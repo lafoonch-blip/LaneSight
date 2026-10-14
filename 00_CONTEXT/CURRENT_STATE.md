@@ -1,9 +1,13 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.2  
+Version: 1.3  
 Last Updated: 2026-10-14  
 Owner: Shayne  
-Supersedes: v1.1
+Supersedes: v1.2
+
+## Where these docs live (DEC-025)
+- **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
+- **Mirrors (read-only):** the Google Drive LaneSight folder and the claude.ai LaneSight Project. Re-sync them after every change.
 
 ## Building now
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after.
@@ -54,7 +58,7 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
 - Witsee + F5 purchase; confirm what data each app exports
 - Meta glasses test clips, native recording + live stream. Third-party live stream is reportedly capped at 720p/30.
 - Decision on DEC-023 (minimum capture requirements)
-- Code under git (no LaneSight repo yet)
+- Put `lanesight-core` code under git (F-02). Context docs are in the LaneSight repo as of 2026-10-14; the code is not yet
 
 ## Latest major strategic decision
 Back end first, with moving-camera measurement and coaching/stats in MVP (DEC-017/018/019).

@@ -14,4 +14,4 @@ This repo is the **source of truth** for LaneSight product and engineering conte
 - If documents conflict, `DECISIONS.md` and `CURRENT_STATE.md` win over older docs. Anything in `99_ARCHIVE/` is historical only.
 - To change a decision, add a new DEC entry and mark the old one superseded. Never edit history.
 - When you update a doc, bump its `Version` and `Last Updated` header.
-- Google Drive copies of these files are read-only mirrors. Make edits here.
+- The Google Drive folder and the claude.ai LaneSight Project hold read-only mirrors of these files (DEC-025). Make edits here, then re-sync both mirrors.

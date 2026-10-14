@@ -1,9 +1,9 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.1  
-Last Updated: 2026-09-27  
+Version: 1.2  
+Last Updated: 2026-10-14  
 Owner: Shayne  
-Supersedes: v1.0; archived `LaneSight_Master_Product_Build_Context_v2.docx`
+Supersedes: v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
 ## 1. What LaneSight is
 LaneSight is the digital platform for bowlers: a hardware-agnostic bowling intelligence system that combines video, optional sensor telemetry, scoring/league records, equipment history and coaching into one persistent Bowler Profile.
@@ -224,6 +224,8 @@ Use personal bowling video as Seed Dataset v1. Collect controlled fixed-camera s
 - Everything in `99_ARCHIVE/` is historical. Do not use it as a requirement source.
 
 ## 22. Canonical documents
+Source of truth: GitHub `lafoonch-blip/LaneSight` (`main`); Google Drive and the claude.ai Project are read-only mirrors (DEC-025). Start with `AGENTS.md`.
+
 - Product strategy PRD: `01_PRODUCT/LaneSight_PRD_Product_Strategy_v3.docx`
 - Current build state: `00_CONTEXT/CURRENT_STATE.md`
 - Decisions: `00_CONTEXT/DECISIONS.md`

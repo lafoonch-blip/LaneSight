@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.3  
+Version: 1.4  
 Last Updated: 2026-10-14  
 Owner: Shayne  
-Supersedes: v1.2
+Supersedes: v1.3
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -177,6 +177,15 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Date:** 2026-10-14  
 **Status:** PROPOSED (awaiting Shayne's decision)  
 **Supersedes:** UI Spec v1 §7 implicit single-tier assumption
+
+### DEC-025 — GitHub repo is the source of truth for context docs
+**Decision:** The LaneSight context and product docs live in GitHub `lafoonch-blip/LaneSight` (`main`), at the same paths as before (`00_CONTEXT/`, `01_PRODUCT/`, `02_RESEARCH/`, `03_ENGINEERING/`). All edits happen there. The Google Drive LaneSight folder and the claude.ai LaneSight Project are read-only mirrors, re-synced after each change. `AGENTS.md` at the repo root tells any AI assistant how to read and update the docs.  
+**Why:** Claude and ChatGPT both need the same context. One editable copy prevents the two tools from drifting apart.  
+**Date:** 2026-10-14  
+**Status:** ACCEPTED  
+**Supersedes:** The claude.ai Project as the only home of the docs
+
+*(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
 
 ## Superseded decisions
 - DEC-001 — partially superseded by DEC-018 (see entry above).
