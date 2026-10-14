@@ -48,8 +48,12 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
         lanes.append(dict(left=pl, right=pr, res=(sl, sr), y_rng=(T[:, 0].min(), y_near), npts=len(T), track=T))
     # 2. common vanishing point from all edges (each edge is a line x = a*y + b)
     E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
+    if not lanes:
+        raise RuntimeError(f"lane not detected: no lane-colored wood found in the background "
+                           f"({100 * m.mean():.1f}% of pixels matched). Check that the lane is in frame and lit, "
+                           "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
     A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
-    vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0] if len(E) >= 2 else None   # x - a*y = b
+    vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
     vp_res = np.abs(A @ vp - b)
     # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
     good = []
@@ -58,6 +62,9 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
         width_near = np.polyval(l['right'], l['y_rng'][1]) - np.polyval(l['left'], l['y_rng'][1])
         l['vp_miss'] = (dl, dr)
         if max(dl, dr) < 0.08 * w and width_near > 60: good.append(l)
+    if not good:
+        raise RuntimeError(f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges "
+                           "meeting at a common vanishing point. Check framing: camera behind the approach, whole lane in view")
     for l in good: _foul(l, m)
     loose = lane_mask(bg, s_min=60)
     for l in good: _refine_edges(l, loose)

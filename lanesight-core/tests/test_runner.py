@@ -157,3 +157,34 @@ def test_api_flow(tmp_path):
     assert cl.get(f'/api/shots/{sid}/replay.png').status_code == 200
     csv = cl.get(f"/api/sessions/{st['session']['id']}/export.csv").text
     assert 'ball_speed' in csv.splitlines()[0] and ',10,' in csv.splitlines()[1]
+
+# ---------- HDR ----------
+def make_hdr_clip(path, fps=60, secs=1):
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', f'testsrc=size=640x360:rate={fps}', '-t', str(secs),
+                    '-pix_fmt', 'yuv420p10le', '-c:v', 'libx264', '-preset', 'ultrafast', '-color_primaries', 'bt2020',
+                    '-color_trc', 'arib-std-b67', '-colorspace', 'bt2020nc', path], check=True)
+    return path
+
+@needs_ffmpeg
+def test_hdr_detected_and_converted_with_same_frame_times(tmp_path):
+    from lanesight_runner.probe import convert_sdr, frame_times, _has
+    if not _has('filters', 'zscale'): pytest.skip('ffmpeg without zscale')
+    src = make_hdr_clip(str(tmp_path / 'hdr.mov'))
+    p = probe(src)
+    assert p['hdr'] and any('HDR' in w for w in p['warnings'])
+    info = convert_sdr(src, str(tmp_path / 'sdr.mov'))
+    q = probe(str(tmp_path / 'sdr.mov'))
+    assert not q['hdr'] and q['decoded_frames'] == 60 and info['frames'] == 60 and info['max_shift_ms'] <= 2
+
+@needs_ffmpeg
+def test_runner_analyzes_sdr_copy_of_hdr_clip(tmp_path):
+    from lanesight_runner.probe import _has
+    if not _has('filters', 'zscale'): pytest.skip('ffmpeg without zscale')
+    seen = {}
+    def an(video, out_prefix, handed=None, log=print):     # TEST ONLY: records what the runner passed in
+        seen.update(video=video, prefix=out_prefix); return val('IMG_8754')
+    r = Runner(tmp_path / 'data', analyzer=an, speaker=Quiet())
+    r.db.start_session(kind='practice'); sid = r.ingest(make_hdr_clip(str(tmp_path / 'IMG_1.MOV'))); r.q.get(); r.process(sid)
+    s = r.db.shot(sid)
+    assert s['status'] == 'done' and seen['video'].endswith('_sdr.mov') and seen['prefix'].endswith('_sdr')
+    assert s['probe']['sdr_conversion']['frames'] == 60 and 'convert_s' in s['timings']

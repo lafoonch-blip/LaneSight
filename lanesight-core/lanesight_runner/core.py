@@ -3,7 +3,7 @@ One clip is analyzed at a time; clips that arrive meanwhile wait in the queue.""
 from __future__ import annotations
 import json, os, queue, shutil, subprocess, threading, time, traceback
 from .db import DB, now
-from .probe import probe, ClipError, VIDEO_EXT
+from .probe import probe, convert_sdr, ClipError, VIDEO_EXT
 from . import card as cardmod
 
 def default_analyzer(video, out_prefix, handed=None, log=print):
@@ -124,10 +124,20 @@ class Runner:
         try:
             t = time.time(); p = probe(shot['clip_path'], check_decoder=self.check_decoder)
             timings['probe_s'] = round(time.time() - t, 2)
-            self.db.update_shot(sid, probe_json=p); log(f"probe: {p['codec']} {p['width']}x{p['height']} {p['measured_fps']} fps")
-            t = time.time()
+            log(f"probe: {p['codec']} {p['width']}x{p['height']} {p['measured_fps']} fps{' HDR' if p.get('hdr') else ''}")
             out_prefix = os.path.splitext(shot['clip_path'])[0]
-            rec = self.analyzer(shot['clip_path'], out_prefix, handed=sess.get('handed'), log=log)
+            video = shot['clip_path']
+            if p.get('hdr'):
+                t = time.time(); video = out_prefix + '_sdr.mov'
+                p['sdr_conversion'] = convert_sdr(shot['clip_path'], video)
+                p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
+                timings['convert_s'] = round(time.time() - t, 2)
+                log(f"HDR -> SDR in {timings['convert_s']}s ({p['sdr_conversion']['encoder']}, "
+                    f"max frame-time shift {p['sdr_conversion']['max_shift_ms']} ms)")
+            self.db.update_shot(sid, probe_json=p)
+            t = time.time()
+            # cache prefix follows the analyzed file, so an SDR copy never reuses a cache built from HDR frames
+            rec = self.analyzer(video, os.path.splitext(video)[0], handed=sess.get('handed'), log=log)
             timings['analyze_s'] = round(time.time() - t, 2)
             rec.setdefault('context', {}).update(session_id=sess['id'], shot_n=shot['n'], ball=shot.get('ball_name'))
             timings['total_s'] = round(time.time() - t0, 2); timings['steps'] = steps
