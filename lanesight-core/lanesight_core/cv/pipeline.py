@@ -68,7 +68,11 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('launch_angle', M.get('launch_angle_deg'), 'deg', 0.5 * lat_c),
         m('breakpoint_board', M['breakpoint_board'], 'board', lat_c),
         m('breakpoint_distance', M['breakpoint_extreme_ft'], 'ft', 0.5 * lat_c, 'geometric breakpoint (DEC-022)'),
-        m('entry_board', M['entry_board'], 'board', lat_c), m('entry_angle', M['entry_angle_deg'], 'deg', 0.7 * lat_c),
+        m('entry_board', M['entry_board'], 'board', lat_c if M.get('entry_board_source') == 'path' else 0.7 * lat_c,
+          None if M.get('entry_board_source') != 'impact_point' else
+          f"from the ball's contact point at impact (smoothed path ends at {M['curve_end_ft']:.0f} ft)"),
+        m('entry_angle', M['entry_angle_deg'], 'deg', 0.7 * lat_c,
+          None if M['curve_end_ft'] > 56 else f"measured over the last tracked feet (path ends at {M['curve_end_ft']:.0f} ft)"),
         m('entry_angle_52_55', M.get('entry_angle_52_55_deg'), 'deg', 0.7 * lat_c, 'Specto-compatible: direction between 52 and 55 ft'),
         m('rev_rate_lane', rpm, 'rpm', rconf, 'surface-pattern periodicity'),
         m('rev_rate', rpm * REV_SENSOR_FACTOR if rpm else None, 'rpm', rconf * 0.7, f'sensor-equivalent ×{REV_SENSOR_FACTOR}',
@@ -90,7 +94,10 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                      video=dict(file=os.path.basename(video), fps=round(1 / np.median(np.diff(S['ts'])), 2),
                                 camera_motion_px=round(float(S['shift'].max()), 1), reference_frame=int(S['ref'])),
                      events=dict(t_release=M['t_release'], t_touchdown=M.get('t_touchdown'), t_impact=t_imp,
-                                 release_source=M['release_source']),
+                                 release_source=M['release_source'], entry_board_source=M.get('entry_board_source'),
+                                 entry_board_path=M['entry_board'] if M.get('entry_board_source') == 'path' else None,
+                                 entry_board_impact_point=M.get('entry_board_impact_point'),
+                                 impact_point_gap_s=M.get('impact_point_gap_s'), curve_end_ft=M.get('curve_end_ft')),
                      measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {})
     shot_view = {x.metric: x.value for x in meas}
     shot_view.update(board_at_15ft=M.get('board_at_15ft'), board_at_0ft=M.get('board_at_0ft'), entry_angle_deg=M['entry_angle_deg'],

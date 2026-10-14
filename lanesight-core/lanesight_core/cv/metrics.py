@@ -114,7 +114,22 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     seg = (zz >= 52) & (zz <= 55)
     out['entry_angle_52_55_deg'] = float(np.mean(ang[seg])) if seg.sum() >= 4 else None     # Specto-compatible definition
     late = zz > zz.max() - 1.5
-    out['entry_angle_deg'] = float(np.mean(ang[late])); out['entry_board'] = float(to_abs(np.interp(Z_IMPACT, zz, bb))) if zz.max() > 56 else None
+    out['entry_angle_deg'] = float(np.mean(ang[late]))
+    # entry board: from the smoothed path when it reaches the pins; otherwise from the ball's contact point at impact
+    # (impact_anchor: robust fit of the raw detections in the last 0.35 s, used only when the last raw detection
+    # is within 0.25 s of impact). Both values are reported so they can be compared where both exist.
+    xa, _ = to_lane(H, np.array([pi[0]]), np.array([pi[1]]))
+    ba = float(xa[0] / LANE_IN * BOARDS + 0.5); ba = (BOARDS + 1 - ba) if right_handed else ba
+    raw_t_end = max(c['t'] for c in raw) if raw else None
+    out['entry_board_impact_point'] = float(to_abs(ba))
+    out['impact_point_gap_s'] = None if raw_t_end is None else float(t_impact - raw_t_end)
+    out['curve_end_ft'] = float(zz.max())
+    if zz.max() > 56:
+        out['entry_board'] = float(to_abs(np.interp(Z_IMPACT, zz, bb))); out['entry_board_source'] = 'path'
+    elif raw_t_end is not None and t_impact - raw_t_end <= 0.25:
+        out['entry_board'] = out['entry_board_impact_point']; out['entry_board_source'] = 'impact_point'
+    else:
+        out['entry_board'] = None; out['entry_board_source'] = None
     for zq in (0, 7, 15):
         if zz.min() <= zq + 1: out[f'board_at_{zq}ft'] = float(to_abs(np.interp(zq, zz, bb)))
     if zz.min() < 3: out['launch_angle_deg'] = float(-np.mean(ang[(zz >= 1) & (zz <= 10)]))
