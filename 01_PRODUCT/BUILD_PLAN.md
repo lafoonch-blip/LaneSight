@@ -1,6 +1,6 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.1  
+Version: 2.2  
 Last Updated: 2026-10-14  
 Owner: Shayne  
 Supersedes: v2.0 (status update only); v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
@@ -155,4 +155,4 @@ All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs re
 
 ## Ongoing tracks
 - R-01..R-04, B-01/B-02, L-01..L-03, G-01..G-03 unchanged from v1.0
-- F-02 (git/monorepo) and F-06 (CI) are needed now for the Stage 1–6 back end
+- F-02 (git/monorepo) done 2026-10-14: code in `lanesight-core/`. F-06 (CI) is still needed for the Stage 1–6 back end

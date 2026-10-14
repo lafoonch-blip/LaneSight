@@ -1,0 +1,10 @@
+[project]
+name = "lanesight-core"
+version = "0.6.0"
+description = "LaneSight back end: video ball tracking, shot metrics, pin reading, scoring/stats, insights, replay"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "matplotlib>=3.8"]
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
