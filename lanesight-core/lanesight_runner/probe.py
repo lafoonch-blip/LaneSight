@@ -86,30 +86,26 @@ def frame_times(path):
                         '-of', 'csv=p=0', path], capture_output=True, text=True)
     return np.array([float(x.strip(',')) for x in r.stdout.split() if x.strip(',')])
 
-TONEMAP = ('zscale=t=linear:npl=203,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,'
-           'zscale=t=bt709:m=bt709:r=tv,format=yuv420p')
-
 def _has(kind, name):
     r = subprocess.run(['ffmpeg', '-hide_banner', f'-{kind}'], capture_output=True, text=True)
     return any(line.split()[1:2] == [name] for line in r.stdout.splitlines() if len(line.split()) > 1)
 
-def convert_sdr(src, dst):
-    """HDR (HLG/PQ) -> 8-bit SDR BT.709 with tone mapping, every frame kept in order.
+def convert_sdr(src, dst, probe_info=None):
+    """HDR (HLG) -> 8-bit SDR BT.709 with tone mapping (lanesight_runner.hdr, numpy: works with any ffmpeg build).
     OpenCV decodes HDR without tone mapping, so colours come out washed out and lane/ball colour models fail.
-    Frame TIMES are always read from the original clip (analyze(timing_video=src)), so the encoder's timebase
-    can't shift them; this function verifies the frame count matches exactly, else ClipError."""
-    if not _has('filters', 'zscale'):
-        raise ClipError('HDR clip, and this ffmpeg has no zscale filter to convert it. '
-                        'Turn off HDR Video on the iPhone (Settings > Camera > Record Video)')
-    enc = (['-c:v', 'h264_videotoolbox', '-b:v', '40M'] if _has('encoders', 'h264_videotoolbox')
-           else ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '16'])
-    r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-map', '0:v:0', '-an', '-fps_mode', 'passthrough',
-                        '-video_track_timescale', '600', '-vf', TONEMAP, *enc,
-                        '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        raise ClipError(f'HDR to SDR conversion failed: {r.stderr.strip()[-300:]}')
+    Frame TIMES are always read from the original clip (analyze(timing_video=src)); this checks the frame count
+    matches exactly, else ClipError."""
+    from . import hdr
+    p = probe_info or probe(src, check_decoder=False)
+    if p.get('color_transfer') != 'arib-std-b67':
+        raise ClipError(f"HDR transfer {p.get('color_transfer')} isn't supported (only iPhone HLG). Turn off HDR Video on the iPhone")
+    w, h = p['width'], p['height']
+    if abs(p.get('rotation') or 0) % 180 == 90: w, h = h, w          # ffmpeg auto-rotates while decoding
+    try:
+        info = hdr.convert(src, dst, w, h)
+    except RuntimeError as e:
+        raise ClipError(f'HDR to SDR conversion failed: {e}')
     a, b = frame_times(src), frame_times(dst)
-    if len(a) != len(b):
+    if len(a) != len(b) or info['frames'] != len(a):
         raise ClipError(f'HDR conversion changed the frame count ({len(a)} -> {len(b)}); frames would not line up with their times')
-    return dict(encoder=enc[1], frames=len(b), timing_source='original clip')
+    return dict(encoder=info['encoder'], frames=len(b), timing_source='original clip', method='numpy HLG tone map')

@@ -129,7 +129,7 @@ class Runner:
             video = shot['clip_path']
             if p.get('hdr'):
                 t = time.time(); video = out_prefix + '_sdr.mov'
-                p['sdr_conversion'] = convert_sdr(shot['clip_path'], video)
+                p['sdr_conversion'] = convert_sdr(shot['clip_path'], video, p)
                 p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
                 timings['convert_s'] = round(time.time() - t, 2)
                 log(f"HDR -> SDR in {timings['convert_s']}s ({p['sdr_conversion']['encoder']}; frame times from the original)")
