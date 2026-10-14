@@ -5,7 +5,7 @@ The LaneSight back end, Stages 1–6 of Build Plan v2. It's pure Python with no 
 ```
 python -m lanesight_core.cv.pipeline VIDEO.mov OUT [--handed R|L] [--sensor sensor.json] [--pattern-length 41]
 python examples/demo_session.py        # 4 validation shots as one session (needs the cached shot JSONs)
-python -m pytest                       # 21 tests: scoring, stats, splits, insights, spares, capabilities
+python -m pytest                       # 34 tests: core + runner
 ```
 
 ## Layout
@@ -40,7 +40,39 @@ Built in a cloud Claude session (2026-10-13/14). Under git in `lafoonch-blip/Lan
 ```
 cd lanesight-core
 python3 -m pip install -e '.[dev]'      # numpy, opencv-python-headless, matplotlib, pytest; also needs ffmpeg/ffprobe (brew install ffmpeg)
-python3 -m pytest                       # 21 tests
+python3 -m pytest                       # 34 tests
 python3 -m lanesight_core.cv.pipeline /path/to/IMG_8754.MOV out/IMG_8754 --sensor validation/IMG_8754_ruby.json
 ```
 Each shot takes a few minutes on CPU (stabilization dominates).
+
+## At-lane runner (`lanesight_runner/`)
+A local web app on your Mac: the iPhone records, you AirDrop the clip, and the Mac analyzes it, shows the shot card and reads the adjustment aloud. Spec: `03_ENGINEERING/LOCAL_RUNNER_SPEC.md`.
+
+**One-time setup (Terminal):**
+```
+brew install ffmpeg                                  # if you don't have it
+cd ~/Documents/LaneSight && git pull
+cd lanesight-core
+python3 -m venv .venv && source .venv/bin/activate   # needs Python 3.11+
+python3 -m pip install -e '.[runner,dev]'
+python3 -m pytest                                    # 34 tests should pass
+```
+The first time it reads `~/Downloads`, macOS asks whether Terminal may access Downloads. Allow it (or later: System Settings > Privacy & Security > Files and Folders > Terminal).
+
+**Each session:**
+```
+cd ~/Documents/LaneSight/lanesight-core && source .venv/bin/activate
+python3 -m lanesight_runner          # opens http://127.0.0.1:8765
+```
+1. Start a session: type, ball, weight (needed for Power), pattern.
+2. iPhone on a tripod behind the approach, 1080p at 60 fps, one clip per shot. Not Slo-mo: a slo-mo clip shared as a slowed video would make speeds wrong.
+3. AirDrop each clip to the Mac. The runner picks up new videos in `~/Downloads` once the file stops growing, says "Shot N received", analyzes it and speaks the result. You can also drag a clip onto the page.
+4. Between shots: target line (applies to the next shots), hit your mark (keys Y / N / U), pin corrections, Ruby values, thumbs up/down on the adjustment.
+5. Export the session CSV for the eval harness.
+
+**Notes**
+- Data goes to `~/LaneSightData` (clips, results, `lanesight_runner.db`), not the repo: Documents may sync to iCloud. Change with `--data`.
+- Options: `--watch DIR`, `--port N`, `--no-speech`, `--no-open`.
+- A clip is rejected, never guessed at, if its frame timestamps are broken or OpenCV decodes a different number of frames than the file has. If OpenCV can't decode HEVC, set iPhone Settings > Camera > Formats > Most Compatible.
+- Speed: analysis takes a few minutes per clip on CPU today (stabilization dominates). Each card shows the time taken; the per-step times are stored for Milestone 4 (speed-up).
+- Badges: ✓ = validated at this capture tier, EST = estimate, N/A = unavailable with the reason. Power is a proposed metric (DEC-024), always an estimate, and not a carry score.

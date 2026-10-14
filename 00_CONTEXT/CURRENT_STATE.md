@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.4  
+Version: 1.5  
 Last Updated: 2026-10-14  
 Owner: Shayne  
-Supersedes: v1.3
+Supersedes: v1.4
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -21,6 +21,7 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
   - Postgres schema
   - shot record + replay
   - capture-tier and sensor capability engine
+- At-lane local runner built (`lanesight-core/lanesight_runner/`, `03_ENGINEERING/LOCAL_RUNNER_SPEC.md` v1.1): AirDrop → Mac analysis → shot card + spoken adjustment, pin correction, Ruby entry, CSV export. Next: first lane session, then Milestone 4 (speed: a few minutes per clip today).
 - Validated against Ruby on 4 shots:
   - Speed is within 0.5% on 3 of 4 shots.
   - Loft is within ~1 frame.

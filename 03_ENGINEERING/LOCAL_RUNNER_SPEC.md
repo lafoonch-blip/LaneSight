@@ -1,10 +1,18 @@
 # Local Runner Spec (at-lane, Mac-only)
-Status: DRAFT  
-Version: 1.0  
+Status: BUILT (Milestones 1–3); Milestone 4 open  
+Version: 1.1  
 Last Updated: 2026-10-14  
 Owner: Shayne
 
 Personal testing tool: phone records, the MacBook analyzes and shows everything. Not the Stage 7 UI (DEC-017). It doubles as Seed Dataset collection (M1-15) and the first accept/reject feedback loop (M4-06).
+
+## 0. Implementation status (v1.1)
+Code: `lanesight-core/lanesight_runner/`. Setup and use: `lanesight-core/README.md` → "At-lane runner".
+- **Done:** Milestones 1–3 (ingest, queue, probe/timing checks, shot card with tier badges, inputs, Power, speech, session stats, Ruby variance, CSV export). 34 tests pass (13 runner tests).
+- **Deviation from §2 / §5:** storage is SQLite (`~/LaneSightData/lanesight_runner.db`), not local Supabase. Reason: no Docker needed at the lane, single user. User inputs are columns on `shots` instead of separate tables; the original video read is never overwritten. Moving to the `schema.sql` tables happens with the cloud stage.
+- **Deviation from §3:** clips are copied to `~/LaneSightData/sessions/<id>/`, not the repo (Documents may sync to iCloud). The watcher uses "new file while a session is active" instead of file dates, because AirDrop can keep the original recording date.
+- **Not yet verified:** acceptance item 1 (the 4 validation clips through the runner on the Mac). Tests use the stored pipeline outputs in `validation/` with a test-only analyzer stub.
+- **Open:** Milestone 4. Analysis takes a few minutes per clip on CPU, far over the 30 s Stage A target; the per-step timing log is in place to drive it.
 
 ## 1. Flow
 1. Start a session on the Mac: type (practice), ball, oil pattern.

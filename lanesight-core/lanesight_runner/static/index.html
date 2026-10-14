@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LaneSight Runner</title>
+<style>
+:root{
+  --navy:#0B1320; --panel:#111c2e; --panel2:#16243a; --line:#22344f; --ice:#F7F9FC; --muted:#8d9ab0; --dim:#5d6b82;
+  --electric:#00D2FF; --blue:#007BFF; --good:#2ecc8f; --warn:#F2C94C; --bad:#ff6b6b;
+  --r:10px; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--navy);color:var(--ice);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
+button:hover{border-color:var(--electric)}
+button.primary{background:var(--blue);border-color:var(--blue);font-weight:600}
+button.on{background:var(--electric);color:var(--navy);border-color:var(--electric);font-weight:700}
+input,select{background:#0d1626;border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--electric)}
+label{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
+.muted{color:var(--muted)} .dim{color:var(--dim)} .small{font-size:12px}
+header{display:flex;align-items:center;gap:18px;padding:10px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-weight:800;letter-spacing:.5px;font-size:18px}
+.brand b{color:var(--electric)}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
+.pill b{font-size:16px;margin-left:4px}
+.spacer{flex:1}
+main{display:grid;grid-template-columns:minmax(220px,300px) 1fr minmax(280px,340px);gap:14px;padding:14px 18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.panel h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+#replay{width:100%;border-radius:8px;display:block}
+.noreplay{height:520px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:20px}
+.result{font-size:40px;font-weight:800;letter-spacing:.5px;line-height:1.1}
+.result.strike{color:var(--electric)}
+.shothead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.adj{margin:12px 0 14px;padding:14px 16px;border-radius:var(--r);background:linear-gradient(135deg,#0f2b4a,#10233c);border:1px solid #1e4d7a}
+.adj .main{font-size:22px;font-weight:700}
+.adj .why{color:#c4d0e2;margin-top:6px}
+.adj .alt{margin-top:8px;font-size:13px;color:var(--muted);border-top:1px solid #23466b;padding-top:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px}
+.m{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;position:relative;min-height:70px}
+.m .l{font-size:12px;color:var(--muted)}
+.m .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.m .v small{font-size:13px;color:var(--muted);font-weight:500;margin-left:2px}
+.m .na{font-size:12px;color:var(--dim);margin-top:4px}
+.badge{position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;letter-spacing:.4px;border-radius:4px;padding:1px 5px;text-transform:uppercase}
+.b-guaranteed{background:#12402e;color:var(--good)} .b-best_effort{background:#40360f;color:var(--warn)} .b-unavailable{background:#2a2f3a;color:var(--dim)}
+.power{display:flex;align-items:center;gap:14px;margin-top:12px}
+.ring{--p:0;width:74px;height:74px;border-radius:50%;background:conic-gradient(var(--electric) calc(var(--p)*1%),#22344f 0);display:grid;place-items:center}
+.ring span{width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-size:22px;font-weight:800}
+.status{padding:30px;text-align:center}
+.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--electric);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 12px}
+@keyframes s{to{transform:rotate(360deg)}}
+.err{color:var(--bad)}
+.warnbox{background:#3a2b0e;border:1px solid #6b5418;color:#f5d98a;border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.seg{display:flex;gap:6px}
+.seg button{flex:1}
+.pins{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;width:220px;margin:6px auto}
+.pin{aspect-ratio:1;border-radius:50%;border:2px solid var(--line);background:#0d1626;font-weight:700;font-size:13px;padding:0}
+.pin.up{background:var(--ice);color:var(--navy);border-color:var(--ice)}
+.pin.unc{border-color:var(--warn);color:var(--warn)}
+.sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.sec:first-child{margin-top:0;padding-top:0;border-top:0}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
+th:first-child,td:first-child,td.l,th.l{text-align:left}
+tbody tr{cursor:pointer} tbody tr:hover{background:var(--panel2)} tbody tr.sel{background:#14304f}
+.bottom{padding:0 18px 18px;display:grid;grid-template-columns:1fr minmax(280px,340px);gap:14px}
+.tablewrap{overflow-x:auto}
+.start{max-width:560px;margin:40px auto}
+.start .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+#drop{position:fixed;inset:0;background:#007bffcc;display:none;align-items:center;justify-content:center;font-size:28px;font-weight:700;z-index:10}
+.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--muted)}
+.varrow{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+@media (max-width:1100px){main{grid-template-columns:1fr 1fr}.bottom{grid-template-columns:1fr}#leftcol{grid-row:span 1}}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Lane<b>Sight</b> <span class="muted small">runner</span></div>
+  <div id="sessinfo" class="small muted"></div>
+  <div class="spacer"></div>
+  <div class="pills" id="pills"></div>
+  <button id="speechBtn" title="Read results aloud">🔊 Speech</button>
+  <button id="endBtn" style="display:none">End session</button>
+</header>
+<div id="app"></div>
+<div id="drop">Drop clip to analyze</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S = null, selected = null, follow = true, editing = false;
+const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts,
+    body: opts.body && typeof opts.body !== 'string' && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body});
+  if (!r.ok) { const t = await r.text(); let m = t; try { m = JSON.parse(t).detail } catch(e){} alert(m); throw new Error(m); }
+  return r.json();
+}
+async function load() { S = await api('/api/state'); render(); }
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onmessage = () => { if (!editing) load(); };
+  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+}
+
+const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+const leaveTxt = p => !p ? '—' : p.strike ? 'X' : p.standing.join('-');
+
+function current() {
+  if (!S || !S.cards.length) return null;
+  if (follow || !S.cards.find(c => c.id === selected)) { selected = S.cards[S.cards.length-1].id; }
+  return S.cards.find(c => c.id === selected);
+}
+
+function render() {
+  const sess = S.session;
+  $('#speechBtn').className = S.speech ? 'on' : '';
+  $('#speechBtn').disabled = !S.speech_available;
+  $('#speechBtn').title = S.speech_available ? 'Read results aloud' : 'Speech needs macOS "say"';
+  $('#endBtn').style.display = sess ? '' : 'none';
+  if (!sess) { $('#pills').innerHTML = ''; $('#sessinfo').textContent = ''; renderStart(); return; }
+  $('#sessinfo').innerHTML = `${esc(sess.kind)} · started ${fmtTime(sess.started_at)} · watching <span class="kbd">${esc(S.watch_dir)}</span>` +
+    (S.queue ? ` · <b>${S.queue} queued</b>` : '');
+  const st = S.stats || {};
+  const pill = (l, v, suf='') => `<span class="pill">${l}<b>${v ?? '—'}${v != null ? suf : ''}</b></span>`;
+  $('#pills').innerHTML = pill('Shots', st.shots) + pill('Strike', st.strike_pct, '%') + pill('Pocket', st.pocket_pct, '%') +
+    pill('Carry', st.carry_pct, '%') + pill('Spare', st.spare_pct, '%');
+  const c = current();
+  $('#app').innerHTML = `
+    ${S.watch_error ? `<div class="warnbox" style="margin:12px 18px 0">${esc(S.watch_error)}</div>` : ''}
+    <main>
+      <div class="panel" id="leftcol">${renderReplay(c)}</div>
+      <div class="panel">${renderCard(c)}</div>
+      <div class="panel">${renderInputs(sess, c)}</div>
+    </main>
+    <div class="bottom">
+      <div class="panel tablewrap">${renderTable()}</div>
+      <div class="panel">${renderSession(sess, st)}</div>
+    </div>`;
+  bind(sess, c);
+}
+
+function renderStart() {
+  const prev = S.sessions[0] || {};
+  $('#app').innerHTML = `<div class="panel start">
+    <h3>Start a session</h3>
+    <div class="g2">
+      <div><label>Type</label><select id="s_kind"><option>practice</option><option>league</option><option>tournament</option></select></div>
+      <div><label>Hand</label><select id="s_hand"><option value="">Auto from video</option><option value="R">Right</option><option value="L">Left</option></select></div>
+      <div><label>Ball</label><input id="s_ball" placeholder="e.g. Phaze II" value="${esc(prev.ball_name || '')}"></div>
+      <div class="row"><div><label>Weight (lb)</label><input id="s_wt" type="number" step="0.5" placeholder="15"></div>
+        <div><label>RG (in)</label><input id="s_rg" type="number" step="0.01" placeholder="2.50"></div></div>
+      <div><label>Oil pattern</label><input id="s_pat" placeholder="House shot"></div>
+      <div><label>Pattern length (ft)</label><input id="s_len" type="number" step="1" placeholder="optional"></div>
+    </div>
+    <p class="small muted">Record each shot on the iPhone (1080p, 60 fps, tripod behind the approach) and AirDrop it to this Mac. Clips that land in
+      <span class="kbd">${esc(S.watch_dir || '')}</span> are picked up automatically, or drag a clip onto this page.</p>
+    <button class="primary" id="startBtn">Start session</button>
+    ${S.sessions.length ? `<div class="sec"><h3>Past sessions</h3>${S.sessions.map(s =>
+      `<div class="varrow"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
+       <span>${s.shot_count} shots · <a href="/api/sessions/${s.id}/export.csv" style="color:var(--electric)">CSV</a></span></div>`).join('')}</div>` : ''}
+  </div>`;
+  $('#startBtn').onclick = async () => {
+    const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
+    await api('/api/session', {method:'POST', body:{kind:$('#s_kind').value, handed:$('#s_hand').value || null,
+      ball_name:$('#s_ball').value || null, ball_weight_lb:num('#s_wt'), ball_rg_in:num('#s_rg'),
+      pattern_name:$('#s_pat').value || null, pattern_length_ft:num('#s_len')}});
+    follow = true; load();
+  };
+}
+
+function renderReplay(c) {
+  if (!c) return `<div class="noreplay">Waiting for the first clip.<br><br>AirDrop a shot to this Mac or drag a clip onto the page.</div>`;
+  if (c.status === 'done') return `<img id="replay" src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Replay of shot ${c.n}">`;
+  return `<div class="noreplay">${c.status === 'failed' ? 'No replay' : 'Replay renders after analysis'}</div>`;
+}
+
+function renderCard(c) {
+  if (!c) return `<div class="status muted">No shots yet this session.</div>`;
+  const head = `<div class="shothead"><span class="muted">Shot ${c.n} · ${c.kind === 'spare' ? 'spare attempt' : 'first ball'} · ${fmtTime(c.created_at)}${c.ball ? ' · ' + esc(c.ball) : ''}</span>
+    ${!follow ? `<button id="latestBtn" class="small">Jump to latest</button>` : ''}</div>`;
+  if (c.status === 'queued' || c.status === 'processing') {
+    return head + `<div class="status"><div class="spin"></div><div>${c.status === 'queued' ? 'Queued' : 'Analyzing…'}</div>
+      <div class="small muted">${esc(c.original_name || '')}</div></div>`;
+  }
+  if (c.status === 'failed') {
+    return head + `<div class="status"><div class="result err">Not analyzed</div><p class="err">${esc(c.error)}</p>
+      <button id="retryBtn">Retry</button></div>`;
+  }
+  const p = c.pins;
+  let result = !p ? 'Pins not read' : p.strike ? (c.kind === 'spare' ? 'SPARE' : 'STRIKE') : (c.kind === 'spare' ? 'Missed ' : 'Leave ') + p.standing.join('-');
+  const unc = p && p.uncertain && p.uncertain.length ? `<div class="small" style="color:var(--warn)">Pin ${p.uncertain.join(', ')} hidden from this view: may also be standing</div>` : '';
+  const src = p && p.source === 'corrected' ? `<div class="small muted">Pins corrected by you</div>` : '';
+  const warns = ((c.probe || {}).warnings || []).map(w => `<div class="warnbox">${esc(w)}</div>`).join('');
+  return head + `<div class="result ${p && p.strike ? 'strike' : ''}">${result}</div>${unc}${src}
+    ${renderAdj(c)}
+    <div class="grid">${(c.metrics || []).map(m => `<div class="m" title="${esc(m.why)}">
+        <span class="badge b-${m.status}">${m.status === 'best_effort' ? 'est' : m.status === 'guaranteed' ? '✓' : 'n/a'}</span>
+        <div class="l">${esc(m.label)}</div>
+        ${m.value == null ? `<div class="v dim">—</div><div class="na">${esc(m.why)}</div>` : `<div class="v">${m.value.toFixed(m.dec || 0)}<small>${esc(m.unit)}</small></div>`}
+      </div>`).join('')}</div>
+    ${renderPower(c.power)}
+    ${warns}
+    <div class="small dim" style="margin-top:10px">${c.capture ? `Capture tier: <b>${esc(c.capture.tier)}</b> · ${c.probe ? `${c.probe.measured_fps} fps ${c.probe.width}×${c.probe.height}` : ''}` : ''}
+      ${c.timings ? ` · analyzed in ${c.timings.total_s}s` : ''} · <span class="badge b-guaranteed" style="position:static">✓</span> validated
+      <span class="badge b-best_effort" style="position:static">est</span> estimate</div>`;
+}
+
+function renderAdj(c) {
+  if (c.kind === 'spare') return '';
+  const recs = (c.insights || {}).recommendations || [];
+  if (!recs.length) return '';
+  const [r, ...rest] = recs;
+  const label = {move:'Adjust', none:'Repeat', execution:'Execution', speed:'Speed', release:'Release', transition:'Lane transition', pattern_note:'Pattern'}[r.type] || 'Next shot';
+  const main = r.type === 'move' ? `Move ${r.direction}: feet ${r.move_feet}, target ${r.move_target}` :
+               r.type === 'execution' ? 'Hit your mark, then reassess' : label;
+  const spare = c.spare_plan ? `<div class="alt">Spare (${esc(c.spare_plan.leave)}): lay down on board ${c.spare_plan.straight_line.laydown_board},
+     cross the arrows at ${c.spare_plan.straight_line.arrows_board}, aim at board ${c.spare_plan.straight_line.pin_board} · ${esc(c.spare_plan.ball)}</div>` : '';
+  return `<div class="adj"><div class="small muted">${label} · confidence ${esc(r.confidence)} · ${esc(c.insights.classification.replace('_',' ').toLowerCase())}</div>
+    <div class="main">${esc(main)}</div><div class="why">${esc(r.reason)}</div>
+    ${rest.map(x => `<div class="alt">${esc(x.reason)}</div>`).join('')}${spare}</div>`;
+}
+
+function renderPower(pw) {
+  if (!pw) return '';
+  if (pw.value == null) return `<div class="power"><div class="ring"><span class="dim">—</span></div><div><b>Power</b><div class="small muted">${esc(pw.why)}</div></div></div>`;
+  return `<div class="power"><div class="ring" style="--p:${pw.value}"><span>${pw.value}</span></div>
+    <div><b>Power</b> <span class="badge b-best_effort" style="position:static">est</span>
+    <div class="small muted">${pw.energy_j} J at the pocket (${pw.translational_j} J speed + ${pw.rotational_j} J revs). Not a carry score.</div>
+    <div class="small dim">${esc(pw.why)}</div></div></div>`;
+}
+
+function renderInputs(sess, c) {
+  const it = sess.intent || {};
+  let html = `<div class="sec"><h3>Target line (next shots)</h3>
+    <div class="row"><div><label>Laydown bd</label><input id="i_lay" type="number" step="0.5" value="${it.laydown_board ?? ''}"></div>
+    <div><label>Arrows bd</label><input id="i_arr" type="number" step="0.5" value="${it.arrows_board ?? ''}"></div>
+    <div><label>Breakpoint bd</label><input id="i_bp" type="number" step="0.5" value="${it.breakpoint_board ?? ''}"></div></div>
+    <div class="row" style="margin-top:8px"><div><label>Current ball</label><input id="i_ball" value="${esc(sess.ball_name || '')}"></div>
+    <div><label>Weight lb</label><input id="i_wt" type="number" step="0.5" value="${sess.ball_weight_lb ?? ''}"></div></div>
+    <button id="saveSess" style="margin-top:8px;width:100%">Save for next shots</button></div>`;
+  if (!c || c.status !== 'done') return html;
+  const pins = c.pins ? new Set(c.pins.standing) : new Set();
+  const unc = c.pins ? new Set(c.pins.uncertain) : new Set();
+  const sens = c.sensor || {};
+  html += `<div class="sec"><h3>Shot ${c.n}</h3>
+    <label>Hit your mark? <span class="kbd">Y</span> <span class="kbd">N</span> <span class="kbd">U</span></label>
+    <div class="seg">${['yes','no','unsure'].map(v => `<button data-hm="${v}" class="${c.hit_mark === v ? 'on' : ''}">${v === 'unsure' ? 'Not sure' : v[0].toUpperCase()+v.slice(1)}</button>`).join('')}</div>
+    <label style="margin-top:10px">Pins standing (tap to correct)</label>
+    <div class="pins">${PIN_ROWS.map((row, i) => `<div style="grid-column:1/-1;display:flex;justify-content:center;gap:6px">${row.map(n =>
+      `<button class="pin ${pins.has(n) ? 'up' : ''} ${unc.has(n) ? 'unc' : ''}" data-pin="${n}" style="width:38px">${n}</button>`).join('')}</div>`).join('')}</div>
+    <div class="seg">${c.pins_override ? `<button id="pinReset">Use video read</button>` : ''}
+      <button data-kind="${c.kind === 'spare' ? 'first' : 'spare'}">Mark as ${c.kind === 'spare' ? 'first ball' : 'spare'}</button></div>
+    </div>
+    <div class="sec"><h3>Ruby values</h3>
+    <div class="row"><div><label>Speed mph</label><input data-s="speed_mph" type="number" step="0.1" value="${sens.speed_mph ?? ''}"></div>
+      <div><label>Revs rpm</label><input data-s="rev_rate_rpm" type="number" step="1" value="${sens.rev_rate_rpm ?? ''}"></div>
+      <div><label>Loft ft</label><input data-s="loft_ft" type="number" step="0.1" value="${sens.loft_ft ?? ''}"></div></div>
+    <div class="row" style="margin-top:6px"><div><label>Tilt °</label><input data-s="axis_tilt_deg" type="number" step="1" value="${sens.axis_tilt_deg ?? ''}"></div>
+      <div><label>Rotation °</label><input data-s="axis_rotation_deg" type="number" step="1" value="${sens.axis_rotation_deg ?? ''}"></div>
+      <div><label>Breakpt ft</label><input data-s="breakpoint_ft" type="number" step="1" value="${sens.breakpoint_ft ?? ''}"></div></div>
+    <button id="saveSensor" style="margin-top:8px;width:100%">Save Ruby values</button>
+    ${renderVariance(c.sensor_variance)}</div>`;
+  if (c.kind === 'first' && c.insights) html += `<div class="sec"><h3>Was the adjustment right?</h3>
+    <div class="seg"><button data-vote="up" class="${c.rec_vote === 'up' ? 'on' : ''}">👍</button><button data-vote="down" class="${c.rec_vote === 'down' ? 'on' : ''}">👎</button></div>
+    <div class="seg" style="margin-top:6px"><button data-fol="yes" class="${c.rec_followed === 'yes' ? 'on' : ''}">I followed it</button><button data-fol="no" class="${c.rec_followed === 'no' ? 'on' : ''}">Didn't</button></div>
+    <input id="recNote" placeholder="Note (optional)" value="${esc(c.rec_note || '')}" style="margin-top:6px"></div>`;
+  return html;
+}
+
+function renderVariance(v) {
+  if (!v || !Object.keys(v.compared).length) return '';
+  const lab = {ball_speed:'Speed', rev_rate:'Rev rate', loft:'Loft'};
+  return `<div style="margin-top:8px">${Object.entries(v.compared).map(([k, x]) =>
+    `<div class="varrow"><span class="muted">${lab[k] || k}</span><span>LS ${x.lanesight} · Ruby ${x.sensor} · <b>${x.diff > 0 ? '+' : ''}${x.diff}</b> (${x.pct > 0 ? '+' : ''}${x.pct}%)</span></div>`).join('')}</div>`;
+}
+
+function renderTable() {
+  if (!S.cards.length) return `<h3>Shots</h3><div class="muted">No shots yet.</div>`;
+  const val = (c, k) => { const m = (c.metrics || []).find(x => x.key === k); return m && m.value != null ? m.value.toFixed(m.dec || 0) : '—'; };
+  return `<h3>Shots</h3><table><thead><tr><th>#</th><th class="l">Type</th><th class="l">Ball</th><th>Speed</th><th>Revs</th><th>Power</th><th>Arrows</th><th>Breakpt</th><th>Entry</th><th>Angle</th><th>Pins</th><th class="l">Mark</th></tr></thead>
+    <tbody>${[...S.cards].reverse().map(c => `<tr data-shot="${c.id}" class="${c.id === selected ? 'sel' : ''}">
+      <td>${c.n}</td><td class="l">${c.status === 'done' ? (c.kind === 'spare' ? 'spare' : '1st') : `<span class="${c.status === 'failed' ? 'err' : 'muted'}">${c.status}</span>`}</td>
+      <td class="l">${esc(c.ball || '')}</td><td>${val(c,'ball_speed')}</td><td>${val(c,'rev_rate')}</td><td>${c.power && c.power.value != null ? c.power.value : '—'}</td>
+      <td>${val(c,'arrows_board')}</td><td>${val(c,'breakpoint_board')}</td><td>${val(c,'entry_board')}</td><td>${val(c,'entry_angle')}</td>
+      <td>${c.status === 'done' ? leaveTxt(c.pins) : ''}</td><td class="l">${c.hit_mark || ''}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderSession(sess, st) {
+  const a = st.averages || {}; const f = (k, d=1) => a[k] ? `${a[k].mean.toFixed(d)} <span class="dim">±${a[k].sd.toFixed(d)}</span>` : '—';
+  const sv = st.sensor_variance || {};
+  return `<h3>Session</h3>
+    <div class="varrow"><span class="muted">First balls / strikes</span><span>${st.first_balls} / ${st.strikes}</span></div>
+    <div class="varrow"><span class="muted">Pocket hits / carried</span><span>${st.pocket_hits} / ${st.carry_pct ?? '—'}${st.carry_pct != null ? '%' : ''}</span></div>
+    <div class="varrow"><span class="muted">Spares made</span><span>${st.spares_made} / ${st.spare_attempts}</span></div>
+    <div class="varrow"><span class="muted">Speed</span><span>${f('ball_speed')}</span></div>
+    <div class="varrow"><span class="muted">Rev rate</span><span>${f('rev_rate', 0)}</span></div>
+    <div class="varrow"><span class="muted">Arrows / breakpoint / entry</span><span>${f('arrows_board')} · ${f('breakpoint_board')} · ${f('entry_board')}</span></div>
+    ${st.consistency && st.consistency.repeatability_score != null ? `<div class="varrow"><span class="muted">Repeatability</span><span>${st.consistency.repeatability_score}</span></div>` : ''}
+    ${Object.keys(sv).length ? `<div class="sec"><h3>LaneSight vs Ruby</h3>${Object.entries(sv).map(([k, x]) =>
+      `<div class="varrow"><span class="muted">${k.replace('_',' ')}</span><span>n=${x.n} · mean ${x.mean_diff > 0 ? '+' : ''}${x.mean_diff} · MAE ${x.mae}</span></div>`).join('')}</div>` : ''}
+    <div class="sec"><a href="/api/sessions/${sess.id}/export.csv" style="color:var(--electric)">Export session CSV</a>
+      ${st.failed ? ` · <span class="err">${st.failed} failed</span>` : ''}</div>`;
+}
+
+function bind(sess, c) {
+  document.querySelectorAll('tr[data-shot]').forEach(tr => tr.onclick = () => {
+    selected = +tr.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
+  const lb = $('#latestBtn'); if (lb) lb.onclick = () => { follow = true; render(); };
+  const rb = $('#retryBtn'); if (rb) rb.onclick = () => api(`/api/shots/${c.id}/retry`, {method:'POST'});
+  document.querySelectorAll('input').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => { editing = false; }; });
+  const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
+  $('#saveSess').onclick = () => api('/api/session', {method:'PATCH', body:{
+    intent:{laydown_board:num('#i_lay'), arrows_board:num('#i_arr'), breakpoint_board:num('#i_bp')},
+    ball_name:$('#i_ball').value || null, ball_weight_lb:num('#i_wt')}}).then(load);
+  if (!c || c.status !== 'done') return;
+  const post = body => api(`/api/shots/${c.id}`, {method:'POST', body}).then(load);
+  document.querySelectorAll('[data-hm]').forEach(b => b.onclick = () => post({hit_mark: c.hit_mark === b.dataset.hm ? null : b.dataset.hm}));
+  document.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => {
+    const s = new Set(c.pins ? c.pins.standing : []); const n = +b.dataset.pin; s.has(n) ? s.delete(n) : s.add(n);
+    post({pins_override:[...s]}); });
+  const pr = $('#pinReset'); if (pr) pr.onclick = () => post({clear_pins_override:true});
+  document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => post({kind_override:b.dataset.kind}));
+  const ss = $('#saveSensor'); if (ss) ss.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
+  document.querySelectorAll('[data-vote]').forEach(b => b.onclick = () => post({rec_vote: c.rec_vote === b.dataset.vote ? null : b.dataset.vote}));
+  document.querySelectorAll('[data-fol]').forEach(b => b.onclick = () => post({rec_followed: c.rec_followed === b.dataset.fol ? null : b.dataset.fol}));
+  const rn = $('#recNote'); if (rn) rn.onchange = () => post({rec_note: rn.value || null});
+}
+
+document.addEventListener('keydown', e => {
+  if (!S || !S.session || ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const c = current(); const k = e.key.toLowerCase();
+  if (c && c.status === 'done' && {y:'yes', n:'no', u:'unsure'}[k]) {
+    api(`/api/shots/${c.id}`, {method:'POST', body:{hit_mark:{y:'yes', n:'no', u:'unsure'}[k]}}).then(load);
+  } else if (k === 'arrowleft' || k === 'arrowright') {
+    const i = S.cards.findIndex(x => x.id === selected); const j = Math.max(0, Math.min(S.cards.length-1, i + (k === 'arrowleft' ? -1 : 1)));
+    selected = S.cards[j].id; follow = j === S.cards.length-1; render();
+  }
+});
+$('#speechBtn').onclick = () => api(`/api/speech?on=${!S.speech}`, {method:'POST'}).then(load);
+$('#endBtn').onclick = () => { if (confirm('End this session?')) api('/api/session/end', {method:'POST'}).then(load); };
+
+// drag a clip onto the page
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); if (S && S.session) { dragDepth++; $('#drop').style.display = 'flex'; } });
+addEventListener('dragleave', e => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').style.display = 'none'; } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', async e => {
+  e.preventDefault(); dragDepth = 0; $('#drop').style.display = 'none';
+  if (!S || !S.session) return;
+  for (const f of e.dataTransfer.files) { const fd = new FormData(); fd.append('file', f);
+    await fetch('/api/upload', {method:'POST', body:fd}).then(async r => { if (!r.ok) alert((await r.json()).detail); }); }
+  follow = true; load();
+});
+
+load().then(connect);
+</script>
+</body>
+</html>
