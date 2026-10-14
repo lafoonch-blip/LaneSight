@@ -15,10 +15,11 @@ from ..insights.spares import spare_plan
 
 REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot calibration; pending blind validation)
 
-def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print):
+def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
+            timing_video=None):
     cache = out_prefix + '_stab.pkl'
     if os.path.exists(cache): S = pickle.load(open(cache, 'rb'))
-    else: S = stabilize(video, log=log); pickle.dump(S, open(cache, 'wb'))
+    else: S = stabilize(video, log=log, timing_path=timing_video); pickle.dump(S, open(cache, 'wb'))
     S['vp_y'] = None
     G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
     bcache = out_prefix + '_blobs.pkl'

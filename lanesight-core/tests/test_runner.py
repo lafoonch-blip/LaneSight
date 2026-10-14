@@ -174,17 +174,26 @@ def test_hdr_detected_and_converted_with_same_frame_times(tmp_path):
     assert p['hdr'] and any('HDR' in w for w in p['warnings'])
     info = convert_sdr(src, str(tmp_path / 'sdr.mov'))
     q = probe(str(tmp_path / 'sdr.mov'))
-    assert not q['hdr'] and q['decoded_frames'] == 60 and info['frames'] == 60 and info['max_shift_ms'] <= 2
+    assert not q['hdr'] and q['decoded_frames'] == 60 and info['frames'] == 60 and info['timing_source'] == 'original clip'
 
 @needs_ffmpeg
 def test_runner_analyzes_sdr_copy_of_hdr_clip(tmp_path):
     from lanesight_runner.probe import _has
     if not _has('filters', 'zscale'): pytest.skip('ffmpeg without zscale')
     seen = {}
-    def an(video, out_prefix, handed=None, log=print):     # TEST ONLY: records what the runner passed in
-        seen.update(video=video, prefix=out_prefix); return val('IMG_8754')
+    def an(video, out_prefix, handed=None, log=print, timing_video=None):     # TEST ONLY: records what the runner passed in
+        seen.update(video=video, prefix=out_prefix, timing=timing_video); return val('IMG_8754')
     r = Runner(tmp_path / 'data', analyzer=an, speaker=Quiet())
     r.db.start_session(kind='practice'); sid = r.ingest(make_hdr_clip(str(tmp_path / 'IMG_1.MOV'))); r.q.get(); r.process(sid)
     s = r.db.shot(sid)
     assert s['status'] == 'done' and seen['video'].endswith('_sdr.mov') and seen['prefix'].endswith('_sdr')
+    assert seen['timing'] == s['clip_path']                      # frame times come from the original clip
     assert s['probe']['sdr_conversion']['frames'] == 60 and 'convert_s' in s['timings']
+
+
+@needs_ffmpeg
+def test_stabilize_rejects_mismatched_timing_source(tmp_path):
+    from lanesight_core.cv.stabilize import stabilize
+    a = make_clip(str(tmp_path / 'a.mp4'), secs=1); b = make_clip(str(tmp_path / 'b.mp4'), secs=2)
+    with pytest.raises(RuntimeError, match='timing source'):
+        stabilize(a, log=lambda m: None, timing_path=b)

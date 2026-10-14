@@ -39,8 +39,13 @@ class Registrar:
         S = np.diag([self.s, self.s, 1.0])
         return np.linalg.inv(S) @ H @ S, int(inl.sum())
 
-def stabilize(path, log=print, min_inliers=60):
-    ts = pts(path)
+def stabilize(path, log=print, min_inliers=60, timing_path=None):
+    """timing_path: read frame times from this file instead (e.g. the original HDR clip when frames come from an
+    SDR copy). It must contain the same frames in the same order; checked here by count."""
+    ts = pts(timing_path or path)
+    if timing_path:
+        n = len(pts(path))
+        if n != len(ts): raise RuntimeError(f'timing source has {len(ts)} frames but the video has {n}')
     # pass A: reference = middle of the longest steady stretch with the lane visible
     prevg = None; mot = []; woodf = []
     for i, f in frames(path):

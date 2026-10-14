@@ -93,10 +93,11 @@ def _has(kind, name):
     r = subprocess.run(['ffmpeg', '-hide_banner', f'-{kind}'], capture_output=True, text=True)
     return any(line.split()[1:2] == [name] for line in r.stdout.splitlines() if len(line.split()) > 1)
 
-def convert_sdr(src, dst, max_shift_s=0.002):
-    """HDR (HLG/PQ) -> 8-bit SDR BT.709 with tone mapping, keeping every frame and its timestamp.
+def convert_sdr(src, dst):
+    """HDR (HLG/PQ) -> 8-bit SDR BT.709 with tone mapping, every frame kept in order.
     OpenCV decodes HDR without tone mapping, so colours come out washed out and lane/ball colour models fail.
-    The output is verified: same frame count, every frame time within max_shift_s of the original; else ClipError."""
+    Frame TIMES are always read from the original clip (analyze(timing_video=src)), so the encoder's timebase
+    can't shift them; this function verifies the frame count matches exactly, else ClipError."""
     if not _has('filters', 'zscale'):
         raise ClipError('HDR clip, and this ffmpeg has no zscale filter to convert it. '
                         'Turn off HDR Video on the iPhone (Settings > Camera > Record Video)')
@@ -110,8 +111,5 @@ def convert_sdr(src, dst, max_shift_s=0.002):
         raise ClipError(f'HDR to SDR conversion failed: {r.stderr.strip()[-300:]}')
     a, b = frame_times(src), frame_times(dst)
     if len(a) != len(b):
-        raise ClipError(f'HDR conversion changed the frame count ({len(a)} -> {len(b)}); timing would be wrong')
-    shift = float(np.abs((a - a[0]) - (b - b[0])).max())
-    if shift > max_shift_s:
-        raise ClipError(f'HDR conversion moved frame times by up to {1000 * shift:.1f} ms; timing would be wrong')
-    return dict(encoder=enc[1], max_shift_ms=round(1000 * shift, 2), frames=len(b))
+        raise ClipError(f'HDR conversion changed the frame count ({len(a)} -> {len(b)}); frames would not line up with their times')
+    return dict(encoder=enc[1], frames=len(b), timing_source='original clip')
