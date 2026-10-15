@@ -93,23 +93,80 @@ def _has(kind, name):
     r = subprocess.run(['ffmpeg', '-hide_banner', f'-{kind}'], capture_output=True, text=True)
     return any(line.split()[1:2] == [name] for line in r.stdout.splitlines() if len(line.split()) > 1)
 
+def _encoder():
+    return (['-c:v', 'h264_videotoolbox', '-b:v', '40M'] if _has('encoders', 'h264_videotoolbox')
+            else ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '16'])
+
+# BT.2020 -> BT.709 primaries, linear RGB
+_BT2020_TO_709 = np.array([[1.6605, -0.5876, -0.0728],
+                           [-0.1246, 1.1329, -0.0083],
+                           [-0.0182, -0.1006, 1.1187]], np.float32)
+
+def _hlg_to_709(rgb_u8):
+    """One HLG (arib-std-b67, BT.2020) R'G'B' frame -> 8-bit SDR BT.709. The decoder gives the HLG-encoded
+    signal with the BT.2020 matrix applied but no transfer/gamut conversion, so colours read washed out and
+    desaturated (hue is also off). Invert the HLG OETF to scene-linear, convert the gamut, re-apply BT.709 gamma."""
+    e = rgb_u8.astype(np.float32) / 255.0
+    a, b, c = 0.17883277, 0.28466892, 0.55991073          # ARIB STD-B67 inverse OETF
+    lin = np.where(e <= 0.5, e * e / 3.0, (np.exp((e - c) / a) + b) / 12.0)
+    lin = np.clip(lin @ _BT2020_TO_709.T, 0, 1)
+    v = np.where(lin < 0.018, 4.5 * lin, 1.099 * np.power(lin, 0.45) - 0.099)   # BT.709 OETF
+    return np.clip(v * 255, 0, 255).astype(np.uint8)
+
+def _convert_sdr_numpy(src, dst, transfer):
+    """Zscale-free HDR -> SDR: decode with OpenCV (the same decoder the pipeline uses, so colours match the model
+    and the frame count lines up), tone-map each frame in numpy, re-encode to H.264 with ffmpeg. Used when this
+    ffmpeg was built without zscale. Only HLG (iPhone HDR Video) is handled; PQ needs a different inverse curve
+    and is refused rather than guessed at."""
+    if transfer != 'arib-std-b67':
+        raise ClipError(f'HDR clip uses the {transfer} transfer, which this build can only convert with an '
+                        'ffmpeg that has the zscale filter. Turn off HDR Video on the iPhone, or install ffmpeg with libzimg.')
+    import cv2
+    cap = cv2.VideoCapture(src)
+    if not cap.isOpened():
+        raise ClipError(f"OpenCV can't decode this HDR clip for conversion. Re-export as H.264 or turn off HDR Video.")
+    ok, bgr = cap.read()
+    if not ok:
+        cap.release(); raise ClipError('OpenCV opened the HDR clip but decoded no frames')
+    h, w = bgr.shape[:2]
+    enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24',
+                            '-s', f'{w}x{h}', '-r', '60', '-i', '-', '-an', '-video_track_timescale', '600',
+                            *_encoder(), '-pix_fmt', 'yuv420p',
+                            '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
+                           stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    n = 0
+    try:
+        while ok:
+            enc.stdin.write(_hlg_to_709(bgr[..., ::-1]).tobytes())   # BGR -> RGB in, RGB out
+            n += 1
+            ok, bgr = cap.read()
+    finally:
+        cap.release(); enc.stdin.close(); enc.wait()
+    if n == 0 or enc.returncode != 0:
+        raise ClipError('HDR to SDR conversion failed (numpy tone-map path produced no output)')
+    return n
+
 def convert_sdr(src, dst):
     """HDR (HLG/PQ) -> 8-bit SDR BT.709 with tone mapping, every frame kept in order.
     OpenCV decodes HDR without tone mapping, so colours come out washed out and lane/ball colour models fail.
+    Uses ffmpeg's zscale tone-map when available, else a portable numpy HLG inverse (no libzimg needed).
     Frame TIMES are always read from the original clip (analyze(timing_video=src)), so the encoder's timebase
     can't shift them; this function verifies the frame count matches exactly, else ClipError."""
-    if not _has('filters', 'zscale'):
-        raise ClipError('HDR clip, and this ffmpeg has no zscale filter to convert it. '
-                        'Turn off HDR Video on the iPhone (Settings > Camera > Record Video)')
-    enc = (['-c:v', 'h264_videotoolbox', '-b:v', '40M'] if _has('encoders', 'h264_videotoolbox')
-           else ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '16'])
-    r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-map', '0:v:0', '-an', '-fps_mode', 'passthrough',
-                        '-video_track_timescale', '600', '-vf', TONEMAP, *enc,
-                        '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        raise ClipError(f'HDR to SDR conversion failed: {r.stderr.strip()[-300:]}')
+    enc = _encoder()
+    if _has('filters', 'zscale'):
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-map', '0:v:0', '-an', '-fps_mode', 'passthrough',
+                            '-video_track_timescale', '600', '-vf', TONEMAP, *enc,
+                            '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise ClipError(f'HDR to SDR conversion failed: {r.stderr.strip()[-300:]}')
+        method = f'zscale+{enc[1]}'
+    else:
+        transfer = (_ffprobe(['-select_streams', 'v:0', '-show_entries', 'stream=color_transfer'], src)
+                    .get('streams') or [{}])[0].get('color_transfer')
+        _convert_sdr_numpy(src, dst, transfer)
+        method = f'hlg-numpy+{enc[1]}'
     a, b = frame_times(src), frame_times(dst)
     if len(a) != len(b):
         raise ClipError(f'HDR conversion changed the frame count ({len(a)} -> {len(b)}); frames would not line up with their times')
-    return dict(encoder=enc[1], frames=len(b), timing_source='original clip')
+    return dict(encoder=enc[1], method=method, frames=len(b), timing_source='original clip')

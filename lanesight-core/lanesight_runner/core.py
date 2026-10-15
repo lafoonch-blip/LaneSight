@@ -1,9 +1,10 @@
 """Runner core: watch folder -> copy -> probe -> lanesight-core analysis -> store -> notify + speak.
 One clip is analyzed at a time; clips that arrive meanwhile wait in the queue."""
 from __future__ import annotations
-import json, os, queue, shutil, subprocess, threading, time, traceback
+import glob, json, os, queue, shutil, subprocess, threading, time, traceback
 from .db import DB, now
 from .probe import probe, convert_sdr, ClipError, VIDEO_EXT
+from .trim import detect_window, trim_clip
 from . import card as cardmod
 
 def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None):
@@ -113,6 +114,52 @@ class Runner:
             try: self.process(sid)
             except Exception: traceback.print_exc()
 
+    def _analyze(self, src, out_prefix, p, handed, log, timings, use_window):
+        """Trim to the shot window (speed-up; see trim.py), convert HDR->SDR if needed, then run the pipeline.
+        Trimming is best-effort: any failure to detect/trim falls back to the whole clip. Analysis errors are
+        raised so process() can retry on the full clip (the window may have cut the shot)."""
+        analysis_src = src
+        if use_window:
+            try:
+                t = time.time(); t0w, t1w, win = detect_window(src, log=log)
+                timings['window_s'] = round(time.time() - t, 2); p['window'] = win
+                if t0w is not None:
+                    trimmed = out_prefix + '_trim.mov'; trim_clip(src, trimmed, t0w, t1w)
+                    analysis_src = trimmed; win['trimmed'] = True; win['trim_file'] = trimmed
+                    log(f"trimmed {win['dur']}s clip to {win['window']} (burst {win.get('burst')})")
+                else:
+                    log(f"no trim ({win.get('reason')})")
+            except Exception as e:
+                log(f"windowing skipped: {e}")
+        timing_src = analysis_src; video = analysis_src
+        if p.get('hdr'):
+            t = time.time(); video = os.path.splitext(analysis_src)[0] + '_sdr.mov'
+            conv = convert_sdr(analysis_src, video); p['sdr_conversion'] = conv
+            p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
+            timings['convert_s'] = round(time.time() - t, 2)
+            log(f"HDR -> SDR in {timings['convert_s']}s ({conv['method']}, {conv['frames']} frames; times from the original)")
+        t = time.time()
+        # cache prefix follows the analyzed file, so an SDR/trimmed copy never reuses a cache built from other frames
+        kw = dict(timing_video=timing_src) if video != timing_src else {}
+        rec = self.analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
+        timings['analyze_s'] = round(time.time() - t, 2)
+        return rec
+
+    def _keep_only_trimmed(self, clip_path, trim_file, out_prefix, log=print):
+        """After a successful windowed analysis, keep just the ~8 s trimmed shot in place of the full clip and
+        delete the SDR/working copies (saves ~75% disk; the irrelevant set-up footage is removed). The stored
+        path is unchanged, so replay and retry still work (a retry re-analyses the already-short clip whole).
+        Best-effort: on any error the full clip is left as-is."""
+        if not trim_file or not os.path.exists(trim_file): return
+        try:
+            os.replace(trim_file, clip_path)                       # trimmed shot becomes the stored clip
+            for f in glob.glob(out_prefix + '_trim*'):             # SDR copy + analysis caches from the trim
+                try: os.remove(f)
+                except OSError: pass
+            log('kept trimmed shot, removed the full clip and working files')
+        except OSError as e:
+            log(f'could not replace clip with trimmed version: {e}')
+
     def process(self, sid):
         shot = self.db.shot(sid)
         if not shot: return
@@ -126,23 +173,23 @@ class Runner:
             timings['probe_s'] = round(time.time() - t, 2)
             log(f"probe: {p['codec']} {p['width']}x{p['height']} {p['measured_fps']} fps{' HDR' if p.get('hdr') else ''}")
             out_prefix = os.path.splitext(shot['clip_path'])[0]
-            video = shot['clip_path']
-            if p.get('hdr'):
-                t = time.time(); video = out_prefix + '_sdr.mov'
-                p['sdr_conversion'] = convert_sdr(shot['clip_path'], video)
-                p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
-                timings['convert_s'] = round(time.time() - t, 2)
-                log(f"HDR -> SDR in {timings['convert_s']}s ({p['sdr_conversion']['encoder']}; frame times from the original)")
+            try:
+                rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=True)
+            except (ClipError, RuntimeError) as e:
+                if (p.get('window') or {}).get('trimmed'):   # a trim was applied; it may have cut the shot -> retry whole clip
+                    log(f"windowed analysis failed ({e}); retrying on the full clip")
+                    timings['windowed_error'] = str(e)
+                    rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=False)
+                else:
+                    raise
             self.db.update_shot(sid, probe_json=p)
-            t = time.time()
-            # cache prefix follows the analyzed file, so an SDR copy never reuses a cache built from HDR frames
-            kw = dict(timing_video=shot['clip_path']) if video != shot['clip_path'] else {}
-            rec = self.analyzer(video, os.path.splitext(video)[0], handed=sess.get('handed'), log=log, **kw)
-            timings['analyze_s'] = round(time.time() - t, 2)
             rec.setdefault('context', {}).update(session_id=sess['id'], shot_n=shot['n'], ball=shot.get('ball_name'))
             timings['total_s'] = round(time.time() - t0, 2); timings['steps'] = steps
             self.db.update_shot(sid, status='done', record_json=rec, timings_json=timings, finished_at=now())
             self.render(sid)
+            win = p.get('window') or {}
+            if win.get('trimmed') and 'windowed_error' not in timings:
+                self._keep_only_trimmed(shot['clip_path'], win.get('trim_file'), out_prefix, log)
         except ClipError as e:
             timings['total_s'] = round(time.time() - t0, 2); timings['steps'] = steps
             self.db.update_shot(sid, status='failed', error=f'Clip rejected: {e}', timings_json=timings, finished_at=now())

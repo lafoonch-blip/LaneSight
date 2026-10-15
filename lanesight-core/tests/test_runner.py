@@ -50,6 +50,58 @@ def test_probe_rejects_non_video(tmp_path):
     f = tmp_path / 'x.mov'; f.write_text('not a video')
     with pytest.raises(ClipError): probe(str(f))
 
+# ---------- shot-window trimming ----------
+def make_burst_clip(path, fps=60, pre=60, burst=90, post=60):
+    """A clip that is static, then has a bright square sweeping up the lower-centre (the 'shot'), then static.
+    The background is non-periodic texture so phase correlation locks to zero shift on the static frames, the
+    way it does on a real lane; a featureless (or periodic) background would read as all-motion."""
+    import cv2, numpy as np
+    w, h = 640, 360
+    vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+    bg = cv2.GaussianBlur((np.random.RandomState(0).rand(h, w, 1) * 120 + 40).astype(np.uint8).repeat(3, 2), (3, 3), 0)
+    for k in range(pre): vw.write(bg.copy())
+    for k in range(burst):                                                  # square sweeps up through the lane
+        f = bg.copy(); y = int(h*0.85 - k/burst * h*0.45); x = int(w*0.5)
+        cv2.rectangle(f, (x-28, y-28), (x+28, y+28), (255, 255, 255), -1); vw.write(f)
+    for k in range(post): vw.write(bg.copy())
+    vw.release(); return path
+
+@needs_ffmpeg
+def test_detect_window_finds_the_burst(tmp_path):
+    from lanesight_runner.trim import detect_window
+    src = make_burst_clip(str(tmp_path / 'burst.mp4'))                      # static 0-1s, shot 1-2.5s, static 2.5-3.5s
+    t0, t1, info = detect_window(src, lead=0.5, tail=0.5)
+    assert t0 is not None and info.get('burst')                             # a shot-like burst was detected
+    bs, be = info['burst']
+    assert 0.8 < bs < 1.6 and 2.0 < be < 3.0                                # burst ~ the moving-square window
+    assert t0 < bs and t1 > be                                              # lead/tail margins applied
+
+@needs_ffmpeg
+def test_detect_window_no_burst_falls_back(tmp_path):
+    from lanesight_runner.trim import detect_window
+    src = make_clip(str(tmp_path / 'static.mp4'), size='640x360', secs=2)   # testsrc: no shot-like burst
+    t0, t1, info = detect_window(src)
+    assert t0 is None and t1 is None and 'reason' in info                   # caller analyses the whole clip
+
+@needs_ffmpeg
+def test_trim_clip_shortens(tmp_path):
+    from lanesight_runner.trim import trim_clip
+    src = str(tmp_path / 'full.mp4')                                        # frequent keyframes (iPhone-like) so a
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=60', '-t', '4',
+                    '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '15', src], check=True)
+    dst = trim_clip(src, str(tmp_path / 'cut.mov'), 1.0, 2.5)               # stream-copy cut cleanly on a keyframe
+    p = probe(dst)
+    assert 1.0 < p['duration_s'] < 2.0 and p['frames'] < 130               # ~1.5 s window, not the full 240 frames
+
+def test_keep_only_trimmed_replaces_and_cleans(tmp_path):
+    base = str(tmp_path / 'shot_001')
+    clip, trim, sdr, cache = base + '.mov', base + '_trim.mov', base + '_trim_sdr.mov', base + '_trim_sdr_stab.pkl'
+    for pth, txt in [(clip, 'FULL ORIGINAL'), (trim, 'TRIMMED SHOT'), (sdr, 'x'), (cache, 'x')]:
+        open(pth, 'w').write(txt)
+    Runner(str(tmp_path / 'data'), speaker=Quiet())._keep_only_trimmed(clip, trim, base)
+    assert open(clip).read() == 'TRIMMED SHOT'                             # the full clip is replaced in place
+    assert not os.path.exists(trim) and not os.path.exists(sdr) and not os.path.exists(cache)   # working files gone
+
 # ---------- cards ----------
 def row(i, n, rec, **kw):
     return dict(dict(id=i, n=n, status='done', created_at='2026-10-14T20:00:00+00:00', record=rec, ball_name='Phaze II',
@@ -159,27 +211,47 @@ def test_api_flow(tmp_path):
     assert 'ball_speed' in csv.splitlines()[0] and ',10,' in csv.splitlines()[1]
 
 # ---------- HDR ----------
-def make_hdr_clip(path, fps=60, secs=1):
+def make_hdr_clip(path, fps=60, secs=1, transfer='arib-std-b67'):
+    # libx265 + numeric color codes: libx264 on some ffmpeg builds drops the transfer tag, so probe() wouldn't see HDR.
+    # transfer codes: arib-std-b67 (HLG)=18, smpte2084 (PQ)=16; primaries/matrix bt2020=9.
+    trc = '16' if transfer == 'smpte2084' else '18'
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', f'testsrc=size=640x360:rate={fps}', '-t', str(secs),
-                    '-pix_fmt', 'yuv420p10le', '-c:v', 'libx264', '-preset', 'ultrafast', '-color_primaries', 'bt2020',
-                    '-color_trc', 'arib-std-b67', '-colorspace', 'bt2020nc', path], check=True)
+                    '-pix_fmt', 'yuv420p10le', '-c:v', 'libx265', '-preset', 'ultrafast',
+                    '-x265-params', f'colorprim=bt2020:transfer={transfer}:colormatrix=bt2020nc',
+                    '-color_trc', trc, '-color_primaries', '9', '-colorspace', '9', path], check=True)
     return path
 
 @needs_ffmpeg
 def test_hdr_detected_and_converted_with_same_frame_times(tmp_path):
-    from lanesight_runner.probe import convert_sdr, frame_times, _has
-    if not _has('filters', 'zscale'): pytest.skip('ffmpeg without zscale')
+    # Runs on either conversion path: ffmpeg zscale when present, else the portable numpy HLG tone-map.
+    from lanesight_runner.probe import convert_sdr, _has
     src = make_hdr_clip(str(tmp_path / 'hdr.mov'))
     p = probe(src)
     assert p['hdr'] and any('HDR' in w for w in p['warnings'])
     info = convert_sdr(src, str(tmp_path / 'sdr.mov'))
     q = probe(str(tmp_path / 'sdr.mov'))
     assert not q['hdr'] and q['decoded_frames'] == 60 and info['frames'] == 60 and info['timing_source'] == 'original clip'
+    assert info['method'].startswith('zscale' if _has('filters', 'zscale') else 'hlg-numpy')
+
+@needs_ffmpeg
+def test_convert_sdr_refuses_pq_without_zscale(tmp_path):
+    # PQ needs a different inverse curve than HLG; the numpy fallback refuses it rather than guessing.
+    from lanesight_runner.probe import convert_sdr, _has
+    if _has('filters', 'zscale'): pytest.skip('zscale present: PQ is handled by ffmpeg')
+    src = make_hdr_clip(str(tmp_path / 'pq.mov'), transfer='smpte2084')
+    with pytest.raises(ClipError, match='smpte2084'):
+        convert_sdr(src, str(tmp_path / 'out.mov'))
+
+def test_hlg_to_709_restores_neutral_grey_and_shape():
+    import numpy as np
+    from lanesight_runner.probe import _hlg_to_709
+    grey = np.full((3, 4, 3), 128, np.uint8)
+    out = _hlg_to_709(grey)
+    assert out.shape == grey.shape and out.dtype == np.uint8
+    assert abs(int(out[..., 0].mean()) - int(out[..., 2].mean())) <= 2   # grey stays neutral (R≈G≈B)
 
 @needs_ffmpeg
 def test_runner_analyzes_sdr_copy_of_hdr_clip(tmp_path):
-    from lanesight_runner.probe import _has
-    if not _has('filters', 'zscale'): pytest.skip('ffmpeg without zscale')
     seen = {}
     def an(video, out_prefix, handed=None, log=print, timing_video=None):     # TEST ONLY: records what the runner passed in
         seen.update(video=video, prefix=out_prefix, timing=timing_video); return val('IMG_8754')

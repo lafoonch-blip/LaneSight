@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.5  
+Version: 1.7  
 Last Updated: 2026-10-14  
 Owner: Shayne  
-Supersedes: v1.4
+Supersedes: v1.6
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -21,7 +21,7 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
   - Postgres schema
   - shot record + replay
   - capture-tier and sensor capability engine
-- At-lane local runner built (`lanesight-core/lanesight_runner/`, `03_ENGINEERING/LOCAL_RUNNER_SPEC.md` v1.1): AirDrop → Mac analysis → shot card + spoken adjustment, pin correction, Ruby entry, CSV export. Next: first lane session, then Milestone 4 (speed: a few minutes per clip today).
+- At-lane local runner built (`lanesight-core/lanesight_runner/`, `03_ENGINEERING/LOCAL_RUNNER_SPEC.md` v1.2): AirDrop → Mac analysis → shot card + spoken adjustment, pin correction, Ruby entry, CSV export. **Verified end-to-end on the Mac (2026-10-14)**: IMG_8754/IMG_8751 run through the real server and reproduce the validation numbers within tolerance (speed ±0.1 mph, rev/pins exact, boards ≤1). The iPhone validation clips are HDR and this Mac's ffmpeg lacks zscale, so `convert_sdr` now has a portable numpy HLG→SDR fallback (no libzimg needed); recommended capture is still SDR (HDR Video off). **Milestone 4 shot-window trimming done (2026-10-14):** a motion pre-pass finds the ~6–9 s shot and trims the dead set-up time before analysis — IMG_8754 went 279 s → 81 s (3.4×), SDR ~3×, numbers preserved; the trimmed shot then replaces the stored clip (~102 MB → ~31 MB). Next: first live lane session, then Milestone 4 staged results (fast metrics first).
 - Validated against Ruby on 4 shots:
   - Speed is within 0.5% on 3 of 4 shots.
   - Loft is within ~1 frame.
