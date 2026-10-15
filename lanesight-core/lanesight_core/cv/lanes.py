@@ -171,6 +171,7 @@ def _refine_edges(l, loose):
         L, R = [], []
         for y in range(int(y_foul) - 4, int(l['y_rng'][0]) - 250, -2):
             if y < 0: break
+            if y >= h: continue                 # foul line can extrapolate below the frame; skip off-image rows
             xa, xb = lane_x(l, y)
             xc = cen.get(y, (xa + xb) / 2) if it == 0 else (xa + xb) / 2
             xc = int(xc)
