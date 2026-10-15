@@ -152,6 +152,20 @@ def create_app(runner) -> FastAPI:
         ct = {'.mov': 'video/quicktime', '.m4v': 'video/mp4', '.mp4': 'video/mp4'}.get(os.path.splitext(p)[1].lower(), 'video/mp4')
         return FileResponse(p, media_type=ct, headers={'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes'})
 
+    @app.get('/api/shots/{sid}/thumb.jpg')
+    def thumb(sid: int):
+        shot = runner.db.shot(sid)
+        if not shot or not shot.get('record'): raise HTTPException(404)
+        p = shot['clip_path']; out = os.path.splitext(p)[0] + '_thumb.jpg'
+        if not os.path.exists(out):                          # grab a frame at release time, cached next to the clip
+            if not os.path.exists(p): raise HTTPException(404, 'clip not found')
+            import subprocess
+            t = (shot['record'].get('events') or {}).get('t_release') or 0
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(max(0, t)), '-i', p, '-frames:v', '1',
+                            '-vf', 'scale=120:-1', out], capture_output=True)
+            if not os.path.exists(out): raise HTTPException(404, 'could not grab a frame')
+        return FileResponse(out, media_type='image/jpeg', headers={'Cache-Control': 'max-age=3600'})
+
     @app.get('/api/shots/{sid}/trajectory')
     def trajectory(sid: int):
         """Tracked ball path in video pixels (stabilized reference frame) + a lane(board,z)->image homography fit
@@ -205,7 +219,7 @@ def to_csv(cards) -> str:
     cols += ['power', 'energy_j', 'pins_standing', 'pins_uncertain', 'pins_source', 'strike', 'hit', 'classification',
              'intent_laydown', 'intent_arrows', 'intent_breakpoint', 'hit_mark', 'primary_rec', 'rec_vote', 'rec_followed', 'rec_note']
     cols += [f'ruby_{k}' for k in SENSOR_FIELDS] + ['analyze_s', 'total_s']
-    buf = io.StringIO(); w = csv.DictWriter(buf, fieldnames=cols); w.writeheader()
+    buf = io.StringIO(); w = csv.DictWriter(buf, fieldnames=cols, extrasaction='ignore'); w.writeheader()   # axis_tilt (Ruby) has its own ruby_* column
     for c in cards:
         r = dict(n=c['n'], status=c['status'], error=c.get('error'), kind=c['kind'], created_at=c['created_at'],
                  original_name=c.get('original_name'), ball=c.get('ball'), ball_weight_lb=c.get('ball_weight_lb'))

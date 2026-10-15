@@ -161,6 +161,7 @@ function render() {
         <section class="panel" style="flex:1 1 520px;display:flex;flex-wrap:wrap;gap:16px">${renderLaneUsage(st)}</section>
       </div>
       ${renderGame(st)}
+      ${renderCapture(c)}
     </main>`;
   bind(sess, c);
 }
@@ -182,10 +183,38 @@ function renderHeaderStatus() {
   el.innerHTML = watch + q;
 }
 const shortPath = p => { if (!p) return ''; const parts = p.replace(/\/$/,'').split('/'); return '~/' + parts.slice(-1)[0]; };
-function procStep(c) {  // latest pipeline step while processing (available once steps are streamed; see step 5)
+const STEP_LABELS = [[/^probe/,'Probe'],[/trimmed|no trim|window/,'Window'],[/hdr/,'HDR→SDR'],[/ref frame/,'Stabilize'],
+  [/^vp|lanes consistent/,'Lanes'],[/blobs|extended track/,'Track'],[/impact/,'Impact'],[/refine/,'Refine'],
+  [/pins/,'Pins'],[/rev/,'Rev rate']];
+function stepLabel(msg) { const m = String(msg).toLowerCase(); if (m.includes('kept trimmed')) return null;
+  for (const [re, lab] of STEP_LABELS) if (re.test(m)) return lab; return 'Working'; }
+function procStep(c) {  // latest pipeline step while a shot is processing (steps are streamed live, see core.log)
   const steps = (c.timings || {}).steps; if (!steps || !steps.length) return '';
-  return steps[steps.length-1].msg;
+  return stepLabel(steps[steps.length-1].msg) || 'Finishing';
 }
+const STEP_COLORS = {'Probe':'#2A9FD6','Window':'#8E9AAD','HDR→SDR':'#6E5BD8','Stabilize':'#0E6BE0','Lanes':'#2A9FD6',
+  'Track':'#00C2EE','Impact':'#4BE0A0','Refine':'#4BE0A0','Pins':'#F5CF5B','Rev rate':'#F5A524','Working':'#5D6B82'};
+function renderCapture(c) {
+  if (!c || c.status !== 'done') return '';
+  const p = c.probe || {}, cap = c.capture || {}, ev = (c.timings || {});
+  const info = [cap.tier ? `Tier <b>${esc(cap.tier)}</b>` : null,
+    p.width ? `${p.width}×${p.height}` : null, p.measured_fps ? `${p.measured_fps} fps` : null,
+    p.codec ? esc((p.codec||'').toUpperCase()) + (p.hdr ? ' HDR→SDR' : '') : null].filter(Boolean).join(' · ');
+  // per-step timing bar from the streamed steps (durations = consecutive t_s deltas), merged by phase
+  const steps = (c.timings || {}).steps || []; const seg = {}; let prev = 0;
+  for (const s of steps) { const lab = stepLabel(s.msg), dur = s.t_s - prev; prev = s.t_s; if (lab && dur > 0.05) seg[lab] = (seg[lab]||0) + dur; }
+  const segs = Object.entries(seg);
+  const total = ev.total_s != null ? ev.total_s : segs.reduce((a,[,s])=>a+s,0);
+  const bar = segs.length ? `<div style="flex:1 1 420px;display:flex;height:22px;border-radius:6px;overflow:hidden" role="img" aria-label="Analysis time by step">
+      ${segs.map(([l,s]) => `<div title="${esc(l)} ${s.toFixed(1)}s" style="flex:${s.toFixed(2)} 1 0;background:${STEP_COLORS[l]||'#5D6B82'}"></div>`).join('')}</div>
+    <div class="rowline" style="gap:10px;font-size:12px;color:#A9B6C9">
+      ${segs.map(([l,s]) => `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${STEP_COLORS[l]||'#5D6B82'}"></span> ${esc(l)} ${s.toFixed(1)}s</span>`).join('')}
+      <b style="color:var(--ice)">${fmtMMSS(total)} total</b></div>` : '';
+  return `<section class="panel rowline" style="gap:18px;align-items:center">
+    <h2 class="h" style="margin:0">Shot ${c.n} capture + timing</h2>
+    ${info ? `<div style="font-size:13px;color:#C3CEDD">${info}</div>` : ''}${bar}</section>`;
+}
+const fmtMMSS = s => s == null ? '' : (s >= 60 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${s.toFixed(1)}s`);
 
 /* ---------- session overview KPIs ---------- */
 function kpisFrom(cards) {
@@ -396,7 +425,7 @@ function renderAdj(c) {
 }
 
 function renderMetrics(c) {
-  const badge = s => s === 'guaranteed' ? ['✓','ok'] : s === 'best_effort' ? ['est','est'] : ['n/a','na'];
+  const badge = s => s === 'guaranteed' ? ['✓','ok'] : s === 'best_effort' ? ['est','est'] : s === 'ruby' ? ['Ruby','you'] : ['n/a','na'];
   const tiles = (c.metrics || []).map(m => { const [b, cl] = badge(m.status);
     return `<div class="m" title="${esc(m.why)}">
       <div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><span class="lbl">${esc(m.label)}</span><span class="badge ${cl}">${b}</span></div>
@@ -493,7 +522,9 @@ function renderShots() {
     const mark = c.hit_mark === 'yes' ? 'Hit' : c.hit_mark === 'no' ? 'Missed' : c.hit_mark === 'unsure' ? 'Not sure' : '';
     return `<div class="srow sgrid ${c.id===selected?'sel':''}" data-shot="${c.id}" style="grid-template-columns:${cols}">
       <span style="text-align:left">${c.n}</span>
-      <span style="text-align:left"><span class="thumb"></span></span>
+      <span style="text-align:left">${c.status === 'done'
+        ? `<img src="/api/shots/${c.id}/thumb.jpg" alt="" style="width:44px;height:30px;object-fit:cover;border-radius:5px;vertical-align:middle;background:#1A2233" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb'}))">`
+        : `<span class="thumb"></span>`}</span>
       <span style="text-align:left;font-size:14px;color:#C3CEDD">${typ}</span>
       <span>${val(c,'ball_speed')}</span><span>${val(c,'rev_rate',0)}</span><span>${(c.power||{}).value ?? '—'}</span>
       <span>${val(c,'laydown_board')}</span><span>${val(c,'arrows_board')}</span><span>${val(c,'breakpoint_board')}</span>

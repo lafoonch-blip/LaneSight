@@ -169,7 +169,10 @@ class Runner:
         sess = self.db.session(shot['session_id'])
         self.db.update_shot(sid, status='processing', started_at=now(), error=None); self.bump()
         t0 = time.time(); steps = []
-        def log(msg): steps.append(dict(t_s=round(time.time() - t0, 2), msg=str(msg))); print(f'[shot {sid}] {msg}', flush=True)
+        def log(msg):
+            steps.append(dict(t_s=round(time.time() - t0, 2), msg=str(msg))); print(f'[shot {sid}] {msg}', flush=True)
+            try: self.db.update_shot(sid, timings_json=dict(timings, steps=steps)); self.bump()   # live progress in the header
+            except Exception: pass
         timings = {}
         try:
             t = time.time(); p = probe(shot['clip_path'], check_decoder=self.check_decoder)

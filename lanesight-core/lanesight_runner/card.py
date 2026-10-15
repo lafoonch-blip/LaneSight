@@ -20,6 +20,7 @@ DISPLAY = [
     ('loft', 'Loft', 'ft', 1, 'loft'),
     ('laydown_board', 'Laydown', 'bd', 1, 'laydown_board'),
     ('arrows_board', 'Arrows', 'bd', 1, 'arrows_board'),
+    ('launch_angle', 'Launch angle', '°', 1, 'launch_angle'),
     ('breakpoint_board', 'Breakpoint', 'bd', 1, 'breakpoint_board'),
     ('breakpoint_distance', 'Breakpoint dist', 'ft', 0, 'breakpoint_distance'),
     ('entry_board', 'Entry board', 'bd', 1, 'entry_board'),
@@ -143,6 +144,12 @@ def build_cards(session, shots):
             v = view(rec, pins)
             c.update(capture=prof, metrics=metrics(rec, status), pins=pins, handed=rec['handed'],
                      key_points=rec.get('key_points'), path=compact_path(rec.get('trajectory')))
+            tilt = (s.get('sensor') or {}).get('axis_tilt_deg')              # axis tilt is Ruby-only (60 fps can't measure it)
+            c['metrics'].append(dict(key='axis_tilt', label='Axis tilt', unit='°', dec=0,
+                                     value=float(tilt) if tilt not in (None, '') else None,
+                                     status='ruby' if tilt not in (None, '') else 'unavailable',
+                                     why='From Ruby (entered). Not measurable from 60 fps video yet.' if tilt not in (None, '')
+                                     else 'Needs 120+ fps; enter the Ruby value to show it.'))
             sens = s.get('sensor') or {}
             rev = sens.get('rev_rate_rpm') or v.get('rev_rate')
             pw = power(s.get('ball_weight_lb'), v.get('speed_late') if status.get('speed_profile', {}).get('status') != 'unavailable' else None,
