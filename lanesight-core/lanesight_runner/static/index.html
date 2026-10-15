@@ -46,6 +46,8 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
 .spinbig{width:30px;height:30px;border:3px solid var(--cardline);border-top-color:var(--blue2);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 10px}
 .kbd{font:500 11px var(--mono);color:var(--muted);border:1px solid var(--subline);border-radius:4px;padding:1px 4px}
 .ph{display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--dim);font-size:13px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+@media (max-width:980px){.grid2{grid-template-columns:1fr}}
 #drop{position:fixed;inset:0;background:#1677FFcc;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:700;z-index:10}
 </style>
 </head>
@@ -139,7 +141,7 @@ function render() {
   $('#app').innerHTML = `
     ${S.watch_error ? `<div class="warnbox" style="margin-bottom:12px">${esc(S.watch_error)}</div>` : ''}
     ${renderTitle(sess)}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;margin-top:14px">
+    <div class="grid2">
       <section class="card" style="padding:16px 16px 12px">${renderOverview()}</section>
       <section class="card" style="padding:16px">${renderTransition()}</section>
       <section class="card" style="padding:16px">${renderShots()}</section>
@@ -405,10 +407,10 @@ function renderLatest(c) {
   if (c.status === 'failed') return head + `<div class="ph" style="flex-direction:column"><div class="err" style="font-size:16px;font-weight:600">Not analyzed</div><div class="err small" style="max-width:360px;text-align:center">${esc(c.error)}</div><button class="pill" id="retryBtn" type="button" style="height:30px;margin-top:8px">Retry</button></div>`;
   const tabs = ['overview','top-down','rotation','compare'].map(t =>
     `<button class="tab ${shotTab===t?'on':''}" data-stab="${t}" type="button">${t==='top-down'?'Top-down':cap(t)}</button>`).join('');
-  return head + `<div style="display:flex;flex-wrap:wrap;gap:14px">
-    <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:10px;min-width:0">
+  return head + `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:stretch">
+    <div style="flex:1 1 320px;display:flex;flex-direction:column;gap:10px;min-width:0">
       <div class="tabs" role="tablist" aria-label="Shot view">${tabs}</div>
-      ${renderShotView(c)}
+      <div style="flex:1;min-height:340px;position:relative;border-radius:10px;overflow:hidden;background:#05080F">${renderShotView(c)}</div>
       <div style="display:flex;gap:22px;font-size:12px;color:#C9D3E2;justify-content:center;flex-wrap:wrap">
         <span><span style="display:inline-block;width:26px;height:3px;background:#2E9BFF;vertical-align:middle;border-radius:2px"></span> Actual Path</span>
         <span><span style="display:inline-block;width:26px;border-top:2px dashed #F3F6FA;vertical-align:middle"></span> Your Target Line</span></div>
@@ -420,7 +422,7 @@ function renderLatest(c) {
 
 function renderShotView(c) {
   if (shotTab === 'rotation') return renderRotation(c);
-  if (shotTab === 'compare') return `<div class="sub ph" style="aspect-ratio:4/3.1">Shot compare — coming soon.</div>`;
+  if (shotTab === 'compare') return `<div class="ph" style="height:100%">Shot compare — coming soon.</div>`;
   if (shotTab === 'top-down') return renderTopDown(c);
   return renderOverviewClip(c);
 }
@@ -443,12 +445,11 @@ function renderOverviewClip(c) {
   }
   let callouts='', marksD='';
   const mark=(b,z)=>{const[x,y]=persp(b,z); marksD+=`M${(x-5).toFixed(1)},${y.toFixed(1)}a5,5 0 1,0 10,0a5,5 0 1,0 -10,0`; return [x,y];};
-  if (kp.breakpoint&&kp.breakpoint.board!=null){ const[x,y]=mark(kp.breakpoint.board,kp.breakpoint.z_ft); callouts+=calloutBox('Break Point',kp.breakpoint.board.toFixed(1),x+12,y+10); }
-  if (kp.entry&&kp.entry.board!=null){ const[x,y]=mark(kp.entry.board,kp.entry.z_ft); callouts+=calloutBox('Entry Board',kp.entry.board.toFixed(1),x+12,y-30); }
+  if (kp.breakpoint&&kp.breakpoint.board!=null){ const[x,y]=mark(kp.breakpoint.board,kp.breakpoint.z_ft); callouts+=calloutSvg('Break Point',kp.breakpoint.board.toFixed(1),x+12,y+10); }
+  if (kp.entry&&kp.entry.board!=null){ const[x,y]=mark(kp.entry.board,kp.entry.z_ft); callouts+=calloutSvg('Entry Board',kp.entry.board.toFixed(1),x+12,y-30); }
   const standing=new Set((c.pins||{}).standing||[]); let pinsUp='',pinsDown='';
   if (c.pins) Object.keys(PINB).forEach(n=>{ const[x,y]=persp(PINB[n],60+PINR[n]*0.866); const d=`M${(x-4).toFixed(1)},${(y-5).toFixed(1)}a4,4 0 1,0 8,0a4,4 0 1,0 -8,0`; if(standing.has(+n)) pinsUp+=d; else pinsDown+=d; });
-  return `<div style="position:relative;border-radius:10px;overflow:hidden;background:#05080F;aspect-ratio:4/3.1">
-    <svg viewBox="0 0 400 310" width="100%" height="100%" role="img" aria-label="Simulated lane with your line, target line and oil pattern" style="display:block">
+  return `<svg viewBox="0 0 400 310" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" role="img" aria-label="Simulated lane with your line, target line and oil pattern" style="display:block">
       <defs><linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C3A1C"></stop><stop offset=".5" stop-color="#A86E37"></stop><stop offset="1" stop-color="#C98B4C"></stop></linearGradient></defs>
       <rect width="400" height="310" fill="#0A0E15"></rect>
       <polygon points="40,310 360,310 228,28 172,28" fill="url(#wood)"></polygon>
@@ -457,14 +458,16 @@ function renderOverviewClip(c) {
       <path d="${pinsDown}" fill="#F3F1EC" fill-opacity=".18"></path><path d="${pinsUp}" fill="#F3F1EC"></path>
       ${targetPts?`<polyline points="${targetPts}" fill="none" stroke="#F3F6FA" stroke-width="2.5" stroke-dasharray="8 7"></polyline>`:''}
       ${pathPts?`<polyline points="${pathPts}" fill="none" stroke="#2E9BFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".95"></polyline><polyline points="${pathPts}" fill="none" stroke="#7CE3FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}
-      <path d="${marksD}" fill="#F3F6FA" stroke="#05080F" stroke-width="2"></path>
-    </svg>${callouts}
+      <path d="${marksD}" fill="#F3F6FA" stroke="#05080F" stroke-width="2"></path>${callouts}
+    </svg>
     ${oil?`<div style="position:absolute;left:8px;bottom:8px;background:#05080Fdd;padding:4px 7px;border-radius:6px;display:flex;flex-direction:column;gap:3px">
       <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#C9D3E2">Light<span style="width:64px;height:8px;border-radius:3px;background:linear-gradient(90deg,${blueRamp(.05)},${blueRamp(.4)},${blueRamp(.72)},${blueRamp(1)})"></span>Heavy oil</div>
-      <div style="font-size:9px;color:#8FB6E0">${esc(oil.name)} · modeled, not a scan</div></div>`:''}</div>`;
+      <div style="font-size:9px;color:#8FB6E0">${esc(oil.name)} · modeled, not a scan</div></div>`:''}`;
 }
-function calloutBox(label,value,x,y){ const box='position:absolute;background:#0A0F18E6;border:1px solid #FFFFFF22;border-radius:7px;padding:4px 8px;color:#F3F6FA;white-space:nowrap;';
-  return `<span style="${box}left:${Math.max(0,Math.min(74,x/400*100)).toFixed(1)}%;top:${Math.max(0,Math.min(88,y/310*100)).toFixed(1)}%"><span style="display:block;font-size:11px;font-weight:600;color:#C9D3E2">${label}</span><span style="display:block;font-size:15px;font-weight:700">${value}</span></span>`; }
+function calloutSvg(label,value,x,y){ const w=62,h=26; x=Math.max(2,Math.min(400-w-2,x)); y=Math.max(2,Math.min(310-h-2,y));
+  return `<g><rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w}" height="${h}" rx="5" fill="#0A0F18" fill-opacity=".92" stroke="#fff" stroke-opacity=".14"></rect>
+    <text x="${(x+6).toFixed(1)}" y="${(y+10).toFixed(1)}" fill="#C9D3E2" font-size="8" font-weight="600">${label}</text>
+    <text x="${(x+6).toFixed(1)}" y="${(y+21).toFixed(1)}" fill="#F3F6FA" font-size="12" font-weight="700">${value}</text></g>`; }
 
 function renderTopDown(c) {
   const W=200,H=310,mx=20,my=10,lw=W-2*mx,lh=H-2*my,ZMAX=62; const oil=(S.session||{}).oil, path=c.path||[], kp=c.key_points||{};
@@ -478,19 +481,16 @@ function renderTopDown(c) {
     .map(([,k])=>`<circle cx="${bx(k.board).toFixed(1)}" cy="${zy(k.z_ft).toFixed(1)}" r="2.6" fill="#fff" stroke="#05080F"></circle>`).join('');
   const standing=new Set((c.pins||{}).standing||[]);
   const pins=c.pins?Object.keys(PINB).map(n=>`<circle cx="${bx(PINB[n]).toFixed(1)}" cy="${zy(60+PINR[n]*0.866).toFixed(1)}" r="3" fill="${standing.has(+n)?'#F3F1EC':'#2A3A52'}" stroke="#05080F"></circle>`).join(''):'';
-  return `<div class="sub" style="padding:8px;display:flex;gap:8px;justify-content:center">
-    <svg viewBox="0 0 ${W} ${H}" width="55%" style="display:block;max-height:46vh" role="img" aria-label="Top-down lane with oil and your line">
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" style="display:block" role="img" aria-label="Top-down lane with oil and your line">
       <rect x="${mx}" y="${my}" width="${lw}" height="${lh}" fill="#6B4A26"></rect>
       <rect x="${mx-6}" y="${my}" width="6" height="${lh}" fill="#2A3240"></rect><rect x="${mx+lw}" y="${my}" width="6" height="${lh}" fill="#2A3240"></rect>
       ${oilSvg}${oil?`<line x1="${mx}" x2="${mx+lw}" y1="${zy(oil.length_ft).toFixed(1)}" y2="${zy(oil.length_ft).toFixed(1)}" stroke="#3FB6FF" stroke-dasharray="3 3" opacity=".6"></line>`:''}
       ${pathPts?`<polyline points="${pathPts}" fill="none" stroke="#2E9BFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}
       ${kpd}${pins}
       <text x="${W/2}" y="8" fill="#9AA8BC" font-size="8" text-anchor="middle">pins</text><text x="${W/2}" y="${H-1}" fill="#9AA8BC" font-size="8" text-anchor="middle">foul</text></svg>
-    <div style="display:flex;flex-direction:column;justify-content:center;gap:6px;font-size:12px">
-      ${oil?`<div style="display:flex;align-items:center;gap:6px"><span style="width:60px;height:9px;border-radius:3px;background:linear-gradient(90deg,${blueRamp(.08)},${blueRamp(.5)},${blueRamp(1)})"></span></div>
-        <div class="muted" style="font-size:11px">Dry → heavy oil</div><div style="font-size:11px">${esc(oil.label)}</div><div class="dim" style="font-size:10px">${esc(oil.source)}</div>`
-        :`<div class="muted">No oil pattern selected.</div>`}
-      <div style="font-size:11px;color:#C9D3E2"><span style="display:inline-block;width:16px;height:3px;background:#2E9BFF;vertical-align:middle"></span> Your line</div></div></div>`;
+    ${oil?`<div style="position:absolute;left:8px;bottom:8px;background:#05080Fdd;padding:4px 7px;border-radius:6px;display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#C9D3E2">Light<span style="width:64px;height:8px;border-radius:3px;background:linear-gradient(90deg,${blueRamp(.05)},${blueRamp(.4)},${blueRamp(.72)},${blueRamp(1)})"></span>Heavy oil</div>
+      <div style="font-size:9px;color:#8FB6E0">${esc(oil.name)} · modeled, not a scan</div></div>`:''}`;
 }
 
 function renderRotation(c) {
@@ -498,7 +498,7 @@ function renderRotation(c) {
   const rows=[['Axis tilt','axis_tilt_deg','°'],['Axis rotation','axis_rotation_deg','°'],['PAP','pap','in']];
   const body=rows.map(([lab,k,u])=>{ const v=s[k]; return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1E2C45">
     <span style="color:#C9D3E2">${lab}</span><span class="num" style="font-weight:600">${v!=null&&v!==''?v+' '+u+' <span class=\"b ruby\" style=\"margin-left:4px\">Ruby</span>':'<span class=\"muted\">—</span>'}</span></div>`;}).join('');
-  return `<div class="sub" style="padding:14px;aspect-ratio:4/3.1;display:flex;flex-direction:column">
+  return `<div class="sub" style="padding:14px;height:100%;display:flex;flex-direction:column">
     <h3 style="font-size:14px;font-weight:600;margin-bottom:6px">Rotation &amp; axis</h3>${body}
     <div class="muted" style="font-size:11px;margin-top:10px">Axis tilt, rotation and PAP aren't measurable from 60 fps video — enter the Ruby values (Ruby button below) to show them here.</div></div>`;
 }
