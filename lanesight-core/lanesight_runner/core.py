@@ -8,10 +8,10 @@ from .trim import detect_window, trim_clip, METRIC_TAIL_S
 from .oil import find as oil_find, oil_field
 from . import card as cardmod
 
-def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None):
+def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None, core_end_s=None):
     """Real analysis: lanesight-core pipeline. Returns the JSON-safe ShotRecord dict."""
     from lanesight_core.cv.pipeline import analyze, _json_default
-    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video)
+    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s)
     return json.loads(json.dumps(rec.to_dict(), default=_json_default))
 
 class Speaker:
