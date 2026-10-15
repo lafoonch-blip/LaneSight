@@ -43,6 +43,17 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     for c in TR: byf[c['i']] = c
     M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
     ser = M.pop('_series')
+    # Distance scale sanity: the impact anchor (the 60 ft reference) is the ball's position extrapolated to the
+    # impact. If the ball was lost before the pins (occlusion or low contrast in the back half, or pin-deck
+    # clutter defeating the linker), that anchor sits mid-lane and every distance is stretched. A thrown ball
+    # tops out near ~22 mph, so a release speed past 30 means the scale is wrong - fail with a clear reason
+    # rather than emit confidently-wrong speed/entry/angle numbers (accuracy beats coverage).
+    v = M.get('ball_speed_mph')
+    if v is not None and v > 30:
+        raise RuntimeError(f"ball not tracked to the pins (measured {v:.0f} mph is not physically possible): the "
+                           f"ball was lost in the back half of the lane, so the distance scale is unreliable. The "
+                           f"lane and early line read fine, but speed/entry can't be trusted. Reshoot with the ball "
+                           f"visible all the way to the pins (less glare / nothing crossing the back of the lane).")
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]

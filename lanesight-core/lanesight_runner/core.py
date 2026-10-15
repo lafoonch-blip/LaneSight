@@ -183,7 +183,12 @@ class Runner:
             try:
                 rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=True)
             except (ClipError, RuntimeError) as e:
-                if (p.get('window') or {}).get('trimmed'):   # a trim was applied; it may have cut the shot -> retry whole clip
+                # Content/framing failures (the lane or the ball itself) look the same on the full clip, which only
+                # has the same background and ball visibility - retrying there just re-pays the HDR conversion
+                # (~2-3 min) to fail again. Retry only errors a wider window could actually fix (e.g. the trim cut
+                # the ball's release so the track was too short).
+                content = str(e).startswith('lane not detected') or 'ball not tracked to the pins' in str(e)
+                if (p.get('window') or {}).get('trimmed') and not content:
                     log(f"windowed analysis failed ({e}); retrying on the full clip")
                     timings['windowed_error'] = str(e)
                     rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=False)

@@ -47,36 +47,121 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
         y_near = T[:, 0].max()
         lanes.append(dict(left=pl, right=pr, res=(sl, sr), y_rng=(T[:, 0].min(), y_near), npts=len(T), track=T))
     # 2. common vanishing point from all edges (each edge is a line x = a*y + b)
-    E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
-    if not lanes:
-        raise RuntimeError(f"lane not detected: no lane-colored wood found in the background "
-                           f"({100 * m.mean():.1f}% of pixels matched). Check that the lane is in frame and lit, "
-                           "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
-    A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
-    vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
-    vp_res = np.abs(A @ vp - b)
-    # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
     good = []
-    for i, l in enumerate(lanes):
-        dl = abs(vp[0] - np.polyval(l['left'], vp[1])); dr = abs(vp[0] - np.polyval(l['right'], vp[1]))
-        width_near = np.polyval(l['right'], l['y_rng'][1]) - np.polyval(l['left'], l['y_rng'][1])
-        l['vp_miss'] = (dl, dr)
-        if max(dl, dr) < 0.08 * w and width_near > 60: good.append(l)
+    if lanes:
+        E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
+        A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
+        vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
+        # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
+        for l in lanes:
+            dl = abs(vp[0] - np.polyval(l['left'], vp[1])); dr = abs(vp[0] - np.polyval(l['right'], vp[1]))
+            width_near = np.polyval(l['right'], l['y_rng'][1]) - np.polyval(l['left'], l['y_rng'][1])
+            l['vp_miss'] = (dl, dr)
+            if max(dl, dr) < 0.08 * w and width_near > 60: good.append(l)
+    # Pale / low-contrast lanes: the wood is too desaturated for the saturation mask to seed a full track
+    # (see the s_min gate in lane_mask). Fall back to edges from the dark gutter->wood boundary, which is
+    # saturation-independent. This runs ONLY when the strict pass finds nothing, so well-saturated lanes
+    # detect exactly as before.
+    foul_mask = m
     if not good:
+        fb = _gutter_fallback(bg, log)
+        if fb:
+            good = fb; foul_mask = lane_mask(bg, s_min=60)
+    if not good:
+        if not lanes:
+            raise RuntimeError(f"lane not detected: no lane-colored wood found in the background "
+                               f"({100 * m.mean():.1f}% of pixels matched). Check that the lane is in frame and lit, "
+                               "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
         raise RuntimeError(f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges "
                            "meeting at a common vanishing point. Check framing: camera behind the approach, whole lane in view")
-    for l in good: _foul(l, m)
     loose = lane_mask(bg, s_min=60)
-    for l in good: _refine_edges(l, loose)
+    for l in good:
+        if l.get('fallback'): continue       # gutter-seeded edges + foul are already set and colour-independent
+        _foul(l, foul_mask); _refine_edges(l, loose)
     if good:   # re-solve VP with refined edges
         E = [(l['left'], l['res'][0]) for l in good] + [(l['right'], l['res'][1]) for l in good]
         A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
         if len(good) == 1: vp = np.linalg.solve(A, b)
         else: vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]
+    for l in good:   # (re)measure edge agreement with the final VP (fallback lanes have none yet)
+        l['vp_miss'] = (abs(vp[0] - np.polyval(l['left'], vp[1])), abs(vp[0] - np.polyval(l['right'], vp[1])))
     log(f"VP ({vp[0]:.0f},{vp[1]:.0f}); {len(good)}/{len(lanes)} lanes consistent: " +
         '; '.join(f"edges±{l['res'][0]:.1f}/{l['res'][1]:.1f}px vp-miss {l['vp_miss'][0]:.0f}/{l['vp_miss'][1]:.0f}px "
                   f"foul±{l['foul_res']:.1f}px" for l in good))
     return dict(vp=vp, lanes=good, mask=m)
+
+def _ransac_edge(P, tol=3.5, min_inliers=40, min_span=200, iters=3000):
+    """Fit one straight lane edge x = a*y + b to gutter-boundary points that are fragmented and salted with
+    outliers (approach bleed, mid-lane streaks). Seeded deterministically so a re-run is reproducible."""
+    P = np.asarray(P, float)
+    if len(P) < min_inliers: return None
+    y, x = P[:, 1], P[:, 0]; best = (0, None); rng = np.random.default_rng(0)
+    for _ in range(iters):
+        i, j = rng.choice(len(P), 2, replace=False)
+        if abs(y[i] - y[j]) < min_span: continue
+        a = (x[i] - x[j]) / (y[i] - y[j]); b = x[i] - a * y[i]
+        inl = np.abs(x - (a * y + b)) < tol
+        span = y[inl].max() - y[inl].min() if inl.sum() > 2 else 0
+        sc = inl.sum() * (span >= min_span)
+        if sc > best[0]: best = (sc, inl)
+    if best[1] is None: return None
+    inl = best[1]
+    for _ in range(3):
+        p = np.polyfit(y[inl], x[inl], 1); inl = np.abs(x - np.polyval(p, y)) < tol
+    if inl.sum() < min_inliers or (y[inl].max() - y[inl].min()) < min_span: return None
+    p = np.polyfit(y[inl], x[inl], 1)
+    return p, float((x[inl] - np.polyval(p, y[inl])).std()), (float(y[inl].min()), float(y[inl].max()))
+
+def _gutter_fallback(bg, log=print):
+    """Seed lanes from the dark gutter->wood boundary instead of the wood colour, for pale lanes the saturation
+    mask can't fill. Every wood-run boundary that has a dark (gutter) pixel just outside it is an edge point;
+    the distinct straight edge lines are extracted (iterated RANSAC), and every adjacent pair enclosing real
+    wood and forming a VP-consistent wedge that widens toward the camera becomes a candidate lane. All are
+    returned so the caller's ball-track step picks the one the ball is on. [] -> caller raises a framing error."""
+    h, w = bg.shape[:2]
+    hsv = cv2.cvtColor(bg, cv2.COLOR_BGR2HSV); V = hsv[..., 2]
+    dark = V < 62                                                   # gutter / shadow (saturation-independent)
+    wood = (hsv[..., 0] >= 5) & (hsv[..., 0] <= 28) & (V > 70)      # wood hue + bright, any saturation
+    gm = 20; pts = []                                              # a real gutter run beside the edge, not a speck
+    for y in range(h - 1, int(0.18 * h), -2):
+        row = wood[y].astype(int); d = np.diff(np.r_[0, row, 0])
+        for a, b in zip(np.where(d == 1)[0], np.where(d == -1)[0] - 1):
+            if b - a < 25: continue
+            if a > 2 and dark[y, max(0, a - gm):a].sum() >= 10: pts.append((a, y))        # wood left edge at a gutter
+            if b < w - 3 and dark[y, b + 1:min(w, b + gm)].sum() >= 10: pts.append((b, y))  # wood right edge at a gutter
+    P = np.array(pts, float)
+    if len(P) < 80: return []
+    # extract distinct straight edge lines, peeling off each line's inliers before the next
+    lines = []; rem = P
+    while len(rem) >= 40 and len(lines) < 8:
+        r = _ransac_edge(rem)
+        if r is None: break
+        p, res, yr = r
+        on = np.abs(rem[:, 0] - np.polyval(p, rem[:, 1])) < 4.0
+        lines.append((p, res, yr)); rem = rem[~on]
+    if len(lines) < 2: return []
+    lines.sort(key=lambda L: np.polyval(L[0], h * 0.5))              # left to right at mid-height
+    out = []
+    for (pl, sl, yl), (pr, sr, yr) in zip(lines, lines[1:]):
+        o_lo, o_hi = max(yl[0], yr[0]), min(yl[1], yr[1])          # region where BOTH edges were observed
+        if o_hi - o_lo < 150: continue
+        # width is validated where both edges are seen; the lane itself spans top-of-either to the foul line
+        # (the longer edge's bottom = where the gutter ends), reached by extrapolating the shorter edge.
+        y_lo, y_hi = min(yl[0], yr[0]), max(yl[1], yr[1])
+        w_o0 = np.polyval(pr, o_lo) - np.polyval(pl, o_lo); w_o1 = np.polyval(pr, o_hi) - np.polyval(pl, o_hi)
+        w_hi = np.polyval(pr, y_hi) - np.polyval(pl, y_hi)
+        vpy = (pl[1] - pr[1]) / (pr[0] - pl[0]) if abs(pr[0] - pl[0]) > 1e-6 else -1e9
+        if max(sl, sr) > 4.0 or not (60 < w_o0 < w_o1) or not (0 < w_hi < 1.6 * w) or not (vpy < y_lo): continue
+        # the enclosed strip must be mostly wood (rejects a gutter interior framed by two edge lines)
+        frac = np.mean([wood[int(y), int(np.clip((np.polyval(pl, y) + np.polyval(pr, y)) / 2, 0, w - 1))]
+                        for y in np.linspace(o_lo, o_hi, 40)])
+        if frac < 0.5: continue
+        out.append(dict(left=pl, right=pr, res=(sl, sr), y_rng=(y_lo, y_hi), npts=0, track=np.empty((0, 3)),
+                        foul=np.array([0.0, y_hi]), foul_res=0.0, foul_n=2, fallback=True))
+    if out:
+        log(f"gutter fallback: pale lane, {len(out)} candidate lane(s) from gutter edges "
+            + "; ".join(f"res {l['res'][0]:.1f}/{l['res'][1]:.1f}px" for l in out))
+    return out
 
 def _refine_edges(l, loose):
     h, w = loose.shape
