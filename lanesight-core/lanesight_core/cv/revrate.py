@@ -33,5 +33,10 @@ def rev_rate(crops, fmin=4.0, fmax=10.0):
     for P in periods:
         k = P / dt
         score.append(np.mean([np.interp(m * k, lags, ac) for m in (1, 2, 3) if m * k < lags[-1]]))
-    P = periods[int(np.argmax(score))]
-    return 60.0 / P, dict(lags=lags * dt, ac=ac, periods=periods, score=np.array(score))
+    score = np.array(score); ai = int(np.argmax(score))
+    # A real spin period sits inside the band; when no pattern repeats, argmax slides to the search rail
+    # (shortest or longest period) and 60/P is the ceiling (or floor) value, not a measurement. Flag it so the
+    # caller reports the rev rate unavailable instead of a confident wrong number (DEC-026).
+    at_rail = ai < 3 or ai > len(score) - 4
+    P = periods[ai]
+    return 60.0 / P, dict(lags=lags * dt, ac=ac, periods=periods, score=score, argmax=ai, at_rail=at_rail)
