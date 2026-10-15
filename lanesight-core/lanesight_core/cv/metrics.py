@@ -73,7 +73,9 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
         mm = (Z >= a) & (Z < b)
         if mm.sum() < 5 or np.ptp(t[mm]) < 0.08: return None
         return np.polyfit(t[mm], Z[mm], 1)
-    early = seg(4, 24) or seg(4, 30) or seg(2, max(32.0, float(Z.max())))   # widen if the early lane is sparse
+    early = seg(4, 24)                                      # widen the window if the early lane is sparse
+    if early is None: early = seg(4, 30)
+    if early is None: early = seg(2, max(32.0, float(Z.max())))
     if early is None:
         raise RuntimeError('ball not tracked enough to measure speed (the rolling track is too short or sparse)')
     late = seg(Z_IMPACT - 15, Z_IMPACT + 2)
