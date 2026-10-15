@@ -394,8 +394,9 @@ function renderShots() {
     <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FFD84A;vertical-align:middle"></span> entry</span>
     <span><span style="display:inline-block;width:0;height:10px;border-left:2px dashed #9AA8BC;vertical-align:middle"></span> target breakpoint</span>
     <span>Rev rate and Power are estimates</span></div>`;
-  return head + avgPills + `<div style="overflow-x:auto"><div style="min-width:640px">${colhead}
-    <div style="max-height:372px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">${rows || '<div class="ph">No shots match this filter.</div>'}</div></div></div>${legend}`;
+  const sub = `<div style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Every shot this session — tap a row to open it.</div>`;
+  return head + sub + avgPills + `<div style="overflow-x:auto"><div style="min-width:640px">${colhead}
+    <div style="max-height:min(60vh,620px);overflow-y:auto;display:flex;flex-direction:column;gap:4px">${rows || '<div class="ph">No shots match this filter.</div>'}</div></div></div>${legend}`;
 }
 const badgeFor = s => s==='guaranteed'?['✓','ok']:s==='best_effort'?['est','est']:s==='ruby'?['Ruby','ruby']:['n/a','na'];
 const metricByKey = (c,k) => (c.metrics||[]).find(m=>m.key===k);
@@ -662,7 +663,7 @@ function bind(sess, c) {
 }
 function bindShots() {
   document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { shotFilter = b.dataset.filter; render(); });
-  document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => { selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
+  document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => { selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; view = 'latest'; render(); });
 }
 function bindLatest(sess, c) {
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));
