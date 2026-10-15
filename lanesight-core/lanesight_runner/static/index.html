@@ -91,7 +91,7 @@ label.lbl{display:block}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', mediaTab = 'video';
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', mediaTab = 'video', chartTab = 'speedrev';
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
 const trajCache = {};
 
@@ -156,6 +156,10 @@ function render() {
         <aside class="panel" style="flex:1 1 330px;display:flex;flex-direction:column;gap:16px">${renderInputs(sess, c)}</aside>
       </div>
       ${renderShots()}
+      <div style="display:flex;flex-wrap:wrap;gap:16px">
+        <section class="panel" style="flex:999 1 560px">${renderChart()}</section>
+        <section class="panel" style="flex:1 1 520px;display:flex;flex-wrap:wrap;gap:16px">${renderLaneUsage(st)}</section>
+      </div>
     </main>`;
   bind(sess, c);
 }
@@ -510,6 +514,106 @@ function renderShots() {
     </div></div></section>`;
 }
 
+/* ---------- shot-by-shot chart ---------- */
+const CHART_DEFS = {
+  speedrev: { tabs: 'Speed + revs', axes: 2, series: [
+    { key: 'ball_speed', color: '#00C2EE', axis: 0, label: 'Speed mph (left)' },
+    { key: 'rev_rate', color: '#F5A524', axis: 1, label: 'Rev rate rpm (right, est)' }] },
+  entrybp: { tabs: 'Entry + breakpoint', axes: 1, unit: 'bd', series: [
+    { key: 'entry_board', color: '#00C2EE', label: 'Entry board' },
+    { key: 'breakpoint_board', color: '#F5A524', label: 'Breakpoint board' }] },
+  arrows: { tabs: 'Arrows', axes: 1, unit: 'bd', series: [{ key: 'arrows_board', color: '#00C2EE', label: 'Arrows board' }] },
+  power: { tabs: 'Power', axes: 1, unit: '', series: [{ key: 'power', color: '#00C2EE', label: 'Power (est)' }] },
+};
+const getSeriesVal = (c, k) => k === 'power' ? ((c.power || {}).value ?? null) : metricVal(c, k);
+function renderChart() {
+  const head = `<div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Shot by shot</h2><div style="flex:1"></div>
+    <div class="rowline" style="gap:6px" role="group" aria-label="Series">${Object.entries(CHART_DEFS).map(([k,d]) =>
+      `<button class="tab ${chartTab===k?'on':''}" data-chart="${k}" type="button">${d.tabs}</button>`).join('')}</div></div>`;
+  const done = S.cards.filter(c => c.status === 'done');
+  const def = CHART_DEFS[chartTab];
+  const sd = def.series.map(s => ({ ...s, pts: done.map(c => ({ n: c.n, v: getSeriesVal(c, s.key) })).filter(p => p.v != null) }));
+  if (!sd.some(s => s.pts.length)) return head + `<div class="muted" style="padding:20px 0">No data yet for this series.</div>`;
+  const W = 680, H = 240, T = 18, B = 42, L = 46, R = def.axes === 2 ? 632 : 648;
+  const ns = done.map(c => c.n); let xmin = Math.min(...ns), xmax = Math.max(...ns); if (xmin === xmax) { xmin -= 0.5; xmax += 0.5; }
+  const X = n => L + (n - xmin) / (xmax - xmin) * (R - L);
+  const scale = idx => { const vs = sd.filter(s => (s.axis||0) === idx).flatMap(s => s.pts.map(p => p.v)); if (!vs.length) return null;
+    let lo = Math.min(...vs), hi = Math.max(...vs); if (lo === hi) { lo -= 1; hi += 1; } const pad = (hi-lo)*0.18; lo -= pad; hi += pad;
+    return { lo, hi, y: v => (H-B) - (v-lo)/(hi-lo)*((H-B)-T) }; };
+  const A = [scale(0), def.axes === 2 ? scale(1) : null];
+  const ticks = (a, x, anchor) => { if (!a) return ''; const out = [];
+    for (let i = 0; i <= 3; i++) { const v = a.lo + (a.hi-a.lo)*i/3, y = a.y(v);
+      out.push(`<text x="${x}" y="${(y+4).toFixed(1)}" fill="#93A3BA" font-size="11" text-anchor="${anchor}">${chartTab==='speedrev'&&anchor==='end'?v.toFixed(1):Math.round(v)}</text>`); }
+    return out.join(''); };
+  const grid = [0,1,2,3].map(i => { const y = (A[0].y(A[0].lo + (A[0].hi-A[0].lo)*i/3)).toFixed(1); return `M${L},${y}H${R}`; }).join('');
+  const half = X((xmin+xmax)/2).toFixed(1);
+  const paths = sd.map(s => { const a = A[s.axis||0]; if (!a || !s.pts.length) return '';
+    const pl = s.pts.map(p => `${X(p.n).toFixed(1)},${a.y(p.v).toFixed(1)}`).join(' ');
+    const dots = s.pts.map(p => `<circle cx="${X(p.n).toFixed(1)}" cy="${a.y(p.v).toFixed(1)}" r="3.5" fill="${s.color}"></circle>`).join('');
+    return `<polyline points="${pl}" fill="none" stroke="${s.color}" stroke-width="2.5"></polyline>${dots}`; }).join('');
+  const xlabels = [xmin, Math.round((xmin+xmax)/2), xmax].filter((v,i,a)=>a.indexOf(v)===i).map(n =>
+    `<text x="${X(n).toFixed(1)}" y="${H-24}" fill="#93A3BA" font-size="11" text-anchor="middle">${n}</text>`).join('');
+  const legend = sd.map(s => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.color}"></span> ${s.label}</span>`).join('');
+  return head + `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Shot by shot ${def.tabs}">
+      <path d="${grid}" stroke="#1F2E45" fill="none"></path>
+      ${ticks(A[0], L-6, 'end')}${A[1] ? ticks(A[1], R+6, 'start') : ''}${xlabels}
+      <text x="${(L+R)/2}" y="${H-8}" fill="#93A3BA" font-size="11" text-anchor="middle">Shot</text>
+      ${done.length>2 ? `<line x1="${half}" x2="${half}" y1="${T}" y2="${H-B}" stroke="#2D4363" stroke-dasharray="4 4"></line>` : ''}
+      ${paths}</svg>
+    <div class="rowline" style="gap:18px;font-size:13px;color:#C3CEDD;margin-top:4px">${legend}${done.length>2?'<span style="color:#93A3BA">Dashed: half-way split</span>':''}</div>`;
+}
+
+/* ---------- lane usage + lane read ---------- */
+function renderLaneUsage(st) {
+  const firsts = S.cards.filter(c => c.status === 'done' && c.kind === 'first' && c.path && c.path.length);
+  const cons = st.consistency || {};
+  const W = 160, H = 520, mx = 20, my = 20, lw = W - 2*mx, lh = H - 2*my;
+  const bx = b => mx + (39 - b) / 38 * lw;          // board 39 at left, 1 at right (1 = right gutter)
+  const zy = z => (H - my) - z / 60 * lh;           // 0 ft at foul (bottom), 60 ft at pins (top)
+  const pathD = p => p.map((pt, i) => `${i?'L':'M'}${bx(pt[1]).toFixed(1)},${zy(pt[0]).toFixed(1)}`).join('');
+  const latestId = firsts.length ? firsts[firsts.length-1].id : null;
+  const others = firsts.filter(c => c.id !== latestId).map(c => `<path d="${pathD(c.path)}" fill="none" stroke="#BFD3EA" stroke-width="1.4" stroke-linecap="round" opacity=".5"></path>`).join('');
+  const latest = firsts.find(c => c.id === latestId);
+  const ell = cons.breakpoint_ellipse;
+  const ellSvg = ell ? (() => { const [cb, cz] = ell.center, [ax, ay] = ell.axes;
+    return `<ellipse cx="${bx(cb).toFixed(1)}" cy="${zy(cz).toFixed(1)}" rx="${(ax/38*lw).toFixed(1)}" ry="${(ay/60*lh).toFixed(1)}" transform="rotate(${-ell.angle_deg} ${bx(cb).toFixed(1)} ${zy(cz).toFixed(1)})" fill="#F5CF5B33" stroke="#F5CF5B" stroke-width="1.5"></ellipse>`; })() : '';
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="160" role="img" aria-label="Top-down lane with first-ball paths">
+      <rect x="${mx}" y="${my}" width="${lw}" height="${lh}" fill="#6B4A26"></rect>
+      <rect x="${mx-8}" y="${my}" width="8" height="${lh}" fill="#2A3240"></rect><rect x="${mx+lw}" y="${my}" width="8" height="${lh}" fill="#2A3240"></rect>
+      ${ellSvg}${others}
+      ${latest ? `<path d="${pathD(latest.path)}" fill="none" stroke="#00C2EE" stroke-width="3" stroke-linecap="round"></path>` : ''}
+      <text x="${W/2}" y="13" fill="#93A3BA" font-size="11" text-anchor="middle">pins</text>
+      <text x="${W/2}" y="${H-4}" fill="#93A3BA" font-size="11" text-anchor="middle">foul line</text></svg>`;
+  const disp = cons.dispersion_boards || {};
+  const spread = ['arrows','breakpoint','entry'].map(k => `<div style="background:var(--tile);border:1px solid var(--tileline);border-radius:9px;padding:8px 10px">
+      <div class="lbl">${cap(k)}</div><div class="num" style="font-size:21px;font-weight:700">${disp[k]!=null?'±'+disp[k]:'—'}<span style="font-size:12px;color:var(--muted)"> bd</span></div></div>`).join('');
+  const takeaways = laneReadTakeaways(st);
+  return `<div style="flex:0 0 170px"><h2 class="h">Lane usage</h2>${svg}</div>
+    <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:12px;min-width:0">
+      <h2 class="h" style="margin:0">Lane read</h2>
+      <div style="display:flex;flex-direction:column;gap:10px">${takeaways.length ? takeaways.map(t => `<div style="display:flex;gap:10px">
+          <span style="flex:0 0 8px;height:8px;margin-top:7px;border-radius:50%;background:${t.color}"></span>
+          <div><div style="font-weight:600">${esc(t.title)}</div><div style="font-size:13px;color:#A9B6C9">${esc(t.body)}</div></div></div>`).join('')
+        : `<div class="muted small">Takeaways appear as the session builds (3+ comparable first balls).</div>`}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:auto">${spread}</div>
+      <div class="lbl">${ell ? 'Yellow ellipse: where your breakpoints landed (2σ). ' : ''}Spread = how repeatable each checkpoint is${cons.dispersion_boards?'':' (needs 3+ first balls)'}.</div>
+    </div>`;
+}
+function laneReadTakeaways(st) {
+  const out = [];
+  // lane transition: surface a transition recommendation if the engine found one on a recent first ball
+  const tr = [...S.cards].reverse().find(c => c.kind === 'first' && ((c.insights || {}).recommendations || []).some(r => r.type === 'transition'));
+  if (tr) { const r = tr.insights.recommendations.find(x => x.type === 'transition'); out.push({ color: '#F5CF5B', title: 'Lane is transitioning', body: r.reason }); }
+  const a = st.averages || {};
+  if (a.ball_speed && a.ball_speed.n >= 2) out.push({ color: '#3FD8FF', title: 'Speed ' + (a.ball_speed.sd <= 0.3 ? 'is steady' : 'is varying'),
+    body: `${a.ball_speed.mean.toFixed(1)} mph ± ${a.ball_speed.sd.toFixed(1)} on first balls.` });
+  if (a.breakpoint_board && a.breakpoint_board.n >= 2) { const len = (S.session || {}).pattern_length_ft;
+    const target = (S.session.intent || {}).breakpoint_board ?? (len ? len - 31 : null);
+    out.push({ color: '#3FD8FF', title: 'Breakpoint', body: `Average ${a.breakpoint_board.mean.toFixed(1)}${target!=null?` vs your target ${target}`:''}.${len?` Pattern rule for ${len} ft says ${len-31}.`:''}` });
+  }
+  return out;
+}
+
 /* ---------- start session ---------- */
 function renderStart() {
   $('#hstatus').innerHTML = '';
@@ -545,6 +649,7 @@ function renderStart() {
 function bind(sess, c) {
   document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; render(); });
   document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { shotFilter = b.dataset.filter; render(); });
+  document.querySelectorAll('[data-chart]').forEach(b => b.onclick = () => { chartTab = b.dataset.chart; render(); });
   document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => {
     selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));

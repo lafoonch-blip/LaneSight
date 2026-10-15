@@ -38,6 +38,17 @@ def capture(rec, probe):
                            release_visible=rec['events'].get('t_release') is not None, pins_visible=rec.get('pins') is not None)
     return prof, metric_status(prof)
 
+def compact_path(trajectory, n=44):
+    """Downsample the smoothed top-down path to ~n [z_ft, board] points for the lane-usage panel (the full path
+    would bloat every /api/state). Returns [] when there's no path."""
+    sm = (trajectory or {}).get('smoothed') or []
+    pts = [[round(p['z_ft'], 1), round(p['board'], 2)] for p in sm if p.get('board') is not None]
+    if len(pts) <= n: return pts
+    step = len(pts) / n
+    out = [pts[int(i * step)] for i in range(n)]
+    if out[-1] != pts[-1]: out.append(pts[-1])
+    return out
+
 def effective_pins(shot, rec):
     p = rec.get('pins')
     if shot.get('pins_override') is not None:
@@ -131,7 +142,7 @@ def build_cards(session, shots):
             pins = effective_pins(s, rec)
             v = view(rec, pins)
             c.update(capture=prof, metrics=metrics(rec, status), pins=pins, handed=rec['handed'],
-                     key_points=rec.get('key_points'))
+                     key_points=rec.get('key_points'), path=compact_path(rec.get('trajectory')))
             sens = s.get('sensor') or {}
             rev = sens.get('rev_rate_rpm') or v.get('rev_rate')
             pw = power(s.get('ball_weight_lb'), v.get('speed_late') if status.get('speed_profile', {}).get('status') != 'unavailable' else None,
