@@ -57,12 +57,14 @@ def effective_pins(shot, rec):
         return dict(standing=st, uncertain=[], strike=not st, source='corrected',
                     video_read=None if not p else dict(standing=p['standing'], uncertain=p['uncertain']))
     if not p: return None
-    return dict(standing=p['standing'], uncertain=p['uncertain'], strike=p['strike'], source='video', confidence=p.get('confidence'))
+    return dict(standing=p['standing'], uncertain=p['uncertain'], strike=p['strike'], source='video', confidence=p.get('confidence'),
+                readable=p.get('readable', True), unread_reason=p.get('unread_reason'))
 
 def view(rec, pins):
     mt = rec['metrics']; v = {k: x['value'] for k, x in mt.items()}
+    read = pins and pins.get('standing') is not None
     v.update(board_at_15ft=v.get('arrows_board'), board_at_0ft=v.get('laydown_board'), entry_angle_deg=v.get('entry_angle'),
-             pins_standing=set(pins['standing']) if pins else None, pins_uncertain=set(pins['uncertain']) if pins else None)
+             pins_standing=set(pins['standing']) if read else None, pins_uncertain=set(pins['uncertain']) if read else None)
     return v
 
 def metrics(rec, status):
@@ -98,7 +100,8 @@ def speech(card):
     if card['status'] == 'failed': return 'Shot could not be analyzed.'
     if card['status'] != 'done': return None
     pins = card.get('pins')
-    head = '' if pins is None else ('Strike. ' if pins['strike'] else f"Left {' '.join(map(str, pins['standing']))}. ")
+    head = ('' if pins is None else 'Pins not read. ' if pins.get('standing') is None
+            else 'Strike. ' if pins['strike'] else f"Left {' '.join(map(str, pins['standing']))}. ")
     if card['kind'] == 'spare':
         return 'Spare made.' if pins and pins['strike'] else (head.strip() or 'Spare result unknown.')
     recs = (card.get('insights') or {}).get('recommendations') or []
@@ -162,7 +165,7 @@ def build_cards(session, shots):
                 ins = strike_adjustment(v, rec['handed'], intent=s.get('intent'), user_said=user_said, history=list(hist), pattern=pattern)
                 c['insights'] = ins
                 hist.append(dict(v, classification=ins['classification']))
-                if pins and not pins['strike']:
+                if pins and pins.get('standing') is not None and not pins['strike']:
                     c['spare_plan'] = spare_plan(set(pins['standing']) | set(pins['uncertain']), rec['handed'])
                 c['hit'] = read_hit(v.get('entry_board'), v.get('entry_angle_deg'), rec['handed'])
             if sens and any(sens.get(k) not in (None, '') for k in SENSOR_FIELDS):
@@ -195,7 +198,7 @@ def game_frames(cards):
     for c in cards:
         if c['status'] != 'done': break
         p = c.get('pins')
-        if p is None: break                                   # unknown result -> stop; rest of the game is blank
+        if p is None or p.get('standing') is None: break      # unknown / unreadable result -> stop; rest stays blank
         standing = frozenset(p['standing'])
         if c['kind'] == 'first':
             down = 10 - len(standing); prev_down = down
@@ -212,18 +215,22 @@ def game_frames(cards):
 def session_stats(cards, shots):
     done = [c for c in cards if c['status'] == 'done' and c.get('pins') is not None]
     first = [c for c in done if c['kind'] == 'first']; spare = [c for c in done if c['kind'] == 'spare']
-    strikes = [c for c in first if c['pins']['strike']]
+    rd = lambda cs: [c for c in cs if c['pins'].get('standing') is not None]   # pins the video actually read
+    first_r, spare_r = rd(first), rd(spare)                   # strike/carry rates only over read results, never guessed
+    strikes = [c for c in first_r if c['pins']['strike']]
     pocket = [c for c in first if (c.get('hit') or {}).get('hit') == 'pocket']
-    pocket_strikes = [c for c in pocket if c['pins']['strike']]
-    made = [c for c in spare if c['pins']['strike']]
+    pocket_r = rd(pocket)
+    pocket_strikes = [c for c in pocket_r if c['pins']['strike']]
+    made = [c for c in spare_r if c['pins']['strike']]
     pct = lambda a, b: round(100 * len(a) / len(b)) if b else None
     recs = [s['record'] for s in shots if s.get('record')]
     pw = [c['power']['value'] for c in first if (c.get('power') or {}).get('value') is not None]
     marks = [c.get('hit_mark') for c in first]
     st = dict(shots=len(cards), analyzed=len([c for c in cards if c['status'] == 'done']), failed=len([c for c in cards if c['status'] == 'failed']),
-              first_balls=len(first), strikes=len(strikes), strike_pct=pct(strikes, first),
-              pocket_hits=len(pocket), pocket_pct=pct(pocket, first), carry_pct=pct(pocket_strikes, pocket),
-              spare_attempts=len(spare), spares_made=len(made), spare_pct=pct(made, spare),
+              first_balls=len(first), strikes=len(strikes), strike_pct=pct(strikes, first_r),
+              pins_unread=len(first) - len(first_r),
+              pocket_hits=len(pocket), pocket_pct=pct(pocket, first), carry_pct=pct(pocket_strikes, pocket_r),
+              spare_attempts=len(spare), spares_made=len(made), spare_pct=pct(made, spare_r),
               avg_power=round(sum(pw) / len(pw)) if pw else None, power_range=[min(pw), max(pw)] if pw else None,
               hit_marks=dict(yes=marks.count('yes'), no=marks.count('no'), unsure=marks.count('unsure'),
                              marked=len([m for m in marks if m])),

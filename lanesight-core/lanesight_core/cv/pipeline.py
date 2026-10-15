@@ -96,7 +96,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
               entry=dict(z_ft=59.44, board=M['entry_board'], angle_deg=M['entry_angle_deg']))
     pins = None
     if PR:
-        pins = {k: PR[k] for k in ('standing', 'uncertain', 'strike', 'pins_down_min', 'pins_down_max', 'confidence')}
+        pins = {k: PR[k] for k in ('standing', 'uncertain', 'strike', 'pins_down_min', 'pins_down_max', 'confidence',
+                                   'readable', 'unread_reason')}
         pins['before'] = list(range(1, 11))
     rec = ShotRecord(shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)), handed=hand,
                      video=dict(file=os.path.basename(video), fps=round(1 / np.median(np.diff(S['ts'])), 2),
@@ -105,10 +106,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                  release_source=M['release_source']),
                      measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {})
     shot_view = {x.metric: x.value for x in meas}
+    pins_read = pins and pins.get('readable', True)   # None standing (unread) -> leave classification stays 'unknown'
     shot_view.update(board_at_15ft=M.get('board_at_15ft'), board_at_0ft=M.get('board_at_0ft'), entry_angle_deg=M['entry_angle_deg'],
-                     pins_standing=set(pins['standing']) if pins else None, pins_uncertain=set(pins['uncertain']) if pins else None)
+                     pins_standing=set(pins['standing']) if pins_read else None,
+                     pins_uncertain=set(pins['uncertain']) if pins_read else None)
     rec.insights = strike_adjustment(shot_view, hand, intent=intent, history=history, pattern=pattern)
-    if pins and not pins['strike']:
+    if pins_read and not pins['strike']:
         rec.spare_plan = spare_plan(set(pins['standing']) | set(pins['uncertain']), hand)
     if sensor: rec.sensor = sensor_variance(rec, sensor)
     return rec

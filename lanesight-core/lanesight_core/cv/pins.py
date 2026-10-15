@@ -86,11 +86,39 @@ def read_pins(path, S, H_img2lane, t_impact, log=print):
     standing = [p for p in range(1, 11) if res[p]['standing']]
     conf = np.mean([min(1.0, abs((res[p]['ratio'] if np.isfinite(res[p]['ratio']) else 0.45) - 0.45) / 0.35)
                     for p in range(1, 11) if res[p]['standing'] is not None])
-    out = dict(t_settled=float(t_set), standing=standing, uncertain=uncertain, strike=(not standing and not uncertain),
-               pins_down_min=10 - len(standing) - len(uncertain), pins_down_max=10 - len(standing),
-               confidence=float(conf), per_pin={p: {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()}
-                                                for p, d in res.items()}, pin_px=PP)
+    # Reliability: a "no pins standing" result is only a real strike if we could actually SEE the settled deck.
+    # The masking unit just above the pins is static background, so if it changed between the pre-impact reference
+    # and the settled frame, something (usually the bowler standing into frame) is blocking the deck. A would-be
+    # strike under that condition is reported as unreadable, not a false strike -- LaneSight reads pins from the
+    # video, so when the video doesn't show them it must say so rather than guess. (A visible leave is still
+    # reported; occlusion most dangerously HIDES standing pins and makes a leave look like a strike.)
+    clip_end = float(S['ts'][min(len(S['ts']), len(S['Hs'])) - 1])
+    vmin = min(pp['v'] for pp in PP.values()); ppi = max(pp['ppi'] for pp in PP.values())
+    us = [pp['u'] for pp in PP.values()]
+    by0, by1 = max(int(vmin - 24 * ppi), 0), max(int(vmin - 15 * ppi), 1)
+    bx0, bx1 = max(int(min(us) - 8 * ppi), 0), min(int(max(us) + 8 * ppi), w)
+    occluded = False
+    if by1 > by0 + 2 and bx1 > bx0 + 2:
+        rb = cv2.cvtColor(ref[by0:by1, bx0:bx1], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
+        sb = cv2.cvtColor(settled[by0:by1, bx0:bx1], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
+        # real strike/leave leaves the masking unit intact (corr ~0.7-0.95); a bowler blocking it drops corr far
+        # lower (shot 5: ~0.07). 0.35 sits in the wide gap, biased to avoid ever false-flagging a real result.
+        if rb.std() > 1 and sb.std() > 1: occluded = float(np.corrcoef(rb, sb)[0, 1]) < 0.35
+    settled_enough = clip_end >= t_impact + 0.6                     # a floor: pins need a moment to fall on screen
+    readable, reason = True, None
+    if not standing and not uncertain and (occluded or not settled_enough):
+        readable = False
+        reason = ("the pin deck was blocked (the bowler stepped into view) as the pins settled" if occluded
+                  else f"the clip ends {clip_end - t_impact:.1f}s after the ball reached the pins — too soon to read the pins")
+    out = dict(t_settled=float(t_set), standing=(standing if readable else None),
+               uncertain=(uncertain if readable else None), strike=((not standing and not uncertain) if readable else None),
+               readable=readable, unread_reason=reason,
+               pins_down_min=(10 - len(standing) - len(uncertain)) if readable else None,
+               pins_down_max=(10 - len(standing)) if readable else None,
+               confidence=float(conf) if readable else 0.0,
+               per_pin={p: {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d.items()} for p, d in res.items()}, pin_px=PP)
     out['rack_snap_px'] = (sx, sy)
-    log(f"pins: rack snapped by ({sx},{sy}) px; standing {standing}{' uncertain ' + str(uncertain) if uncertain else ''} "
-        f"({'STRIKE' if out['strike'] else str(out['pins_down_min']) + ' down'}) settled t={t_set:.2f}s conf {conf:.2f}")
+    log(f"pins: rack snapped by ({sx},{sy}) px; " + (f"UNREADABLE ({reason})" if not readable else
+        f"standing {standing}{' uncertain ' + str(uncertain) if uncertain else ''} "
+        f"({'STRIKE' if out['strike'] else str(out['pins_down_min']) + ' down'})") + f" settled t={t_set:.2f}s conf {conf:.2f}")
     return out

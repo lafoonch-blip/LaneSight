@@ -130,13 +130,15 @@ function rangeCards() {
   return cs;
 }
 // one shot's outcome mark: X strike / "/" spare made / "–" open-or-leave
+const pinsUnread = c => c.pins && c.pins.standing == null;   // video couldn't read the pins (not a result)
 function shotMark(c) {
   if (c.status !== 'done' || !c.pins) return null;
+  if (pinsUnread(c)) return '?';
   if (c.kind === 'first') return c.pins.strike ? 'X' : '–';
   return c.pins.strike ? '/' : '–';
 }
 function shotTag(c) {
-  const m = shotMark(c); return m === 'X' ? 'strike' : m === '/' ? 'spare' : m === '–' ? 'open' : (c.status === 'failed' ? 'failed' : 'pending');
+  const m = shotMark(c); return m === 'X' ? 'strike' : m === '/' ? 'spare' : m === '–' ? 'open' : m === '?' ? 'unread' : (c.status === 'failed' ? 'failed' : 'pending');
 }
 
 function render() {
@@ -220,17 +222,18 @@ function renderOverview() {
   const head = panelHead('Session Overview', `<div class="tabs" role="group" aria-label="Range">${range_tabs}</div>`);
   const first = cards.filter(c => c.status==='done' && c.kind==='first' && c.pins);
   const spare = cards.filter(c => c.status==='done' && c.kind==='spare' && c.pins);
-  const strikes = first.filter(c => c.pins.strike), made = spare.filter(c => c.pins.strike);
+  const firstR = first.filter(c => !pinsUnread(c));   // readable pin result (unreadable shots don't count as strike or open)
+  const strikes = firstR.filter(c => c.pins.strike), made = spare.filter(c => c.pins.strike);
   const col = k => first.map(c => metricVal(c,k)).filter(v => v!=null);
   const aSpeed = avg(col('ball_speed')), aRev = avg(col('rev_rate'));
-  const strikePct = pct(strikes.length, first.length), sparePct = pct(made.length, spare.length);
+  const strikePct = pct(strikes.length, firstR.length), sparePct = pct(made.length, spare.length);
   const prev = (range === 'all' && S.prev_stats) ? S.prev_stats : null;
-  const downs = first.map(c => 10 - ((c.pins.standing || []).length)).filter(v => v >= 0);
+  const downs = firstR.map(c => 10 - ((c.pins.standing || []).length)).filter(v => v >= 0);
   const aPins = avg(downs);
   const tiles = [
     tile('Average Speed', aSpeed!=null?aSpeed.toFixed(1):'—', 'MPH', '✓', 'ok', prev ? kdelta(aSpeed, (prev.averages.ball_speed||{}).mean, 1, 'vs last session') : null, `${first.length} first ball${first.length===1?'':'s'}`),
     tile('Average Rev Rate', aRev!=null?Math.round(aRev):'—', 'RPM', 'est', 'est', prev ? kdelta(aRev, (prev.averages.rev_rate||{}).mean, 0, 'vs last session') : null, 'surface periodicity'),
-    tile('Strikes', strikePct!=null?strikePct+'%':'—', `(${strikes.length}/${first.length})`, '✓', 'ok', prev ? kdelta(strikePct, prev.strike_pct, 0, '% vs last session') : null),
+    tile('Strikes', strikePct!=null?strikePct+'%':'—', `(${strikes.length}/${firstR.length})`, '✓', 'ok', prev ? kdelta(strikePct, prev.strike_pct, 0, '% vs last session') : null),
     tile('Spares', sparePct!=null?sparePct+'%':'—', `(${made.length}/${spare.length})`, '✓', 'ok', prev ? kdelta(sparePct, prev.spare_pct, 0, '% vs last session') : null),
     tile('Average Pins', aPins!=null?aPins.toFixed(1):'—', 'pins', '✓', 'ok', null, downs.length?`High ${Math.max(...downs)} · Low ${Math.min(...downs)}`:''),
   ];
@@ -379,7 +382,7 @@ function renderTransitionStatus() {
   const third = Math.max(1, Math.floor(first.length / 3)), early = first.slice(0, third), recent = first.slice(-third);
   const m = (arr, k) => avg(arr.map(c => metricVal(c, k)).filter(v => v != null));
   const eEntry = m(early, 'entry_board'), rEntry = m(recent, 'entry_board');
-  const carry = arr => pct(arr.filter(c => c.pins.strike).length, arr.length);
+  const carry = arr => { const r = arr.filter(c => !pinsUnread(c)); return pct(r.filter(c => c.pins.strike).length, r.length); };
   const mag = Math.abs(rEntry - eEntry);
   const [stName, stCol] = mag < 0.5 ? ['Lane holding', '#43D893'] : mag < 1.5 ? ['Moderate transition', '#F2C94C'] : ['Significant transition', '#F2552C'];
   const score = Math.min(100, Math.round(mag / 3 * 100));
@@ -455,7 +458,7 @@ function renderShots() {
     const mark = shotMark(c);
     const chipC = mark==='X'?['#22C55E','#0F2E1C']:mark==='/'?['#F2C94C','#33290D']:mark==='–'?['#EF4444','#3A1414']:['#8592A6','#1A2436'];
     const leave = c.pins && !c.pins.strike ? (c.pins.standing||[]).join('-') : '';
-    const title = c.status!=='done' ? cap(c.status) : !c.pins ? 'Pins not read' : c.pins.strike ? (c.kind==='spare'?'Spare made':'Strike') : 'Leave '+leave;
+    const title = c.status!=='done' ? cap(c.status) : (!c.pins || pinsUnread(c)) ? "Pins not read from video" : c.pins.strike ? (c.kind==='spare'?'Spare made':'Strike') : 'Leave '+leave;
     const bp = metricVal(c,'breakpoint_board'), entry = metricVal(c,'entry_board');
     const tgt = ((c.intent||{}).breakpoint_board) ?? ((S.session.intent||{}).breakpoint_board);
     const rev = metricVal(c,'rev_rate'), speed = metricVal(c,'ball_speed'), ang = metricVal(c,'entry_angle'), loft = metricVal(c,'loft'), power = (c.power||{}).value;
@@ -661,6 +664,7 @@ function renderMetricsGrid(c) {
 function buildVerdict(c){
   const ins=c.insights||{}, pins=c.pins, hit=ins.hit||{}, recs=ins.recommendations||[];
   const next=recs.length?recs[0].reason:(ins.classification==='LOW_CONFIDENCE'?'Not enough evidence for an adjustment yet.':'');
+  if(pinsUnread(c)) return {good:null,title:"Couldn't read the pins",body:(pins.unread_reason?pins.unread_reason.charAt(0).toUpperCase()+pins.unread_reason.slice(1)+'.':"The pin deck wasn't visible when the pins settled.")+' The line and metrics below are from the video. Tap Fix pins to record the result.',next:''};
   if(c.kind==='spare') return pins&&pins.strike?{good:true,title:'Spare made',body:'Cleared the leave.',next}:{good:false,title:'Open',body:'Missed the spare.',next};
   if(pins&&pins.strike&&hit.hit==='pocket') return {good:true,title:'Great shot',body:'Pocket hit at a good entry angle. Strike.',next};
   if(pins&&pins.strike) return {good:true,title:'Strike',body:hit.reason||'',next};
