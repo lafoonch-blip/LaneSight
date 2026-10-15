@@ -17,6 +17,9 @@ class SessionIn(BaseModel):
     ball_rg_in: float | None = None
     pattern_name: str | None = None
     pattern_length_ft: float | None = None
+    name: str | None = None
+    center: str | None = None
+    lane: int | None = None
 
 class SessionPatch(BaseModel):
     ball_name: str | None = None
@@ -27,6 +30,9 @@ class SessionPatch(BaseModel):
     handed: str | None = None
     intent: dict | None = None
     notes: str | None = None
+    name: str | None = None
+    center: str | None = None
+    lane: int | None = None
 
 class ShotInputs(BaseModel):
     intent: dict | None = None

@@ -46,7 +46,11 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.lock = threading.Lock()
         with self.lock:
-            self.conn.executescript(SCHEMA); self.conn.commit()
+            self.conn.executescript(SCHEMA)
+            have = {r['name'] for r in self.conn.execute("PRAGMA table_info(sessions)")}
+            for col, decl in [('name', 'TEXT'), ('center', 'TEXT'), ('lane', 'INTEGER')]:   # added for the v2 title row
+                if col not in have: self.conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {decl}")
+            self.conn.commit()
 
     def _row(self, r):
         if r is None: return None

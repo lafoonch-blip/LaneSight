@@ -5,93 +5,82 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LaneSight runner</title>
 <style>
-/* v2 design (runner_v2_mock). System fonts so it works offline at the lanes. */
+/* runner v2 design (runner_v2_mock). System fonts so it works offline at the lanes. */
 :root{
-  --bg:#0A111D; --panel:#111B2B; --tile:#0D1625; --line:#1F2E45; --tileline:#1C2A40; --fieldbg:#0B1422; --fieldline:#23344E;
-  --ice:#E8EEF6; --muted:#93A3BA; --dim:#7F8DA3; --dimmer:#5D6B82;
-  --cyan:#00C2EE; --cyan2:#3FD8FF; --blue:#0E6BE0; --good:#4BE0A0; --warn:#F5CF5B; --orange:#F5A524; --bad:#ff6b6b;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --bg:#070D18; --card:#0E1626; --cardline:#1B2840; --sub:#111C2F; --subline:#1E2C45; --field:#0B1322;
+  --ink:#E6ECF5; --ink2:#C9D3E2; --muted:#9AA8BC; --dim:#8592A6; --dimmer:#6E7C92;
+  --blue:#1677FF; --blue2:#2E9BFF; --sky:#3F8CFF; --green:#43D893; --green2:#22C55E; --yellow:#F2C94C; --red:#EF4444;
+  --purple:#C99BFF; --teal:#5FD8CB; --amber:#F5BC4E; --loft:#F27A7A;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","Helvetica Neue",Arial,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ice);font:15px/1.4 var(--sans)}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans)}
 .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-a{color:var(--cyan2);text-decoration:none}a:hover{color:#9BEBFF;text-decoration:underline}
-h2.h{margin:0 0 12px;font:600 12px/1 var(--sans);letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}
-.lbl{font-size:12px;color:var(--muted)}
-.muted{color:var(--muted)}.dim{color:var(--dim)}.small{font-size:12px}.err{color:var(--bad)}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-sizing:border-box;min-width:0}
-.badge{font:700 10px/1 var(--sans);letter-spacing:.6px;border-radius:4px;padding:3px 5px;text-transform:uppercase;white-space:nowrap}
-.ok{background:#123D2D;color:var(--good)}.est{background:#3D3311;color:var(--warn)}.na{background:#232B38;color:#8E9AAD}.you{background:#15263C;color:#7FB2E8}
-.tab{background:none;border:1px solid #23344E;color:#C3CEDD;border-radius:8px;padding:7px 12px;font:500 13px var(--sans);cursor:pointer;min-height:34px}
-.tab.on{background:var(--blue);border-color:var(--blue);color:#fff}
-.btn{background:#162438;border:1px solid #27395A;color:var(--ice);border-radius:9px;padding:9px 14px;font:500 14px var(--sans);min-height:40px;cursor:pointer}
-.btn:hover{border-color:#3a557f}
-.btn.on{background:var(--cyan);border-color:var(--cyan);color:#04121F;font-weight:700}
-.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
-.fld{background:var(--fieldbg);border:1px solid var(--fieldline);border-radius:8px;color:var(--ice);padding:8px 9px;font:500 15px var(--sans);width:100%;box-sizing:border-box}
-.fld:focus{outline:none;border-color:var(--cyan)}
-input[type=number]{font-variant-numeric:tabular-nums}
-label.lbl{display:block}
-.pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#C3CEDD;border:1px solid #23344E;border-radius:999px;padding:7px 12px}
-.dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
-.spin{width:12px;height:12px;border:2px solid #4A3E18;border-top-color:var(--warn);border-radius:50%;animation:s 1s linear infinite}
+a{color:var(--blue2);text-decoration:none}a:hover{color:#9AD7FF}
+h1,h2,h3{margin:0}
+.card{background:var(--card);border:1px solid var(--cardline);border-radius:12px;box-sizing:border-box;min-width:0}
+.sub{background:var(--sub);border:1px solid var(--subline);border-radius:10px;box-sizing:border-box;min-width:0}
+.b{font:700 9px/1 var(--sans);letter-spacing:.5px;border-radius:3px;padding:3px 4px;text-transform:uppercase;white-space:nowrap}
+.ok{background:#11392A;color:var(--green)}.est{background:#3A3010;color:var(--yellow)}.na{background:#212A38;color:#8592A6}.ruby{background:#17263E;color:#7FB2E8}
+.tabs{display:inline-flex;border:1px solid var(--subline);border-radius:8px;overflow:hidden;background:#0B1322}
+.tab{background:transparent;border:0;border-right:1px solid var(--subline);color:var(--ink2);padding:0 14px;height:34px;font:500 13px var(--sans);cursor:pointer;white-space:nowrap}
+.tab:last-child{border-right:0}
+.tab.on{background:var(--blue);color:#fff}
+.pill{background:#0B1322;border:1px solid var(--subline);color:var(--ink);border-radius:7px;height:30px;padding:0 10px;font:500 12px var(--sans);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.pill:hover{border-color:#2d436b}
+.pill.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.pill:disabled{opacity:.5;cursor:default}
+.nav{display:flex;align-items:center;gap:12px;padding:0 14px;height:40px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:14px;cursor:pointer}
+.nav:hover{background:var(--sub);color:#fff}
+.nav.on{background:var(--blue);color:#fff}
+.fld{background:var(--field);border:1px solid var(--subline);border-radius:8px;color:var(--ink);padding:8px 9px;font:500 14px var(--sans);width:100%;box-sizing:border-box}
+.fld:focus{outline:none;border-color:var(--blue2)}
+label.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
+.muted{color:var(--muted)}.dim{color:var(--dim)}.small{font-size:12px}.err{color:var(--red)}
+.dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.statpill{display:inline-flex;align-items:center;gap:7px;font-size:12px;border-radius:999px;padding:6px 11px}
+.spin{width:11px;height:11px;border:2px solid #4A3D15;border-top-color:var(--yellow);border-radius:50%;animation:s 1s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
 .warnbox{background:#3a2b0e;border:1px solid #6b5418;color:#f5d98a;border-radius:8px;padding:8px 10px;font-size:13px}
-.kpi{background:var(--tile);border:1px solid var(--tileline);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
-.kpi .v{font-size:32px;font-weight:700;line-height:1.05}
-.kpi .v small{font-size:15px;color:var(--muted);font-weight:500;margin-left:3px}
-.m{background:var(--tile);border:1px solid var(--tileline);border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:2px;min-height:74px;position:relative}
-.m .v{font-size:25px;font-weight:700}
-.m .v small{font-size:13px;color:var(--muted);font-weight:500;margin-left:2px}
-.adj{background:#0F2742;border:1px solid #1E4A7A;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
-.adj .main{font:700 22px var(--sans)}
-.ring{width:74px;height:74px;border-radius:50%;display:grid;place-items:center}
-.ring span{width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-size:24px;font-weight:700}
-.pinbtn{width:44px;height:44px;border-radius:50%;font:700 15px var(--sans);cursor:pointer;border:2px solid #2D4363;background:var(--fieldbg);color:var(--muted)}
-.pinbtn.up{border-color:#F7F9FC;background:#F7F9FC;color:#04121F}
-.pinbtn.unc{border-color:var(--warn);color:var(--warn)}
-.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.seg{display:grid;gap:6px}
-.varrow{display:flex;justify-content:space-between;gap:8px;font-size:13px}
-.rowline{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-.sgrid{display:grid;gap:0 8px;align-items:center}
-.srow{padding:8px 10px;border-bottom:1px solid #18253A;text-align:right;font-variant-numeric:tabular-nums;font-size:16px;cursor:pointer;border-radius:8px}
-.srow:hover{background:#0F1B2E}
-.srow.sel{background:#14304F}
-.shead{padding:0 10px 8px;border-bottom:1px solid var(--line);font:600 11px var(--sans);letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:right}
-.thumb{display:inline-block;width:44px;height:30px;border-radius:5px;background:linear-gradient(180deg,#1A2233 0 30%,#6B4A26 30%);vertical-align:middle}
-.start{max-width:600px;margin:40px auto}
-#drop{position:fixed;inset:0;background:#0E6BE0cc;display:none;align-items:center;justify-content:center;font-size:28px;font-weight:700;z-index:10}
-.kbd{font:500 11px var(--mono);color:var(--muted);border:1px solid #27395A;border-radius:4px;padding:1px 4px}
-.status{padding:30px;text-align:center}
-.bigspin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--cyan);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 12px}
-.media{position:relative;background:#05090F;border-radius:12px;overflow:hidden}
-.media img{width:100%;display:block}
-.noreplay{min-height:420px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:20px}
+.spinbig{width:30px;height:30px;border:3px solid var(--cardline);border-top-color:var(--blue2);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 10px}
+.kbd{font:500 11px var(--mono);color:var(--muted);border:1px solid var(--subline);border-radius:4px;padding:1px 4px}
+.ph{display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--dim);font-size:13px}
+#drop{position:fixed;inset:0;background:#1677FFcc;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:700;z-index:10}
 </style>
 </head>
 <body>
-<header style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;padding:14px 24px;border-bottom:1px solid #1A2840;background:#0C1524">
+<header style="display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid #141F33;background:#0A1220;flex-wrap:wrap">
   <div style="display:flex;align-items:center;gap:10px">
-    <svg width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><path d="M2 20 L14 2 M32 20 L20 2" stroke="#3FD8FF" stroke-width="2.4" fill="none" stroke-linecap="round"></path><path d="M17 20 C17 13 12 9 14 4" stroke="#0E6BE0" stroke-width="2.4" fill="none" stroke-linecap="round"></path></svg>
-    <span style="font:700 21px var(--sans);letter-spacing:.3px">Lane<span style="color:#3FD8FF">Sight</span></span>
-    <span style="font-size:12px;color:var(--muted);border:1px solid #27395A;border-radius:999px;padding:3px 9px">runner</span>
+    <svg width="38" height="24" viewBox="0 0 38 24" aria-hidden="true"><path d="M2 21 L15 3 M36 21 L23 3" stroke="#E6ECF5" stroke-width="2.6" fill="none" stroke-linecap="round"></path><path d="M8 21 Q19 2 30 21" stroke="#2E9BFF" stroke-width="2.6" fill="none" stroke-linecap="round"></path></svg>
+    <span style="font-size:24px;font-weight:700;letter-spacing:-.3px">Lane<span style="color:#2E9BFF">Sight</span></span>
   </div>
-  <div id="sessmeta" style="display:flex;flex-direction:column;gap:3px"></div>
   <div style="flex:1"></div>
-  <div id="hstatus" class="rowline" style="gap:8px"></div>
-  <button id="speechBtn" class="btn" type="button">🔊 Speech</button>
-  <button id="endBtn" class="btn" type="button" style="display:none">End session</button>
+  <div id="hstatus" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"></div>
+  <button id="speechBtn" class="pill" type="button">🔊 Speech</button>
+  <div style="display:flex;align-items:center;gap:9px;margin-left:4px">
+    <span style="width:32px;height:32px;border-radius:50%;background:#1E3A66;display:grid;place-items:center;font-weight:700;font-size:13px">S</span>
+    <span style="font-size:14px">Shayne</span>
+  </div>
 </header>
-<div id="app"></div>
+<div style="display:flex;flex-wrap:wrap;min-height:calc(100vh - 49px)">
+  <nav aria-label="Main" style="flex:0 0 168px;padding:16px 10px;border-right:1px solid #141F33;background:#0A1220;display:flex;flex-direction:column;gap:4px">
+    <a class="nav on" aria-current="page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Session</a>
+    <a class="nav" title="History — coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Sessions</a>
+    <a class="nav" title="Cross-session trends — coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>Analysis</a>
+    <a class="nav" title="Balls — coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><circle cx="10" cy="9" r="1.2"></circle><circle cx="14" cy="9" r="1.2"></circle><circle cx="12" cy="12.5" r="1.2"></circle></svg>Arsenal</a>
+    <a class="nav" title="Settings — coming soon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path><circle cx="12" cy="12" r="3.5"></circle></svg>Settings</a>
+    <div style="flex:1"></div>
+    <div style="font-size:11px;color:var(--dimmer);padding:0 8px;line-height:1.5">Clips: AirDrop to this Mac or drag onto the page</div>
+  </nav>
+  <main id="app" style="flex:999 1 900px;min-width:0;padding:16px 20px 22px"></main>
+</div>
 <div id="drop">Drop clip to analyze</div>
 
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', chartTab = 'speedrev', patternsLib = null;
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', shotTab = 'overview', transTab = 'traffic', patternsLib = null;
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
 
 async function api(path, opts={}) {
@@ -108,20 +97,19 @@ function connect() {
 }
 
 const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
-const fmtDate = iso => iso ? new Date(iso).toLocaleDateString([], {month:'short', day:'numeric'}) : '';
-const leaveTxt = p => !p ? '—' : p.strike ? 'X' : p.standing.join('-');
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString([], {month:'numeric', day:'numeric', year:'numeric'}) : '';
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 const metricVal = (c, k) => { const m = (c.metrics || []).find(x => x.key === k); return m && m.value != null ? m.value : null; };
 const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const sd = a => { if (a.length < 2) return null; const m = avg(a); return Math.sqrt(avg(a.map(x=>(x-m)**2))); };
 const pct = (a,b) => b ? Math.round(100*a/b) : null;
+function durStr(a, b) { if (!a) return ''; const ms = (b?new Date(b):new Date()) - new Date(a); const m = Math.max(0, Math.round(ms/60000)); return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`; }
 
 function current() {
   if (!S || !S.cards.length) return null;
   if (follow || !S.cards.find(c => c.id === selected)) selected = S.cards[S.cards.length-1].id;
   return S.cards.find(c => c.id === selected);
 }
-
-// cards within the selected range (All / First half / Second half / Last 5), by shot number
 function rangeCards() {
   const cs = S.cards;
   if (range === 'last5') return cs.slice(-5);
@@ -129,532 +117,89 @@ function rangeCards() {
   if (range === 'second') return cs.slice(Math.ceil(cs.length/2));
   return cs;
 }
+// one shot's outcome mark: X strike / "/" spare made / "–" open-or-leave
+function shotMark(c) {
+  if (c.status !== 'done' || !c.pins) return null;
+  if (c.kind === 'first') return c.pins.strike ? 'X' : '–';
+  return c.pins.strike ? '/' : '–';
+}
+function shotTag(c) {
+  const m = shotMark(c); return m === 'X' ? 'strike' : m === '/' ? 'spare' : m === '–' ? 'open' : (c.status === 'failed' ? 'failed' : 'pending');
+}
 
 function render() {
   const sess = S.session;
-  $('#speechBtn').className = 'btn' + (S.speech ? ' on' : '');
+  $('#speechBtn').className = 'pill' + (S.speech ? ' on' : '');
   $('#speechBtn').disabled = !S.speech_available;
-  $('#speechBtn').title = S.speech_available ? 'Read results aloud' : 'Speech needs macOS "say"';
-  $('#speechBtn').textContent = S.speech ? 'Speech on' : 'Speech off';
-  $('#endBtn').style.display = sess ? '' : 'none';
+  $('#speechBtn').textContent = S.speech ? '🔊 Speech on' : '🔇 Speech off';
   renderHeaderStatus();
-  if (!sess) { $('#sessmeta').innerHTML = ''; renderStart(); return; }
-  const st = S.stats || {};
-  $('#sessmeta').innerHTML = `
-    <div style="font:600 18px var(--sans)">${esc(cap(sess.kind))} · ${fmtDate(sess.started_at)}</div>
-    <div class="small muted">${[sess.ball_name && esc(sess.ball_name) + (sess.ball_weight_lb ? ' ' + sess.ball_weight_lb + ' lb' : ''),
-      sess.pattern_name && esc(sess.pattern_name) + (sess.pattern_length_ft ? ' ' + sess.pattern_length_ft + ' ft' : ''),
-      'started ' + fmtTime(sess.started_at), (st.shots || 0) + ' shot' + (st.shots === 1 ? '' : 's')].filter(Boolean).join(' · ')}</div>`;
+  if (!sess) { renderStart(); return; }
   const c = current();
   $('#app').innerHTML = `
-    ${S.watch_error ? `<div class="warnbox" style="margin:14px 24px 0">${esc(S.watch_error)}</div>` : ''}
-    <main style="max-width:1500px;margin:0 auto;padding:18px 24px;display:flex;flex-direction:column;gap:16px">
-      ${renderOverview(st)}
-      <div style="display:flex;flex-wrap:wrap;gap:16px">
-        <section class="panel" style="flex:999 1 640px;display:flex;flex-direction:column;gap:14px">${renderLatest(c)}</section>
-        <aside class="panel" style="flex:1 1 330px;display:flex;flex-direction:column;gap:16px">${renderInputs(sess, c)}</aside>
-      </div>
-      ${renderShots()}
-      <div style="display:flex;flex-wrap:wrap;gap:16px">
-        <section class="panel" style="flex:999 1 560px">${renderChart()}</section>
-        <section class="panel" style="flex:1 1 520px;display:flex;flex-wrap:wrap;gap:16px">${renderLaneUsage(st)}</section>
-      </div>
-      ${renderGame(st)}
-      ${renderCapture(c)}
-    </main>`;
+    ${S.watch_error ? `<div class="warnbox" style="margin-bottom:12px">${esc(S.watch_error)}</div>` : ''}
+    ${renderTitle(sess)}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:14px;margin-top:14px">
+      <section class="card" style="padding:16px 16px 12px">${renderOverview()}</section>
+      <section class="card" style="padding:16px">${renderTransition()}</section>
+      <section class="card" style="padding:16px">${renderShots()}</section>
+      <section class="card" style="padding:16px">${renderLatest(c)}</section>
+    </div>`;
   bind(sess, c);
 }
-const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 
-function renderHeaderStatus() {
-  const el = $('#hstatus'); if (!S.session) { el.innerHTML = ''; return; }
-  const watch = S.watch_error
-    ? `<span class="pill" style="color:var(--bad);border-color:#5a2222"><span class="dot" style="background:var(--bad)"></span>Watch error</span>`
-    : `<span class="pill"><span class="dot" style="background:var(--good)"></span>Watching ${esc(shortPath(S.watch_dir))}</span>`;
-  const proc = S.cards.find(c => c.status === 'processing');
-  let q = '';
-  if (proc) {
-    const step = procStep(proc);
-    q = `<span class="pill" style="color:var(--warn);border-color:#4A3E18"><span class="spin"></span>Analyzing shot ${proc.n}${step ? ' · ' + esc(step) : ''}</span>`;
-  } else if (S.queue) {
-    q = `<span class="pill" style="color:var(--warn);border-color:#4A3E18"><span class="spin"></span>${S.queue} queued</span>`;
-  }
-  el.innerHTML = watch + q;
-}
-const shortPath = p => { if (!p) return ''; const parts = p.replace(/\/$/,'').split('/'); return '~/' + parts.slice(-1)[0]; };
-const STEP_LABELS = [[/^probe/,'Probe'],[/trimmed|no trim|window/,'Window'],[/hdr/,'HDR→SDR'],[/ref frame/,'Stabilize'],
-  [/^vp|lanes consistent/,'Lanes'],[/blobs|extended track/,'Track'],[/impact/,'Impact'],[/refine/,'Refine'],
-  [/pins/,'Pins'],[/rev/,'Rev rate']];
-function stepLabel(msg) { const m = String(msg).toLowerCase(); if (m.includes('kept trimmed')) return null;
-  for (const [re, lab] of STEP_LABELS) if (re.test(m)) return lab; return 'Working'; }
-function procStep(c) {  // latest pipeline step while a shot is processing (steps are streamed live, see core.log)
-  const steps = (c.timings || {}).steps; if (!steps || !steps.length) return '';
-  return stepLabel(steps[steps.length-1].msg) || 'Finishing';
-}
-const STEP_COLORS = {'Probe':'#2A9FD6','Window':'#8E9AAD','HDR→SDR':'#6E5BD8','Stabilize':'#0E6BE0','Lanes':'#2A9FD6',
-  'Track':'#00C2EE','Impact':'#4BE0A0','Refine':'#4BE0A0','Pins':'#F5CF5B','Rev rate':'#F5A524','Working':'#5D6B82'};
-function renderCapture(c) {
-  if (!c || c.status !== 'done') return '';
-  const p = c.probe || {}, cap = c.capture || {}, ev = (c.timings || {});
-  const info = [cap.tier ? `Tier <b>${esc(cap.tier)}</b>` : null,
-    p.width ? `${p.width}×${p.height}` : null, p.measured_fps ? `${p.measured_fps} fps` : null,
-    p.codec ? esc((p.codec||'').toUpperCase()) + (p.hdr ? ' HDR→SDR' : '') : null].filter(Boolean).join(' · ');
-  // per-step timing bar from the streamed steps (durations = consecutive t_s deltas), merged by phase
-  const steps = (c.timings || {}).steps || []; const seg = {}; let prev = 0;
-  for (const s of steps) { const lab = stepLabel(s.msg), dur = s.t_s - prev; prev = s.t_s; if (lab && dur > 0.05) seg[lab] = (seg[lab]||0) + dur; }
-  const segs = Object.entries(seg);
-  const total = ev.total_s != null ? ev.total_s : segs.reduce((a,[,s])=>a+s,0);
-  const bar = segs.length ? `<div style="flex:1 1 420px;display:flex;height:22px;border-radius:6px;overflow:hidden" role="img" aria-label="Analysis time by step">
-      ${segs.map(([l,s]) => `<div title="${esc(l)} ${s.toFixed(1)}s" style="flex:${s.toFixed(2)} 1 0;background:${STEP_COLORS[l]||'#5D6B82'}"></div>`).join('')}</div>
-    <div class="rowline" style="gap:10px;font-size:12px;color:#A9B6C9">
-      ${segs.map(([l,s]) => `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${STEP_COLORS[l]||'#5D6B82'}"></span> ${esc(l)} ${s.toFixed(1)}s</span>`).join('')}
-      <b style="color:var(--ice)">${fmtMMSS(total)} total</b></div>` : '';
-  return `<section class="panel rowline" style="gap:18px;align-items:center">
-    <h2 class="h" style="margin:0">Shot ${c.n} capture + timing</h2>
-    ${info ? `<div style="font-size:13px;color:#C3CEDD">${info}</div>` : ''}${bar}</section>`;
-}
-const fmtMMSS = s => s == null ? '' : (s >= 60 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${s.toFixed(1)}s`);
-
-/* ---------- session overview KPIs ---------- */
-function kpisFrom(cards) {
-  const done = cards.filter(c => c.status === 'done');
-  const first = done.filter(c => c.kind === 'first' && c.pins);
-  const spare = done.filter(c => c.kind === 'spare' && c.pins);
-  const strikes = first.filter(c => c.pins.strike);
-  const pocket = first.filter(c => (c.hit || {}).hit === 'pocket');
-  const carried = pocket.filter(c => c.pins.strike);
-  const made = spare.filter(c => c.pins.strike);
-  const col = (k, cards=first) => cards.map(c => metricVal(c, k)).filter(v => v != null);
-  const powers = first.map(c => (c.power || {}).value).filter(v => v != null);
-  const spreads = ['arrows_board','breakpoint_board','entry_board'].map(k => col(k)).filter(a => a.length >= 3).map(sd);
-  const rep = spreads.length ? Math.round(100 * Math.exp(-(avg(spreads)) / 2)) : null;
-  const marks = first.map(c => c.hit_mark);
-  return { first: first.length, spare: spare.length, strikes: strikes.length, strike_pct: pct(strikes.length, first.length),
-    pocket_pct: pct(pocket.length, first.length), carry_pct: pct(carried.length, pocket.length),
-    spare_pct: pct(made.length, spare.length), spares_made: made.length,
-    speed: avg(col('ball_speed')), speed_sd: sd(col('ball_speed')),
-    rev: avg(col('rev_rate')), power: powers.length ? Math.round(avg(powers)) : null,
-    power_min: powers.length ? Math.min(...powers) : null, power_max: powers.length ? Math.max(...powers) : null,
-    rep, entry_sd: col('entry_board').length >= 2 ? sd(col('entry_board')) : null,
-    hit_yes: marks.filter(m => m === 'yes').length, hit_no: marks.filter(m => m === 'no').length,
-    hit_marked: marks.filter(Boolean).length };
-}
-function renderOverview(st) {
-  const k = kpisFrom(rangeCards());
-  const prev = (range === 'all' && S.prev_stats) ? S.prev_stats : null;
-  const d1 = (cur, was, suf='') => (cur == null || was == null) ? '' : `${cur - was >= 0 ? '+' : ''}${(cur - was).toFixed(suf === 'mph' ? 1 : 0)} vs last`;
-  const tiles = [
-    kpi('Avg speed', fmt(k.speed, 1), 'mph', '✓', 'ok', prev ? d1(k.speed, (prev.averages.ball_speed || {}).mean, 'mph') : (k.speed_sd != null ? `± ${k.speed_sd.toFixed(1)}` : '')),
-    kpi('Avg rev rate', fmt(k.rev, 0), 'rpm', 'est', 'est', prev ? d1(k.rev, (prev.averages.rev_rate || {}).mean) : 'surface periodicity × factor'),
-    kpi('Strikes', k.strike_pct == null ? '—' : k.strike_pct, k.strike_pct == null ? '' : `% · ${k.strikes}/${k.first}`, '✓', 'ok',
-        k.pocket_pct == null ? 'no first balls yet' : `Pocket ${k.pocket_pct}%${k.carry_pct != null ? ' · carry ' + k.carry_pct + '%' : ''}`, '#4BE0A0'),
-    kpi('Spares', k.spare_pct == null ? '—' : k.spare_pct, k.spare_pct == null ? '' : `% · ${k.spares_made}/${k.spare}`, '✓', 'ok',
-        k.spare == null || k.spare === 0 ? 'no spare attempts' : `${k.spares_made} of ${k.spare} made`),
-    kpi('Avg Power', k.power == null ? '—' : k.power, '', 'est', 'est', k.power == null ? 'needs speed + revs' : `Range ${k.power_min} to ${k.power_max}`),
-    kpi('Repeatability', k.rep == null ? '—' : k.rep, k.rep == null ? '' : '/100', '✓', 'ok',
-        k.rep == null ? 'needs 3+ first balls' : (k.entry_sd != null ? `Entry spread ±${k.entry_sd.toFixed(1)} bd` : '')),
-    kpi('Hit your mark', k.first ? k.hit_yes : '—', k.first ? '/ ' + k.first : '', 'you', 'you',
-        k.hit_marked ? `${k.hit_no} miss${k.hit_no === 1 ? '' : 'es'} kept off the lane read` : 'mark your shots to track this'),
-  ];
-  return `<section class="panel">
-    <div class="rowline" style="margin-bottom:14px">
-      <h2 class="h" style="margin:0">Session overview</h2><div style="flex:1"></div>
-      <div class="rowline" style="gap:6px" role="group" aria-label="Range">
-        ${[['all','All'],['first','First half'],['second','Second half'],['last5','Last 5']].map(([v,l]) =>
-          `<button class="tab ${range===v?'on':''}" data-range="${v}" type="button">${l}</button>`).join('')}</div>
-      <a href="/api/sessions/${S.session.id}/export.csv" class="small">Export CSV</a>
+/* ---------- title row ---------- */
+function renderTitle(sess) {
+  const st = S.stats || {};
+  const name = sess.name || `${cap(sess.kind || 'practice')} ${fmtDate(sess.started_at)}`;
+  const meta = [
+    [sess.center, sess.lane != null ? `lane ${sess.lane}` : null].filter(Boolean).join(' · ') || null,
+    sess.pattern_name ? esc(sess.pattern_name) + (sess.pattern_length_ft ? ' ' + sess.pattern_length_ft + ' ft' : '') : null,
+    `${st.shots || 0} shot${st.shots === 1 ? '' : 's'}`,
+    durStr(sess.started_at, sess.ended_at),
+    sess.ball_name ? esc(sess.ball_name) + (sess.ball_weight_lb ? ' ' + sess.ball_weight_lb + ' lb' : '') : null,
+    cap(sess.kind),
+  ].filter(Boolean);
+  return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:10px"><h1 style="font-size:24px;font-weight:600">${esc(name)}</h1>
+        <button id="editName" type="button" aria-label="Edit session name" style="background:none;border:0;color:var(--ink2);cursor:pointer;padding:4px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></button></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--ink2)">
+        ${meta.map((m,i) => `${i?'<span style="color:#3A4A63">|</span>':''}<span>${m}</span>`).join('')}</div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${tiles.join('')}</div>
-  </section>`;
-}
-const fmt = (v, d) => v == null ? '—' : v.toFixed(d);
-function kpi(label, value, unit, badge, cls, delta, deltaColor) {
-  return `<div class="kpi">
-    <div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">${label}</span><span class="badge ${cls}">${badge}</span></div>
-    <div class="v num">${value}${unit ? `<small>${unit}</small>` : ''}</div>
-    <div style="font-size:12px;color:${deltaColor || 'var(--muted)'}">${esc(delta || '')}</div>
+    <div style="flex:1"></div>
+    <button class="pill" id="editSess" type="button" style="height:38px;padding:0 14px;font-size:13px">Change ball / pattern</button>
+    <a class="pill" href="/api/sessions/${sess.id}/export.csv" style="height:38px;padding:0 14px;font-size:13px;text-decoration:none">Export CSV</a>
+    <button class="pill" id="endBtn" type="button" style="height:38px;padding:0 14px;font-size:13px">End session</button>
   </div>`;
 }
 
-/* ---------- latest shot ---------- */
-function renderLatest(c) {
-  if (!c) return `<div class="noreplay">Waiting for the first clip.<br><br>AirDrop a shot to this Mac or drag a clip onto the page.</div>`;
-  const i = S.cards.findIndex(x => x.id === c.id);
-  const head = `<div class="rowline">
-      <h2 class="h" style="margin:0">Latest shot · #${c.n} · ${c.kind === 'spare' ? 'spare attempt' : 'first ball'}</h2>
-      <div style="flex:1"></div>
-      <button class="btn" data-nav="-1" type="button" aria-label="Previous shot" ${i<=0?'disabled':''}>&#8249;</button>
-      <span class="small muted">${c.n} of ${S.cards.length} · ${fmtTime(c.created_at)}</span>
-      <button class="btn" data-nav="1" type="button" aria-label="Next shot" ${i>=S.cards.length-1?'disabled':''}>&#8250;</button>
-      ${!follow ? `<button class="btn" id="latestBtn" type="button">Latest</button>` : ''}</div>`;
-  if (c.status === 'queued' || c.status === 'processing')
-    return head + `<div class="status"><div class="bigspin"></div><div>${c.status === 'queued' ? 'Queued' : 'Analyzing…'}</div>
-      <div class="small muted">${esc(c.original_name || '')}</div>${procStep(c) ? `<div class="small dim">${esc(procStep(c))}</div>` : ''}</div>`;
-  if (c.status === 'failed')
-    return head + `<div class="status"><div style="font-size:30px;font-weight:700" class="err">Not analyzed</div><p class="err">${esc(c.error)}</p>
-      <button class="btn" id="retryBtn" type="button">Retry</button></div>`;
-  return head + `<div style="display:flex;flex-wrap:wrap;gap:16px">
-    <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:10px;min-width:0">${renderMedia(c)}</div>
-    <div style="flex:999 1 380px;display:flex;flex-direction:column;gap:12px;min-width:0">
-      ${renderResult(c)}${renderAdj(c)}${renderMetrics(c)}
-    </div></div>`;
+/* ---------- header status ---------- */
+function renderHeaderStatus() {
+  const el = $('#hstatus'); if (!S.session) { el.innerHTML = ''; return; }
+  const watch = S.watch_error
+    ? `<span class="statpill" style="color:var(--red);border:1px solid #5a2222"><span class="dot" style="background:var(--red)"></span>Watch error</span>`
+    : `<span class="statpill" style="color:var(--ink2);border:1px solid var(--subline)"><span class="dot" style="background:var(--green)"></span>Watching ${esc(shortPath(S.watch_dir))}</span>`;
+  const proc = S.cards.find(c => c.status === 'processing');
+  let q = '';
+  if (proc) { const step = procStep(proc); q = `<span class="statpill" style="color:var(--yellow);border:1px solid #4A3D15"><span class="spin"></span>Analyzing shot ${proc.n}${step ? ' · ' + esc(step) : ''}</span>`; }
+  else if (S.queue) q = `<span class="statpill" style="color:var(--yellow);border:1px solid #4A3D15"><span class="spin"></span>${S.queue} queued</span>`;
+  el.innerHTML = watch + q;
 }
+const shortPath = p => { if (!p) return ''; const parts = p.replace(/\/$/,'').split('/'); return parts.slice(-1)[0]; };
+const STEP_LABELS = [[/^probe/,'probing'],[/trimmed|no trim|window/,'finding the shot'],[/hdr/,'converting HDR'],[/ref frame/,'stabilizing'],
+  [/^vp|lanes consistent/,'finding lanes'],[/blobs|extended track/,'tracking the ball'],[/impact/,'finding impact'],[/refine/,'refining'],[/pins/,'reading pins'],[/rev/,'rev rate']];
+function stepLabel(msg) { const m = String(msg).toLowerCase(); if (m.includes('kept trimmed')) return 'finishing';
+  for (const [re, lab] of STEP_LABELS) if (re.test(m)) return lab; return 'working'; }
+function procStep(c) { const steps = (c.timings || {}).steps; return steps && steps.length ? stepLabel(steps[steps.length-1].msg) : ''; }
 
-function renderMedia(c) {
-  if (c.status !== 'done') return `<div class="media"><div class="noreplay">Lane view appears after analysis</div></div>`;
-  return renderLaneView(c);
+/* ---------- panels (filled in later steps) ---------- */
+function panelHead(title, right='') {
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><h2 style="font-size:17px;font-weight:600">${title}</h2><div style="flex:1"></div>${right}</div>`;
 }
-
-// validated sequential blue (lightest ≈ dry → darkest = heavy oil), interpolated for the oil heatmap
-function blueRamp(t) {
-  const stops = [[205,226,251],[134,182,239],[57,135,229],[28,92,171],[13,54,107]];
-  t = Math.max(0, Math.min(1, t)); const x = t*(stops.length-1), i = Math.floor(x), f = x-i;
-  const a = stops[i], b = stops[Math.min(i+1, stops.length-1)], ch = k => Math.round(a[k]+(b[k]-a[k])*f);
-  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
-}
-// schematic pin positions: absolute board (1 = right gutter) and distance (ft)
-const PIN_POS = {1:[20,60],2:[23.5,61],3:[16.5,61],4:[27,62],5:[20,62],6:[13,62],7:[30.5,63],8:[23.5,63],9:[16.5,63],10:[9.5,63]};
-
-// top-down simulated lane: the oil-pattern heatmap with the line you threw over it
-function renderLaneView(c) {
-  const W=220, H=560, mx=26, my=16, lw=W-2*mx, lh=H-2*my, ZMAX=64;
-  const bx = b => mx + (39 - b)/38 * lw;    // board 1 at right, 39 at left
-  const zy = z => (H-my) - z/ZMAX * lh;     // 0 ft (foul) at the bottom, pins at the top
-  const oil = (S.session || {}).oil;
-  let oilSvg = '';
-  if (oil && oil.grid && oil.grid.length) {
-    const cw = lw/39, zs = oil.z_ft, dz = zs.length > 1 ? zs[1]-zs[0] : 2;
-    for (let i=0;i<oil.grid.length;i++){
-      const z0 = zs[i], z1 = (i+1<zs.length?zs[i+1]:z0+dz), y = zy(z1), hh = Math.max(zy(z0)-zy(z1), 0.6);
-      for (let b=0;b<39;b++){ const v = oil.grid[i][b]; if (v < 0.04) continue;
-        oilSvg += `<rect x="${(bx(b+1)-cw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${(cw+0.6).toFixed(1)}" height="${hh.toFixed(1)}" fill="${blueRamp(v)}" opacity="${(v*0.8).toFixed(2)}"></rect>`;
-      }
-    }
-  }
-  const endLine = oil ? `<line x1="${mx}" x2="${mx+lw}" y1="${zy(oil.length_ft).toFixed(1)}" y2="${zy(oil.length_ft).toFixed(1)}" stroke="#3FD8FF" stroke-dasharray="3 3" opacity=".6"></line>
-    <text x="${mx+lw-2}" y="${(zy(oil.length_ft)-3).toFixed(1)}" fill="#8FB6E0" font-size="9" text-anchor="end">oil ends ${oil.length_ft} ft</text>` : '';
-  const path = c.path || [];
-  const pathPts = path.map(p => `${bx(p[1]).toFixed(1)},${zy(p[0]).toFixed(1)}`).join(' ');
-  const kp = c.key_points || {};
-  const kpMarks = [['Laydown',kp.laydown,1],['Arrows',kp.arrows,1],['Breakpoint',kp.breakpoint,1],['Entry',kp.entry,-1]]
-    .filter(([,k]) => k && k.board != null).map(([lab,k,dir]) => { const x=bx(k.board), y=zy(k.z_ft);
-      const txt = `${lab} ${k.board.toFixed(1)}${k.angle_deg!=null?' · '+k.angle_deg.toFixed(1)+'°':''}`;
-      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#fff" stroke="#04121F" stroke-width="1"></circle>
-        <text x="${(x+dir*5).toFixed(1)}" y="${y.toFixed(1)}" fill="#F7F9FC" font-size="10" text-anchor="${dir>0?'start':'end'}" dominant-baseline="middle" style="paint-order:stroke;stroke:#05090F;stroke-width:3px">${esc(txt)}</text>`;
-    }).join('');
-  const standing = new Set((c.pins||{}).standing||[]);
-  const pins = c.pins ? Object.entries(PIN_POS).map(([n,[b,z]]) =>
-    `<circle cx="${bx(b).toFixed(1)}" cy="${zy(z).toFixed(1)}" r="3.4" fill="${standing.has(+n)?'#F7F9FC':'#2A3A52'}" stroke="#05090F" stroke-width="1"></circle>`).join('') : '';
-  const legend = oil ? `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:#A9B6C9;flex-wrap:wrap">
-      <span>Dry</span><span style="flex:0 0 80px;height:10px;border-radius:3px;background:linear-gradient(90deg,${blueRamp(.08)},${blueRamp(.4)},${blueRamp(.72)},${blueRamp(1)})"></span><span>Heavy oil</span>
-      <span style="flex:1"></span><span style="display:inline-block;width:14px;height:3px;background:#00C2EE;vertical-align:middle"></span><span>Your line</span></div>
-    <div class="lbl" style="margin-top:5px">${esc(oil.label)}</div>
-    <div class="lbl" style="font-size:11px;color:var(--dim)">${esc(oil.source)}</div>`
-    : `<div class="lbl" style="margin-top:8px">No oil pattern selected — pick one at session start to see the heatmap. <span style="display:inline-block;width:14px;height:3px;background:#00C2EE;vertical-align:middle"></span> is your line.</div>`;
-  return `<div class="media" style="background:#0b1016;padding:8px;border-radius:12px">
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-height:62vh" role="img" aria-label="Top-down lane: oil pattern heatmap with your thrown line">
-      <rect x="${mx}" y="${my}" width="${lw}" height="${lh}" fill="#6B4A26"></rect>
-      <rect x="${mx-7}" y="${my}" width="7" height="${lh}" fill="#2A3240"></rect><rect x="${mx+lw}" y="${my}" width="7" height="${lh}" fill="#2A3240"></rect>
-      ${oilSvg}${endLine}
-      ${pathPts?`<polyline points="${pathPts}" fill="none" stroke="#00C2EE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}
-      ${kpMarks}${pins}
-      <text x="${W/2}" y="11" fill="#93A3BA" font-size="10" text-anchor="middle">pins</text>
-      <text x="${W/2}" y="${H-3}" fill="#93A3BA" font-size="10" text-anchor="middle">foul line</text>
-    </svg>${legend}</div>`;
-}
-
-function renderResult(c) {
-  const p = c.pins;
-  const result = !p ? 'Pins not read' : p.strike ? (c.kind === 'spare' ? 'Spare' : 'Strike') : (c.kind === 'spare' ? 'Missed ' : 'Leave ') + p.standing.join('-');
-  const grid = p ? `<div style="display:grid;grid-template-columns:repeat(4,22px);gap:5px;margin-bottom:4px">
-      ${[7,8,9,10,4,5,6,2,3,1].map(n => { const up = p.standing.includes(n), unc = (p.uncertain||[]).includes(n);
-        return `<span class="num" style="width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 10px var(--sans);${up?'background:#F7F9FC;color:#04121F':unc?'background:#2a2410;color:var(--warn);border:1px solid #4A3E18':'background:#1A2840;color:var(--dimmer)'}">${n}</span>`;}).join('')}</div>` : '';
-  const unc = p && (p.uncertain||[]).length ? `<div class="small" style="color:var(--warn);flex-basis:100%">Pin ${p.uncertain.join(', ')} hidden from this view: may also be standing</div>` : '';
-  const src = p && p.source === 'corrected' ? `<div class="small muted" style="flex-basis:100%">Pins corrected by you</div>` : '';
-  return `<div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
-    <div><div class="lbl">Result</div><div class="num" style="font-size:46px;font-weight:700;line-height:1">${esc(result)}</div></div>
-    ${grid}<div style="flex:1"></div>${renderPower(c.power)}${unc}${src}</div>`;
-}
-function renderPower(pw) {
-  if (!pw) return '';
-  const inner = pw.value == null ? `<span class="dim">—</span>` : `<span class="num">${pw.value}</span>`;
-  const ring = pw.value == null ? '#22344F' : `conic-gradient(var(--cyan) 0 ${pw.value}%, #22344F 0)`;
-  const sub = pw.value == null ? esc(pw.why) : `${pw.energy_j} J at the pocket: ${pw.translational_j} speed + ${pw.rotational_j} revs. Not a carry score.`;
-  return `<div style="display:flex;align-items:center;gap:12px">
-    <div class="ring" style="background:${pw.value==null?'#22344F':ring}">${pw.value==null?`<span style="width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center">${inner}</span>`:`<span>${pw.value}</span>`}</div>
-    <div style="max-width:200px"><div style="font-weight:600">Power <span class="badge est">est</span></div><div class="small muted">${sub}</div></div></div>`;
-}
-
-function renderAdj(c) {
-  if (c.kind === 'spare') {
-    if (!c.spare_plan) return '';
-    const sl = c.spare_plan.straight_line;
-    return `<div class="adj"><div class="small" style="color:#9DB8D8">Spare line · ${esc(c.spare_plan.leave)}</div>
-      <div class="main" style="font-size:19px">Lay down ${sl.laydown_board}, cross arrows ${sl.arrows_board}, aim board ${sl.pin_board}</div>
-      <div class="small muted">${esc(c.spare_plan.ball)}</div></div>`;
-  }
-  const recs = (c.insights || {}).recommendations || [];
-  if (!recs.length) return '';
-  const [r, ...rest] = recs;
-  const label = {move:'Adjust', none:'Repeat', execution:'Execution', speed:'Speed', release:'Release', transition:'Lane transition', pattern_note:'Pattern'}[r.type] || 'Next shot';
-  const headline = r.type === 'move' ? `Move ${r.direction}: feet ${r.move_feet}, eyes ${r.move_target}`
-    : r.type === 'execution' ? 'Hit your mark, then reassess' : r.type === 'none' ? 'No change — repeat the shot' : label;
-  const hit = (c.hit || {}).hit, cls = (c.insights.classification || '').replace('_',' ').toLowerCase();
-  const alt = rest.map(x => `<div><span style="color:${x.type==='transition'?'#F5CF5B':x.type==='pattern_note'?'#93A3BA':'#3FD8FF'};font-weight:600">${x.type==='transition'?'Or:':x.type==='pattern_note'?'Pattern:':'Also:'}</span> ${esc(x.reason)}</div>`).join('');
-  const spare = c.spare_plan ? `<div><span style="color:#3FD8FF;font-weight:600">Spare ${esc(c.spare_plan.leave)}:</span> lay down ${c.spare_plan.straight_line.laydown_board}, arrows ${c.spare_plan.straight_line.arrows_board}, aim ${c.spare_plan.straight_line.pin_board} · ${esc(c.spare_plan.ball)}</div>` : '';
-  return `<div class="adj">
-    <div class="small" style="color:#9DB8D8">Next shot · confidence ${esc(r.confidence)} · ${esc(cls)}${hit ? ' · ' + esc(hit) + ' hit' : ''}</div>
-    <div class="main">${esc(headline)}</div>
-    <div style="color:#C9D6E8;font-size:15px">${esc(r.reason)}</div>
-    ${alt || spare ? `<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #234B75;padding-top:8px;font-size:14px;color:#B5C6DC">${alt}${spare}</div>` : ''}
-    <div class="rowline" style="gap:8px"><span class="lbl">Was this right?</span>
-      <button class="btn ${c.rec_vote==='up'?'on':''}" data-vote="up" type="button">Yes</button>
-      <button class="btn ${c.rec_vote==='down'?'on':''}" data-vote="down" type="button">No</button>
-      <button class="btn ${c.rec_followed==='yes'?'on':''}" data-fol="yes" type="button">I followed it</button>
-      <button class="btn ${c.rec_followed==='no'?'on':''}" data-fol="no" type="button">Didn't</button></div></div>`;
-}
-
-function renderMetrics(c) {
-  const badge = s => s === 'guaranteed' ? ['✓','ok'] : s === 'best_effort' ? ['est','est'] : s === 'ruby' ? ['Ruby','you'] : ['n/a','na'];
-  const tiles = (c.metrics || []).map(m => { const [b, cl] = badge(m.status);
-    return `<div class="m" title="${esc(m.why)}">
-      <div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><span class="lbl">${esc(m.label)}</span><span class="badge ${cl}">${b}</span></div>
-      ${m.value == null ? `<div class="v num dim">—</div><div style="font-size:11px;color:var(--dim)">${esc(m.why)}</div>`
-        : `<div class="v num">${m.value.toFixed(m.dec || 0)}<small>${esc(m.unit)}</small></div>`}</div>`;}).join('');
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px">${tiles}</div>
-    <div class="small" style="color:var(--dim)">Hover a metric for how it was measured. <span class="badge ok">✓</span> validated at this tier · <span class="badge est">est</span> estimate · <span class="badge na">n/a</span> not measurable from this clip</div>`;
-}
-
-/* ---------- your input ---------- */
-function renderInputs(sess, c) {
-  const it = sess.intent || {};
-  let html = `<h2 class="h" style="margin:0">Your input</h2>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="font-weight:600">Target line for next shots</div>
-      <div class="row3">
-        <label class="lbl">Feet bd<input class="fld" id="i_lay" type="number" step="0.5" value="${it.laydown_board ?? ''}"></label>
-        <label class="lbl">Arrows bd<input class="fld" id="i_arr" type="number" step="0.5" value="${it.arrows_board ?? ''}"></label>
-        <label class="lbl">Breakpt bd<input class="fld" id="i_bp" type="number" step="0.5" value="${it.breakpoint_board ?? ''}"></label>
-      </div>
-      <div class="row2"><label class="lbl">Current ball<input class="fld" id="i_ball" value="${esc(sess.ball_name || '')}"></label>
-        <label class="lbl">Weight lb<input class="fld" id="i_wt" type="number" step="0.5" value="${sess.ball_weight_lb ?? ''}"></label></div>
-      <button class="btn" id="saveSess" type="button">Save for next shots</button></div>`;
-  if (!c || c.status !== 'done') return html;
-  const pins = new Set(c.pins ? c.pins.standing : []);
-  const unc = new Set(c.pins ? (c.pins.uncertain||[]) : []);
-  const sens = c.sensor || {};
-  const missed = (c.insights || {}).execution;
-  const missTxt = missed && missed.status !== 'no_intent' && missed.misses
-    ? 'Missed by: ' + Object.entries(missed.misses).map(([k,v]) => `${k.replace('_board','')} ${v>0?'+':''}${v}`).join(', ') + ' (measured)' : '';
-  html += `<div style="display:flex;flex-direction:column;gap:8px">
-      <div style="font-weight:600">Shot ${c.n}: hit your mark? <span class="kbd">Y</span> <span class="kbd">N</span> <span class="kbd">U</span></div>
-      <div class="row3">${['yes','no','unsure'].map(v => `<button class="btn ${c.hit_mark===v?'on':''}" data-hm="${v}" type="button">${v==='unsure'?'Not sure':cap(v)}</button>`).join('')}</div>
-      ${missTxt ? `<div class="lbl">${esc(missTxt)}</div>` : ''}</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="font-weight:600">Pins standing <span class="lbl">tap to correct</span></div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
-        ${PIN_ROWS.map(row => `<div style="display:flex;gap:7px">${row.map(n =>
-          `<button class="pinbtn ${pins.has(n)?'up':''} ${unc.has(n)?'unc':''}" data-pin="${n}" type="button">${n}</button>`).join('')}</div>`).join('')}</div>
-      <div class="lbl" style="text-align:center">${c.pins ? (c.pins.source === 'corrected' ? 'Corrected by you' : `Read from video · conf ${c.pins.confidence ?? '—'}`) : 'Not read'}</div>
-      <div class="row2">${c.pins_override ? `<button class="btn" id="pinReset" type="button">Use video read</button>` : '<span></span>'}
-        <button class="btn" data-kind="${c.kind === 'spare' ? 'first' : 'spare'}" type="button">Mark as ${c.kind === 'spare' ? 'first ball' : 'spare'}</button></div></div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="display:flex;justify-content:space-between"><span style="font-weight:600">Ruby (shot ${c.n})</span></div>
-      <div class="row3">
-        <label class="lbl">Speed<input class="fld" data-s="speed_mph" type="number" step="0.1" value="${sens.speed_mph ?? ''}"></label>
-        <label class="lbl">Revs<input class="fld" data-s="rev_rate_rpm" type="number" step="1" value="${sens.rev_rate_rpm ?? ''}"></label>
-        <label class="lbl">Loft ft<input class="fld" data-s="loft_ft" type="number" step="0.1" value="${sens.loft_ft ?? ''}"></label>
-        <label class="lbl">Tilt °<input class="fld" data-s="axis_tilt_deg" type="number" step="1" value="${sens.axis_tilt_deg ?? ''}"></label>
-        <label class="lbl">Rotation °<input class="fld" data-s="axis_rotation_deg" type="number" step="1" value="${sens.axis_rotation_deg ?? ''}"></label>
-        <label class="lbl">Breakpt ft<input class="fld" data-s="breakpoint_ft" type="number" step="1" value="${sens.breakpoint_ft ?? ''}"></label></div>
-      <button class="btn" id="saveSensor" type="button">Save Ruby values</button>
-      ${renderVariance(c.sensor_variance)}</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <div style="font-weight:600">Shot type</div>
-      <div class="row2"><button class="btn ${c.kind==='first'?'on':''}" data-kind="first" type="button">First ball</button>
-        <button class="btn ${c.kind==='spare'?'on':''}" data-kind="spare" type="button">Spare</button></div></div>`;
-  if (c.kind === 'first' && c.insights) html += `<div style="display:flex;flex-direction:column;gap:6px">
-      <div style="font-weight:600">Adjustment note</div>
-      <input class="fld" id="recNote" placeholder="Note (optional)" value="${esc(c.rec_note || '')}"></div>`;
-  return html;
-}
-function renderVariance(v) {
-  if (!v || !Object.keys(v.compared).length) return '';
-  const lab = {ball_speed:'Speed vs Ruby', rev_rate:'Rev rate vs Ruby', loft:'Loft vs Ruby'};
-  return `<div style="display:flex;flex-direction:column;gap:4px;font-size:13px">${Object.entries(v.compared).map(([k, x]) =>
-    `<div class="varrow"><span class="muted">${lab[k] || k}</span><span class="num">LS ${x.lanesight} · Ruby ${x.sensor} · ${x.diff>0?'+':''}${x.diff}${x.pct!=null?` (${x.pct>0?'+':''}${x.pct}%)`:''}</span></div>`).join('')}</div>`;
-}
-
-/* ---------- shots list ---------- */
-function shotTag(c) {
-  if (c.status !== 'done') return c.status;
-  if (!c.pins) return 'review';
-  if (c.kind === 'spare') return 'spare';
-  return c.pins.strike ? 'strike' : 'leave';
-}
-function renderShots() {
-  const cs = S.cards;
-  if (!cs.length) return `<section class="panel"><h2 class="h">Shots</h2><div class="muted">No shots yet this session.</div></section>`;
-  const counts = { strike:0, leave:0, spare:0, review:0 };
-  cs.forEach(c => { const t = shotTag(c); if (t in counts) counts[t]++; else if (c.status==='failed') counts.review++; });
-  const filters = [['all','All',cs.length],['strike','Strikes',counts.strike],['leave','Leaves',counts.leave],['spare','Spares',counts.spare],['review','Needs review',counts.review]];
-  const match = c => shotFilter === 'all' || shotTag(c) === shotFilter || (shotFilter === 'review' && c.status === 'failed');
-  const cols = '40px 60px 64px repeat(8,minmax(58px,1fr)) 130px 78px 76px 52px';
-  const val = (c, k, d=1) => { const v = metricVal(c, k); return v == null ? '—' : v.toFixed(d); };
-  const mmss = s => s == null ? '' : `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
-  const rubyD = c => { const x = (c.sensor_variance || {}).compared; return x && x.ball_speed ? `${x.ball_speed.diff>0?'+':''}${x.ball_speed.diff}` : ''; };
-  const rows = [...cs].reverse().filter(match).map(c => {
-    const tag = shotTag(c);
-    const dot = c.status !== 'done' ? '#5D6B82' : (tag === 'strike' || tag === 'spare' && c.pins && c.pins.strike) ? '#4BE0A0' : tag === 'review' ? '#F5A524' : '#F5A524';
-    const result = c.status === 'failed' ? 'Failed' : c.status !== 'done' ? cap(c.status) :
-      !c.pins ? 'Pins not read' : c.pins.strike ? (c.kind==='spare'?'Spare made':'Strike') : (c.kind==='spare'?'Missed ':'Leave ')+c.pins.standing.join('-');
-    const typ = c.status !== 'done' ? '' : c.kind === 'spare' ? 'spare' : '1st';
-    const mark = c.hit_mark === 'yes' ? 'Hit' : c.hit_mark === 'no' ? 'Missed' : c.hit_mark === 'unsure' ? 'Not sure' : '';
-    return `<div class="srow sgrid ${c.id===selected?'sel':''}" data-shot="${c.id}" style="grid-template-columns:${cols}">
-      <span style="text-align:left">${c.n}</span>
-      <span style="text-align:left">${c.status === 'done'
-        ? `<img src="/api/shots/${c.id}/thumb.jpg" alt="" style="width:44px;height:30px;object-fit:cover;border-radius:5px;vertical-align:middle;background:#1A2233" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'thumb'}))">`
-        : `<span class="thumb"></span>`}</span>
-      <span style="text-align:left;font-size:14px;color:#C3CEDD">${typ}</span>
-      <span>${val(c,'ball_speed')}</span><span>${val(c,'rev_rate',0)}</span><span>${(c.power||{}).value ?? '—'}</span>
-      <span>${val(c,'laydown_board')}</span><span>${val(c,'arrows_board')}</span><span>${val(c,'breakpoint_board')}</span>
-      <span>${val(c,'entry_board')}</span><span>${metricVal(c,'entry_angle')==null?'—':val(c,'entry_angle')+'°'}</span>
-      <span style="text-align:left;display:inline-flex;align-items:center;gap:7px"><span class="dot" style="background:${dot}"></span>${esc(result)}</span>
-      <span style="text-align:left;font-size:14px;color:#C3CEDD">${mark}</span>
-      <span style="color:#A9B6C9">${rubyD(c) ? rubyD(c)+' mph' : ''}</span>
-      <span style="color:var(--muted)">${mmss((c.timings||{}).total_s)}</span></div>`;}).join('');
-  return `<section class="panel">
-    <div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Shots (${cs.length})</h2><div style="flex:1"></div>
-      <div class="rowline" style="gap:6px" role="group" aria-label="Filter shots">
-        ${filters.map(([v,l,n]) => `<button class="tab ${shotFilter===v?'on':''}" data-filter="${v}" type="button">${l}${v!=='all'?' '+n:''}</button>`).join('')}</div></div>
-    <div style="overflow-x:auto"><div style="min-width:1080px;display:flex;flex-direction:column">
-      <div class="sgrid shead" style="grid-template-columns:${cols}">
-        <span style="text-align:left">#</span><span style="text-align:left">Clip</span><span style="text-align:left">Type</span>
-        <span>Speed</span><span>Revs</span><span>Power</span><span>Laydown</span><span>Arrows</span><span>Breakpt</span><span>Entry</span><span>Angle</span>
-        <span style="text-align:left">Result</span><span style="text-align:left">Mark</span><span>Ruby Δ</span><span>Time</span></div>
-      ${rows || `<div class="muted" style="padding:14px 10px">No shots match this filter.</div>`}
-    </div></div></section>`;
-}
-
-/* ---------- shot-by-shot chart ---------- */
-const CHART_DEFS = {
-  speedrev: { tabs: 'Speed + revs', axes: 2, series: [
-    { key: 'ball_speed', color: '#00C2EE', axis: 0, label: 'Speed mph (left)' },
-    { key: 'rev_rate', color: '#F5A524', axis: 1, label: 'Rev rate rpm (right, est)' }] },
-  entrybp: { tabs: 'Entry + breakpoint', axes: 1, unit: 'bd', series: [
-    { key: 'entry_board', color: '#00C2EE', label: 'Entry board' },
-    { key: 'breakpoint_board', color: '#F5A524', label: 'Breakpoint board' }] },
-  arrows: { tabs: 'Arrows', axes: 1, unit: 'bd', series: [{ key: 'arrows_board', color: '#00C2EE', label: 'Arrows board' }] },
-  power: { tabs: 'Power', axes: 1, unit: '', series: [{ key: 'power', color: '#00C2EE', label: 'Power (est)' }] },
-};
-const getSeriesVal = (c, k) => k === 'power' ? ((c.power || {}).value ?? null) : metricVal(c, k);
-function renderChart() {
-  const head = `<div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Shot by shot</h2><div style="flex:1"></div>
-    <div class="rowline" style="gap:6px" role="group" aria-label="Series">${Object.entries(CHART_DEFS).map(([k,d]) =>
-      `<button class="tab ${chartTab===k?'on':''}" data-chart="${k}" type="button">${d.tabs}</button>`).join('')}</div></div>`;
-  const done = S.cards.filter(c => c.status === 'done');
-  const def = CHART_DEFS[chartTab];
-  const sd = def.series.map(s => ({ ...s, pts: done.map(c => ({ n: c.n, v: getSeriesVal(c, s.key) })).filter(p => p.v != null) }));
-  if (!sd.some(s => s.pts.length)) return head + `<div class="muted" style="padding:20px 0">No data yet for this series.</div>`;
-  const W = 680, H = 240, T = 18, B = 42, L = 46, R = def.axes === 2 ? 632 : 648;
-  const ns = done.map(c => c.n); let xmin = Math.min(...ns), xmax = Math.max(...ns); if (xmin === xmax) { xmin -= 0.5; xmax += 0.5; }
-  const X = n => L + (n - xmin) / (xmax - xmin) * (R - L);
-  const scale = idx => { const vs = sd.filter(s => (s.axis||0) === idx).flatMap(s => s.pts.map(p => p.v)); if (!vs.length) return null;
-    let lo = Math.min(...vs), hi = Math.max(...vs); if (lo === hi) { lo -= 1; hi += 1; } const pad = (hi-lo)*0.18; lo -= pad; hi += pad;
-    return { lo, hi, y: v => (H-B) - (v-lo)/(hi-lo)*((H-B)-T) }; };
-  const A = [scale(0), def.axes === 2 ? scale(1) : null];
-  const ticks = (a, x, anchor) => { if (!a) return ''; const out = [];
-    for (let i = 0; i <= 3; i++) { const v = a.lo + (a.hi-a.lo)*i/3, y = a.y(v);
-      out.push(`<text x="${x}" y="${(y+4).toFixed(1)}" fill="#93A3BA" font-size="11" text-anchor="${anchor}">${chartTab==='speedrev'&&anchor==='end'?v.toFixed(1):Math.round(v)}</text>`); }
-    return out.join(''); };
-  const grid = [0,1,2,3].map(i => { const y = (A[0].y(A[0].lo + (A[0].hi-A[0].lo)*i/3)).toFixed(1); return `M${L},${y}H${R}`; }).join('');
-  const half = X((xmin+xmax)/2).toFixed(1);
-  const paths = sd.map(s => { const a = A[s.axis||0]; if (!a || !s.pts.length) return '';
-    const pl = s.pts.map(p => `${X(p.n).toFixed(1)},${a.y(p.v).toFixed(1)}`).join(' ');
-    const dots = s.pts.map(p => `<circle cx="${X(p.n).toFixed(1)}" cy="${a.y(p.v).toFixed(1)}" r="3.5" fill="${s.color}"></circle>`).join('');
-    return `<polyline points="${pl}" fill="none" stroke="${s.color}" stroke-width="2.5"></polyline>${dots}`; }).join('');
-  const xlabels = [xmin, Math.round((xmin+xmax)/2), xmax].filter((v,i,a)=>a.indexOf(v)===i).map(n =>
-    `<text x="${X(n).toFixed(1)}" y="${H-24}" fill="#93A3BA" font-size="11" text-anchor="middle">${n}</text>`).join('');
-  const legend = sd.map(s => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${s.color}"></span> ${s.label}</span>`).join('');
-  return head + `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Shot by shot ${def.tabs}">
-      <path d="${grid}" stroke="#1F2E45" fill="none"></path>
-      ${ticks(A[0], L-6, 'end')}${A[1] ? ticks(A[1], R+6, 'start') : ''}${xlabels}
-      <text x="${(L+R)/2}" y="${H-8}" fill="#93A3BA" font-size="11" text-anchor="middle">Shot</text>
-      ${done.length>2 ? `<line x1="${half}" x2="${half}" y1="${T}" y2="${H-B}" stroke="#2D4363" stroke-dasharray="4 4"></line>` : ''}
-      ${paths}</svg>
-    <div class="rowline" style="gap:18px;font-size:13px;color:#C3CEDD;margin-top:4px">${legend}${done.length>2?'<span style="color:#93A3BA">Dashed: half-way split</span>':''}</div>`;
-}
-
-/* ---------- lane usage + lane read ---------- */
-function renderLaneUsage(st) {
-  const firsts = S.cards.filter(c => c.status === 'done' && c.kind === 'first' && c.path && c.path.length);
-  const cons = st.consistency || {};
-  const W = 160, H = 520, mx = 20, my = 20, lw = W - 2*mx, lh = H - 2*my;
-  const bx = b => mx + (39 - b) / 38 * lw;          // board 39 at left, 1 at right (1 = right gutter)
-  const zy = z => (H - my) - z / 60 * lh;           // 0 ft at foul (bottom), 60 ft at pins (top)
-  const pathD = p => p.map((pt, i) => `${i?'L':'M'}${bx(pt[1]).toFixed(1)},${zy(pt[0]).toFixed(1)}`).join('');
-  const latestId = firsts.length ? firsts[firsts.length-1].id : null;
-  const others = firsts.filter(c => c.id !== latestId).map(c => `<path d="${pathD(c.path)}" fill="none" stroke="#BFD3EA" stroke-width="1.4" stroke-linecap="round" opacity=".5"></path>`).join('');
-  const latest = firsts.find(c => c.id === latestId);
-  const ell = cons.breakpoint_ellipse;
-  const ellSvg = ell ? (() => { const [cb, cz] = ell.center, [ax, ay] = ell.axes;
-    return `<ellipse cx="${bx(cb).toFixed(1)}" cy="${zy(cz).toFixed(1)}" rx="${(ax/38*lw).toFixed(1)}" ry="${(ay/60*lh).toFixed(1)}" transform="rotate(${-ell.angle_deg} ${bx(cb).toFixed(1)} ${zy(cz).toFixed(1)})" fill="#F5CF5B33" stroke="#F5CF5B" stroke-width="1.5"></ellipse>`; })() : '';
-  const svg = `<svg viewBox="0 0 ${W} ${H}" width="160" role="img" aria-label="Top-down lane with first-ball paths">
-      <rect x="${mx}" y="${my}" width="${lw}" height="${lh}" fill="#6B4A26"></rect>
-      <rect x="${mx-8}" y="${my}" width="8" height="${lh}" fill="#2A3240"></rect><rect x="${mx+lw}" y="${my}" width="8" height="${lh}" fill="#2A3240"></rect>
-      ${ellSvg}${others}
-      ${latest ? `<path d="${pathD(latest.path)}" fill="none" stroke="#00C2EE" stroke-width="3" stroke-linecap="round"></path>` : ''}
-      <text x="${W/2}" y="13" fill="#93A3BA" font-size="11" text-anchor="middle">pins</text>
-      <text x="${W/2}" y="${H-4}" fill="#93A3BA" font-size="11" text-anchor="middle">foul line</text></svg>`;
-  const disp = cons.dispersion_boards || {};
-  const spread = ['arrows','breakpoint','entry'].map(k => `<div style="background:var(--tile);border:1px solid var(--tileline);border-radius:9px;padding:8px 10px">
-      <div class="lbl">${cap(k)}</div><div class="num" style="font-size:21px;font-weight:700">${disp[k]!=null?'±'+disp[k]:'—'}<span style="font-size:12px;color:var(--muted)"> bd</span></div></div>`).join('');
-  const takeaways = laneReadTakeaways(st);
-  return `<div style="flex:0 0 170px"><h2 class="h">Lane usage</h2>${svg}</div>
-    <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:12px;min-width:0">
-      <h2 class="h" style="margin:0">Lane read</h2>
-      <div style="display:flex;flex-direction:column;gap:10px">${takeaways.length ? takeaways.map(t => `<div style="display:flex;gap:10px">
-          <span style="flex:0 0 8px;height:8px;margin-top:7px;border-radius:50%;background:${t.color}"></span>
-          <div><div style="font-weight:600">${esc(t.title)}</div><div style="font-size:13px;color:#A9B6C9">${esc(t.body)}</div></div></div>`).join('')
-        : `<div class="muted small">Takeaways appear as the session builds (3+ comparable first balls).</div>`}</div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:auto">${spread}</div>
-      <div class="lbl">${ell ? 'Yellow ellipse: where your breakpoints landed (2σ). ' : ''}Spread = how repeatable each checkpoint is${cons.dispersion_boards?'':' (needs 3+ first balls)'}.</div>
-    </div>`;
-}
-function laneReadTakeaways(st) {
-  const out = [];
-  // lane transition: surface a transition recommendation if the engine found one on a recent first ball
-  const tr = [...S.cards].reverse().find(c => c.kind === 'first' && ((c.insights || {}).recommendations || []).some(r => r.type === 'transition'));
-  if (tr) { const r = tr.insights.recommendations.find(x => x.type === 'transition'); out.push({ color: '#F5CF5B', title: 'Lane is transitioning', body: r.reason }); }
-  const a = st.averages || {};
-  if (a.ball_speed && a.ball_speed.n >= 2) out.push({ color: '#3FD8FF', title: 'Speed ' + (a.ball_speed.sd <= 0.3 ? 'is steady' : 'is varying'),
-    body: `${a.ball_speed.mean.toFixed(1)} mph ± ${a.ball_speed.sd.toFixed(1)} on first balls.` });
-  if (a.breakpoint_board && a.breakpoint_board.n >= 2) { const len = (S.session || {}).pattern_length_ft;
-    const target = (S.session.intent || {}).breakpoint_board ?? (len ? len - 31 : null);
-    out.push({ color: '#3FD8FF', title: 'Breakpoint', body: `Average ${a.breakpoint_board.mean.toFixed(1)}${target!=null?` vs your target ${target}`:''}.${len?` Pattern rule for ${len} ft says ${len-31}.`:''}` });
-  }
-  return out;
-}
-
-/* ---------- game ---------- */
-function renderGame(st) {
-  const g = (st || {}).game;
-  const head = `<div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Game from these shots</h2>`;
-  if (!g) return `<section class="panel">${head}</div><div class="muted small">A game can't be built from this shot sequence yet — mark first balls and spares so the frames line up.</div></section>`;
-  const final = [...g].reverse().find(f => f.score != null);
-  const frame = f => {
-    const boxes = f.n === 10 ? 3 : 2, cells = [];
-    for (let i = 0; i < boxes; i++) cells.push(`<span style="flex:1;min-width:0;text-align:center;padding:3px 0;${i>0?'border-left:1px solid #1F2E45;':''}${i<boxes-1?'border-bottom:1px solid #1F2E45;':''}">${f.rolls[i] != null ? esc(f.rolls[i]) : ''}</span>`);
-    const clickable = f.shot_ids && f.shot_ids.length;
-    return `<div ${clickable ? `data-shot="${f.shot_ids[f.shot_ids.length-1]}"` : ''} style="border-right:1px solid #27395A;display:flex;flex-direction:column;min-width:52px${clickable ? ';cursor:pointer' : ''}">
-      <div style="font-size:11px;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line)">${f.n}</div>
-      <div class="num" style="display:flex;justify-content:flex-end;font-size:17px;font-weight:700;min-height:26px">${cells.join('')}</div>
-      <div class="num" style="font-size:20px;font-weight:700;text-align:center;padding:6px 0 8px;color:${f.score!=null?'var(--ice)':'var(--dimmer)'}">${f.score != null ? f.score : ''}</div></div>`;
-  };
-  return `<section class="panel">${head}<span class="lbl">Frames from first-ball + spare order; a frame that can't be scored yet is blank${final?` · through frame ${final.n}: ${final.score}`:''}</span></div>
-    <div style="display:grid;grid-template-columns:repeat(10,minmax(52px,1fr));border:1px solid #27395A;border-radius:10px;overflow-x:auto">${g.map(frame).join('')}</div></section>`;
-}
+function renderOverview() { return panelHead('Session Overview') + `<div class="ph">Session overview — built in step 4.</div>`; }
+function renderTransition() { return panelHead('Lane Transition Analysis') + `<div class="ph">Lane transition — built in step 5.</div>`; }
+function renderShots() { return panelHead('Shots in Session') + `<div class="ph">Shots list — built in step 2.</div>`; }
+function renderLatest(c) { return panelHead('Latest Shot Analysis') + `<div class="ph">Latest shot — built in step 3.</div>`; }
 
 /* ---------- start session ---------- */
 function renderStart() {
@@ -662,78 +207,72 @@ function renderStart() {
   if (patternsLib === null) { patternsLib = []; api('/api/patterns').then(p => { patternsLib = p; if (!S.session) renderStart(); }).catch(() => {}); }
   const prev = S.sessions[0] || {};
   const patOpts = (patternsLib || []).map(p => `<option value="${esc(p.name)}" data-len="${p.length_ft}">${esc(p.name)} · ${p.length_ft} ft</option>`).join('');
-  $('#app').innerHTML = `<main style="max-width:1500px;margin:0 auto;padding:18px 24px"><div class="panel start">
-    <h2 class="h">Start a session</h2>
-    <div class="row2" style="margin-bottom:10px">
+  $('#app').innerHTML = `<div class="card" style="max-width:620px;margin:30px auto;padding:20px">
+    <h2 style="font-size:18px;font-weight:600;margin-bottom:14px">Start a session</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <label class="lbl">Type<select class="fld" id="s_kind"><option>practice</option><option>league</option><option>tournament</option></select></label>
       <label class="lbl">Hand<select class="fld" id="s_hand"><option value="">Auto from video</option><option value="R">Right</option><option value="L">Left</option></select></label>
+      <label class="lbl">Center<input class="fld" id="s_center" placeholder="e.g. Richmond Bowling Center"></label>
+      <label class="lbl">Lane #<input class="fld" id="s_lane" type="number" step="1" placeholder="optional"></label>
       <label class="lbl">Ball<input class="fld" id="s_ball" placeholder="e.g. Phaze II" value="${esc(prev.ball_name || '')}"></label>
-      <div class="row2"><label class="lbl">Weight lb<input class="fld" id="s_wt" type="number" step="0.5" placeholder="15"></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="lbl">Weight lb<input class="fld" id="s_wt" type="number" step="0.5" placeholder="15"></label>
         <label class="lbl">RG in<input class="fld" id="s_rg" type="number" step="0.01" placeholder="2.50"></label></div>
       <label class="lbl">Oil pattern<select class="fld" id="s_pat"><option value="">Custom / none</option>${patOpts}</select></label>
       <label class="lbl">Pattern length ft<input class="fld" id="s_len" type="number" step="1" placeholder="auto from pattern"></label>
     </div>
-    <p class="lbl" style="margin:-4px 0 6px">Pick a known pattern to see its oil heatmap under your line. The heatmap is modeled from the pattern's published spec, not a scan of the lane.</p>
-    <p class="small muted">Record each shot on the iPhone (1080p, 60 fps, tripod, HDR off) and AirDrop it to this Mac. Clips in
+    <p class="lbl" style="margin:-2px 0 8px">Pick a known pattern to see its oil heatmap under your line (modeled from the pattern's published spec, not a lane scan).</p>
+    <p class="small muted" style="margin:0 0 12px">Record each shot on the iPhone (1080p, 60 fps, tripod, HDR off) and AirDrop it to this Mac. Clips in
       <span class="kbd">${esc(S.watch_dir || '')}</span> are picked up automatically, or drag a clip onto this page.</p>
-    <button class="btn primary" id="startBtn" type="button">Start session</button>
-    ${S.sessions.length ? `<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px"><h2 class="h">Past sessions</h2>${S.sessions.map(s =>
-      `<div class="varrow" style="padding:4px 0"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
+    <button class="pill on" id="startBtn" type="button" style="height:40px;padding:0 18px;font-size:14px">Start session</button>
+    ${S.sessions.length ? `<div style="margin-top:16px;border-top:1px solid var(--cardline);padding-top:12px"><h3 style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Past sessions</h3>${S.sessions.map(s =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:13px"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
        <span>${s.shot_count} shots · <a href="/api/sessions/${s.id}/export.csv">CSV</a></span></div>`).join('')}</div>` : ''}
-  </div></main>`;
+  </div>`;
   $('#s_pat').onchange = () => { const o = $('#s_pat').selectedOptions[0]; if (o && o.dataset.len) $('#s_len').value = o.dataset.len; };
   $('#startBtn').onclick = async () => {
     const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
     await api('/api/session', {method:'POST', body:{kind:$('#s_kind').value, handed:$('#s_hand').value || null,
       ball_name:$('#s_ball').value || null, ball_weight_lb:num('#s_wt'), ball_rg_in:num('#s_rg'),
-      pattern_name:$('#s_pat').value || null, pattern_length_ft:num('#s_len')}});
+      pattern_name:$('#s_pat').value || null, pattern_length_ft:num('#s_len'),
+      center:$('#s_center').value || null, lane:num('#s_lane')}});
     follow = true; load();
   };
 }
 
 /* ---------- bind ---------- */
 function bind(sess, c) {
-  document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; render(); });
-  document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { shotFilter = b.dataset.filter; render(); });
-  document.querySelectorAll('[data-chart]').forEach(b => b.onclick = () => { chartTab = b.dataset.chart; render(); });
-  document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => {
-    selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
-  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));
-  const lb = $('#latestBtn'); if (lb) lb.onclick = () => { follow = true; render(); };
-  const rb = $('#retryBtn'); if (rb) rb.onclick = () => api(`/api/shots/${c.id}/retry`, {method:'POST'});
-  document.querySelectorAll('input,select').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
-  const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
-  const ss = $('#saveSess'); if (ss) ss.onclick = () => api('/api/session', {method:'PATCH', body:{
-    intent:{laydown_board:num('#i_lay'), arrows_board:num('#i_arr'), breakpoint_board:num('#i_bp')},
-    ball_name:$('#i_ball').value || null, ball_weight_lb:num('#i_wt')}}).then(load);
-  if (!c || c.status !== 'done') return;
-  const post = body => api(`/api/shots/${c.id}`, {method:'POST', body}).then(load);
-  document.querySelectorAll('[data-hm]').forEach(b => b.onclick = () => post({hit_mark: c.hit_mark === b.dataset.hm ? null : b.dataset.hm}));
-  document.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => {
-    const s = new Set(c.pins ? c.pins.standing : []); const n = +b.dataset.pin; s.has(n) ? s.delete(n) : s.add(n); post({pins_override:[...s]}); });
-  const pr = $('#pinReset'); if (pr) pr.onclick = () => post({clear_pins_override:true});
-  document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => post({kind_override:b.dataset.kind}));
-  const sv = $('#saveSensor'); if (sv) sv.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
-  document.querySelectorAll('[data-vote]').forEach(b => b.onclick = () => post({rec_vote: c.rec_vote === b.dataset.vote ? null : b.dataset.vote}));
-  document.querySelectorAll('[data-fol]').forEach(b => b.onclick = () => post({rec_followed: c.rec_followed === b.dataset.fol ? null : b.dataset.fol}));
-  const rn = $('#recNote'); if (rn) rn.onchange = () => post({rec_note: rn.value || null});
+  const en = $('#editName'); if (en) en.onclick = () => { const v = prompt('Session name', sess.name || ''); if (v != null) api('/api/session', {method:'PATCH', body:{name: v || null}}).then(load); };
+  const es = $('#editSess'); if (es) es.onclick = () => editSession(sess);
+  const eb = $('#endBtn'); if (eb) eb.onclick = () => { if (confirm('End this session?')) api('/api/session/end', {method:'POST'}).then(load); };
+  document.querySelectorAll('input,select,textarea').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
+  bindShots(sess, c); bindLatest(sess, c); bindOverview(); bindTransition();
 }
-function navShot(d) {
-  const i = S.cards.findIndex(x => x.id === selected);
-  const j = Math.max(0, Math.min(S.cards.length-1, i + d));
-  selected = S.cards[j].id; follow = j === S.cards.length-1; render();
+function bindShots() {}
+function bindLatest() {}
+function bindOverview() {}
+function bindTransition() {}
+function editSession(sess) {
+  const name = prompt('Current ball name', sess.ball_name || ''); if (name == null) return;
+  const pat = prompt('Oil pattern name (blank to keep)', sess.pattern_name || '');
+  const body = {ball_name: name || null};
+  if (pat != null) body.pattern_name = pat || null;
+  api('/api/session', {method:'PATCH', body}).then(load);
 }
 
 document.addEventListener('keydown', e => {
   if (!S || !S.session || ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
   const c = current(); const k = e.key.toLowerCase();
-  if (c && c.status === 'done' && {y:'yes', n:'no', u:'unsure'}[k])
-    api(`/api/shots/${c.id}`, {method:'POST', body:{hit_mark:{y:'yes', n:'no', u:'unsure'}[k]}}).then(load);
+  if (c && c.status === 'done' && {y:'yes', n:'no', u:'unsure'}[k]) api(`/api/shots/${c.id}`, {method:'POST', body:{hit_mark:{y:'yes', n:'no', u:'unsure'}[k]}}).then(load);
   else if (k === 'arrowleft') navShot(-1);
   else if (k === 'arrowright') navShot(1);
 });
+function navShot(d) {
+  if (!S || !S.cards.length) return;
+  const i = S.cards.findIndex(x => x.id === selected);
+  const j = Math.max(0, Math.min(S.cards.length-1, (i < 0 ? S.cards.length-1 : i) + d));
+  selected = S.cards[j].id; follow = j === S.cards.length-1; render();
+}
 $('#speechBtn').onclick = () => api(`/api/speech?on=${!S.speech}`, {method:'POST'}).then(load);
-$('#endBtn').onclick = () => { if (confirm('End this session?')) api('/api/session/end', {method:'POST'}).then(load); };
 
 let dragDepth = 0;
 addEventListener('dragenter', e => { e.preventDefault(); if (S && S.session) { dragDepth++; $('#drop').style.display = 'flex'; } });
