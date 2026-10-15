@@ -3,93 +3,87 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LaneSight Runner</title>
+<title>LaneSight runner</title>
 <style>
+/* v2 design (runner_v2_mock). System fonts so it works offline at the lanes. */
 :root{
-  --navy:#0B1320; --panel:#111c2e; --panel2:#16243a; --line:#22344f; --ice:#F7F9FC; --muted:#8d9ab0; --dim:#5d6b82;
-  --electric:#00D2FF; --blue:#007BFF; --good:#2ecc8f; --warn:#F2C94C; --bad:#ff6b6b;
-  --r:10px; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --bg:#0A111D; --panel:#111B2B; --tile:#0D1625; --line:#1F2E45; --tileline:#1C2A40; --fieldbg:#0B1422; --fieldline:#23344E;
+  --ice:#E8EEF6; --muted:#93A3BA; --dim:#7F8DA3; --dimmer:#5D6B82;
+  --cyan:#00C2EE; --cyan2:#3FD8FF; --blue:#0E6BE0; --good:#4BE0A0; --warn:#F5CF5B; --orange:#F5A524; --bad:#ff6b6b;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
 }
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--navy);color:var(--ice);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif}
-button,input,select{font:inherit;color:inherit}
-button{cursor:pointer;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
-button:hover{border-color:var(--electric)}
-button.primary{background:var(--blue);border-color:var(--blue);font-weight:600}
-button.on{background:var(--electric);color:var(--navy);border-color:var(--electric);font-weight:700}
-input,select{background:#0d1626;border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
-input:focus,select:focus{outline:none;border-color:var(--electric)}
-label{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
-.muted{color:var(--muted)} .dim{color:var(--dim)} .small{font-size:12px}
-header{display:flex;align-items:center;gap:18px;padding:10px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.brand{font-weight:800;letter-spacing:.5px;font-size:18px}
-.brand b{color:var(--electric)}
-.pills{display:flex;gap:8px;flex-wrap:wrap}
-.pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
-.pill b{font-size:16px;margin-left:4px}
-.spacer{flex:1}
-main{display:grid;grid-template-columns:minmax(220px,300px) 1fr minmax(280px,340px);gap:14px;padding:14px 18px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
-.panel h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
-#replay{width:100%;border-radius:8px;display:block}
-.noreplay{height:520px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:20px}
-.result{font-size:40px;font-weight:800;letter-spacing:.5px;line-height:1.1}
-.result.strike{color:var(--electric)}
-.shothead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
-.adj{margin:12px 0 14px;padding:14px 16px;border-radius:var(--r);background:linear-gradient(135deg,#0f2b4a,#10233c);border:1px solid #1e4d7a}
-.adj .main{font-size:22px;font-weight:700}
-.adj .why{color:#c4d0e2;margin-top:6px}
-.adj .alt{margin-top:8px;font-size:13px;color:var(--muted);border-top:1px solid #23466b;padding-top:8px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px}
-.m{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;position:relative;min-height:70px}
-.m .l{font-size:12px;color:var(--muted)}
-.m .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
-.m .v small{font-size:13px;color:var(--muted);font-weight:500;margin-left:2px}
-.m .na{font-size:12px;color:var(--dim);margin-top:4px}
-.badge{position:absolute;top:7px;right:7px;font-size:10px;font-weight:700;letter-spacing:.4px;border-radius:4px;padding:1px 5px;text-transform:uppercase}
-.b-guaranteed{background:#12402e;color:var(--good)} .b-best_effort{background:#40360f;color:var(--warn)} .b-unavailable{background:#2a2f3a;color:var(--dim)}
-.power{display:flex;align-items:center;gap:14px;margin-top:12px}
-.ring{--p:0;width:74px;height:74px;border-radius:50%;background:conic-gradient(var(--electric) calc(var(--p)*1%),#22344f 0);display:grid;place-items:center}
-.ring span{width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-size:22px;font-weight:800}
-.status{padding:30px;text-align:center}
-.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--electric);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 12px}
+html,body{margin:0;background:var(--bg);color:var(--ice);font:15px/1.4 var(--sans)}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+a{color:var(--cyan2);text-decoration:none}a:hover{color:#9BEBFF;text-decoration:underline}
+h2.h{margin:0 0 12px;font:600 12px/1 var(--sans);letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}
+.lbl{font-size:12px;color:var(--muted)}
+.muted{color:var(--muted)}.dim{color:var(--dim)}.small{font-size:12px}.err{color:var(--bad)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;box-sizing:border-box;min-width:0}
+.badge{font:700 10px/1 var(--sans);letter-spacing:.6px;border-radius:4px;padding:3px 5px;text-transform:uppercase;white-space:nowrap}
+.ok{background:#123D2D;color:var(--good)}.est{background:#3D3311;color:var(--warn)}.na{background:#232B38;color:#8E9AAD}.you{background:#15263C;color:#7FB2E8}
+.tab{background:none;border:1px solid #23344E;color:#C3CEDD;border-radius:8px;padding:7px 12px;font:500 13px var(--sans);cursor:pointer;min-height:34px}
+.tab.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn{background:#162438;border:1px solid #27395A;color:var(--ice);border-radius:9px;padding:9px 14px;font:500 14px var(--sans);min-height:40px;cursor:pointer}
+.btn:hover{border-color:#3a557f}
+.btn.on{background:var(--cyan);border-color:var(--cyan);color:#04121F;font-weight:700}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.fld{background:var(--fieldbg);border:1px solid var(--fieldline);border-radius:8px;color:var(--ice);padding:8px 9px;font:500 15px var(--sans);width:100%;box-sizing:border-box}
+.fld:focus{outline:none;border-color:var(--cyan)}
+input[type=number]{font-variant-numeric:tabular-nums}
+label.lbl{display:block}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#C3CEDD;border:1px solid #23344E;border-radius:999px;padding:7px 12px}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+.spin{width:12px;height:12px;border:2px solid #4A3E18;border-top-color:var(--warn);border-radius:50%;animation:s 1s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
-.err{color:var(--bad)}
-.warnbox{background:#3a2b0e;border:1px solid #6b5418;color:#f5d98a;border-radius:8px;padding:8px 10px;font-size:13px;margin:8px 0}
-.row{display:flex;gap:8px;align-items:center}
-.row>*{flex:1}
-.seg{display:flex;gap:6px}
-.seg button{flex:1}
-.pins{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;width:220px;margin:6px auto}
-.pin{aspect-ratio:1;border-radius:50%;border:2px solid var(--line);background:#0d1626;font-weight:700;font-size:13px;padding:0}
-.pin.up{background:var(--ice);color:var(--navy);border-color:var(--ice)}
-.pin.unc{border-color:var(--warn);color:var(--warn)}
-.sec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-.sec:first-child{margin-top:0;padding-top:0;border-top:0}
-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
-th:first-child,td:first-child,td.l,th.l{text-align:left}
-tbody tr{cursor:pointer} tbody tr:hover{background:var(--panel2)} tbody tr.sel{background:#14304f}
-.bottom{padding:0 18px 18px;display:grid;grid-template-columns:1fr minmax(280px,340px);gap:14px}
-.tablewrap{overflow-x:auto}
-.start{max-width:560px;margin:40px auto}
-.start .g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-#drop{position:fixed;inset:0;background:#007bffcc;display:none;align-items:center;justify-content:center;font-size:28px;font-weight:700;z-index:10}
-.kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--muted)}
-.varrow{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
-@media (max-width:1100px){main{grid-template-columns:1fr 1fr}.bottom{grid-template-columns:1fr}#leftcol{grid-row:span 1}}
-@media (max-width:760px){main{grid-template-columns:1fr}}
+.warnbox{background:#3a2b0e;border:1px solid #6b5418;color:#f5d98a;border-radius:8px;padding:8px 10px;font-size:13px}
+.kpi{background:var(--tile);border:1px solid var(--tileline);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.kpi .v{font-size:32px;font-weight:700;line-height:1.05}
+.kpi .v small{font-size:15px;color:var(--muted);font-weight:500;margin-left:3px}
+.m{background:var(--tile);border:1px solid var(--tileline);border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:2px;min-height:74px;position:relative}
+.m .v{font-size:25px;font-weight:700}
+.m .v small{font-size:13px;color:var(--muted);font-weight:500;margin-left:2px}
+.adj{background:#0F2742;border:1px solid #1E4A7A;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.adj .main{font:700 22px var(--sans)}
+.ring{width:74px;height:74px;border-radius:50%;display:grid;place-items:center}
+.ring span{width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-size:24px;font-weight:700}
+.pinbtn{width:44px;height:44px;border-radius:50%;font:700 15px var(--sans);cursor:pointer;border:2px solid #2D4363;background:var(--fieldbg);color:var(--muted)}
+.pinbtn.up{border-color:#F7F9FC;background:#F7F9FC;color:#04121F}
+.pinbtn.unc{border-color:var(--warn);color:var(--warn)}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.seg{display:grid;gap:6px}
+.varrow{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.rowline{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.sgrid{display:grid;gap:0 8px;align-items:center}
+.srow{padding:8px 10px;border-bottom:1px solid #18253A;text-align:right;font-variant-numeric:tabular-nums;font-size:16px;cursor:pointer;border-radius:8px}
+.srow:hover{background:#0F1B2E}
+.srow.sel{background:#14304F}
+.shead{padding:0 10px 8px;border-bottom:1px solid var(--line);font:600 11px var(--sans);letter-spacing:.8px;text-transform:uppercase;color:var(--muted);text-align:right}
+.thumb{display:inline-block;width:44px;height:30px;border-radius:5px;background:linear-gradient(180deg,#1A2233 0 30%,#6B4A26 30%);vertical-align:middle}
+.start{max-width:600px;margin:40px auto}
+#drop{position:fixed;inset:0;background:#0E6BE0cc;display:none;align-items:center;justify-content:center;font-size:28px;font-weight:700;z-index:10}
+.kbd{font:500 11px var(--mono);color:var(--muted);border:1px solid #27395A;border-radius:4px;padding:1px 4px}
+.status{padding:30px;text-align:center}
+.bigspin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--cyan);border-radius:50%;animation:s 1s linear infinite;margin:0 auto 12px}
+.media{position:relative;background:#05090F;border-radius:12px;overflow:hidden}
+.media img{width:100%;display:block}
+.noreplay{min-height:420px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-align:center;padding:20px}
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">Lane<b>Sight</b> <span class="muted small">runner</span></div>
-  <div id="sessinfo" class="small muted"></div>
-  <div class="spacer"></div>
-  <div class="pills" id="pills"></div>
-  <button id="speechBtn" title="Read results aloud">🔊 Speech</button>
-  <button id="endBtn" style="display:none">End session</button>
+<header style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 22px;padding:14px 24px;border-bottom:1px solid #1A2840;background:#0C1524">
+  <div style="display:flex;align-items:center;gap:10px">
+    <svg width="34" height="22" viewBox="0 0 34 22" aria-hidden="true"><path d="M2 20 L14 2 M32 20 L20 2" stroke="#3FD8FF" stroke-width="2.4" fill="none" stroke-linecap="round"></path><path d="M17 20 C17 13 12 9 14 4" stroke="#0E6BE0" stroke-width="2.4" fill="none" stroke-linecap="round"></path></svg>
+    <span style="font:700 21px var(--sans);letter-spacing:.3px">Lane<span style="color:#3FD8FF">Sight</span></span>
+    <span style="font-size:12px;color:var(--muted);border:1px solid #27395A;border-radius:999px;padding:3px 9px">runner</span>
+  </div>
+  <div id="sessmeta" style="display:flex;flex-direction:column;gap:3px"></div>
+  <div style="flex:1"></div>
+  <div id="hstatus" class="rowline" style="gap:8px"></div>
+  <button id="speechBtn" class="btn" type="button">🔊 Speech</button>
+  <button id="endBtn" class="btn" type="button" style="display:none">End session</button>
 </header>
 <div id="app"></div>
 <div id="drop">Drop clip to analyze</div>
@@ -97,7 +91,7 @@ tbody tr{cursor:pointer} tbody tr:hover{background:var(--panel2)} tbody tr.sel{b
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false;
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all';
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
 
 async function api(path, opts={}) {
@@ -114,62 +108,366 @@ function connect() {
 }
 
 const fmtTime = iso => iso ? new Date(iso).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString([], {month:'short', day:'numeric'}) : '';
 const leaveTxt = p => !p ? '—' : p.strike ? 'X' : p.standing.join('-');
+const metricVal = (c, k) => { const m = (c.metrics || []).find(x => x.key === k); return m && m.value != null ? m.value : null; };
+const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+const sd = a => { if (a.length < 2) return null; const m = avg(a); return Math.sqrt(avg(a.map(x=>(x-m)**2))); };
+const pct = (a,b) => b ? Math.round(100*a/b) : null;
 
 function current() {
   if (!S || !S.cards.length) return null;
-  if (follow || !S.cards.find(c => c.id === selected)) { selected = S.cards[S.cards.length-1].id; }
+  if (follow || !S.cards.find(c => c.id === selected)) selected = S.cards[S.cards.length-1].id;
   return S.cards.find(c => c.id === selected);
+}
+
+// cards within the selected range (All / First half / Second half / Last 5), by shot number
+function rangeCards() {
+  const cs = S.cards;
+  if (range === 'last5') return cs.slice(-5);
+  if (range === 'first') return cs.slice(0, Math.ceil(cs.length/2));
+  if (range === 'second') return cs.slice(Math.ceil(cs.length/2));
+  return cs;
 }
 
 function render() {
   const sess = S.session;
-  $('#speechBtn').className = S.speech ? 'on' : '';
+  $('#speechBtn').className = 'btn' + (S.speech ? ' on' : '');
   $('#speechBtn').disabled = !S.speech_available;
   $('#speechBtn').title = S.speech_available ? 'Read results aloud' : 'Speech needs macOS "say"';
+  $('#speechBtn').textContent = S.speech ? 'Speech on' : 'Speech off';
   $('#endBtn').style.display = sess ? '' : 'none';
-  if (!sess) { $('#pills').innerHTML = ''; $('#sessinfo').textContent = ''; renderStart(); return; }
-  $('#sessinfo').innerHTML = `${esc(sess.kind)} · started ${fmtTime(sess.started_at)} · watching <span class="kbd">${esc(S.watch_dir)}</span>` +
-    (S.queue ? ` · <b>${S.queue} queued</b>` : '');
+  renderHeaderStatus();
+  if (!sess) { $('#sessmeta').innerHTML = ''; renderStart(); return; }
   const st = S.stats || {};
-  const pill = (l, v, suf='') => `<span class="pill">${l}<b>${v ?? '—'}${v != null ? suf : ''}</b></span>`;
-  $('#pills').innerHTML = pill('Shots', st.shots) + pill('Strike', st.strike_pct, '%') + pill('Pocket', st.pocket_pct, '%') +
-    pill('Carry', st.carry_pct, '%') + pill('Spare', st.spare_pct, '%');
+  $('#sessmeta').innerHTML = `
+    <div style="font:600 18px var(--sans)">${esc(cap(sess.kind))} · ${fmtDate(sess.started_at)}</div>
+    <div class="small muted">${[sess.ball_name && esc(sess.ball_name) + (sess.ball_weight_lb ? ' ' + sess.ball_weight_lb + ' lb' : ''),
+      sess.pattern_name && esc(sess.pattern_name) + (sess.pattern_length_ft ? ' ' + sess.pattern_length_ft + ' ft' : ''),
+      'started ' + fmtTime(sess.started_at), (st.shots || 0) + ' shot' + (st.shots === 1 ? '' : 's')].filter(Boolean).join(' · ')}</div>`;
   const c = current();
   $('#app').innerHTML = `
-    ${S.watch_error ? `<div class="warnbox" style="margin:12px 18px 0">${esc(S.watch_error)}</div>` : ''}
-    <main>
-      <div class="panel" id="leftcol">${renderReplay(c)}</div>
-      <div class="panel">${renderCard(c)}</div>
-      <div class="panel">${renderInputs(sess, c)}</div>
-    </main>
-    <div class="bottom">
-      <div class="panel tablewrap">${renderTable()}</div>
-      <div class="panel">${renderSession(sess, st)}</div>
-    </div>`;
+    ${S.watch_error ? `<div class="warnbox" style="margin:14px 24px 0">${esc(S.watch_error)}</div>` : ''}
+    <main style="max-width:1500px;margin:0 auto;padding:18px 24px;display:flex;flex-direction:column;gap:16px">
+      ${renderOverview(st)}
+      <div style="display:flex;flex-wrap:wrap;gap:16px">
+        <section class="panel" style="flex:999 1 640px;display:flex;flex-direction:column;gap:14px">${renderLatest(c)}</section>
+        <aside class="panel" style="flex:1 1 330px;display:flex;flex-direction:column;gap:16px">${renderInputs(sess, c)}</aside>
+      </div>
+      ${renderShots()}
+    </main>`;
   bind(sess, c);
 }
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 
-function renderStart() {
-  const prev = S.sessions[0] || {};
-  $('#app').innerHTML = `<div class="panel start">
-    <h3>Start a session</h3>
-    <div class="g2">
-      <div><label>Type</label><select id="s_kind"><option>practice</option><option>league</option><option>tournament</option></select></div>
-      <div><label>Hand</label><select id="s_hand"><option value="">Auto from video</option><option value="R">Right</option><option value="L">Left</option></select></div>
-      <div><label>Ball</label><input id="s_ball" placeholder="e.g. Phaze II" value="${esc(prev.ball_name || '')}"></div>
-      <div class="row"><div><label>Weight (lb)</label><input id="s_wt" type="number" step="0.5" placeholder="15"></div>
-        <div><label>RG (in)</label><input id="s_rg" type="number" step="0.01" placeholder="2.50"></div></div>
-      <div><label>Oil pattern</label><input id="s_pat" placeholder="House shot"></div>
-      <div><label>Pattern length (ft)</label><input id="s_len" type="number" step="1" placeholder="optional"></div>
+function renderHeaderStatus() {
+  const el = $('#hstatus'); if (!S.session) { el.innerHTML = ''; return; }
+  const watch = S.watch_error
+    ? `<span class="pill" style="color:var(--bad);border-color:#5a2222"><span class="dot" style="background:var(--bad)"></span>Watch error</span>`
+    : `<span class="pill"><span class="dot" style="background:var(--good)"></span>Watching ${esc(shortPath(S.watch_dir))}</span>`;
+  const proc = S.cards.find(c => c.status === 'processing');
+  let q = '';
+  if (proc) {
+    const step = procStep(proc);
+    q = `<span class="pill" style="color:var(--warn);border-color:#4A3E18"><span class="spin"></span>Analyzing shot ${proc.n}${step ? ' · ' + esc(step) : ''}</span>`;
+  } else if (S.queue) {
+    q = `<span class="pill" style="color:var(--warn);border-color:#4A3E18"><span class="spin"></span>${S.queue} queued</span>`;
+  }
+  el.innerHTML = watch + q;
+}
+const shortPath = p => { if (!p) return ''; const parts = p.replace(/\/$/,'').split('/'); return '~/' + parts.slice(-1)[0]; };
+function procStep(c) {  // latest pipeline step while processing (available once steps are streamed; see step 5)
+  const steps = (c.timings || {}).steps; if (!steps || !steps.length) return '';
+  return steps[steps.length-1].msg;
+}
+
+/* ---------- session overview KPIs ---------- */
+function kpisFrom(cards) {
+  const done = cards.filter(c => c.status === 'done');
+  const first = done.filter(c => c.kind === 'first' && c.pins);
+  const spare = done.filter(c => c.kind === 'spare' && c.pins);
+  const strikes = first.filter(c => c.pins.strike);
+  const pocket = first.filter(c => (c.hit || {}).hit === 'pocket');
+  const carried = pocket.filter(c => c.pins.strike);
+  const made = spare.filter(c => c.pins.strike);
+  const col = (k, cards=first) => cards.map(c => metricVal(c, k)).filter(v => v != null);
+  const powers = first.map(c => (c.power || {}).value).filter(v => v != null);
+  const spreads = ['arrows_board','breakpoint_board','entry_board'].map(k => col(k)).filter(a => a.length >= 3).map(sd);
+  const rep = spreads.length ? Math.round(100 * Math.exp(-(avg(spreads)) / 2)) : null;
+  const marks = first.map(c => c.hit_mark);
+  return { first: first.length, spare: spare.length, strikes: strikes.length, strike_pct: pct(strikes.length, first.length),
+    pocket_pct: pct(pocket.length, first.length), carry_pct: pct(carried.length, pocket.length),
+    spare_pct: pct(made.length, spare.length), spares_made: made.length,
+    speed: avg(col('ball_speed')), speed_sd: sd(col('ball_speed')),
+    rev: avg(col('rev_rate')), power: powers.length ? Math.round(avg(powers)) : null,
+    power_min: powers.length ? Math.min(...powers) : null, power_max: powers.length ? Math.max(...powers) : null,
+    rep, entry_sd: col('entry_board').length >= 2 ? sd(col('entry_board')) : null,
+    hit_yes: marks.filter(m => m === 'yes').length, hit_no: marks.filter(m => m === 'no').length,
+    hit_marked: marks.filter(Boolean).length };
+}
+function renderOverview(st) {
+  const k = kpisFrom(rangeCards());
+  const prev = (range === 'all' && S.prev_stats) ? S.prev_stats : null;
+  const d1 = (cur, was, suf='') => (cur == null || was == null) ? '' : `${cur - was >= 0 ? '+' : ''}${(cur - was).toFixed(suf === 'mph' ? 1 : 0)} vs last`;
+  const tiles = [
+    kpi('Avg speed', fmt(k.speed, 1), 'mph', '✓', 'ok', prev ? d1(k.speed, (prev.averages.ball_speed || {}).mean, 'mph') : (k.speed_sd != null ? `± ${k.speed_sd.toFixed(1)}` : '')),
+    kpi('Avg rev rate', fmt(k.rev, 0), 'rpm', 'est', 'est', prev ? d1(k.rev, (prev.averages.rev_rate || {}).mean) : 'surface periodicity × factor'),
+    kpi('Strikes', k.strike_pct == null ? '—' : k.strike_pct, k.strike_pct == null ? '' : `% · ${k.strikes}/${k.first}`, '✓', 'ok',
+        k.pocket_pct == null ? 'no first balls yet' : `Pocket ${k.pocket_pct}%${k.carry_pct != null ? ' · carry ' + k.carry_pct + '%' : ''}`, '#4BE0A0'),
+    kpi('Spares', k.spare_pct == null ? '—' : k.spare_pct, k.spare_pct == null ? '' : `% · ${k.spares_made}/${k.spare}`, '✓', 'ok',
+        k.spare == null || k.spare === 0 ? 'no spare attempts' : `${k.spares_made} of ${k.spare} made`),
+    kpi('Avg Power', k.power == null ? '—' : k.power, '', 'est', 'est', k.power == null ? 'needs speed + revs' : `Range ${k.power_min} to ${k.power_max}`),
+    kpi('Repeatability', k.rep == null ? '—' : k.rep, k.rep == null ? '' : '/100', '✓', 'ok',
+        k.rep == null ? 'needs 3+ first balls' : (k.entry_sd != null ? `Entry spread ±${k.entry_sd.toFixed(1)} bd` : '')),
+    kpi('Hit your mark', k.first ? k.hit_yes : '—', k.first ? '/ ' + k.first : '', 'you', 'you',
+        k.hit_marked ? `${k.hit_no} miss${k.hit_no === 1 ? '' : 'es'} kept off the lane read` : 'mark your shots to track this'),
+  ];
+  return `<section class="panel">
+    <div class="rowline" style="margin-bottom:14px">
+      <h2 class="h" style="margin:0">Session overview</h2><div style="flex:1"></div>
+      <div class="rowline" style="gap:6px" role="group" aria-label="Range">
+        ${[['all','All'],['first','First half'],['second','Second half'],['last5','Last 5']].map(([v,l]) =>
+          `<button class="tab ${range===v?'on':''}" data-range="${v}" type="button">${l}</button>`).join('')}</div>
+      <a href="/api/sessions/${S.session.id}/export.csv" class="small">Export CSV</a>
     </div>
-    <p class="small muted">Record each shot on the iPhone (1080p, 60 fps, tripod behind the approach) and AirDrop it to this Mac. Clips that land in
-      <span class="kbd">${esc(S.watch_dir || '')}</span> are picked up automatically, or drag a clip onto this page.</p>
-    <button class="primary" id="startBtn">Start session</button>
-    ${S.sessions.length ? `<div class="sec"><h3>Past sessions</h3>${S.sessions.map(s =>
-      `<div class="varrow"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
-       <span>${s.shot_count} shots · <a href="/api/sessions/${s.id}/export.csv" style="color:var(--electric)">CSV</a></span></div>`).join('')}</div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${tiles.join('')}</div>
+  </section>`;
+}
+const fmt = (v, d) => v == null ? '—' : v.toFixed(d);
+function kpi(label, value, unit, badge, cls, delta, deltaColor) {
+  return `<div class="kpi">
+    <div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">${label}</span><span class="badge ${cls}">${badge}</span></div>
+    <div class="v num">${value}${unit ? `<small>${unit}</small>` : ''}</div>
+    <div style="font-size:12px;color:${deltaColor || 'var(--muted)'}">${esc(delta || '')}</div>
   </div>`;
+}
+
+/* ---------- latest shot ---------- */
+function renderLatest(c) {
+  if (!c) return `<div class="noreplay">Waiting for the first clip.<br><br>AirDrop a shot to this Mac or drag a clip onto the page.</div>`;
+  const i = S.cards.findIndex(x => x.id === c.id);
+  const head = `<div class="rowline">
+      <h2 class="h" style="margin:0">Latest shot · #${c.n} · ${c.kind === 'spare' ? 'spare attempt' : 'first ball'}</h2>
+      <div style="flex:1"></div>
+      <button class="btn" data-nav="-1" type="button" aria-label="Previous shot" ${i<=0?'disabled':''}>&#8249;</button>
+      <span class="small muted">${c.n} of ${S.cards.length} · ${fmtTime(c.created_at)}</span>
+      <button class="btn" data-nav="1" type="button" aria-label="Next shot" ${i>=S.cards.length-1?'disabled':''}>&#8250;</button>
+      ${!follow ? `<button class="btn" id="latestBtn" type="button">Latest</button>` : ''}</div>`;
+  if (c.status === 'queued' || c.status === 'processing')
+    return head + `<div class="status"><div class="bigspin"></div><div>${c.status === 'queued' ? 'Queued' : 'Analyzing…'}</div>
+      <div class="small muted">${esc(c.original_name || '')}</div>${procStep(c) ? `<div class="small dim">${esc(procStep(c))}</div>` : ''}</div>`;
+  if (c.status === 'failed')
+    return head + `<div class="status"><div style="font-size:30px;font-weight:700" class="err">Not analyzed</div><p class="err">${esc(c.error)}</p>
+      <button class="btn" id="retryBtn" type="button">Retry</button></div>`;
+  return head + `<div style="display:flex;flex-wrap:wrap;gap:16px">
+    <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:10px;min-width:0">${renderMedia(c)}</div>
+    <div style="flex:999 1 380px;display:flex;flex-direction:column;gap:12px;min-width:0">
+      ${renderResult(c)}${renderAdj(c)}${renderMetrics(c)}
+    </div></div>`;
+}
+
+function renderMedia(c) {
+  // Step 1: top-down replay PNG. Video + path overlay comes in step 2.
+  return `<div style="display:flex;gap:6px" role="tablist">
+      <button class="tab on" type="button">Top-down</button></div>
+    <div class="media">${c.status === 'done'
+      ? `<img src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Top-down replay of shot ${c.n}">`
+      : `<div class="noreplay">Replay renders after analysis</div>`}</div>`;
+}
+
+function renderResult(c) {
+  const p = c.pins;
+  const result = !p ? 'Pins not read' : p.strike ? (c.kind === 'spare' ? 'Spare' : 'Strike') : (c.kind === 'spare' ? 'Missed ' : 'Leave ') + p.standing.join('-');
+  const grid = p ? `<div style="display:grid;grid-template-columns:repeat(4,22px);gap:5px;margin-bottom:4px">
+      ${[7,8,9,10,4,5,6,2,3,1].map(n => { const up = p.standing.includes(n), unc = (p.uncertain||[]).includes(n);
+        return `<span class="num" style="width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 10px var(--sans);${up?'background:#F7F9FC;color:#04121F':unc?'background:#2a2410;color:var(--warn);border:1px solid #4A3E18':'background:#1A2840;color:var(--dimmer)'}">${n}</span>`;}).join('')}</div>` : '';
+  const unc = p && (p.uncertain||[]).length ? `<div class="small" style="color:var(--warn);flex-basis:100%">Pin ${p.uncertain.join(', ')} hidden from this view: may also be standing</div>` : '';
+  const src = p && p.source === 'corrected' ? `<div class="small muted" style="flex-basis:100%">Pins corrected by you</div>` : '';
+  return `<div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+    <div><div class="lbl">Result</div><div class="num" style="font-size:46px;font-weight:700;line-height:1">${esc(result)}</div></div>
+    ${grid}<div style="flex:1"></div>${renderPower(c.power)}${unc}${src}</div>`;
+}
+function renderPower(pw) {
+  if (!pw) return '';
+  const inner = pw.value == null ? `<span class="dim">—</span>` : `<span class="num">${pw.value}</span>`;
+  const ring = pw.value == null ? '#22344F' : `conic-gradient(var(--cyan) 0 ${pw.value}%, #22344F 0)`;
+  const sub = pw.value == null ? esc(pw.why) : `${pw.energy_j} J at the pocket: ${pw.translational_j} speed + ${pw.rotational_j} revs. Not a carry score.`;
+  return `<div style="display:flex;align-items:center;gap:12px">
+    <div class="ring" style="background:${pw.value==null?'#22344F':ring}">${pw.value==null?`<span style="width:58px;height:58px;border-radius:50%;background:var(--panel);display:grid;place-items:center">${inner}</span>`:`<span>${pw.value}</span>`}</div>
+    <div style="max-width:200px"><div style="font-weight:600">Power <span class="badge est">est</span></div><div class="small muted">${sub}</div></div></div>`;
+}
+
+function renderAdj(c) {
+  if (c.kind === 'spare') {
+    if (!c.spare_plan) return '';
+    const sl = c.spare_plan.straight_line;
+    return `<div class="adj"><div class="small" style="color:#9DB8D8">Spare line · ${esc(c.spare_plan.leave)}</div>
+      <div class="main" style="font-size:19px">Lay down ${sl.laydown_board}, cross arrows ${sl.arrows_board}, aim board ${sl.pin_board}</div>
+      <div class="small muted">${esc(c.spare_plan.ball)}</div></div>`;
+  }
+  const recs = (c.insights || {}).recommendations || [];
+  if (!recs.length) return '';
+  const [r, ...rest] = recs;
+  const label = {move:'Adjust', none:'Repeat', execution:'Execution', speed:'Speed', release:'Release', transition:'Lane transition', pattern_note:'Pattern'}[r.type] || 'Next shot';
+  const headline = r.type === 'move' ? `Move ${r.direction}: feet ${r.move_feet}, eyes ${r.move_target}`
+    : r.type === 'execution' ? 'Hit your mark, then reassess' : r.type === 'none' ? 'No change — repeat the shot' : label;
+  const hit = (c.hit || {}).hit, cls = (c.insights.classification || '').replace('_',' ').toLowerCase();
+  const alt = rest.map(x => `<div><span style="color:${x.type==='transition'?'#F5CF5B':x.type==='pattern_note'?'#93A3BA':'#3FD8FF'};font-weight:600">${x.type==='transition'?'Or:':x.type==='pattern_note'?'Pattern:':'Also:'}</span> ${esc(x.reason)}</div>`).join('');
+  const spare = c.spare_plan ? `<div><span style="color:#3FD8FF;font-weight:600">Spare ${esc(c.spare_plan.leave)}:</span> lay down ${c.spare_plan.straight_line.laydown_board}, arrows ${c.spare_plan.straight_line.arrows_board}, aim ${c.spare_plan.straight_line.pin_board} · ${esc(c.spare_plan.ball)}</div>` : '';
+  return `<div class="adj">
+    <div class="small" style="color:#9DB8D8">Next shot · confidence ${esc(r.confidence)} · ${esc(cls)}${hit ? ' · ' + esc(hit) + ' hit' : ''}</div>
+    <div class="main">${esc(headline)}</div>
+    <div style="color:#C9D6E8;font-size:15px">${esc(r.reason)}</div>
+    ${alt || spare ? `<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #234B75;padding-top:8px;font-size:14px;color:#B5C6DC">${alt}${spare}</div>` : ''}
+    <div class="rowline" style="gap:8px"><span class="lbl">Was this right?</span>
+      <button class="btn ${c.rec_vote==='up'?'on':''}" data-vote="up" type="button">Yes</button>
+      <button class="btn ${c.rec_vote==='down'?'on':''}" data-vote="down" type="button">No</button>
+      <button class="btn ${c.rec_followed==='yes'?'on':''}" data-fol="yes" type="button">I followed it</button>
+      <button class="btn ${c.rec_followed==='no'?'on':''}" data-fol="no" type="button">Didn't</button></div></div>`;
+}
+
+function renderMetrics(c) {
+  const badge = s => s === 'guaranteed' ? ['✓','ok'] : s === 'best_effort' ? ['est','est'] : ['n/a','na'];
+  const tiles = (c.metrics || []).map(m => { const [b, cl] = badge(m.status);
+    return `<div class="m" title="${esc(m.why)}">
+      <div style="display:flex;justify-content:space-between;gap:4px;align-items:center"><span class="lbl">${esc(m.label)}</span><span class="badge ${cl}">${b}</span></div>
+      ${m.value == null ? `<div class="v num dim">—</div><div style="font-size:11px;color:var(--dim)">${esc(m.why)}</div>`
+        : `<div class="v num">${m.value.toFixed(m.dec || 0)}<small>${esc(m.unit)}</small></div>`}</div>`;}).join('');
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px">${tiles}</div>
+    <div class="small" style="color:var(--dim)">Hover a metric for how it was measured. <span class="badge ok">✓</span> validated at this tier · <span class="badge est">est</span> estimate · <span class="badge na">n/a</span> not measurable from this clip</div>`;
+}
+
+/* ---------- your input ---------- */
+function renderInputs(sess, c) {
+  const it = sess.intent || {};
+  let html = `<h2 class="h" style="margin:0">Your input</h2>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-weight:600">Target line for next shots</div>
+      <div class="row3">
+        <label class="lbl">Feet bd<input class="fld" id="i_lay" type="number" step="0.5" value="${it.laydown_board ?? ''}"></label>
+        <label class="lbl">Arrows bd<input class="fld" id="i_arr" type="number" step="0.5" value="${it.arrows_board ?? ''}"></label>
+        <label class="lbl">Breakpt bd<input class="fld" id="i_bp" type="number" step="0.5" value="${it.breakpoint_board ?? ''}"></label>
+      </div>
+      <div class="row2"><label class="lbl">Current ball<input class="fld" id="i_ball" value="${esc(sess.ball_name || '')}"></label>
+        <label class="lbl">Weight lb<input class="fld" id="i_wt" type="number" step="0.5" value="${sess.ball_weight_lb ?? ''}"></label></div>
+      <button class="btn" id="saveSess" type="button">Save for next shots</button></div>`;
+  if (!c || c.status !== 'done') return html;
+  const pins = new Set(c.pins ? c.pins.standing : []);
+  const unc = new Set(c.pins ? (c.pins.uncertain||[]) : []);
+  const sens = c.sensor || {};
+  const missed = (c.insights || {}).execution;
+  const missTxt = missed && missed.status !== 'no_intent' && missed.misses
+    ? 'Missed by: ' + Object.entries(missed.misses).map(([k,v]) => `${k.replace('_board','')} ${v>0?'+':''}${v}`).join(', ') + ' (measured)' : '';
+  html += `<div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-weight:600">Shot ${c.n}: hit your mark? <span class="kbd">Y</span> <span class="kbd">N</span> <span class="kbd">U</span></div>
+      <div class="row3">${['yes','no','unsure'].map(v => `<button class="btn ${c.hit_mark===v?'on':''}" data-hm="${v}" type="button">${v==='unsure'?'Not sure':cap(v)}</button>`).join('')}</div>
+      ${missTxt ? `<div class="lbl">${esc(missTxt)}</div>` : ''}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-weight:600">Pins standing <span class="lbl">tap to correct</span></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        ${PIN_ROWS.map(row => `<div style="display:flex;gap:7px">${row.map(n =>
+          `<button class="pinbtn ${pins.has(n)?'up':''} ${unc.has(n)?'unc':''}" data-pin="${n}" type="button">${n}</button>`).join('')}</div>`).join('')}</div>
+      <div class="lbl" style="text-align:center">${c.pins ? (c.pins.source === 'corrected' ? 'Corrected by you' : `Read from video · conf ${c.pins.confidence ?? '—'}`) : 'Not read'}</div>
+      <div class="row2">${c.pins_override ? `<button class="btn" id="pinReset" type="button">Use video read</button>` : '<span></span>'}
+        <button class="btn" data-kind="${c.kind === 'spare' ? 'first' : 'spare'}" type="button">Mark as ${c.kind === 'spare' ? 'first ball' : 'spare'}</button></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between"><span style="font-weight:600">Ruby (shot ${c.n})</span></div>
+      <div class="row3">
+        <label class="lbl">Speed<input class="fld" data-s="speed_mph" type="number" step="0.1" value="${sens.speed_mph ?? ''}"></label>
+        <label class="lbl">Revs<input class="fld" data-s="rev_rate_rpm" type="number" step="1" value="${sens.rev_rate_rpm ?? ''}"></label>
+        <label class="lbl">Loft ft<input class="fld" data-s="loft_ft" type="number" step="0.1" value="${sens.loft_ft ?? ''}"></label>
+        <label class="lbl">Tilt °<input class="fld" data-s="axis_tilt_deg" type="number" step="1" value="${sens.axis_tilt_deg ?? ''}"></label>
+        <label class="lbl">Rotation °<input class="fld" data-s="axis_rotation_deg" type="number" step="1" value="${sens.axis_rotation_deg ?? ''}"></label>
+        <label class="lbl">Breakpt ft<input class="fld" data-s="breakpoint_ft" type="number" step="1" value="${sens.breakpoint_ft ?? ''}"></label></div>
+      <button class="btn" id="saveSensor" type="button">Save Ruby values</button>
+      ${renderVariance(c.sensor_variance)}</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-weight:600">Shot type</div>
+      <div class="row2"><button class="btn ${c.kind==='first'?'on':''}" data-kind="first" type="button">First ball</button>
+        <button class="btn ${c.kind==='spare'?'on':''}" data-kind="spare" type="button">Spare</button></div></div>`;
+  if (c.kind === 'first' && c.insights) html += `<div style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-weight:600">Adjustment note</div>
+      <input class="fld" id="recNote" placeholder="Note (optional)" value="${esc(c.rec_note || '')}"></div>`;
+  return html;
+}
+function renderVariance(v) {
+  if (!v || !Object.keys(v.compared).length) return '';
+  const lab = {ball_speed:'Speed vs Ruby', rev_rate:'Rev rate vs Ruby', loft:'Loft vs Ruby'};
+  return `<div style="display:flex;flex-direction:column;gap:4px;font-size:13px">${Object.entries(v.compared).map(([k, x]) =>
+    `<div class="varrow"><span class="muted">${lab[k] || k}</span><span class="num">LS ${x.lanesight} · Ruby ${x.sensor} · ${x.diff>0?'+':''}${x.diff}${x.pct!=null?` (${x.pct>0?'+':''}${x.pct}%)`:''}</span></div>`).join('')}</div>`;
+}
+
+/* ---------- shots list ---------- */
+function shotTag(c) {
+  if (c.status !== 'done') return c.status;
+  if (!c.pins) return 'review';
+  if (c.kind === 'spare') return 'spare';
+  return c.pins.strike ? 'strike' : 'leave';
+}
+function renderShots() {
+  const cs = S.cards;
+  if (!cs.length) return `<section class="panel"><h2 class="h">Shots</h2><div class="muted">No shots yet this session.</div></section>`;
+  const counts = { strike:0, leave:0, spare:0, review:0 };
+  cs.forEach(c => { const t = shotTag(c); if (t in counts) counts[t]++; else if (c.status==='failed') counts.review++; });
+  const filters = [['all','All',cs.length],['strike','Strikes',counts.strike],['leave','Leaves',counts.leave],['spare','Spares',counts.spare],['review','Needs review',counts.review]];
+  const match = c => shotFilter === 'all' || shotTag(c) === shotFilter || (shotFilter === 'review' && c.status === 'failed');
+  const cols = '40px 60px 64px repeat(8,minmax(58px,1fr)) 130px 78px 76px 52px';
+  const val = (c, k, d=1) => { const v = metricVal(c, k); return v == null ? '—' : v.toFixed(d); };
+  const mmss = s => s == null ? '' : `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+  const rubyD = c => { const x = (c.sensor_variance || {}).compared; return x && x.ball_speed ? `${x.ball_speed.diff>0?'+':''}${x.ball_speed.diff}` : ''; };
+  const rows = [...cs].reverse().filter(match).map(c => {
+    const tag = shotTag(c);
+    const dot = c.status !== 'done' ? '#5D6B82' : (tag === 'strike' || tag === 'spare' && c.pins && c.pins.strike) ? '#4BE0A0' : tag === 'review' ? '#F5A524' : '#F5A524';
+    const result = c.status === 'failed' ? 'Failed' : c.status !== 'done' ? cap(c.status) :
+      !c.pins ? 'Pins not read' : c.pins.strike ? (c.kind==='spare'?'Spare made':'Strike') : (c.kind==='spare'?'Missed ':'Leave ')+c.pins.standing.join('-');
+    const typ = c.status !== 'done' ? '' : c.kind === 'spare' ? 'spare' : '1st';
+    const mark = c.hit_mark === 'yes' ? 'Hit' : c.hit_mark === 'no' ? 'Missed' : c.hit_mark === 'unsure' ? 'Not sure' : '';
+    return `<div class="srow sgrid ${c.id===selected?'sel':''}" data-shot="${c.id}" style="grid-template-columns:${cols}">
+      <span style="text-align:left">${c.n}</span>
+      <span style="text-align:left"><span class="thumb"></span></span>
+      <span style="text-align:left;font-size:14px;color:#C3CEDD">${typ}</span>
+      <span>${val(c,'ball_speed')}</span><span>${val(c,'rev_rate',0)}</span><span>${(c.power||{}).value ?? '—'}</span>
+      <span>${val(c,'laydown_board')}</span><span>${val(c,'arrows_board')}</span><span>${val(c,'breakpoint_board')}</span>
+      <span>${val(c,'entry_board')}</span><span>${metricVal(c,'entry_angle')==null?'—':val(c,'entry_angle')+'°'}</span>
+      <span style="text-align:left;display:inline-flex;align-items:center;gap:7px"><span class="dot" style="background:${dot}"></span>${esc(result)}</span>
+      <span style="text-align:left;font-size:14px;color:#C3CEDD">${mark}</span>
+      <span style="color:#A9B6C9">${rubyD(c) ? rubyD(c)+' mph' : ''}</span>
+      <span style="color:var(--muted)">${mmss((c.timings||{}).total_s)}</span></div>`;}).join('');
+  return `<section class="panel">
+    <div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Shots (${cs.length})</h2><div style="flex:1"></div>
+      <div class="rowline" style="gap:6px" role="group" aria-label="Filter shots">
+        ${filters.map(([v,l,n]) => `<button class="tab ${shotFilter===v?'on':''}" data-filter="${v}" type="button">${l}${v!=='all'?' '+n:''}</button>`).join('')}</div></div>
+    <div style="overflow-x:auto"><div style="min-width:1080px;display:flex;flex-direction:column">
+      <div class="sgrid shead" style="grid-template-columns:${cols}">
+        <span style="text-align:left">#</span><span style="text-align:left">Clip</span><span style="text-align:left">Type</span>
+        <span>Speed</span><span>Revs</span><span>Power</span><span>Laydown</span><span>Arrows</span><span>Breakpt</span><span>Entry</span><span>Angle</span>
+        <span style="text-align:left">Result</span><span style="text-align:left">Mark</span><span>Ruby Δ</span><span>Time</span></div>
+      ${rows || `<div class="muted" style="padding:14px 10px">No shots match this filter.</div>`}
+    </div></div></section>`;
+}
+
+/* ---------- start session ---------- */
+function renderStart() {
+  $('#hstatus').innerHTML = '';
+  const prev = S.sessions[0] || {};
+  $('#app').innerHTML = `<main style="max-width:1500px;margin:0 auto;padding:18px 24px"><div class="panel start">
+    <h2 class="h">Start a session</h2>
+    <div class="row2" style="margin-bottom:10px">
+      <label class="lbl">Type<select class="fld" id="s_kind"><option>practice</option><option>league</option><option>tournament</option></select></label>
+      <label class="lbl">Hand<select class="fld" id="s_hand"><option value="">Auto from video</option><option value="R">Right</option><option value="L">Left</option></select></label>
+      <label class="lbl">Ball<input class="fld" id="s_ball" placeholder="e.g. Phaze II" value="${esc(prev.ball_name || '')}"></label>
+      <div class="row2"><label class="lbl">Weight lb<input class="fld" id="s_wt" type="number" step="0.5" placeholder="15"></label>
+        <label class="lbl">RG in<input class="fld" id="s_rg" type="number" step="0.01" placeholder="2.50"></label></div>
+      <label class="lbl">Oil pattern<input class="fld" id="s_pat" placeholder="House shot"></label>
+      <label class="lbl">Pattern length ft<input class="fld" id="s_len" type="number" step="1" placeholder="optional"></label>
+    </div>
+    <p class="small muted">Record each shot on the iPhone (1080p, 60 fps, tripod, HDR off) and AirDrop it to this Mac. Clips in
+      <span class="kbd">${esc(S.watch_dir || '')}</span> are picked up automatically, or drag a clip onto this page.</p>
+    <button class="btn primary" id="startBtn" type="button">Start session</button>
+    ${S.sessions.length ? `<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px"><h2 class="h">Past sessions</h2>${S.sessions.map(s =>
+      `<div class="varrow" style="padding:4px 0"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
+       <span>${s.shot_count} shots · <a href="/api/sessions/${s.id}/export.csv">CSV</a></span></div>`).join('')}</div>` : ''}
+  </div></main>`;
   $('#startBtn').onclick = async () => {
     const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
     await api('/api/session', {method:'POST', body:{kind:$('#s_kind').value, handed:$('#s_hand').value || null,
@@ -179,181 +477,52 @@ function renderStart() {
   };
 }
 
-function renderReplay(c) {
-  if (!c) return `<div class="noreplay">Waiting for the first clip.<br><br>AirDrop a shot to this Mac or drag a clip onto the page.</div>`;
-  if (c.status === 'done') return `<img id="replay" src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Replay of shot ${c.n}">`;
-  return `<div class="noreplay">${c.status === 'failed' ? 'No replay' : 'Replay renders after analysis'}</div>`;
-}
-
-function renderCard(c) {
-  if (!c) return `<div class="status muted">No shots yet this session.</div>`;
-  const head = `<div class="shothead"><span class="muted">Shot ${c.n} · ${c.kind === 'spare' ? 'spare attempt' : 'first ball'} · ${fmtTime(c.created_at)}${c.ball ? ' · ' + esc(c.ball) : ''}</span>
-    ${!follow ? `<button id="latestBtn" class="small">Jump to latest</button>` : ''}</div>`;
-  if (c.status === 'queued' || c.status === 'processing') {
-    return head + `<div class="status"><div class="spin"></div><div>${c.status === 'queued' ? 'Queued' : 'Analyzing…'}</div>
-      <div class="small muted">${esc(c.original_name || '')}</div></div>`;
-  }
-  if (c.status === 'failed') {
-    return head + `<div class="status"><div class="result err">Not analyzed</div><p class="err">${esc(c.error)}</p>
-      <button id="retryBtn">Retry</button></div>`;
-  }
-  const p = c.pins;
-  let result = !p ? 'Pins not read' : p.strike ? (c.kind === 'spare' ? 'SPARE' : 'STRIKE') : (c.kind === 'spare' ? 'Missed ' : 'Leave ') + p.standing.join('-');
-  const unc = p && p.uncertain && p.uncertain.length ? `<div class="small" style="color:var(--warn)">Pin ${p.uncertain.join(', ')} hidden from this view: may also be standing</div>` : '';
-  const src = p && p.source === 'corrected' ? `<div class="small muted">Pins corrected by you</div>` : '';
-  const warns = ((c.probe || {}).warnings || []).map(w => `<div class="warnbox">${esc(w)}</div>`).join('');
-  return head + `<div class="result ${p && p.strike ? 'strike' : ''}">${result}</div>${unc}${src}
-    ${renderAdj(c)}
-    <div class="grid">${(c.metrics || []).map(m => `<div class="m" title="${esc(m.why)}">
-        <span class="badge b-${m.status}">${m.status === 'best_effort' ? 'est' : m.status === 'guaranteed' ? '✓' : 'n/a'}</span>
-        <div class="l">${esc(m.label)}</div>
-        ${m.value == null ? `<div class="v dim">—</div><div class="na">${esc(m.why)}</div>` : `<div class="v">${m.value.toFixed(m.dec || 0)}<small>${esc(m.unit)}</small></div>`}
-      </div>`).join('')}</div>
-    ${renderPower(c.power)}
-    ${warns}
-    <div class="small dim" style="margin-top:10px">${c.capture ? `Capture tier: <b>${esc(c.capture.tier)}</b> · ${c.probe ? `${c.probe.measured_fps} fps ${c.probe.width}×${c.probe.height}` : ''}` : ''}
-      ${c.timings ? ` · analyzed in ${c.timings.total_s}s` : ''} · <span class="badge b-guaranteed" style="position:static">✓</span> validated
-      <span class="badge b-best_effort" style="position:static">est</span> estimate</div>`;
-}
-
-function renderAdj(c) {
-  if (c.kind === 'spare') return '';
-  const recs = (c.insights || {}).recommendations || [];
-  if (!recs.length) return '';
-  const [r, ...rest] = recs;
-  const label = {move:'Adjust', none:'Repeat', execution:'Execution', speed:'Speed', release:'Release', transition:'Lane transition', pattern_note:'Pattern'}[r.type] || 'Next shot';
-  const main = r.type === 'move' ? `Move ${r.direction}: feet ${r.move_feet}, target ${r.move_target}` :
-               r.type === 'execution' ? 'Hit your mark, then reassess' : label;
-  const spare = c.spare_plan ? `<div class="alt">Spare (${esc(c.spare_plan.leave)}): lay down on board ${c.spare_plan.straight_line.laydown_board},
-     cross the arrows at ${c.spare_plan.straight_line.arrows_board}, aim at board ${c.spare_plan.straight_line.pin_board} · ${esc(c.spare_plan.ball)}</div>` : '';
-  return `<div class="adj"><div class="small muted">${label} · confidence ${esc(r.confidence)} · ${esc(c.insights.classification.replace('_',' ').toLowerCase())}</div>
-    <div class="main">${esc(main)}</div><div class="why">${esc(r.reason)}</div>
-    ${rest.map(x => `<div class="alt">${esc(x.reason)}</div>`).join('')}${spare}</div>`;
-}
-
-function renderPower(pw) {
-  if (!pw) return '';
-  if (pw.value == null) return `<div class="power"><div class="ring"><span class="dim">—</span></div><div><b>Power</b><div class="small muted">${esc(pw.why)}</div></div></div>`;
-  return `<div class="power"><div class="ring" style="--p:${pw.value}"><span>${pw.value}</span></div>
-    <div><b>Power</b> <span class="badge b-best_effort" style="position:static">est</span>
-    <div class="small muted">${pw.energy_j} J at the pocket (${pw.translational_j} J speed + ${pw.rotational_j} J revs). Not a carry score.</div>
-    <div class="small dim">${esc(pw.why)}</div></div></div>`;
-}
-
-function renderInputs(sess, c) {
-  const it = sess.intent || {};
-  let html = `<div class="sec"><h3>Target line (next shots)</h3>
-    <div class="row"><div><label>Laydown bd</label><input id="i_lay" type="number" step="0.5" value="${it.laydown_board ?? ''}"></div>
-    <div><label>Arrows bd</label><input id="i_arr" type="number" step="0.5" value="${it.arrows_board ?? ''}"></div>
-    <div><label>Breakpoint bd</label><input id="i_bp" type="number" step="0.5" value="${it.breakpoint_board ?? ''}"></div></div>
-    <div class="row" style="margin-top:8px"><div><label>Current ball</label><input id="i_ball" value="${esc(sess.ball_name || '')}"></div>
-    <div><label>Weight lb</label><input id="i_wt" type="number" step="0.5" value="${sess.ball_weight_lb ?? ''}"></div></div>
-    <button id="saveSess" style="margin-top:8px;width:100%">Save for next shots</button></div>`;
-  if (!c || c.status !== 'done') return html;
-  const pins = c.pins ? new Set(c.pins.standing) : new Set();
-  const unc = c.pins ? new Set(c.pins.uncertain) : new Set();
-  const sens = c.sensor || {};
-  html += `<div class="sec"><h3>Shot ${c.n}</h3>
-    <label>Hit your mark? <span class="kbd">Y</span> <span class="kbd">N</span> <span class="kbd">U</span></label>
-    <div class="seg">${['yes','no','unsure'].map(v => `<button data-hm="${v}" class="${c.hit_mark === v ? 'on' : ''}">${v === 'unsure' ? 'Not sure' : v[0].toUpperCase()+v.slice(1)}</button>`).join('')}</div>
-    <label style="margin-top:10px">Pins standing (tap to correct)</label>
-    <div class="pins">${PIN_ROWS.map((row, i) => `<div style="grid-column:1/-1;display:flex;justify-content:center;gap:6px">${row.map(n =>
-      `<button class="pin ${pins.has(n) ? 'up' : ''} ${unc.has(n) ? 'unc' : ''}" data-pin="${n}" style="width:38px">${n}</button>`).join('')}</div>`).join('')}</div>
-    <div class="seg">${c.pins_override ? `<button id="pinReset">Use video read</button>` : ''}
-      <button data-kind="${c.kind === 'spare' ? 'first' : 'spare'}">Mark as ${c.kind === 'spare' ? 'first ball' : 'spare'}</button></div>
-    </div>
-    <div class="sec"><h3>Ruby values</h3>
-    <div class="row"><div><label>Speed mph</label><input data-s="speed_mph" type="number" step="0.1" value="${sens.speed_mph ?? ''}"></div>
-      <div><label>Revs rpm</label><input data-s="rev_rate_rpm" type="number" step="1" value="${sens.rev_rate_rpm ?? ''}"></div>
-      <div><label>Loft ft</label><input data-s="loft_ft" type="number" step="0.1" value="${sens.loft_ft ?? ''}"></div></div>
-    <div class="row" style="margin-top:6px"><div><label>Tilt °</label><input data-s="axis_tilt_deg" type="number" step="1" value="${sens.axis_tilt_deg ?? ''}"></div>
-      <div><label>Rotation °</label><input data-s="axis_rotation_deg" type="number" step="1" value="${sens.axis_rotation_deg ?? ''}"></div>
-      <div><label>Breakpt ft</label><input data-s="breakpoint_ft" type="number" step="1" value="${sens.breakpoint_ft ?? ''}"></div></div>
-    <button id="saveSensor" style="margin-top:8px;width:100%">Save Ruby values</button>
-    ${renderVariance(c.sensor_variance)}</div>`;
-  if (c.kind === 'first' && c.insights) html += `<div class="sec"><h3>Was the adjustment right?</h3>
-    <div class="seg"><button data-vote="up" class="${c.rec_vote === 'up' ? 'on' : ''}">👍</button><button data-vote="down" class="${c.rec_vote === 'down' ? 'on' : ''}">👎</button></div>
-    <div class="seg" style="margin-top:6px"><button data-fol="yes" class="${c.rec_followed === 'yes' ? 'on' : ''}">I followed it</button><button data-fol="no" class="${c.rec_followed === 'no' ? 'on' : ''}">Didn't</button></div>
-    <input id="recNote" placeholder="Note (optional)" value="${esc(c.rec_note || '')}" style="margin-top:6px"></div>`;
-  return html;
-}
-
-function renderVariance(v) {
-  if (!v || !Object.keys(v.compared).length) return '';
-  const lab = {ball_speed:'Speed', rev_rate:'Rev rate', loft:'Loft'};
-  return `<div style="margin-top:8px">${Object.entries(v.compared).map(([k, x]) =>
-    `<div class="varrow"><span class="muted">${lab[k] || k}</span><span>LS ${x.lanesight} · Ruby ${x.sensor} · <b>${x.diff > 0 ? '+' : ''}${x.diff}</b> (${x.pct > 0 ? '+' : ''}${x.pct}%)</span></div>`).join('')}</div>`;
-}
-
-function renderTable() {
-  if (!S.cards.length) return `<h3>Shots</h3><div class="muted">No shots yet.</div>`;
-  const val = (c, k) => { const m = (c.metrics || []).find(x => x.key === k); return m && m.value != null ? m.value.toFixed(m.dec || 0) : '—'; };
-  return `<h3>Shots</h3><table><thead><tr><th>#</th><th class="l">Type</th><th class="l">Ball</th><th>Speed</th><th>Revs</th><th>Power</th><th>Arrows</th><th>Breakpt</th><th>Entry</th><th>Angle</th><th>Pins</th><th class="l">Mark</th></tr></thead>
-    <tbody>${[...S.cards].reverse().map(c => `<tr data-shot="${c.id}" class="${c.id === selected ? 'sel' : ''}">
-      <td>${c.n}</td><td class="l">${c.status === 'done' ? (c.kind === 'spare' ? 'spare' : '1st') : `<span class="${c.status === 'failed' ? 'err' : 'muted'}">${c.status}</span>`}</td>
-      <td class="l">${esc(c.ball || '')}</td><td>${val(c,'ball_speed')}</td><td>${val(c,'rev_rate')}</td><td>${c.power && c.power.value != null ? c.power.value : '—'}</td>
-      <td>${val(c,'arrows_board')}</td><td>${val(c,'breakpoint_board')}</td><td>${val(c,'entry_board')}</td><td>${val(c,'entry_angle')}</td>
-      <td>${c.status === 'done' ? leaveTxt(c.pins) : ''}</td><td class="l">${c.hit_mark || ''}</td></tr>`).join('')}</tbody></table>`;
-}
-
-function renderSession(sess, st) {
-  const a = st.averages || {}; const f = (k, d=1) => a[k] ? `${a[k].mean.toFixed(d)} <span class="dim">±${a[k].sd.toFixed(d)}</span>` : '—';
-  const sv = st.sensor_variance || {};
-  return `<h3>Session</h3>
-    <div class="varrow"><span class="muted">First balls / strikes</span><span>${st.first_balls} / ${st.strikes}</span></div>
-    <div class="varrow"><span class="muted">Pocket hits / carried</span><span>${st.pocket_hits} / ${st.carry_pct ?? '—'}${st.carry_pct != null ? '%' : ''}</span></div>
-    <div class="varrow"><span class="muted">Spares made</span><span>${st.spares_made} / ${st.spare_attempts}</span></div>
-    <div class="varrow"><span class="muted">Speed</span><span>${f('ball_speed')}</span></div>
-    <div class="varrow"><span class="muted">Rev rate</span><span>${f('rev_rate', 0)}</span></div>
-    <div class="varrow"><span class="muted">Arrows / breakpoint / entry</span><span>${f('arrows_board')} · ${f('breakpoint_board')} · ${f('entry_board')}</span></div>
-    ${st.consistency && st.consistency.repeatability_score != null ? `<div class="varrow"><span class="muted">Repeatability</span><span>${st.consistency.repeatability_score}</span></div>` : ''}
-    ${Object.keys(sv).length ? `<div class="sec"><h3>LaneSight vs Ruby</h3>${Object.entries(sv).map(([k, x]) =>
-      `<div class="varrow"><span class="muted">${k.replace('_',' ')}</span><span>n=${x.n} · mean ${x.mean_diff > 0 ? '+' : ''}${x.mean_diff} · MAE ${x.mae}</span></div>`).join('')}</div>` : ''}
-    <div class="sec"><a href="/api/sessions/${sess.id}/export.csv" style="color:var(--electric)">Export session CSV</a>
-      ${st.failed ? ` · <span class="err">${st.failed} failed</span>` : ''}</div>`;
-}
-
+/* ---------- bind ---------- */
 function bind(sess, c) {
-  document.querySelectorAll('tr[data-shot]').forEach(tr => tr.onclick = () => {
-    selected = +tr.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
+  document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; render(); });
+  document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { shotFilter = b.dataset.filter; render(); });
+  document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => {
+    selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
+  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));
   const lb = $('#latestBtn'); if (lb) lb.onclick = () => { follow = true; render(); };
   const rb = $('#retryBtn'); if (rb) rb.onclick = () => api(`/api/shots/${c.id}/retry`, {method:'POST'});
-  document.querySelectorAll('input').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => { editing = false; }; });
+  document.querySelectorAll('input,select').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
   const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
-  $('#saveSess').onclick = () => api('/api/session', {method:'PATCH', body:{
+  const ss = $('#saveSess'); if (ss) ss.onclick = () => api('/api/session', {method:'PATCH', body:{
     intent:{laydown_board:num('#i_lay'), arrows_board:num('#i_arr'), breakpoint_board:num('#i_bp')},
     ball_name:$('#i_ball').value || null, ball_weight_lb:num('#i_wt')}}).then(load);
   if (!c || c.status !== 'done') return;
   const post = body => api(`/api/shots/${c.id}`, {method:'POST', body}).then(load);
   document.querySelectorAll('[data-hm]').forEach(b => b.onclick = () => post({hit_mark: c.hit_mark === b.dataset.hm ? null : b.dataset.hm}));
   document.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => {
-    const s = new Set(c.pins ? c.pins.standing : []); const n = +b.dataset.pin; s.has(n) ? s.delete(n) : s.add(n);
-    post({pins_override:[...s]}); });
+    const s = new Set(c.pins ? c.pins.standing : []); const n = +b.dataset.pin; s.has(n) ? s.delete(n) : s.add(n); post({pins_override:[...s]}); });
   const pr = $('#pinReset'); if (pr) pr.onclick = () => post({clear_pins_override:true});
   document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => post({kind_override:b.dataset.kind}));
-  const ss = $('#saveSensor'); if (ss) ss.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
+  const sv = $('#saveSensor'); if (sv) sv.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
   document.querySelectorAll('[data-vote]').forEach(b => b.onclick = () => post({rec_vote: c.rec_vote === b.dataset.vote ? null : b.dataset.vote}));
   document.querySelectorAll('[data-fol]').forEach(b => b.onclick = () => post({rec_followed: c.rec_followed === b.dataset.fol ? null : b.dataset.fol}));
   const rn = $('#recNote'); if (rn) rn.onchange = () => post({rec_note: rn.value || null});
+}
+function navShot(d) {
+  const i = S.cards.findIndex(x => x.id === selected);
+  const j = Math.max(0, Math.min(S.cards.length-1, i + d));
+  selected = S.cards[j].id; follow = j === S.cards.length-1; render();
 }
 
 document.addEventListener('keydown', e => {
   if (!S || !S.session || ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
   const c = current(); const k = e.key.toLowerCase();
-  if (c && c.status === 'done' && {y:'yes', n:'no', u:'unsure'}[k]) {
+  if (c && c.status === 'done' && {y:'yes', n:'no', u:'unsure'}[k])
     api(`/api/shots/${c.id}`, {method:'POST', body:{hit_mark:{y:'yes', n:'no', u:'unsure'}[k]}}).then(load);
-  } else if (k === 'arrowleft' || k === 'arrowright') {
-    const i = S.cards.findIndex(x => x.id === selected); const j = Math.max(0, Math.min(S.cards.length-1, i + (k === 'arrowleft' ? -1 : 1)));
-    selected = S.cards[j].id; follow = j === S.cards.length-1; render();
-  }
+  else if (k === 'arrowleft') navShot(-1);
+  else if (k === 'arrowright') navShot(1);
 });
 $('#speechBtn').onclick = () => api(`/api/speech?on=${!S.speech}`, {method:'POST'}).then(load);
 $('#endBtn').onclick = () => { if (confirm('End this session?')) api('/api/session/end', {method:'POST'}).then(load); };
 
-// drag a clip onto the page
 let dragDepth = 0;
 addEventListener('dragenter', e => { e.preventDefault(); if (S && S.session) { dragDepth++; $('#drop').style.display = 'flex'; } });
-addEventListener('dragleave', e => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').style.display = 'none'; } });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').style.display = 'none'; } });
 addEventListener('dragover', e => e.preventDefault());
 addEventListener('drop', async e => {
   e.preventDefault(); dragDepth = 0; $('#drop').style.display = 'none';

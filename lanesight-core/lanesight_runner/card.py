@@ -162,10 +162,15 @@ def session_stats(cards, shots):
     made = [c for c in spare if c['pins']['strike']]
     pct = lambda a, b: round(100 * len(a) / len(b)) if b else None
     recs = [s['record'] for s in shots if s.get('record')]
+    pw = [c['power']['value'] for c in first if (c.get('power') or {}).get('value') is not None]
+    marks = [c.get('hit_mark') for c in first]
     st = dict(shots=len(cards), analyzed=len([c for c in cards if c['status'] == 'done']), failed=len([c for c in cards if c['status'] == 'failed']),
               first_balls=len(first), strikes=len(strikes), strike_pct=pct(strikes, first),
               pocket_hits=len(pocket), pocket_pct=pct(pocket, first), carry_pct=pct(pocket_strikes, pocket),
               spare_attempts=len(spare), spares_made=len(made), spare_pct=pct(made, spare),
+              avg_power=round(sum(pw) / len(pw)) if pw else None, power_range=[min(pw), max(pw)] if pw else None,
+              hit_marks=dict(yes=marks.count('yes'), no=marks.count('no'), unsure=marks.count('unsure'),
+                             marked=len([m for m in marks if m])),
               averages=summary(recs) if recs else {}, consistency=consistency(recs) if len(recs) >= 3 else {})
     var = [c['sensor_variance']['compared'] for c in cards if c.get('sensor_variance')]
     agg = {}

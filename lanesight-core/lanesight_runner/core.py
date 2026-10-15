@@ -236,4 +236,8 @@ class Runner:
         if sess:
             sess, shots, cards = self.cards(sess['id'])
             out.update(session=sess, cards=cards, stats=cardmod.session_stats(cards, shots))
+            prev = next((s for s in self.db.sessions() if s['id'] < sess['id'] and s['shot_count']), None)  # for KPI deltas
+            if prev:
+                _, pshots, pcards = self.cards(prev['id'])
+                out['prev_stats'] = cardmod.session_stats(pcards, pshots)
         return out
