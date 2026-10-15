@@ -124,7 +124,10 @@ def sensor_variance(rec, sensor: dict):
         v, s = rec.value(mk), sensor.get(sk)
         if v is not None and s is not None:
             out['compared'][mk] = dict(lanesight=round(v, 2), sensor=s, diff=round(v - s, 2), pct=round(100 * (v - s) / s, 1))
-    for k in ('axis_tilt_deg', 'axis_rotation_deg', 'pap', 'breakpoint_ft', 'skid_ft', 'hook_ft', 'roll_ft'):
+    # Ruby-only values video can't produce: axis geometry, PAP, and the approach/swing timing breakdown.
+    for k in ('axis_tilt_deg', 'axis_rotation_deg', 'pap', 'pap_over_in', 'pap_up_in', 'breakpoint_ft',
+              'skid_ft', 'hook_ft', 'roll_ft', 'swing_height_ft',
+              'setup_s', 'pushaway_s', 'backswing_s', 'downswing_s', 'release_s'):
         if sensor.get(k) is not None: out['sensor_only'][k] = sensor[k]
     return out
 

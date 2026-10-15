@@ -85,7 +85,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', shotTab = 'overview', transTab = 'traffic', inputMode = null, showSpeed = true, showRev = true, patternsLib = null;
 let showOil = true, showTarget = true, showBoards = true, showArrows = false;   // Latest Shot lane-view toggles
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
-const SENSOR_FIELDS = [['speed_mph','Speed',0.1],['rev_rate_rpm','Revs',1],['loft_ft','Loft ft',0.1],['axis_tilt_deg','Tilt °',1],['axis_rotation_deg','Rotation °',1],['breakpoint_ft','Breakpt ft',1]];
+// Ruby sensor fields, grouped. [key, label, unit, step]. Keys match the stored sensor_json.
+const RUBY_GROUPS = [
+  ['Release & axis', [['axis_tilt_deg','Axis tilt','°',1],['axis_rotation_deg','Axis rotation','°',1],['pap_over_in','PAP over','in',0.25],['pap_up_in','PAP up','in',0.25]]],
+  ['Swing & approach', [['setup_s','Setup','s',0.1],['pushaway_s','Pushaway','s',0.01],['backswing_s','Backswing','s',0.01],['downswing_s','Downswing','s',0.01],['release_s','Release','s',0.01],['swing_height_ft','Swing height','ft',0.1]]],
+  ['Compare to video', [['speed_mph','Ball speed','MPH',0.1],['rev_rate_rpm','Rev rate','RPM',1],['loft_ft','Loft','ft',0.1]]],
+];
+const RUBY_FIELDS = RUBY_GROUPS.flatMap(g => g[1]);
+// the swing phases that sum to the approach time, in order (Setup is the separate pre-approach stance time)
+const RUBY_PHASES = [['pushaway_s','Pushaway','#3F8CFF'],['backswing_s','Backswing','#22C55E'],['downswing_s','Downswing','#F5BC4E'],['release_s','Release','#F27A7A']];
 
 async function api(path, opts={}) {
   const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts,
@@ -593,14 +601,39 @@ function renderTopDown(c) {
       <div style="font-size:9px;color:#8FB6E0">${esc(oil.name)} · modeled, not a scan</div></div>`:''}`;
 }
 
+function axisDiagram(tilt, rot) {   // simple top-of-ball view: rotation = axis angle, tilt = how upright
+  if (tilt == null && rot == null) return '';
+  const a = (rot != null ? rot : 0) * Math.PI / 180, len = 34 * (tilt != null ? Math.cos(Math.min(tilt, 89) * Math.PI / 180) : 1) + 6;
+  const x2 = 50 + Math.sin(a) * len, y2 = 50 - Math.cos(a) * len;
+  return `<svg viewBox="0 0 100 100" width="92" height="92" role="img" aria-label="Axis of rotation">
+    <circle cx="50" cy="50" r="38" fill="#0B1322" stroke="#1E2C45" stroke-width="1.5"></circle>
+    <ellipse cx="50" cy="50" rx="38" ry="${(38*(tilt!=null?Math.sin(Math.min(tilt,89)*Math.PI/180):1)).toFixed(1)}" fill="none" stroke="#2A3A52" stroke-dasharray="3 3"></ellipse>
+    <line x1="50" y1="50" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#7FB2E8" stroke-width="2.5" stroke-linecap="round"></line>
+    <line x1="50" y1="50" x2="${(100-x2).toFixed(1)}" y2="${(100-y2).toFixed(1)}" stroke="#7FB2E8" stroke-width="2.5" stroke-linecap="round" opacity=".4"></line>
+    <circle cx="50" cy="50" r="2.5" fill="#7FB2E8"></circle></svg>`;
+}
 function renderRotation(c) {
-  const s=c.sensor||{};
-  const rows=[['Axis tilt','axis_tilt_deg','°'],['Axis rotation','axis_rotation_deg','°'],['PAP','pap','in']];
-  const body=rows.map(([lab,k,u])=>{ const v=s[k]; return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1E2C45">
-    <span style="color:#C9D3E2">${lab}</span><span class="num" style="font-weight:600">${v!=null&&v!==''?v+' '+u+' <span class=\"b ruby\" style=\"margin-left:4px\">Ruby</span>':'<span class=\"muted\">—</span>'}</span></div>`;}).join('');
-  return `<div class="sub" style="padding:14px;height:100%;display:flex;flex-direction:column">
-    <h3 style="font-size:14px;font-weight:600;margin-bottom:6px">Rotation &amp; axis</h3>${body}
-    <div class="muted" style="font-size:11px;margin-top:10px">Axis tilt, rotation and PAP aren't measurable from 60 fps video — enter the Ruby values (Ruby button below) to show them here.</div></div>`;
+  const s = c.sensor || {};
+  if (!hasRuby(s)) return `<div class="sub" style="padding:14px;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center">
+    <div style="font-size:14px;font-weight:600">Rotation, axis &amp; approach <span class="b ruby">Ruby</span></div>
+    <div class="muted" style="font-size:12px;max-width:300px">Axis tilt/rotation, PAP and your approach-and-swing timing aren't measurable from 60 fps video. Tap <b>Ruby</b> below to add this shot's values from the Ruby app.</div></div>`;
+  const row = (lab, k, u, dec) => { const v = s[k]; return v == null ? '' : `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1E2C45;font-size:13px">
+    <span style="color:#C9D3E2">${lab}</span><span class="num" style="font-weight:600">${dec!=null?(+v).toFixed(dec):v} ${u}</span></div>`; };
+  const papRow = (s.pap_over_in != null || s.pap_up_in != null) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1E2C45;font-size:13px"><span style="color:#C9D3E2">PAP</span><span class="num" style="font-weight:600">${s.pap_over_in??'—'}" over · ${s.pap_up_in??'—'}" up</span></div>` : '';
+  // approach/swing breakdown bars (phases that exist)
+  const phases = RUBY_PHASES.filter(([k]) => s[k] != null);
+  const total = phases.reduce((t, [k]) => t + s[k], 0);
+  const bars = phases.length ? `<div style="font-size:12px;font-weight:600;margin:10px 0 4px">Approach &amp; swing${total?` · ${total.toFixed(2)}s`:''}</div>
+    ${phases.map(([k,l,col]) => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin:3px 0">
+      <span style="flex:0 0 72px;color:#C9D3E2">${l}</span>
+      <span style="flex:1;height:7px;border-radius:4px;background:#0B1322;overflow:hidden"><span style="display:block;height:100%;width:${total?Math.max(3,s[k]/total*100):0}%;background:${col}"></span></span>
+      <span class="num" style="flex:0 0 52px;text-align:right;color:#C9D3E2">${s[k].toFixed(2)}s</span></div>`).join('')}` : '';
+  return `<div class="sub" style="padding:14px;height:100%;display:flex;flex-direction:column;overflow:auto">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><h3 style="font-size:14px;font-weight:600">Rotation, axis &amp; approach</h3><span class="b ruby">Ruby</span></div>
+    <div style="display:flex;gap:14px;align-items:center">
+      ${axisDiagram(s.axis_tilt_deg, s.axis_rotation_deg)}
+      <div style="flex:1;min-width:0">${row('Axis tilt','axis_tilt_deg','°',0)}${row('Axis rotation','axis_rotation_deg','°',0)}${papRow}${row('Swing height','swing_height_ft','ft',1)}${row('Setup time','setup_s','s',2)}</div></div>
+    ${bars}</div>`;
 }
 
 function renderMetricsGrid(c) {
@@ -682,10 +715,17 @@ function pinEditor(c){ const pins=new Set((c.pins||{}).standing||[]), unc=new Se
     ${PIN_ROWS.map(row=>`<div style="display:flex;gap:6px">${row.map(n=>`<button class="pill ${pins.has(n)?'on':''}" data-pin="${n}" type="button" style="width:34px;height:34px;padding:0;border-radius:50%${unc.has(n)?';border-color:#F2C94C;color:#F2C94C':''}">${n}</button>`).join('')}</div>`).join('')}
     ${c.pins_override?`<button class="pill" id="pinReset" type="button" style="height:26px">Use video read</button>`:''}</div>`;
 }
-function rubyEditor(c){ const s=c.sensor||{};
-  return `<div style="border-top:1px solid #1E2C45;padding-top:8px;display:flex;flex-direction:column;gap:6px">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${SENSOR_FIELDS.map(([k,l,st])=>`<label class="lbl">${l}<input class="fld" data-s="${k}" type="number" step="${st}" value="${s[k]??''}"></label>`).join('')}</div>
-    <button class="pill on" id="saveRuby" type="button" style="height:28px">Save Ruby</button>${renderVariance(c.sensor_variance)}</div>`;
+const hasRuby = s => s && Object.keys(s).some(k => k !== 'vendor' && s[k] != null);
+function lastRuby(exceptId){ const r = S.cards.filter(c => c.id !== exceptId && hasRuby(c.sensor)); return r.length ? r[r.length-1].sensor : null; }
+function rubyEditor(c){
+  const s = c.sensor || {}, last = lastRuby(c.id);
+  const grp = RUBY_GROUPS.map(([title, fields]) => `<div><div style="font-size:11px;color:#9AA8BC;font-weight:600;margin:6px 0 4px">${title}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${fields.map(([k,l,u,st]) => `<label class="lbl">${l}${u?` (${u})`:''}<input class="fld" data-s="${k}" type="number" step="${st}" value="${s[k]??''}"></label>`).join('')}</div></div>`).join('');
+  return `<div style="border-top:1px solid #1E2C45;padding-top:8px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:600">Ruby values</span><span class="b ruby">Ruby</span>
+      ${last && !hasRuby(s) ? `<button class="pill" id="copyRuby" type="button" style="height:24px;margin-left:auto">Copy last shot</button>` : ''}</div>
+    ${grp}
+    <button class="pill on" id="saveRuby" type="button" style="height:28px;margin-top:6px">Save Ruby</button>${renderVariance(c.sensor_variance)}</div>`;
 }
 function renderVariance(v){ if(!v||!Object.keys(v.compared||{}).length) return ''; const lab={ball_speed:'Speed',rev_rate:'Rev',loft:'Loft'};
   return `<div style="font-size:12px;color:#C9D3E2">${Object.entries(v.compared).map(([k,x])=>`<div style="display:flex;justify-content:space-between"><span class="muted">${lab[k]||k} vs Ruby</span><span class="num">${x.diff>0?'+':''}${x.diff}${x.pct!=null?` (${x.pct>0?'+':''}${x.pct}%)`:''}</span></div>`).join('')}</div>`; }
@@ -753,6 +793,7 @@ function bindLatest(sess, c) {
   document.querySelectorAll('[data-pin]').forEach(b => b.onclick = () => { const s = new Set(c.pins ? c.pins.standing : []); const n = +b.dataset.pin; s.has(n) ? s.delete(n) : s.add(n); post({pins_override:[...s]}); });
   const pr = $('#pinReset'); if (pr) pr.onclick = () => post({clear_pins_override:true});
   const sr = $('#saveRuby'); if (sr) sr.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
+  const cr = $('#copyRuby'); if (cr) cr.onclick = () => { const last = lastRuby(c.id) || {}; document.querySelectorAll('[data-s]').forEach(i => { if (last[i.dataset.s] != null) i.value = last[i.dataset.s]; }); };
 }
 function bindOverview() {
   document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; render(); });
