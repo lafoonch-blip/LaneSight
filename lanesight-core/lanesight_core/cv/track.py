@@ -175,7 +175,12 @@ def detect_impact(path, S, lane, track, log=print):
     hot = E[:, 1] > base + 5 * sd
     t_imp = None
     for k in range(len(E) - 4):        # 3 of the next 4 frames hot (pins keep moving once struck)
-        if hot[k] and hot[k:k + 4].sum() >= 3: t_imp = float(E[k, 0]); break
+        if hot[k] and hot[k:k + 4].sum() >= 3:
+            # the strike happens when the ball reaches the pins (ct ~ far['ct']). A hot streak while the ball is
+            # still many diameters short of the pins is a mid-lane artifact (glare/reflection on a glossy lane),
+            # not a pin hit; skipping it stops a false early impact from truncating the track to mid-lane.
+            if np.interp(E[k, 0], tt, ct_t) - far['ct'] > 2.5 * D: continue
+            t_imp = float(E[k, 0]); break
     log(f'impact t={t_imp} (ROI rows {y_a}-{y_b}, ball enters ROI {t_enter:.2f}s, baseline {base:.4f}±{sd:.4f})')
     return t_imp, E
 
