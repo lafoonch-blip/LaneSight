@@ -234,9 +234,9 @@ def test_patterns_endpoint_and_oil_in_state(tmp_path):
     cl = TestClient(create_app(r))
     lib = cl.get('/api/patterns').json()
     assert any(p['id'] == 'house' for p in lib) and all({'id', 'name', 'length_ft'} <= set(p) for p in lib)
-    cl.post('/api/session', json=dict(kind='practice', pattern_name='Typical house shot', pattern_length_ft=40))
+    cl.post('/api/session', json=dict(kind='practice', pattern_name='Typical house shot', pattern_length_ft=41))
     oil = cl.get('/api/state').json()['session']['oil']
-    assert oil and oil['grid'] and oil['length_ft'] == 40 and 'not a scan' in oil['source']
+    assert oil and oil['grid'] and oil['length_ft'] == 41 and 'not a scan' in oil['source']
 
 # ---------- API ----------
 @needs_ffmpeg

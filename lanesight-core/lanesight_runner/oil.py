@@ -11,14 +11,14 @@ Shark), times a longitudinal profile that runs full strength from the foul line 
 pattern length. The grid is normalized per pattern so the heaviest area reads as full intensity.
 """
 from __future__ import annotations
-import math
+
 
 BOARDS = 39
 
 # Real published specs (2025–2026 WSOB values for the PBA animals; the house shot is the typical recreational
 # condition and varies by centre). ratio = centre:outside oil; reverse = edge-heavy (centre drier).
 PATTERNS = [
-    dict(id='house',     name='Typical house shot', length_ft=40, volume_ml=23.0,  ratio=10.0, category='house'),
+    dict(id='house',     name='Typical house shot', length_ft=41, volume_ml=24.15, ratio=8.0,  category='house'),
     dict(id='cheetah',   name='PBA Cheetah',        length_ft=33, volume_ml=26.31, ratio=1.2,  category='sport'),
     dict(id='wolf',      name='PBA Wolf',           length_ft=34, volume_ml=31.8,  ratio=1.31, category='sport'),
     dict(id='viper',     name='PBA Viper',          length_ft=37, volume_ml=25.55, ratio=2.65, category='sport'),
@@ -42,24 +42,24 @@ def find(name_or_id):
     return None
 
 
-def _cross_section(ratio, reverse):
-    """Oil across the 39 boards, max ~1. Crown steepness from the ratio; wider/steeper for a house shot."""
-    w, k = (0.60, 4.0)                           # flat-topped crown with steep walls (house-like)
-    if ratio < 4: w, k = 0.72, 2.2               # sport patterns are flatter and rounder
-    prof = []
-    for b in range(1, BOARDS + 1):
-        x = abs(b - 20) / 19.0                    # 0 at centre board 20, 1 at the gutters
-        crown = math.exp(-(x / w) ** k)
-        v = 1 + (ratio - 1) * ((1 - crown) if reverse else crown)   # reverse = edge-heavy
-        prof.append(v)
-    return prof
-
-
-def _longitudinal(z, length, taper=8.0):
-    """Full strength from the foul line, tapering to zero over the last `taper` ft of the pattern."""
+def _oil_value(board, z, length, ratio, reverse, taper=8.0):
+    """Relative oil at (board 1..39, z ft), shaped like a real Kegel pattern graph: a flat-topped plateau of
+    heavy oil across the middle boards, steep shoulders down to a low non-zero baseline on the outside
+    (baseline = 1/ratio, e.g. 1/8 for a house shot), running full strength from the foul line and tapering to
+    zero over the last `taper` ft; the oiled WIDTH also narrows toward the pattern end (the reverse brush lifts
+    off first). reverse = edge-heavy (centre drier), as on a Shark block."""
     if z >= length: return 0.0
-    if z <= length - taper: return 1.0
-    return (length - z) / taper
+    g = 1.0 if z <= length - taper else (length - z) / taper            # longitudinal strength
+    baseline = 1.0 / ratio
+    nz = length * 0.6                                                    # width narrows past ~60% of the length
+    narrow = 1.0 if z <= nz else max(0.42, 1 - 0.58 * (z - nz) / (length - nz))
+    plateau, shoulder = 0.40 * narrow, 0.22
+    d = abs(board - 20) / 19.0                                          # 0 at centre board 20, 1 at the gutters
+    if d <= plateau: v = 1.0
+    elif d <= plateau + shoulder: v = 1 - (1 - baseline) * (d - plateau) / shoulder
+    else: v = baseline
+    if reverse: v = 1 + baseline - v
+    return v * g
 
 
 def oil_field(pattern, dz=2.0):
@@ -67,8 +67,8 @@ def oil_field(pattern, dz=2.0):
     is board 1. Values are relative within the pattern (heaviest area = 1)."""
     length = pattern['length_ft']
     zs = [round(z, 1) for z in _frange(0.0, min(length + 4, 62.0), dz)]
-    cross = _cross_section(pattern['ratio'], pattern.get('reverse', False))
-    grid = [[f * _longitudinal(z, length) for f in cross] for z in zs]
+    reverse = pattern.get('reverse', False)
+    grid = [[_oil_value(b, z, length, pattern['ratio'], reverse) for b in range(1, BOARDS + 1)] for z in zs]
     mx = max((max(row) for row in grid), default=0.0) or 1.0
     grid = [[round(v / mx, 3) for v in row] for row in grid]
     return dict(
