@@ -142,6 +142,31 @@ def create_app(runner) -> FastAPI:
         if not os.path.exists(p): raise HTTPException(404, 'no replay yet')
         return FileResponse(p, media_type='image/png', headers={'Cache-Control': 'no-store'})
 
+    @app.get('/api/shots/{sid}/video')
+    def video(sid: int):
+        shot = runner.db.shot(sid)
+        if not shot: raise HTTPException(404)
+        p = shot['clip_path']                # after a windowed run this is the trimmed shot (SDR 8-bit for HDR)
+        if not os.path.exists(p): raise HTTPException(404, 'clip not found')
+        # content-type must match the container, or Chrome's media loader stalls on a .mov served as video/mp4
+        ct = {'.mov': 'video/quicktime', '.m4v': 'video/mp4', '.mp4': 'video/mp4'}.get(os.path.splitext(p)[1].lower(), 'video/mp4')
+        return FileResponse(p, media_type=ct, headers={'Cache-Control': 'no-store', 'Accept-Ranges': 'bytes'})
+
+    @app.get('/api/shots/{sid}/trajectory')
+    def trajectory(sid: int):
+        """Tracked ball path in video pixels (stabilized reference frame) + a lane(board,z)->image homography fit
+        from the path, so the page can project the target line. Pixels overlay the raw frame directly only when
+        camera motion is small (trimmed clips are ~0); the page gates on camera_motion_px."""
+        shot = runner.db.shot(sid)
+        if not shot or not shot.get('record'): raise HTTPException(404, 'no analysis')
+        rec = shot['record']; tr = rec.get('trajectory') or {}
+        pix = tr.get('pixel') or []
+        if not pix: raise HTTPException(404, 'no tracked path for this shot')
+        out = dict(pixel=pix, key_points=rec.get('key_points'),
+                   camera_motion_px=(rec.get('video') or {}).get('camera_motion_px'),
+                   lane_to_image=fit_lane_to_image(tr))
+        return out
+
     @app.post('/api/speech')
     def speech(on: bool):
         runner.speaker.enabled = on and runner.speaker.cmd is not None; runner.bump(); return dict(speech=runner.speaker.enabled)
@@ -155,6 +180,23 @@ def create_app(runner) -> FastAPI:
                         headers={'Content-Disposition': f'attachment; filename="lanesight_session_{sid}.csv"'})
 
     return app
+
+def fit_lane_to_image(trajectory):
+    """Homography mapping lane coordinates (absolute board, z ft) -> image pixels, fitted from the shot's own
+    tracked path (trajectory.lane <-> trajectory.pixel, same points in order). The hooking path spans enough of
+    the lane plane to fit well (sub-pixel on real shots). Returns a 3x3 list, or None if there aren't enough
+    points. Used only to draw the target line; the ball path uses the stored pixels directly."""
+    lane = trajectory.get('lane') or []; pix = trajectory.get('pixel') or []
+    n = min(len(lane), len(pix))
+    if n < 6: return None
+    try:
+        import numpy as np, cv2
+        L = np.array([[p['board'], p['z_ft']] for p in lane[:n]], np.float64)
+        P = np.array([[p['x'], p['y']] for p in pix[:n]], np.float64)
+        H, _ = cv2.findHomography(L, P, 0)
+        return None if H is None else [[round(float(v), 6) for v in row] for row in H]
+    except Exception:
+        return None
 
 def to_csv(cards) -> str:
     from .card import DISPLAY, SENSOR_FIELDS

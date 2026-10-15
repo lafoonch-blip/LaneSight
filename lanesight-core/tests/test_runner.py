@@ -207,8 +207,27 @@ def test_api_flow(tmp_path):
     assert c['pins']['standing'] == [10] and c['hit_mark'] == 'yes' and c['sensor'] == {'speed_mph': 17.0, 'vendor': 'ruby'}
     assert cl.post(f'/api/shots/{sid}', json=dict(pins_override=[11])).status_code == 400
     assert cl.get(f'/api/shots/{sid}/replay.png').status_code == 200
+    vid = cl.get(f'/api/shots/{sid}/video')
+    assert vid.status_code == 200 and vid.headers['content-type'] in ('video/quicktime', 'video/mp4')
+    tj = cl.get(f'/api/shots/{sid}/trajectory').json()
+    assert tj['pixel'] and {'t', 'x', 'y'} <= set(tj['pixel'][0]) and tj['key_points']
+    assert len(tj['lane_to_image']) == 3 and len(tj['lane_to_image'][0]) == 3        # fitted homography
     csv = cl.get(f"/api/sessions/{st['session']['id']}/export.csv").text
     assert 'ball_speed' in csv.splitlines()[0] and ',10,' in csv.splitlines()[1]
+
+def test_fit_lane_to_image_recovers_a_known_homography():
+    import numpy as np, cv2
+    from lanesight_runner.server import fit_lane_to_image
+    H0 = np.array([[12.0, 0.5, 100.0], [1.0, -9.0, 1700.0], [0.0, -0.01, 1.0]])   # arbitrary lane->image
+    lane = [(b, z) for b in (8, 12, 16, 20) for z in (0, 15, 38, 59)]             # a spread of lane points
+    pix = cv2.perspectiveTransform(np.array(lane, float).reshape(-1, 1, 2), H0).reshape(-1, 2)
+    tr = dict(lane=[dict(board=b, z_ft=z) for b, z in lane], pixel=[dict(x=x, y=y) for x, y in pix])
+    H = fit_lane_to_image(tr)
+    assert H is not None
+    got = cv2.perspectiveTransform(np.array([[[14.0, 30.0]]]), np.array(H)).reshape(2)   # project a new point
+    want = cv2.perspectiveTransform(np.array([[[14.0, 30.0]]]), H0).reshape(2)
+    assert np.allclose(got, want, atol=1.0)
+    assert fit_lane_to_image(dict(lane=[], pixel=[])) is None                     # too few points -> None
 
 # ---------- HDR ----------
 def make_hdr_clip(path, fps=60, secs=1, transfer='arib-std-b67'):

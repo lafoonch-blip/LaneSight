@@ -131,7 +131,7 @@ def _convert_sdr_numpy(src, dst, transfer):
     h, w = bgr.shape[:2]
     enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24',
                             '-s', f'{w}x{h}', '-r', '60', '-i', '-', '-an', '-video_track_timescale', '600',
-                            *_encoder(), '-pix_fmt', 'yuv420p',
+                            *_encoder(), '-pix_fmt', 'yuv420p', '-movflags', '+faststart',   # moov up front: plays in a browser
                             '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
                            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
     n = 0
@@ -155,7 +155,7 @@ def convert_sdr(src, dst):
     enc = _encoder()
     if _has('filters', 'zscale'):
         r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-map', '0:v:0', '-an', '-fps_mode', 'passthrough',
-                            '-video_track_timescale', '600', '-vf', TONEMAP, *enc,
+                            '-video_track_timescale', '600', '-vf', TONEMAP, *enc, '-movflags', '+faststart',
                             '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', dst],
                            capture_output=True, text=True)
         if r.returncode != 0:

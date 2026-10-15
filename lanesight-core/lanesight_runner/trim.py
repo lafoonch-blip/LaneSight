@@ -96,7 +96,7 @@ def trim_clip(src, dst, t0, t1):
     at or before t0, so a little extra lead is normal. Frame timestamps restart near 0; metrics use time
     differences, which are preserved."""
     r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(t0), '-to', str(t1), '-i', src,
-                        '-map', '0', '-c', 'copy', dst], capture_output=True, text=True)
+                        '-map', '0', '-c', 'copy', '-movflags', '+faststart', dst], capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f'trim failed: {r.stderr.strip()[-200:]}')
     return dst

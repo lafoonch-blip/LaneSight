@@ -138,6 +138,8 @@ class Runner:
             p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
             timings['convert_s'] = round(time.time() - t, 2)
             log(f"HDR -> SDR in {timings['convert_s']}s ({conv['method']}, {conv['frames']} frames; times from the original)")
+        # the browser-playable artifact: SDR 8-bit for HDR clips, else the trimmed clip itself
+        if (p.get('window') or {}).get('trimmed'): p['window']['analyzed_file'] = video
         t = time.time()
         # cache prefix follows the analyzed file, so an SDR/trimmed copy never reuses a cache built from other frames
         kw = dict(timing_video=timing_src) if video != timing_src else {}
@@ -145,15 +147,16 @@ class Runner:
         timings['analyze_s'] = round(time.time() - t, 2)
         return rec
 
-    def _keep_only_trimmed(self, clip_path, trim_file, out_prefix, log=print):
-        """After a successful windowed analysis, keep just the ~8 s trimmed shot in place of the full clip and
-        delete the SDR/working copies (saves ~75% disk; the irrelevant set-up footage is removed). The stored
-        path is unchanged, so replay and retry still work (a retry re-analyses the already-short clip whole).
+    def _keep_only_trimmed(self, clip_path, keep_file, out_prefix, log=print):
+        """After a successful windowed analysis, keep just the ~8 s shot that was analysed in place of the full
+        clip and delete the other working copies (saves ~75% disk; irrelevant set-up footage is removed). For HDR
+        the kept file is the 8-bit SDR copy, so it plays in a browser and its pixels match trajectory.pixel. The
+        stored path is unchanged, so replay/retry still work (a retry re-analyses the already-short clip whole).
         Best-effort: on any error the full clip is left as-is."""
-        if not trim_file or not os.path.exists(trim_file): return
+        if not keep_file or not os.path.exists(keep_file): return
         try:
-            os.replace(trim_file, clip_path)                       # trimmed shot becomes the stored clip
-            for f in glob.glob(out_prefix + '_trim*'):             # SDR copy + analysis caches from the trim
+            os.replace(keep_file, clip_path)                       # analysed shot becomes the stored clip
+            for f in glob.glob(out_prefix + '_trim*'):             # HDR trim + analysis caches from the trim
                 try: os.remove(f)
                 except OSError: pass
             log('kept trimmed shot, removed the full clip and working files')
@@ -189,7 +192,7 @@ class Runner:
             self.render(sid)
             win = p.get('window') or {}
             if win.get('trimmed') and 'windowed_error' not in timings:
-                self._keep_only_trimmed(shot['clip_path'], win.get('trim_file'), out_prefix, log)
+                self._keep_only_trimmed(shot['clip_path'], win.get('analyzed_file'), out_prefix, log)
         except ClipError as e:
             timings['total_s'] = round(time.time() - t0, 2); timings['steps'] = steps
             self.db.update_shot(sid, status='failed', error=f'Clip rejected: {e}', timings_json=timings, finished_at=now())

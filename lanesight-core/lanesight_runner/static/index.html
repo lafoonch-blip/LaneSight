@@ -91,8 +91,9 @@ label.lbl{display:block}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all';
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', mediaTab = 'video';
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
+const trajCache = {};
 
 async function api(path, opts={}) {
   const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts,
@@ -267,12 +268,75 @@ function renderLatest(c) {
 }
 
 function renderMedia(c) {
-  // Step 1: top-down replay PNG. Video + path overlay comes in step 2.
-  return `<div style="display:flex;gap:6px" role="tablist">
-      <button class="tab on" type="button">Top-down</button></div>
-    <div class="media">${c.status === 'done'
-      ? `<img src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Top-down replay of shot ${c.n}">`
-      : `<div class="noreplay">Replay renders after analysis</div>`}</div>`;
+  if (c.status !== 'done') return `<div class="media"><div class="noreplay">Replay renders after analysis</div></div>`;
+  const tabs = `<div style="display:flex;gap:6px" role="tablist">
+      <button class="tab ${mediaTab==='video'?'on':''}" data-media="video" type="button">Video + path</button>
+      <button class="tab ${mediaTab==='topdown'?'on':''}" data-media="topdown" type="button">Top-down</button></div>`;
+  if (mediaTab === 'topdown')
+    return tabs + `<div class="media"><img src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Top-down replay of shot ${c.n}"></div>`;
+  return tabs + `<div class="media" id="vwrap">
+      <video id="vid" src="/api/shots/${c.id}/video" playsinline muted preload="auto" style="width:100%;display:block"></video>
+      <canvas id="vcanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+      <div id="vnote" style="position:absolute;left:10px;top:10px;right:10px;font-size:12px;color:#F5CF5B;display:none"></div>
+      <div style="position:absolute;left:10px;bottom:10px;display:flex;gap:12px;font-size:12px;color:#C3CEDD;background:#05090Fcc;padding:6px 9px;border-radius:7px">
+        <span><span style="display:inline-block;width:18px;height:3px;background:#00C2EE;vertical-align:middle"></span> Tracked path</span>
+        <span><span style="display:inline-block;width:18px;border-top:2px dashed #F7F9FC;vertical-align:middle"></span> Your target line</span></div>
+      <button class="btn" id="playBtn" type="button" style="position:absolute;right:10px;top:10px;min-height:36px;padding:6px 10px;font-size:13px">Play 0.25×</button>
+    </div>`;
+}
+
+function proj(H, b, z) {   // lane (board, z ft) -> image pixel
+  const x = H[0][0]*b + H[0][1]*z + H[0][2], y = H[1][0]*b + H[1][1]*z + H[1][2], w = H[2][0]*b + H[2][1]*z + H[2][2];
+  return [x/w, y/w];
+}
+async function setupVideoOverlay(c) {
+  const vid = $('#vid'), cv = $('#vcanvas'), note = $('#vnote'), play = $('#playBtn');
+  if (!vid || !cv) return;
+  if (play) play.onclick = () => { if (vid.paused) { vid.playbackRate = 0.25; vid.play(); play.textContent = 'Pause'; } else { vid.pause(); play.textContent = 'Play 0.25×'; } };
+  if (trajCache[c.id] === undefined) { try { trajCache[c.id] = await api(`/api/shots/${c.id}/trajectory`); } catch(e) { trajCache[c.id] = null; } }
+  const tj = trajCache[c.id];
+  const moved = tj && tj.camera_motion_px != null && tj.camera_motion_px >= 25;
+  if (note) {
+    if (!tj || !tj.pixel || !tj.pixel.length) { note.style.display = 'block'; note.textContent = 'No tracked path for this shot.'; }
+    else if (moved) { note.style.display = 'block'; note.textContent = `Camera moved ${Math.round(tj.camera_motion_px)} px — path overlay needs a steady camera. Use Top-down.`; }
+  }
+  const draw = () => {
+    const ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!tj || !tj.pixel || !tj.pixel.length || moved) return;
+    const P = tj.pixel, H = tj.lane_to_image, it = (S.session || {}).intent || {}, kp = tj.key_points || {};
+    // target line from your intent, projected through the lane homography
+    if (H && it.laydown_board != null && it.arrows_board != null && it.breakpoint_board != null) {
+      const bpz = (kp.breakpoint || {}).z_ft || 38;
+      const tp = [[it.laydown_board,0],[it.arrows_board,15],[it.breakpoint_board,bpz]].map(([b,z]) => proj(H,b,z));
+      ctx.strokeStyle = '#F7F9FC'; ctx.lineWidth = Math.max(cv.width/360, 2); ctx.setLineDash([12,10]); ctx.globalAlpha = .85;
+      ctx.beginPath(); tp.forEach(([x,y],i) => i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+    // tracked ball path
+    ctx.strokeStyle = '#00C2EE'; ctx.lineWidth = Math.max(cv.width/180, 3); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); P.forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+    // key-point markers + labels
+    if (H) { const F = cv.width/22;
+      ctx.font = `600 ${Math.round(F)}px -apple-system,sans-serif`; ctx.textBaseline = 'middle';
+      const marks = [['Laydown', kp.laydown], ['Arrows', kp.arrows], ['Breakpoint', kp.breakpoint], ['Entry', kp.entry]];
+      marks.forEach(([lab, k]) => { if (!k || k.board == null) return; const [x,y] = proj(H, k.board, k.z_ft);
+        ctx.fillStyle = '#F7F9FC'; ctx.beginPath(); ctx.arc(x, y, F*0.3, 0, 7); ctx.fill();
+        const txt = `${lab} ${k.board.toFixed(1)}${k.angle_deg!=null?' · '+k.angle_deg.toFixed(1)+'°':''}`;
+        const tw = ctx.measureText(txt).width, lx = lab === 'Entry' ? x - tw - F*0.6 : x + F*0.6;
+        ctx.fillStyle = '#05090Fcc'; ctx.fillRect(lx - 4, y - F*0.7, tw + 8, F*1.4);
+        ctx.fillStyle = '#F7F9FC'; ctx.fillText(txt, lx, y); });
+    }
+    // moving ball marker at the current video time
+    const t = vid.currentTime;
+    if (t > 0) { let bp = null;
+      for (const p of P) { if (p.t <= t) bp = p; else break; }
+      if (bp) { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#04121F'; ctx.lineWidth = cv.width/180;
+        ctx.beginPath(); ctx.arc(bp.x, bp.y, cv.width/55, 0, 7); ctx.fill(); ctx.stroke(); }
+    }
+  };
+  const sizeAndDraw = () => { if (vid.videoWidth) { cv.width = vid.videoWidth; cv.height = vid.videoHeight; } draw(); };
+  vid.onloadedmetadata = sizeAndDraw; vid.ontimeupdate = draw; vid.onseeked = draw; vid.onplay = draw;
+  if (vid.readyState >= 1) sizeAndDraw();
 }
 
 function renderResult(c) {
@@ -484,6 +548,8 @@ function bind(sess, c) {
   document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => {
     selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));
+  document.querySelectorAll('[data-media]').forEach(b => b.onclick = () => { mediaTab = b.dataset.media; render(); });
+  if (c && c.status === 'done' && mediaTab === 'video') setupVideoOverlay(c);
   const lb = $('#latestBtn'); if (lb) lb.onclick = () => { follow = true; render(); };
   const rb = $('#retryBtn'); if (rb) rb.onclick = () => api(`/api/shots/${c.id}/retry`, {method:'POST'});
   document.querySelectorAll('input,select').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
