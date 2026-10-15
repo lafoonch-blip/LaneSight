@@ -198,7 +198,60 @@ function panelHead(title, right='') {
 }
 function renderOverview() { return panelHead('Session Overview') + `<div class="ph">Session overview — built in step 4.</div>`; }
 function renderTransition() { return panelHead('Lane Transition Analysis') + `<div class="ph">Lane transition — built in step 5.</div>`; }
-function renderShots() { return panelHead('Shots in Session') + `<div class="ph">Shots list — built in step 2.</div>`; }
+function renderShots() {
+  const cs = S.cards;
+  const counts = {strike:0, spare:0, open:0};
+  cs.forEach(c => { const t = shotTag(c); if (t in counts) counts[t]++; });
+  const filters = [['all','All',cs.length],['strike','Strikes',counts.strike],['spare','Spares',counts.spare],['open','Opens',counts.open]]
+    .map(([v,l,n]) => `<button class="tab ${shotFilter===v?'on':''}" data-filter="${v}" type="button">${l}${v!=='all'?' ('+n+')':''}</button>`).join('');
+  const head = panelHead(`Shots in Session (${cs.length})`, `<div class="tabs" role="group" aria-label="Filter shots">${filters}</div>`);
+  if (!cs.length) return head + `<div class="ph">No shots yet. AirDrop a clip or drop one on the page.</div>`;
+  const first = cs.filter(c => c.status==='done' && c.kind==='first' && c.pins);
+  const col = k => first.map(c => metricVal(c,k)).filter(v => v!=null);
+  const a = { rev: avg(col('rev_rate')), speed: avg(col('ball_speed')), angle: avg(col('entry_angle')), entry: avg(col('entry_board')) };
+  const avgPills = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+    <span style="font-size:12px;padding:4px 9px;border-radius:6px;background:#2E1C45;color:#C99BFF">${a.rev!=null?Math.round(a.rev):'—'} RPM</span>
+    <span style="font-size:12px;padding:4px 9px;border-radius:6px;background:#142C42;color:#6CC4FF">${a.speed!=null?a.speed.toFixed(2):'—'} MPH</span>
+    <span style="font-size:12px;padding:4px 9px;border-radius:6px;background:#0F3434;color:#5FD8CB">${a.angle!=null?a.angle.toFixed(1):'—'}° entry</span>
+    <span style="font-size:12px;padding:4px 9px;border-radius:6px;background:#17351A;color:#6EE07A">${a.entry!=null?a.entry.toFixed(1):'—'} bd entry</span>
+    <span style="font-size:12px;color:var(--muted);align-self:center">session averages</span></div>`;
+  const cols = '30px 64px minmax(120px,1.4fr) repeat(6,minmax(66px,1fr))';
+  const colhead = `<div style="display:grid;grid-template-columns:${cols};gap:0 8px;padding:4px 6px 8px;font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);text-align:center;align-items:end">
+    <span></span><span style="text-align:left">Time</span><span>Line <span style="text-transform:none;font-weight:400">(bp · entry)</span></span><span>Rev rate</span><span>Speed</span><span>Entry ∠</span><span>Entry bd</span><span>Power</span><span>Loft</span></div>`;
+  const match = c => shotFilter==='all' || shotTag(c)===shotFilter;
+  const pos = b => (39 - b)/38*100;
+  const pill = (v, bg, fg, suf='') => `<span class="num" style="font-size:13px;padding:5px 0;border-radius:6px;background:${bg};color:${fg}">${v==null?'—':v}${v!=null&&suf?' '+suf:''}</span>`;
+  const latestId = cs[cs.length-1].id;
+  const rows = [...cs].reverse().filter(match).map(c => {
+    const mark = shotMark(c);
+    const chipC = mark==='X'?['#22C55E','#0F2E1C']:mark==='/'?['#F2C94C','#33290D']:mark==='–'?['#EF4444','#3A1414']:['#8592A6','#1A2436'];
+    const leave = c.pins && !c.pins.strike ? (c.pins.standing||[]).join('-') : '';
+    const title = c.status!=='done' ? cap(c.status) : !c.pins ? 'Pins not read' : c.pins.strike ? (c.kind==='spare'?'Spare made':'Strike') : 'Leave '+leave;
+    const bp = metricVal(c,'breakpoint_board'), entry = metricVal(c,'entry_board');
+    const tgt = ((c.intent||{}).breakpoint_board) ?? ((S.session.intent||{}).breakpoint_board);
+    const rev = metricVal(c,'rev_rate'), speed = metricVal(c,'ball_speed'), ang = metricVal(c,'entry_angle'), loft = metricVal(c,'loft'), power = (c.power||{}).value;
+    const bar = `<span style="position:relative;height:10px;border-radius:5px;background:linear-gradient(90deg,#7C6CF2 0%,#4FA3F7 45%,#6EE07A 100%);opacity:.9;align-self:center">
+      ${tgt!=null?`<span style="position:absolute;top:-2px;bottom:-2px;left:${pos(tgt).toFixed(1)}%;border-left:2px dashed #0B1322"></span>`:''}
+      ${bp!=null?`<span style="position:absolute;top:-3px;bottom:-3px;width:2px;background:#F3F6FA;left:${pos(bp).toFixed(1)}%"></span>`:''}
+      ${entry!=null?`<span style="position:absolute;top:1px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#FFD84A;left:${pos(entry).toFixed(1)}%"></span>`:''}</span>`;
+    const rowStyle = `display:grid;grid-template-columns:${cols};gap:0 8px;align-items:center;padding:6px;text-align:center;border-radius:8px;cursor:pointer;` + (c.id===selected?'background:#10264A;outline:1px solid #1677FF':'background:#0B1322');
+    return `<div data-shot="${c.id}" style="${rowStyle}">
+      <span title="${esc(title)}" style="width:26px;height:26px;border-radius:6px;display:grid;place-items:center;font-size:15px;font-weight:800;color:${chipC[0]};background:${chipC[1]};border:1px solid ${chipC[0]}55;justify-self:center">${mark||(c.status==='failed'?'!':'·')}</span>
+      <span style="text-align:left;font-size:13px;white-space:nowrap">${fmtTime(c.created_at)}<span style="display:block;font-size:10.5px;color:#8592A6">#${c.n}${leave?' · '+leave:''}</span></span>
+      ${bar}
+      ${pill(rev!=null?Math.round(rev):null,'#2E1C45','#C99BFF','RPM')}${pill(speed!=null?speed.toFixed(2):null,'#142C42','#6CC4FF','MPH')}
+      ${pill(ang!=null?ang.toFixed(1)+'°':null,'#0F3434','#5FD8CB')}${pill(entry!=null?entry.toFixed(1):null,'#17351A','#6EE07A')}
+      ${pill(power!=null?power:null,'#3A2C10','#F5BC4E')}${pill(loft!=null?loft.toFixed(1):null,'#3D1A1A','#F27A7A','FT')}</div>`;
+  }).join('');
+  const legend = `<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:#8592A6;margin-top:8px">
+    <span>Line: board 39 (left) → 1 (right)</span>
+    <span><span style="display:inline-block;width:2px;height:10px;background:#F3F6FA;vertical-align:middle"></span> breakpoint</span>
+    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FFD84A;vertical-align:middle"></span> entry</span>
+    <span><span style="display:inline-block;width:0;height:10px;border-left:2px dashed #9AA8BC;vertical-align:middle"></span> target breakpoint</span>
+    <span>Rev rate and Power are estimates</span></div>`;
+  return head + avgPills + `<div style="overflow-x:auto"><div style="min-width:640px">${colhead}
+    <div style="max-height:372px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">${rows || '<div class="ph">No shots match this filter.</div>'}</div></div></div>${legend}`;
+}
 function renderLatest(c) { return panelHead('Latest Shot Analysis') + `<div class="ph">Latest shot — built in step 3.</div>`; }
 
 /* ---------- start session ---------- */
@@ -247,7 +300,10 @@ function bind(sess, c) {
   document.querySelectorAll('input,select,textarea').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
   bindShots(sess, c); bindLatest(sess, c); bindOverview(); bindTransition();
 }
-function bindShots() {}
+function bindShots() {
+  document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { shotFilter = b.dataset.filter; render(); });
+  document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => { selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
+}
 function bindLatest() {}
 function bindOverview() {}
 function bindTransition() {}
