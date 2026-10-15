@@ -39,14 +39,18 @@ class Registrar:
         S = np.diag([self.s, self.s, 1.0])
         return np.linalg.inv(S) @ H @ S, int(inl.sum())
 
-def stabilize(path, log=print, min_inliers=60, timing_path=None):
+def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None):
     """timing_path: read frame times from this file instead (e.g. the original HDR clip when frames come from an
-    SDR copy). It must contain the same frames in the same order; checked here by count."""
+    SDR copy). It must contain the same frames in the same order; checked here by count.
+    core_end_s: frames after this time are the pin-settle tail — they still get homographies (so read_pins can
+    use them) but are excluded from the reference frame and the background median, so extra settle footage never
+    perturbs the lane geometry / shot metrics."""
     ts = pts(timing_path or path)
     if timing_path:
         n = len(pts(path))
         if n != len(ts): raise RuntimeError(f'timing source has {len(ts)} frames but the video has {n}')
-    # pass A: reference = middle of the longest steady stretch with the lane visible
+    core = (lambda i: True) if core_end_s is None else (lambda i: i >= len(ts) or ts[i] <= core_end_s)
+    # pass A: reference = middle of the longest steady stretch with the lane visible (within the core, not the tail)
     prevg = None; mot = []; woodf = []
     for i, f in frames(path):
         sm = cv2.resize(f, None, fx=0.125, fy=0.125)
@@ -54,7 +58,9 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None):
         mot.append(0.0 if prevg is None else np.hypot(*cv2.phaseCorrelate(prevg, g)[0]) * 8)
         woodf.append(wood_mask(sm).mean()); prevg = g
     mot = np.convolve(np.array(mot), np.ones(15) / 15, 'same'); woodf = np.array(woodf)
-    steady = (mot < max(3.0, np.percentile(mot, 40))) & (woodf > 0.5 * woodf.max())
+    cm = np.array([core(i) for i in range(len(mot))])          # thresholds over core frames only, so the settle
+    thr = max(3.0, np.percentile(mot[cm], 40)); wmax = woodf[cm].max()   # tail never shifts the reference choice
+    steady = (mot < thr) & (woodf > 0.5 * wmax) & cm
     best = (0, 0, 0); run = 0
     for i, v in enumerate(steady):
         run = run + 1 if v else 0
@@ -77,9 +83,12 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None):
     c = np.array([540., 960., 1.]); sh = [np.linalg.norm((h @ c / (h @ c)[2])[:2] - c[:2]) for h in Hs]
     log(f'ref frame {ref} (t={ts[ref]:.2f}s); median inliers {np.median([v for v in inl if v > 0]):.0f}; '
         f'chained {sum(v < 0 for v in inl)}/{len(inl)}; camera motion up to {max(sh):.0f}px')
-    # pass C: background = temporal median of warped frames (moving bowler/ball removed)
-    h, w = ref_img.shape[:2]; step = max(1, len(Hs) // 80); stack = []
+    # pass C: background = temporal median of warped frames (moving bowler/ball removed), core frames only so the
+    # pin-settle tail (rake sweep, reset, bowler walking back) never pollutes the lane geometry
+    h, w = ref_img.shape[:2]
+    core_idx = [i for i in range(len(Hs)) if core(i)]; step = max(1, len(core_idx) // 80)
+    sample = set(core_idx[::step]); stack = []
     for i, f in frames(path):
-        if i % step == 0 and i < len(Hs): stack.append(cv2.warpPerspective(f, Hs[i], (w, h)))
+        if i in sample: stack.append(cv2.warpPerspective(f, Hs[i], (w, h)))
     bg = np.median(np.stack(stack), axis=0).astype(np.uint8)
     return dict(ts=ts[:len(Hs)], Hs=Hs, ref=ref, bg=bg, inliers=np.array(inl), shift=np.array(sh))

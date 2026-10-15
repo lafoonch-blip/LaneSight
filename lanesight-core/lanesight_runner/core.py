@@ -4,7 +4,7 @@ from __future__ import annotations
 import glob, json, os, queue, shutil, subprocess, threading, time, traceback
 from .db import DB, now
 from .probe import probe, convert_sdr, ClipError, VIDEO_EXT
-from .trim import detect_window, trim_clip
+from .trim import detect_window, trim_clip, METRIC_TAIL_S
 from .oil import find as oil_find, oil_field
 from . import card as cardmod
 
@@ -144,6 +144,9 @@ class Runner:
         t = time.time()
         # cache prefix follows the analyzed file, so an SDR/trimmed copy never reuses a cache built from other frames
         kw = dict(timing_video=timing_src) if video != timing_src else {}
+        win = p.get('window') or {}
+        if win.get('trimmed') and win.get('burst'):   # exclude the pin-settle tail from the stabiliser (metric stability)
+            kw['core_end_s'] = round(win['burst'][1] - win['window'][0] + METRIC_TAIL_S, 2)
         rec = self.analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
         timings['analyze_s'] = round(time.time() - t, 2)
         return rec

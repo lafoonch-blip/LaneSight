@@ -13,9 +13,12 @@ often quieter than ambient noise and other lanes.
 
 Window margins (tuned on IMG_8754/IMG_8751, re-validate on the seed dataset):
 - LEAD 4.0 s before the burst: steady, lane-clean frames for the stabiliser reference and background plate.
-- TAIL 1.8 s after the burst: covers pin settle but ends before the rake sweeps the deck. A longer tail lets
-  post-impact rake motion pollute the background median and the far-end ball track, which pushes entry board/
-  angle off by several boards — the metrics that decide pocket/light/high. Keep the tail short.
+- TAIL 2.6 s after the burst: the pins settle ~0.8-1.6 s after the ball reaches them, and on a pale/low-contrast
+  lane the low-res burst detector loses the ball early so impact can land ~0.8 s PAST the burst end — 1.8 s was
+  then too short and the deck left frame before the pins settled (a blocked/early cut-off read, see pins.py).
+  2.6 s covers the settle window in both cases while still ending before the rake sweeps (~3 s+ after impact);
+  going much longer lets rake motion pollute the background median and far-end ball track, pushing entry board/
+  angle off by several boards. Re-validated: reference metrics unchanged at 2.6 s.
 
 The original clip is never modified; trimming writes a separate working file by stream copy (no re-encode).
 If no clear burst is found, or the window would cover most of the clip, the caller analyses the whole clip.
@@ -25,7 +28,9 @@ import json, subprocess
 import numpy as np
 
 LEAD_S = 4.0
-TAIL_S = 1.8
+TAIL_S = 2.6               # footage kept after the burst so the pins settle in view (read_pins)
+METRIC_TAIL_S = 1.8       # only this much after the burst feeds the reference frame + background median; the rest
+                          # is settle-only, so extending TAIL_S for pin reading can't perturb the shot metrics
 MIN_BURST_S = 1.0          # a shot's ball-roll lasts ~2-3 s; ignore briefer blips
 SKIP_IF_COVERS = 0.85      # if the window is >=85% of the clip, don't bother trimming
 
