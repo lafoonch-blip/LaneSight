@@ -91,9 +91,8 @@ label.lbl{display:block}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', mediaTab = 'video', chartTab = 'speedrev';
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', chartTab = 'speedrev', patternsLib = null;
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
-const trajCache = {};
 
 async function api(path, opts={}) {
   const r = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts,
@@ -302,75 +301,67 @@ function renderLatest(c) {
 }
 
 function renderMedia(c) {
-  if (c.status !== 'done') return `<div class="media"><div class="noreplay">Replay renders after analysis</div></div>`;
-  const tabs = `<div style="display:flex;gap:6px" role="tablist">
-      <button class="tab ${mediaTab==='video'?'on':''}" data-media="video" type="button">Video + path</button>
-      <button class="tab ${mediaTab==='topdown'?'on':''}" data-media="topdown" type="button">Top-down</button></div>`;
-  if (mediaTab === 'topdown')
-    return tabs + `<div class="media"><img src="/api/shots/${c.id}/replay.png?v=${S.version}" alt="Top-down replay of shot ${c.n}"></div>`;
-  return tabs + `<div class="media" id="vwrap">
-      <video id="vid" src="/api/shots/${c.id}/video" playsinline muted preload="auto" style="width:100%;display:block"></video>
-      <canvas id="vcanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
-      <div id="vnote" style="position:absolute;left:10px;top:10px;right:10px;font-size:12px;color:#F5CF5B;display:none"></div>
-      <div style="position:absolute;left:10px;bottom:10px;display:flex;gap:12px;font-size:12px;color:#C3CEDD;background:#05090Fcc;padding:6px 9px;border-radius:7px">
-        <span><span style="display:inline-block;width:18px;height:3px;background:#00C2EE;vertical-align:middle"></span> Tracked path</span>
-        <span><span style="display:inline-block;width:18px;border-top:2px dashed #F7F9FC;vertical-align:middle"></span> Your target line</span></div>
-      <button class="btn" id="playBtn" type="button" style="position:absolute;right:10px;top:10px;min-height:36px;padding:6px 10px;font-size:13px">Play 0.25×</button>
-    </div>`;
+  if (c.status !== 'done') return `<div class="media"><div class="noreplay">Lane view appears after analysis</div></div>`;
+  return renderLaneView(c);
 }
 
-function proj(H, b, z) {   // lane (board, z ft) -> image pixel
-  const x = H[0][0]*b + H[0][1]*z + H[0][2], y = H[1][0]*b + H[1][1]*z + H[1][2], w = H[2][0]*b + H[2][1]*z + H[2][2];
-  return [x/w, y/w];
+// validated sequential blue (lightest ≈ dry → darkest = heavy oil), interpolated for the oil heatmap
+function blueRamp(t) {
+  const stops = [[205,226,251],[134,182,239],[57,135,229],[28,92,171],[13,54,107]];
+  t = Math.max(0, Math.min(1, t)); const x = t*(stops.length-1), i = Math.floor(x), f = x-i;
+  const a = stops[i], b = stops[Math.min(i+1, stops.length-1)], ch = k => Math.round(a[k]+(b[k]-a[k])*f);
+  return `rgb(${ch(0)},${ch(1)},${ch(2)})`;
 }
-async function setupVideoOverlay(c) {
-  const vid = $('#vid'), cv = $('#vcanvas'), note = $('#vnote'), play = $('#playBtn');
-  if (!vid || !cv) return;
-  if (play) play.onclick = () => { if (vid.paused) { vid.playbackRate = 0.25; vid.play(); play.textContent = 'Pause'; } else { vid.pause(); play.textContent = 'Play 0.25×'; } };
-  if (trajCache[c.id] === undefined) { try { trajCache[c.id] = await api(`/api/shots/${c.id}/trajectory`); } catch(e) { trajCache[c.id] = null; } }
-  const tj = trajCache[c.id];
-  const moved = tj && tj.camera_motion_px != null && tj.camera_motion_px >= 25;
-  if (note) {
-    if (!tj || !tj.pixel || !tj.pixel.length) { note.style.display = 'block'; note.textContent = 'No tracked path for this shot.'; }
-    else if (moved) { note.style.display = 'block'; note.textContent = `Camera moved ${Math.round(tj.camera_motion_px)} px — path overlay needs a steady camera. Use Top-down.`; }
+// schematic pin positions: absolute board (1 = right gutter) and distance (ft)
+const PIN_POS = {1:[20,60],2:[23.5,61],3:[16.5,61],4:[27,62],5:[20,62],6:[13,62],7:[30.5,63],8:[23.5,63],9:[16.5,63],10:[9.5,63]};
+
+// top-down simulated lane: the oil-pattern heatmap with the line you threw over it
+function renderLaneView(c) {
+  const W=220, H=560, mx=26, my=16, lw=W-2*mx, lh=H-2*my, ZMAX=64;
+  const bx = b => mx + (39 - b)/38 * lw;    // board 1 at right, 39 at left
+  const zy = z => (H-my) - z/ZMAX * lh;     // 0 ft (foul) at the bottom, pins at the top
+  const oil = (S.session || {}).oil;
+  let oilSvg = '';
+  if (oil && oil.grid && oil.grid.length) {
+    const cw = lw/39, zs = oil.z_ft, dz = zs.length > 1 ? zs[1]-zs[0] : 2;
+    for (let i=0;i<oil.grid.length;i++){
+      const z0 = zs[i], z1 = (i+1<zs.length?zs[i+1]:z0+dz), y = zy(z1), hh = Math.max(zy(z0)-zy(z1), 0.6);
+      for (let b=0;b<39;b++){ const v = oil.grid[i][b]; if (v < 0.04) continue;
+        oilSvg += `<rect x="${(bx(b+1)-cw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${(cw+0.6).toFixed(1)}" height="${hh.toFixed(1)}" fill="${blueRamp(v)}" opacity="${(v*0.8).toFixed(2)}"></rect>`;
+      }
+    }
   }
-  const draw = () => {
-    const ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!tj || !tj.pixel || !tj.pixel.length || moved) return;
-    const P = tj.pixel, H = tj.lane_to_image, it = (S.session || {}).intent || {}, kp = tj.key_points || {};
-    // target line from your intent, projected through the lane homography
-    if (H && it.laydown_board != null && it.arrows_board != null && it.breakpoint_board != null) {
-      const bpz = (kp.breakpoint || {}).z_ft || 38;
-      const tp = [[it.laydown_board,0],[it.arrows_board,15],[it.breakpoint_board,bpz]].map(([b,z]) => proj(H,b,z));
-      ctx.strokeStyle = '#F7F9FC'; ctx.lineWidth = Math.max(cv.width/360, 2); ctx.setLineDash([12,10]); ctx.globalAlpha = .85;
-      ctx.beginPath(); tp.forEach(([x,y],i) => i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = 1;
-    }
-    // tracked ball path
-    ctx.strokeStyle = '#00C2EE'; ctx.lineWidth = Math.max(cv.width/180, 3); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.beginPath(); P.forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
-    // key-point markers + labels
-    if (H) { const F = cv.width/22;
-      ctx.font = `600 ${Math.round(F)}px -apple-system,sans-serif`; ctx.textBaseline = 'middle';
-      const marks = [['Laydown', kp.laydown], ['Arrows', kp.arrows], ['Breakpoint', kp.breakpoint], ['Entry', kp.entry]];
-      marks.forEach(([lab, k]) => { if (!k || k.board == null) return; const [x,y] = proj(H, k.board, k.z_ft);
-        ctx.fillStyle = '#F7F9FC'; ctx.beginPath(); ctx.arc(x, y, F*0.3, 0, 7); ctx.fill();
-        const txt = `${lab} ${k.board.toFixed(1)}${k.angle_deg!=null?' · '+k.angle_deg.toFixed(1)+'°':''}`;
-        const tw = ctx.measureText(txt).width, lx = lab === 'Entry' ? x - tw - F*0.6 : x + F*0.6;
-        ctx.fillStyle = '#05090Fcc'; ctx.fillRect(lx - 4, y - F*0.7, tw + 8, F*1.4);
-        ctx.fillStyle = '#F7F9FC'; ctx.fillText(txt, lx, y); });
-    }
-    // moving ball marker at the current video time
-    const t = vid.currentTime;
-    if (t > 0) { let bp = null;
-      for (const p of P) { if (p.t <= t) bp = p; else break; }
-      if (bp) { ctx.fillStyle = '#fff'; ctx.strokeStyle = '#04121F'; ctx.lineWidth = cv.width/180;
-        ctx.beginPath(); ctx.arc(bp.x, bp.y, cv.width/55, 0, 7); ctx.fill(); ctx.stroke(); }
-    }
-  };
-  const sizeAndDraw = () => { if (vid.videoWidth) { cv.width = vid.videoWidth; cv.height = vid.videoHeight; } draw(); };
-  vid.onloadedmetadata = sizeAndDraw; vid.ontimeupdate = draw; vid.onseeked = draw; vid.onplay = draw;
-  if (vid.readyState >= 1) sizeAndDraw();
+  const endLine = oil ? `<line x1="${mx}" x2="${mx+lw}" y1="${zy(oil.length_ft).toFixed(1)}" y2="${zy(oil.length_ft).toFixed(1)}" stroke="#3FD8FF" stroke-dasharray="3 3" opacity=".6"></line>
+    <text x="${mx+lw-2}" y="${(zy(oil.length_ft)-3).toFixed(1)}" fill="#8FB6E0" font-size="9" text-anchor="end">oil ends ${oil.length_ft} ft</text>` : '';
+  const path = c.path || [];
+  const pathPts = path.map(p => `${bx(p[1]).toFixed(1)},${zy(p[0]).toFixed(1)}`).join(' ');
+  const kp = c.key_points || {};
+  const kpMarks = [['Laydown',kp.laydown,1],['Arrows',kp.arrows,1],['Breakpoint',kp.breakpoint,1],['Entry',kp.entry,-1]]
+    .filter(([,k]) => k && k.board != null).map(([lab,k,dir]) => { const x=bx(k.board), y=zy(k.z_ft);
+      const txt = `${lab} ${k.board.toFixed(1)}${k.angle_deg!=null?' · '+k.angle_deg.toFixed(1)+'°':''}`;
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#fff" stroke="#04121F" stroke-width="1"></circle>
+        <text x="${(x+dir*5).toFixed(1)}" y="${y.toFixed(1)}" fill="#F7F9FC" font-size="10" text-anchor="${dir>0?'start':'end'}" dominant-baseline="middle" style="paint-order:stroke;stroke:#05090F;stroke-width:3px">${esc(txt)}</text>`;
+    }).join('');
+  const standing = new Set((c.pins||{}).standing||[]);
+  const pins = c.pins ? Object.entries(PIN_POS).map(([n,[b,z]]) =>
+    `<circle cx="${bx(b).toFixed(1)}" cy="${zy(z).toFixed(1)}" r="3.4" fill="${standing.has(+n)?'#F7F9FC':'#2A3A52'}" stroke="#05090F" stroke-width="1"></circle>`).join('') : '';
+  const legend = oil ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:#A9B6C9;flex-wrap:wrap">
+      <span>Dry</span><span style="flex:0 0 80px;height:10px;border-radius:3px;background:linear-gradient(90deg,${blueRamp(.08)},${blueRamp(.4)},${blueRamp(.72)},${blueRamp(1)})"></span><span>Heavy oil</span>
+      <span style="flex:1"></span><span style="display:inline-block;width:14px;height:3px;background:#00C2EE;vertical-align:middle"></span><span>Your line</span></div>
+    <div class="lbl" style="margin-top:5px">${esc(oil.label)}</div>
+    <div class="lbl" style="font-size:11px;color:var(--dim)">${esc(oil.source)}</div>`
+    : `<div class="lbl" style="margin-top:8px">No oil pattern selected — pick one at session start to see the heatmap. <span style="display:inline-block;width:14px;height:3px;background:#00C2EE;vertical-align:middle"></span> is your line.</div>`;
+  return `<div class="media" style="background:#0b1016;padding:8px;border-radius:12px">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-height:62vh" role="img" aria-label="Top-down lane: oil pattern heatmap with your thrown line">
+      <rect x="${mx}" y="${my}" width="${lw}" height="${lh}" fill="#6B4A26"></rect>
+      <rect x="${mx-7}" y="${my}" width="7" height="${lh}" fill="#2A3240"></rect><rect x="${mx+lw}" y="${my}" width="7" height="${lh}" fill="#2A3240"></rect>
+      ${oilSvg}${endLine}
+      ${pathPts?`<polyline points="${pathPts}" fill="none" stroke="#00C2EE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>`:''}
+      ${kpMarks}${pins}
+      <text x="${W/2}" y="11" fill="#93A3BA" font-size="10" text-anchor="middle">pins</text>
+      <text x="${W/2}" y="${H-3}" fill="#93A3BA" font-size="10" text-anchor="middle">foul line</text>
+    </svg>${legend}</div>`;
 }
 
 function renderResult(c) {
@@ -668,7 +659,9 @@ function renderGame(st) {
 /* ---------- start session ---------- */
 function renderStart() {
   $('#hstatus').innerHTML = '';
+  if (patternsLib === null) { patternsLib = []; api('/api/patterns').then(p => { patternsLib = p; if (!S.session) renderStart(); }).catch(() => {}); }
   const prev = S.sessions[0] || {};
+  const patOpts = (patternsLib || []).map(p => `<option value="${esc(p.name)}" data-len="${p.length_ft}">${esc(p.name)} · ${p.length_ft} ft</option>`).join('');
   $('#app').innerHTML = `<main style="max-width:1500px;margin:0 auto;padding:18px 24px"><div class="panel start">
     <h2 class="h">Start a session</h2>
     <div class="row2" style="margin-bottom:10px">
@@ -677,9 +670,10 @@ function renderStart() {
       <label class="lbl">Ball<input class="fld" id="s_ball" placeholder="e.g. Phaze II" value="${esc(prev.ball_name || '')}"></label>
       <div class="row2"><label class="lbl">Weight lb<input class="fld" id="s_wt" type="number" step="0.5" placeholder="15"></label>
         <label class="lbl">RG in<input class="fld" id="s_rg" type="number" step="0.01" placeholder="2.50"></label></div>
-      <label class="lbl">Oil pattern<input class="fld" id="s_pat" placeholder="House shot"></label>
-      <label class="lbl">Pattern length ft<input class="fld" id="s_len" type="number" step="1" placeholder="optional"></label>
+      <label class="lbl">Oil pattern<select class="fld" id="s_pat"><option value="">Custom / none</option>${patOpts}</select></label>
+      <label class="lbl">Pattern length ft<input class="fld" id="s_len" type="number" step="1" placeholder="auto from pattern"></label>
     </div>
+    <p class="lbl" style="margin:-4px 0 6px">Pick a known pattern to see its oil heatmap under your line. The heatmap is modeled from the pattern's published spec, not a scan of the lane.</p>
     <p class="small muted">Record each shot on the iPhone (1080p, 60 fps, tripod, HDR off) and AirDrop it to this Mac. Clips in
       <span class="kbd">${esc(S.watch_dir || '')}</span> are picked up automatically, or drag a clip onto this page.</p>
     <button class="btn primary" id="startBtn" type="button">Start session</button>
@@ -687,6 +681,7 @@ function renderStart() {
       `<div class="varrow" style="padding:4px 0"><span>#${s.id} ${esc(s.kind)} · ${new Date(s.started_at).toLocaleString()} · ${esc(s.ball_name || '')}</span>
        <span>${s.shot_count} shots · <a href="/api/sessions/${s.id}/export.csv">CSV</a></span></div>`).join('')}</div>` : ''}
   </div></main>`;
+  $('#s_pat').onchange = () => { const o = $('#s_pat').selectedOptions[0]; if (o && o.dataset.len) $('#s_len').value = o.dataset.len; };
   $('#startBtn').onclick = async () => {
     const num = id => { const v = $(id).value; return v === '' ? null : parseFloat(v); };
     await api('/api/session', {method:'POST', body:{kind:$('#s_kind').value, handed:$('#s_hand').value || null,
@@ -704,8 +699,6 @@ function bind(sess, c) {
   document.querySelectorAll('[data-shot]').forEach(el => el.onclick = () => {
     selected = +el.dataset.shot; follow = selected === S.cards[S.cards.length-1].id; render(); });
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navShot(+b.dataset.nav));
-  document.querySelectorAll('[data-media]').forEach(b => b.onclick = () => { mediaTab = b.dataset.media; render(); });
-  if (c && c.status === 'done' && mediaTab === 'video') setupVideoOverlay(c);
   const lb = $('#latestBtn'); if (lb) lb.onclick = () => { follow = true; render(); };
   const rb = $('#retryBtn'); if (rb) rb.onclick = () => api(`/api/shots/${c.id}/retry`, {method:'POST'});
   document.querySelectorAll('input,select').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });

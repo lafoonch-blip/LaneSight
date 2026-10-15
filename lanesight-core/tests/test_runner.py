@@ -207,6 +207,37 @@ def test_game_frames_perfect_game_is_300():
     g = game_frames([_gcard(i, 'first', []) for i in range(1, 13)])        # 12 strikes
     assert g[9]['rolls'] == ['X', 'X', 'X'] and g[9]['score'] == 300
 
+# ---------- oil patterns ----------
+def test_oil_find_matches_id_name_and_substring():
+    from lanesight_runner.oil import find
+    assert find('house')['id'] == 'house' and find('Typical house shot')['id'] == 'house'
+    assert find('House shot')['id'] == 'house' and find('scorpion')['id'] == 'scorpion'
+    assert find('Not a pattern') is None and find(None) is None
+
+def test_oil_field_shape_crown_flat_and_reverse():
+    from lanesight_runner.oil import find, oil_field
+    house = oil_field(find('house')); sport = oil_field(find('scorpion')); shark = oil_field(find('shark'))
+    row = lambda f: f['grid'][1]                                   # cross-section near the foul line
+    centre, edge = 19, 0                                           # board 20 (centre) vs board 1 (edge)
+    assert all(0 <= v <= 1 for r in house['grid'] for v in r)      # normalized
+    assert row(house)[centre] > row(house)[edge] + 0.4            # house crowns hard (dry outside)
+    assert row(sport)[centre] - row(sport)[edge] < row(house)[centre] - row(house)[edge]   # sport is flatter
+    assert row(shark)[edge] > row(shark)[centre]                  # reverse block: edges heavier
+    zs = house['z_ft']; beyond = [i for i, z in enumerate(zs) if z >= house['length_ft']]
+    assert all(house['grid'][i][centre] == 0 for i in beyond)     # no oil past the pattern length
+
+@needs_ffmpeg
+def test_patterns_endpoint_and_oil_in_state(tmp_path):
+    from fastapi.testclient import TestClient
+    from lanesight_runner.server import create_app
+    r = Runner(tmp_path / 'data', analyzer=fake_analyzer, speaker=Quiet())
+    cl = TestClient(create_app(r))
+    lib = cl.get('/api/patterns').json()
+    assert any(p['id'] == 'house' for p in lib) and all({'id', 'name', 'length_ft'} <= set(p) for p in lib)
+    cl.post('/api/session', json=dict(kind='practice', pattern_name='Typical house shot', pattern_length_ft=40))
+    oil = cl.get('/api/state').json()['session']['oil']
+    assert oil and oil['grid'] and oil['length_ft'] == 40 and 'not a scan' in oil['source']
+
 # ---------- API ----------
 @needs_ffmpeg
 def test_api_flow(tmp_path):

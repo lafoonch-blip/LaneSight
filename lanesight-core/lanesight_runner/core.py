@@ -5,6 +5,7 @@ import glob, json, os, queue, shutil, subprocess, threading, time, traceback
 from .db import DB, now
 from .probe import probe, convert_sdr, ClipError, VIDEO_EXT
 from .trim import detect_window, trim_clip
+from .oil import find as oil_find, oil_field
 from . import card as cardmod
 
 def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None):
@@ -241,6 +242,8 @@ class Runner:
                                   ball_name=s['ball_name'], shot_count=s['shot_count']) for s in self.db.sessions()[:20]])
         if sess:
             sess, shots, cards = self.cards(sess['id'])
+            pat = oil_find(sess.get('pattern_name'))                         # a representation of the selected pattern
+            if pat: sess = dict(sess, oil=oil_field(pat))
             out.update(session=sess, cards=cards, stats=cardmod.session_stats(cards, shots))
             prev = next((s for s in self.db.sessions() if s['id'] < sess['id'] and s['shot_count']), None)  # for KPI deltas
             if prev:

@@ -58,6 +58,11 @@ def create_app(runner) -> FastAPI:
     def state(session_id: int | None = None):
         return runner.state(session_id)
 
+    @app.get('/api/patterns')
+    def patterns():
+        from .oil import library
+        return library()
+
     @app.get('/api/events')
     async def events():
         async def gen():
