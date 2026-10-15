@@ -80,7 +80,7 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', shotTab = 'overview', transTab = 'traffic', inputMode = null, patternsLib = null;
+let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', shotTab = 'overview', transTab = 'traffic', inputMode = null, showSpeed = true, showRev = true, patternsLib = null;
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
 const SENSOR_FIELDS = [['speed_mph','Speed',0.1],['rev_rate_rpm','Revs',1],['loft_ft','Loft ft',0.1],['axis_tilt_deg','Tilt °',1],['axis_rotation_deg','Rotation °',1],['breakpoint_ft','Breakpt ft',1]];
 
@@ -197,7 +197,74 @@ function procStep(c) { const steps = (c.timings || {}).steps; return steps && st
 function panelHead(title, right='') {
   return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><h2 style="font-size:17px;font-weight:600">${title}</h2><div style="flex:1"></div>${right}</div>`;
 }
-function renderOverview() { return panelHead('Session Overview') + `<div class="ph">Session overview — built in step 4.</div>`; }
+function kdelta(cur, was, dec, suf) {
+  if (cur == null || was == null) return { text: '', color: '#9AA8BC' };
+  const d = cur - was; return { text: `${d >= 0 ? '↑' : '↓'} ${Math.abs(d).toFixed(dec)} ${suf}`, color: d > 0 ? '#43D893' : d < 0 ? '#F27A7A' : '#9AA8BC' };
+}
+function renderOverview() {
+  const cards = rangeCards();
+  const range_tabs = [['all','Total'],['first','First Half'],['second','Second Half'],['last5','Last 5']]
+    .map(([v,l]) => `<button class="tab ${range===v?'on':''}" data-range="${v}" type="button">${l}</button>`).join('');
+  const head = panelHead('Session Overview', `<div class="tabs" role="group" aria-label="Range">${range_tabs}</div>`);
+  const first = cards.filter(c => c.status==='done' && c.kind==='first' && c.pins);
+  const spare = cards.filter(c => c.status==='done' && c.kind==='spare' && c.pins);
+  const strikes = first.filter(c => c.pins.strike), made = spare.filter(c => c.pins.strike);
+  const col = k => first.map(c => metricVal(c,k)).filter(v => v!=null);
+  const aSpeed = avg(col('ball_speed')), aRev = avg(col('rev_rate'));
+  const strikePct = pct(strikes.length, first.length), sparePct = pct(made.length, spare.length);
+  const prev = (range === 'all' && S.prev_stats) ? S.prev_stats : null;
+  const pv = (k,sub) => prev && (prev.averages[k]||{}).mean != null ? (prev.averages[k]).mean : (prev ? prev[sub] : null);
+  const tiles = [
+    tile('Average Speed', aSpeed!=null?aSpeed.toFixed(1):'—', 'MPH', '✓', 'ok', prev ? kdelta(aSpeed, (prev.averages.ball_speed||{}).mean, 1, 'vs last session') : null, `${first.length} first ball${first.length===1?'':'s'}`),
+    tile('Average Rev Rate', aRev!=null?Math.round(aRev):'—', 'RPM', 'est', 'est', prev ? kdelta(aRev, (prev.averages.rev_rate||{}).mean, 0, 'vs last session') : null, 'surface periodicity'),
+    tile('Strikes', strikePct!=null?strikePct+'%':'—', `(${strikes.length}/${first.length})`, '✓', 'ok', prev ? kdelta(strikePct, prev.strike_pct, 0, '% vs last session') : null),
+    tile('Spares', sparePct!=null?sparePct+'%':'—', `(${made.length}/${spare.length})`, '✓', 'ok', prev ? kdelta(sparePct, prev.spare_pct, 0, '% vs last session') : null),
+  ];
+  const checks = `<div style="display:flex;gap:16px;font-size:13px;align-items:center;margin-top:2px">
+    <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="ckSpeed" ${showSpeed?'checked':''} style="accent-color:#1677FF;width:15px;height:15px">Speed (MPH)</label>
+    <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="ckRev" ${showRev?'checked':''} style="accent-color:#22C55E;width:15px;height:15px">Rev Rate (RPM) <span class="b est">est</span></label></div>`;
+  return head + `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">${tiles.join('')}</div>${checks}${overviewChart(cards)}`;
+}
+function tile(label, value, sub, b, bc, delta, sub2) {
+  return `<div class="sub" style="padding:11px 13px;display:flex;flex-direction:column;gap:3px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="font-size:12px;color:#C9D3E2">${label}</span><span class="b ${bc}">${b}</span></div>
+    <div class="num" style="font-size:27px;font-weight:600;letter-spacing:-.3px">${value}<span style="font-size:13px;color:#9AA8BC;font-weight:500"> ${sub||''}</span></div>
+    <div style="font-size:12px;color:#9AA8BC">${sub2 || ''}</div>
+    <div style="font-size:12px;font-weight:600;color:${delta?delta.color:'#9AA8BC'}">${delta?esc(delta.text):''}</div></div>`;
+}
+function overviewChart(cards) {
+  const done = cards.filter(c => c.status === 'done').sort((a,b)=>a.n-b.n);
+  const sp = done.map(c => ({n:c.n, v:metricVal(c,'ball_speed')})).filter(p=>p.v!=null);
+  const rv = done.map(c => ({n:c.n, v:metricVal(c,'rev_rate')})).filter(p=>p.v!=null);
+  if (!sp.length && !rv.length) return `<div class="ph" style="min-height:120px">No speed or rev data yet.</div>`;
+  const ns = done.map(c=>c.n); let xmin=Math.min(...ns), xmax=Math.max(...ns); if(xmin===xmax){xmin-=.5;xmax+=.5;}
+  const W=620,H=200,L=38,R=584,T=14,B=28;
+  const X = n => L + (n-xmin)/(xmax-xmin)*(R-L);
+  const scale = arr => { if(!arr.length) return null; let lo=Math.min(...arr.map(p=>p.v)),hi=Math.max(...arr.map(p=>p.v)); if(lo===hi){lo-=1;hi+=1;} const pad=(hi-lo)*.2; lo-=pad;hi+=pad; return {lo,hi,y:v=>(H-B)-(v-lo)/(hi-lo)*((H-B)-T)}; };
+  const ys = scale(sp), yr = scale(rv);
+  const line = (arr,s,col) => { if(!arr.length||!s) return ''; const pts=arr.map(p=>`${X(p.n).toFixed(1)},${s.y(p.v).toFixed(1)}`).join(' ');
+    const dots=arr.map(p=>`<circle cx="${X(p.n).toFixed(1)}" cy="${s.y(p.v).toFixed(1)}" r="3.2" fill="${col}"></circle>`).join('');
+    return `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2"></polyline>${dots}`; };
+  // thirds
+  const thirds = [], span = (xmax-xmin)/3;
+  const b1 = xmin+span, b2 = xmin+2*span;
+  const lab = (lo,hi) => `${Math.ceil(lo)}-${Math.round(hi)}`;
+  const grid = ys ? [0,1,2,3].map(i=>`M${L},${ys.y(ys.lo+(ys.hi-ys.lo)*i/3).toFixed(1)}H${R}`).join('') : '';
+  const axisL = ys ? [0,1,2,3].map(i=>{const v=ys.lo+(ys.hi-ys.lo)*i/3;return `<text x="32" y="${(ys.y(v)+3).toFixed(1)}" fill="#9AA8BC" font-size="10" text-anchor="end">${v.toFixed(1)}</text>`;}).join('') : '';
+  const axisR = yr ? [0,1,2,3].map(i=>{const v=yr.lo+(yr.hi-yr.lo)*i/3;return `<text x="590" y="${(yr.y(v)+3).toFixed(1)}" fill="#9AA8BC" font-size="10">${Math.round(v)}</text>`;}).join('') : '';
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Speed and rev rate per shot, split early/mid/late">
+    <path d="${grid}" stroke="#1B2840" fill="none"></path>
+    ${done.length>=6?`<path d="M${X(b1).toFixed(1)},${T}V${H-B}M${X(b2).toFixed(1)},${T}V${H-B}" stroke="#3A4A63" stroke-dasharray="4 4"></path>
+    <text x="${X((xmin+b1)/2).toFixed(1)}" y="10" fill="#C9D3E2" font-size="11" text-anchor="middle">Early (${lab(xmin,b1)})</text>
+    <text x="${X((b1+b2)/2).toFixed(1)}" y="10" fill="#C9D3E2" font-size="11" text-anchor="middle">Mid (${lab(b1,b2)})</text>
+    <text x="${X((b2+xmax)/2).toFixed(1)}" y="10" fill="#C9D3E2" font-size="11" text-anchor="middle">Late (${lab(b2,xmax)})</text>`:''}
+    ${axisL}${axisR}
+    ${showRev?line(rv,yr,'#22C55E'):''}${showSpeed?line(sp,ys,'#3F8CFF'):''}
+    <text x="${Math.round(xmin)===Math.round(xmax)?(L+R)/2:X(xmin).toFixed(1)}" y="${H-10}" fill="#9AA8BC" font-size="10" text-anchor="middle">${Math.round(xmin)}</text>
+    <text x="${X(xmax).toFixed(1)}" y="${H-10}" fill="#9AA8BC" font-size="10" text-anchor="middle">${Math.round(xmax)}</text>
+    <text x="12" y="${(T+H-B)/2}" fill="#3F8CFF" font-size="10" transform="rotate(-90 12 ${((T+H-B)/2).toFixed(0)})" text-anchor="middle">Speed (MPH)</text>
+    <text x="612" y="${(T+H-B)/2}" fill="#22C55E" font-size="10" transform="rotate(90 612 ${((T+H-B)/2).toFixed(0)})" text-anchor="middle">Rev Rate (RPM)</text></svg>`;
+}
 function renderTransition() { return panelHead('Lane Transition Analysis') + `<div class="ph">Lane transition — built in step 5.</div>`; }
 function renderShots() {
   const cs = S.cards;
@@ -505,7 +572,11 @@ function bindLatest(sess, c) {
   const pr = $('#pinReset'); if (pr) pr.onclick = () => post({clear_pins_override:true});
   const sr = $('#saveRuby'); if (sr) sr.onclick = () => { const o = {}; document.querySelectorAll('[data-s]').forEach(i => o[i.dataset.s] = i.value === '' ? null : parseFloat(i.value)); post({sensor:o}); };
 }
-function bindOverview() {}
+function bindOverview() {
+  document.querySelectorAll('[data-range]').forEach(b => b.onclick = () => { range = b.dataset.range; render(); });
+  const cs = $('#ckSpeed'); if (cs) cs.onchange = () => { showSpeed = cs.checked; render(); };
+  const cr = $('#ckRev'); if (cr) cr.onchange = () => { showRev = cr.checked; render(); };
+}
 function bindTransition() {}
 function editSession(sess) {
   const name = prompt('Current ball name', sess.ball_name || ''); if (name == null) return;
