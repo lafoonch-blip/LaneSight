@@ -366,10 +366,45 @@ function transTakeaways(){
   if(rec) out.push({color:'#F2C94C',icon:'!',title:'Recommended Adjustment',body:rec.reason});
   return out;
 }
+function trendRow(icon, label, from, to, unit, dec, goodDir) {
+  if (from == null || to == null) return '';
+  const d = to - from, col = Math.abs(d) < (dec ? 0.05 : 0.5) ? '#9AA8BC' : (goodDir == null ? '#F5BC4E' : ((d > 0) === (goodDir > 0) ? '#43D893' : '#F2552C'));
+  const f = v => (dec ? v.toFixed(dec) : Math.round(v));
+  return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 0;border-bottom:1px solid #1E2C45">
+    <span style="flex:0 0 16px">${icon}</span><span style="flex:1;color:#C9D3E2">${label}</span>
+    <span class="num" style="color:#9AA8BC">${f(from)}${unit} → ${f(to)}${unit}</span>
+    <span class="num" style="flex:0 0 46px;text-align:right;font-weight:600;color:${col}">${d > 0 ? '+' : ''}${f(d)}</span></div>`;
+}
+function renderTransitionStatus() {
+  const first = S.cards.filter(c => c.status === 'done' && c.kind === 'first' && c.pins);
+  if (first.length < 4) return '';
+  const third = Math.max(1, Math.floor(first.length / 3)), early = first.slice(0, third), recent = first.slice(-third);
+  const m = (arr, k) => avg(arr.map(c => metricVal(c, k)).filter(v => v != null));
+  const eEntry = m(early, 'entry_board'), rEntry = m(recent, 'entry_board');
+  const carry = arr => pct(arr.filter(c => c.pins.strike).length, arr.length);
+  const mag = Math.abs(rEntry - eEntry);
+  const [stName, stCol] = mag < 0.5 ? ['Lane holding', '#43D893'] : mag < 1.5 ? ['Moderate transition', '#F2C94C'] : ['Significant transition', '#F2552C'];
+  const score = Math.min(100, Math.round(mag / 3 * 100));
+  const dir = mag < 0.5 ? 'Stable' : (rEntry > eEntry ? 'Hooking earlier / more friction' : 'Tightening / less friction');
+  const rec = (first[first.length - 1].insights || {}).recommendations || [];
+  const trRec = rec.find(r => r.type === 'transition');
+  return `<div class="sub" style="padding:14px;flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:10px">
+    <h3 style="font-size:14px;font-weight:600">Lane Transition Status</h3>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="flex:1;background:${stCol};color:#06101E;font-weight:700;font-size:15px;text-align:center;padding:10px;border-radius:999px">${stName}</span>
+      ${ring(score, stCol, score, '/100')}</div>
+    <div>${trendRow('↗', 'Breakpoint', m(early, 'breakpoint_board'), m(recent, 'breakpoint_board'), '', 1, null)}
+      ${trendRow('∠', 'Entry angle', m(early, 'entry_angle'), m(recent, 'entry_angle'), '°', 1, +1)}
+      ${trendRow('◎', 'Entry board', eEntry, rEntry, '', 1, null)}
+      ${trendRow('✦', 'Carry', carry(early), carry(recent), '%', 0, +1)}</div>
+    <div style="font-size:11px;color:#9AA8BC">Direction: <span style="color:${stCol};font-weight:600">${dir}</span></div>
+    ${trRec ? `<div style="border-top:1px solid #1E2C45;padding-top:8px"><div style="font-size:12px;font-weight:600;color:#43D893">Recommended adjustment</div><div style="font-size:12px;color:#C9D3E2;margin-top:3px">${esc(trRec.reason)}</div></div>` : ''}</div>`;
+}
 function renderTransition() {
   const tabs = [['traffic','Ball traffic'],['entry','Entry'],['breakpoint','Breakpoint'],['speed','Speed']]
     .map(([v,l]) => `<button class="tab ${transTab===v?'on':''}" data-ttab="${v}" type="button">${l}</button>`).join('');
   const head = panelHead('Lane Transition Analysis', `<div class="tabs" role="group" aria-label="Lane view">${tabs}</div>`);
+  const sub = `<div style="font-size:13px;color:var(--muted);margin:-4px 0 10px">How the lane is changing and what to do about it.</div>`;
   const firstN = S.cards.filter(c=>c.status==='done'&&c.kind==='first'&&c.path&&c.path.length).length;
   const heatCells = firstN ? buildHeat(transTab).map(c=>`<span style="background:${c}"></span>`).join('') : '';
   const legendLabel = transTab==='speed' ? ['Faster','Slower'] : ['Most balls','Fewest'];
@@ -388,8 +423,9 @@ function renderTransition() {
   const takeaways = transTakeaways().map(t => `<div style="display:flex;gap:10px">
     <span style="flex:0 0 18px;height:18px;border-radius:50%;background:${t.color};display:grid;place-items:center;color:#06101E;font-size:11px;font-weight:800">${t.icon}</span>
     <div><div style="font-size:13px;font-weight:600;color:${t.color}">${esc(t.title)}</div><div style="font-size:12px;color:#C9D3E2;line-height:1.4">${esc(t.body)}</div></div></div>`).join('');
-  return head + `<div style="display:flex;flex-wrap:wrap;gap:14px">
+  return head + sub + `<div style="display:flex;flex-wrap:wrap;gap:14px">
     <div style="flex:1 1 300px;min-width:0">${heat}</div>
+    ${renderTransitionStatus()}
     <div class="sub" style="flex:1 1 230px;padding:14px;display:flex;flex-direction:column;gap:12px">
       <h3 style="font-size:14px;font-weight:600">Key Takeaways</h3>${takeaways}</div></div>`;
 }
