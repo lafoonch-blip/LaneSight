@@ -160,6 +160,7 @@ function render() {
         <section class="panel" style="flex:999 1 560px">${renderChart()}</section>
         <section class="panel" style="flex:1 1 520px;display:flex;flex-wrap:wrap;gap:16px">${renderLaneUsage(st)}</section>
       </div>
+      ${renderGame(st)}
     </main>`;
   bind(sess, c);
 }
@@ -612,6 +613,25 @@ function laneReadTakeaways(st) {
     out.push({ color: '#3FD8FF', title: 'Breakpoint', body: `Average ${a.breakpoint_board.mean.toFixed(1)}${target!=null?` vs your target ${target}`:''}.${len?` Pattern rule for ${len} ft says ${len-31}.`:''}` });
   }
   return out;
+}
+
+/* ---------- game ---------- */
+function renderGame(st) {
+  const g = (st || {}).game;
+  const head = `<div class="rowline" style="margin-bottom:10px"><h2 class="h" style="margin:0">Game from these shots</h2>`;
+  if (!g) return `<section class="panel">${head}</div><div class="muted small">A game can't be built from this shot sequence yet — mark first balls and spares so the frames line up.</div></section>`;
+  const final = [...g].reverse().find(f => f.score != null);
+  const frame = f => {
+    const boxes = f.n === 10 ? 3 : 2, cells = [];
+    for (let i = 0; i < boxes; i++) cells.push(`<span style="flex:1;min-width:0;text-align:center;padding:3px 0;${i>0?'border-left:1px solid #1F2E45;':''}${i<boxes-1?'border-bottom:1px solid #1F2E45;':''}">${f.rolls[i] != null ? esc(f.rolls[i]) : ''}</span>`);
+    const clickable = f.shot_ids && f.shot_ids.length;
+    return `<div ${clickable ? `data-shot="${f.shot_ids[f.shot_ids.length-1]}"` : ''} style="border-right:1px solid #27395A;display:flex;flex-direction:column;min-width:52px${clickable ? ';cursor:pointer' : ''}">
+      <div style="font-size:11px;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line)">${f.n}</div>
+      <div class="num" style="display:flex;justify-content:flex-end;font-size:17px;font-weight:700;min-height:26px">${cells.join('')}</div>
+      <div class="num" style="font-size:20px;font-weight:700;text-align:center;padding:6px 0 8px;color:${f.score!=null?'var(--ice)':'var(--dimmer)'}">${f.score != null ? f.score : ''}</div></div>`;
+  };
+  return `<section class="panel">${head}<span class="lbl">Frames from first-ball + spare order; a frame that can't be scored yet is blank${final?` · through frame ${final.n}: ${final.score}`:''}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(10,minmax(52px,1fr));border:1px solid #27395A;border-radius:10px;overflow-x:auto">${g.map(frame).join('')}</div></section>`;
 }
 
 /* ---------- start session ---------- */

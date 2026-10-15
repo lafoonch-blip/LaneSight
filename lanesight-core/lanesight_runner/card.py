@@ -164,6 +164,44 @@ def build_cards(session, shots):
         cards.append(c)
     return cards
 
+def _display_frame(f):
+    """Roll marks for one frame: X strike, / spare, - miss, digits. Handles the 10th frame's rack resets."""
+    p = [r.pins for r in f.rolls]; out = []
+    g = lambda v: '-' if v == 0 else str(v)
+    if f.number < 10:
+        if len(p) >= 1: out.append('X' if p[0] == 10 else g(p[0]))
+        if len(p) >= 2: out.append('/' if (p[0] < 10 and p[0] + p[1] == 10) else g(p[1]))
+    else:
+        rem = 10
+        for v in p:
+            if v == 10 and rem == 10: out.append('X'); rem = 10
+            elif rem < 10 and v == rem: out.append('/'); rem = 10
+            else: out.append(g(v)); rem = (rem - v) or 10
+    return out
+
+def game_frames(cards):
+    """Ten frames built from the session's first-ball/spare order with pins down from the effective pins.
+    A shot with an unknown result ends the scoreable run (the rest of the game stays blank, never guessed);
+    an inconsistent sequence returns None. Each frame: {n, rolls:[marks], score:int|None, shot_ids:[...]}."""
+    from lanesight_core.scoring.game import Roll, build_frames, GameError
+    rolls, prev_down = [], None
+    for c in cards:
+        if c['status'] != 'done': break
+        p = c.get('pins')
+        if p is None: break                                   # unknown result -> stop; rest of the game is blank
+        standing = frozenset(p['standing'])
+        if c['kind'] == 'first':
+            down = 10 - len(standing); prev_down = down
+        else:                                                 # spare: pins down = (pins left after the first ball) - (now)
+            down = max(0, (10 - (prev_down or 0)) - len(standing)); prev_down = None
+        rolls.append(Roll(down, standing_after=standing, shot_id=str(c['id'])))
+    try:
+        frames = build_frames(rolls)
+    except GameError:
+        return None
+    return [dict(n=f.number, rolls=_display_frame(f), score=f.score,
+                 shot_ids=[int(r.shot_id) for r in f.rolls if r.shot_id]) for f in frames]
+
 def session_stats(cards, shots):
     done = [c for c in cards if c['status'] == 'done' and c.get('pins') is not None]
     first = [c for c in done if c['kind'] == 'first']; spare = [c for c in done if c['kind'] == 'spare']
@@ -189,4 +227,5 @@ def session_stats(cards, shots):
         d = [v[k]['diff'] for v in var if k in v]
         if d: agg[k] = dict(n=len(d), mean_diff=round(sum(d) / len(d), 2), mae=round(sum(abs(x) for x in d) / len(d), 2))
     st['sensor_variance'] = agg
+    st['game'] = game_frames(cards)
     return st

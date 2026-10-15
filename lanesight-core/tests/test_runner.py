@@ -186,6 +186,27 @@ def test_failed_analysis_is_visible(tmp_path):
     assert s['status'] == 'failed' and s['error'].startswith('Clip rejected') and s['record'] is None
     assert r.card(sid)['speech'] == 'Shot could not be analyzed.'
 
+# ---------- game frame builder ----------
+def _gcard(i, kind, standing):
+    return dict(id=i, n=i, status='done', kind=kind, pins=None if standing is None else dict(standing=standing, strike=not standing))
+
+def test_game_frames_scores_and_handles_blanks():
+    from lanesight_runner.card import game_frames
+    g = game_frames([_gcard(1, 'first', [10]), _gcard(2, 'spare', []), _gcard(3, 'first', [])])
+    assert g[0]['rolls'] == ['9', '/'] and g[0]['score'] == 20            # spare + strike bonus
+    assert g[1]['rolls'] == ['X'] and g[1]['score'] is None               # strike, not enough following rolls -> blank
+    assert g[2]['rolls'] == [] and g[0]['shot_ids'] == [1, 2]
+
+def test_game_frames_unknown_result_stops_the_game():
+    from lanesight_runner.card import game_frames
+    g = game_frames([_gcard(1, 'first', [10]), _gcard(2, 'spare', None)])  # 2nd shot's pins unknown
+    assert g[0]['rolls'] == ['9'] and g[0]['score'] is None and g[1]['rolls'] == []
+
+def test_game_frames_perfect_game_is_300():
+    from lanesight_runner.card import game_frames
+    g = game_frames([_gcard(i, 'first', []) for i in range(1, 13)])        # 12 strikes
+    assert g[9]['rolls'] == ['X', 'X', 'X'] and g[9]['score'] == 300
+
 # ---------- API ----------
 @needs_ffmpeg
 def test_api_flow(tmp_path):
