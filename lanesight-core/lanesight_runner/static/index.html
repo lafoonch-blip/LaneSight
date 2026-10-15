@@ -83,6 +83,9 @@ label.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let S = null, selected = null, follow = true, editing = false, range = 'all', shotFilter = 'all', shotTab = 'overview', transTab = 'traffic', inputMode = null, showSpeed = true, showRev = true, patternsLib = null;
+let view = 'latest';   // top-level page: latest | shots | overview | transition
+const VIEWS = [['latest', 'Latest Shot'], ['shots', 'Shots'], ['overview', 'Session Overview'], ['transition', 'Lane Transition']];
+const VIEW_SUB = {latest: 'Your most recent shot — metrics, line and the next move.', shots: 'Every shot this session.', overview: 'Key metrics, trends and performance for your session.', transition: "How the lane is changing and what to do about it."};
 const PIN_ROWS = [[7,8,9,10],[4,5,6],[2,3],[1]];
 const SENSOR_FIELDS = [['speed_mph','Speed',0.1],['rev_rate_rpm','Revs',1],['loft_ft','Loft ft',0.1],['axis_tilt_deg','Tilt °',1],['axis_rotation_deg','Rotation °',1],['breakpoint_ft','Breakpt ft',1]];
 
@@ -141,14 +144,22 @@ function render() {
   $('#app').innerHTML = `
     ${S.watch_error ? `<div class="warnbox" style="margin-bottom:12px">${esc(S.watch_error)}</div>` : ''}
     ${renderTitle(sess)}
-    <div class="grid2">
-      <section class="card" style="padding:16px 16px 12px">${renderOverview()}</section>
-      <section class="card" style="padding:16px">${renderTransition()}</section>
-      <section class="card" style="padding:16px">${renderShots()}</section>
-      <section class="card" style="padding:16px">${renderLatest(c)}</section>
-    </div>`;
+    <div class="tabs" role="tablist" aria-label="View" style="margin:16px 0 4px">
+      ${VIEWS.map(([k, l]) => `<button class="tab ${view === k ? 'on' : ''}" role="tab" aria-selected="${view === k}" data-view="${k}" type="button">${l}</button>`).join('')}
+    </div>
+    <div id="viewbody">${renderView(c)}</div>`;
   bind(sess, c);
 }
+
+/* ---------- view routing: one full-width page at a time (reference images are per-page, not a 2x2 grid) ---------- */
+function renderView(c) {
+  if (view === 'shots') return `<section class="card" style="padding:16px">${renderShots()}</section>`;
+  if (view === 'overview') return `<section class="card" style="padding:16px 16px 12px">${renderOverview()}</section>`;
+  if (view === 'transition') return `<section class="card" style="padding:16px">${renderTransition()}</section>`;
+  return `<section class="card" style="padding:16px">${renderLatest(c)}</section>`;
+}
+function setView(v) { view = v; const b = $('#viewbody'); if (b) { b.innerHTML = renderView(current()); bind(S.session, current()); }
+  document.querySelectorAll('[data-view]').forEach(t => { const on = t.dataset.view === v; t.classList.toggle('on', on); t.setAttribute('aria-selected', on); }); }
 
 /* ---------- title row ---------- */
 function renderTitle(sess) {
@@ -621,6 +632,7 @@ function bind(sess, c) {
   const en = $('#editName'); if (en) en.onclick = () => { const v = prompt('Session name', sess.name || ''); if (v != null) api('/api/session', {method:'PATCH', body:{name: v || null}}).then(load); };
   const es = $('#editSess'); if (es) es.onclick = () => editSession(sess);
   const eb = $('#endBtn'); if (eb) eb.onclick = () => { if (confirm('End this session?')) api('/api/session/end', {method:'POST'}).then(load); };
+  document.querySelectorAll('[data-view]').forEach(t => t.onclick = () => setView(t.dataset.view));
   document.querySelectorAll('input,select,textarea').forEach(i => { i.onfocus = () => editing = true; i.onblur = () => editing = false; });
   bindShots(sess, c); bindLatest(sess, c); bindOverview(); bindTransition();
 }
