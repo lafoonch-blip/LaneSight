@@ -227,17 +227,67 @@ function renderOverview() {
   const aSpeed = avg(col('ball_speed')), aRev = avg(col('rev_rate'));
   const strikePct = pct(strikes.length, first.length), sparePct = pct(made.length, spare.length);
   const prev = (range === 'all' && S.prev_stats) ? S.prev_stats : null;
-  const pv = (k,sub) => prev && (prev.averages[k]||{}).mean != null ? (prev.averages[k]).mean : (prev ? prev[sub] : null);
+  const downs = first.map(c => 10 - ((c.pins.standing || []).length)).filter(v => v >= 0);
+  const aPins = avg(downs);
   const tiles = [
     tile('Average Speed', aSpeed!=null?aSpeed.toFixed(1):'—', 'MPH', '✓', 'ok', prev ? kdelta(aSpeed, (prev.averages.ball_speed||{}).mean, 1, 'vs last session') : null, `${first.length} first ball${first.length===1?'':'s'}`),
     tile('Average Rev Rate', aRev!=null?Math.round(aRev):'—', 'RPM', 'est', 'est', prev ? kdelta(aRev, (prev.averages.rev_rate||{}).mean, 0, 'vs last session') : null, 'surface periodicity'),
     tile('Strikes', strikePct!=null?strikePct+'%':'—', `(${strikes.length}/${first.length})`, '✓', 'ok', prev ? kdelta(strikePct, prev.strike_pct, 0, '% vs last session') : null),
     tile('Spares', sparePct!=null?sparePct+'%':'—', `(${made.length}/${spare.length})`, '✓', 'ok', prev ? kdelta(sparePct, prev.spare_pct, 0, '% vs last session') : null),
+    tile('Average Pins', aPins!=null?aPins.toFixed(1):'—', 'pins', '✓', 'ok', null, downs.length?`High ${Math.max(...downs)} · Low ${Math.min(...downs)}`:''),
   ];
   const checks = `<div style="display:flex;gap:16px;font-size:13px;align-items:center;margin-top:2px">
     <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="ckSpeed" ${showSpeed?'checked':''} style="accent-color:#1677FF;width:15px;height:15px">Speed (MPH)</label>
     <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="ckRev" ${showRev?'checked':''} style="accent-color:#22C55E;width:15px;height:15px">Rev Rate (RPM) <span class="b est">est</span></label></div>`;
-  return head + `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">${tiles.join('')}</div>${checks}${overviewChart(cards)}`;
+  const sub = `<div style="font-size:13px;color:var(--muted);margin:-4px 0 10px">Key metrics, trends and performance for your session.</div>`;
+  const extra = (renderConsistency(first) || renderScatter(first)) ?
+    `<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:14px">${renderConsistency(first)}${renderScatter(first)}</div>` : '';
+  return head + sub + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${tiles.join('')}</div>${checks}${overviewChart(cards)}${extra}`;
+}
+function ring(pct, color, big, small) {
+  const r = 26, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+    <svg width="74" height="74" viewBox="0 0 74 74"><circle cx="37" cy="37" r="${r}" fill="none" stroke="#1E2C45" stroke-width="7"></circle>
+      <circle cx="37" cy="37" r="${r}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 37 37)"></circle>
+      <text x="37" y="42" fill="#E6ECF5" font-size="16" font-weight="700" text-anchor="middle" class="num">${big}</text></svg>
+    <div style="font-size:12px;color:#C9D3E2;text-align:center;line-height:1.3">${small}</div></div>`;
+}
+// consistency score from a real coefficient of variation (tighter spread -> higher); the SD itself is shown too
+function consScore(sd, mean) { return (sd == null || !mean) ? null : Math.round(100 * Math.max(0, 1 - 5 * Math.abs(sd / mean))); }
+function renderConsistency(first) {
+  const sp = first.map(c => metricVal(c, 'ball_speed')).filter(v => v != null);
+  const rv = first.map(c => metricVal(c, 'rev_rate')).filter(v => v != null);
+  const cons = (S.stats || {}).consistency || {};
+  const rep = cons.repeatability_score, disp = cons.dispersion_boards || {};
+  const sMean = avg(sp), sSd = sd(sp), rMean = avg(rv), rSd = sd(rv);
+  const rings = [];
+  if (rep != null) rings.push(ring(rep, '#3F8CFF', Math.round(rep) + '%', 'Repeatability' + (disp.entry != null ? `<div style="font-size:10px;color:#8592A6">entry ±${disp.entry.toFixed(1)} bd</div>` : '')));
+  if (sSd != null) { const sc = consScore(sSd, sMean); rings.push(ring(sc, '#22C55E', sc + '%', `Speed<div style="font-size:10px;color:#8592A6">SD ${sSd.toFixed(1)} MPH</div>`)); }
+  if (rSd != null) { const sc = consScore(rSd, rMean); rings.push(ring(sc, '#C99BFF', sc + '%', `Rev rate<div style="font-size:10px;color:#8592A6">SD ${Math.round(rSd)} RPM</div>`)); }
+  if (!rings.length) return '';
+  return `<div class="sub" style="padding:14px;flex:1 1 300px;min-width:0">
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Accuracy &amp; Consistency</h3>
+    <div style="display:flex;gap:14px;justify-content:space-around;flex-wrap:wrap">${rings.join('')}</div></div>`;
+}
+function renderScatter(first) {
+  const pts = first.map(c => ({ x: metricVal(c, 'breakpoint_board'), y: metricVal(c, 'entry_angle') })).filter(p => p.x != null && p.y != null);
+  if (pts.length < 2) return '';
+  const W = 300, H = 180, L = 36, R = 292, T = 12, B = 30;
+  const xs = pts.map(p => p.x), ysv = pts.map(p => p.y);
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ysv, 0), y1 = Math.max(...ysv, 8);
+  const padx = Math.max(1, (x1 - x0) * .3); x0 -= padx; x1 += padx;
+  const X = v => L + (v - x0) / (x1 - x0) * (R - L), Y = v => (H - B) - (v - y0) / (y1 - y0) * ((H - B) - T);
+  const mx = avg(xs), my = avg(ysv), sx = sd(xs) || 1, sy = sd(ysv) || 1;
+  const dots = pts.map(p => `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="3.4" fill="#3F8CFF" opacity=".85"></circle>`).join('');
+  const ell = `<ellipse cx="${X(mx).toFixed(1)}" cy="${Y(my).toFixed(1)}" rx="${(Math.abs(X(mx + sx) - X(mx))).toFixed(1)}" ry="${(Math.abs(Y(my + sy) - Y(my))).toFixed(1)}" fill="#3F8CFF" fill-opacity=".1" stroke="#3F8CFF" stroke-opacity=".4"></ellipse>`;
+  const xticks = [Math.ceil(x0), Math.round((x0 + x1) / 2), Math.floor(x1)].map(v => `<text x="${X(v).toFixed(1)}" y="${H - 8}" fill="#9AA8BC" font-size="9" text-anchor="middle">${v}</text>`).join('');
+  return `<div class="sub" style="padding:14px;flex:1 1 300px;min-width:0">
+    <h3 style="font-size:14px;font-weight:600;margin-bottom:8px">Shot Distribution</h3>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Entry angle versus breakpoint board for each first ball">
+      <line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#1B2840"></line><line x1="${L}" y1="${H - B}" x2="${R}" y2="${H - B}" stroke="#1B2840"></line>
+      ${ell}${dots}${xticks}
+      <text x="${(L + R) / 2}" y="${H - 1}" fill="#8592A6" font-size="9" text-anchor="middle">Breakpoint board</text>
+      <text x="10" y="${(T + H - B) / 2}" fill="#8592A6" font-size="9" transform="rotate(-90 10 ${((T + H - B) / 2).toFixed(0)})" text-anchor="middle">Entry angle °</text></svg></div>`;
 }
 function tile(label, value, sub, b, bc, delta, sub2) {
   return `<div class="sub" style="padding:11px 13px;display:flex;flex-direction:column;gap:3px">
