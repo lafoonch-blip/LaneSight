@@ -265,7 +265,70 @@ function overviewChart(cards) {
     <text x="12" y="${(T+H-B)/2}" fill="#3F8CFF" font-size="10" transform="rotate(-90 12 ${((T+H-B)/2).toFixed(0)})" text-anchor="middle">Speed (MPH)</text>
     <text x="612" y="${(T+H-B)/2}" fill="#22C55E" font-size="10" transform="rotate(90 612 ${((T+H-B)/2).toFixed(0)})" text-anchor="middle">Rev Rate (RPM)</text></svg>`;
 }
-function renderTransition() { return panelHead('Lane Transition Analysis') + `<div class="ph">Lane transition — built in step 5.</div>`; }
+function heatRamp(t){ const s=[[0,[11,26,58]],[0.18,[20,70,160]],[0.4,[15,163,216]],[0.6,[51,209,122]],[0.8,[245,211,60]],[1,[242,85,44]]]; t=Math.max(0,Math.min(1,t));
+  for(let i=1;i<s.length;i++) if(t<=s[i][0]){ const[t0,a]=s[i-1],[t1,b]=s[i],k=(t-t0)/((t1-t0)||1); return `rgb(${a.map((v,j)=>Math.round(v+(b[j]-v)*k)).join(',')})`; } return 'rgb(242,85,44)'; }
+function boardAtPath(path, z){ if(!path.length) return null; if(z<=path[0][0]) return path[0][1];
+  for(let i=1;i<path.length;i++){ if(z<=path[i][0]){ const[z0,b0]=path[i-1],[z1,b1]=path[i],u=(z-z0)/((z1-z0)||1); return b0+(b1-b0)*u; } } return path[path.length-1][1]; }
+function buildHeat(mode){
+  const R=24,B=39, first=S.cards.filter(c=>c.status==='done'&&c.kind==='first'&&c.path&&c.path.length);
+  const g=new Array(R*B).fill(0), sval=new Array(R*B).fill(0), cnt=new Array(R*B).fill(0);
+  first.forEach(c=>{ const speed=metricVal(c,'ball_speed'), kp=c.key_points||{}, entryB=(kp.entry||{}).board, bpB=(kp.breakpoint||{}).board, bpZ=(kp.breakpoint||{}).z_ft;
+    for(let r=0;r<R;r++){ const z=60-(r+0.5)*2.5; let b;
+      if(mode==='entry'){ if(z<50) continue; b=entryB; }
+      else if(mode==='breakpoint'){ if(bpZ==null||Math.abs(z-bpZ)>8) continue; b=bpB; }
+      else b=boardAtPath(c.path,z);
+      if(b==null) continue;
+      for(let col=0;col<B;col++){ const board=39-col, w=Math.exp(-((board-b)**2)/(2*1.96)), idx=r*B+col;
+        g[idx]+=w; if(mode==='speed'&&speed!=null){ sval[idx]+=w*speed; cnt[idx]+=w; } } } });
+  if(mode==='speed'){ const sp=[]; for(let i=0;i<g.length;i++) if(g[i]>0.05) sp.push(sval[i]/cnt[i]);
+    if(!sp.length) return g.map(()=> '#0B1A3A'); const lo=Math.min(...sp),hi=Math.max(...sp);
+    return g.map((v,i)=> v<0.05?'#0B1A3A':heatRamp((sval[i]/cnt[i]-lo)/((hi-lo)||1))); }
+  const mx=Math.max(...g,1e-6);
+  return g.map(v=> v<1e-6?'#0B1A3A':heatRamp(Math.pow(v/mx,0.7)));
+}
+function transTakeaways(){
+  const first=S.cards.filter(c=>c.status==='done'&&c.kind==='first'&&c.pins);
+  if(first.length<4) return [{color:'#9AA8BC',icon:'·',title:'Not enough shots yet',body:'Transition takeaways appear after about 6 comparable first balls.'}];
+  const third=Math.max(1,Math.floor(first.length/3)), early=first.slice(0,third), late=first.slice(-third);
+  const m=(arr,k)=>avg(arr.map(c=>metricVal(c,k)).filter(v=>v!=null));
+  const dEntry=m(late,'entry_board')-m(early,'entry_board'), dSpeed=m(late,'ball_speed')-m(early,'ball_speed'), dAngle=m(late,'entry_angle')-m(early,'entry_angle');
+  const out=[];
+  out.push({color:Math.abs(dEntry)>=0.8?'#43D893':'#3F8CFF',icon:Math.abs(dEntry)>=0.8?'✓':'i',
+    title:Math.abs(dEntry)<0.5?'Lane is holding':(dEntry>0?'Lane is transitioning: hooking earlier':'Lane is tightening up'),
+    body:`Entry board moved ${Math.abs(dEntry).toFixed(1)} boards ${dEntry>0?'left':'right'} from early to late shots.`});
+  out.push({color:'#3F8CFF',icon:'i',title:dSpeed<-0.2?'Speed decreasing':dSpeed>0.2?'Speed increasing':'Speed steady',body:`Average speed ${dSpeed<0?'dropped':'changed'} ${Math.abs(dSpeed).toFixed(1)} MPH in the late shots.`});
+  out.push({color:'#3F8CFF',icon:'i',title:dAngle>0.3?'Higher entry angle':dAngle<-0.3?'Lower entry angle':'Entry angle steady',body:`Entry angle ${dAngle>0?'up':'changed'} ${Math.abs(dAngle).toFixed(1)}° as the lane broke down.`});
+  const latest=first[first.length-1], recs=(latest.insights||{}).recommendations||[], rec=recs.find(r=>r.type==='transition')||recs[0];
+  if(rec) out.push({color:'#F2C94C',icon:'!',title:'Recommended Adjustment',body:rec.reason});
+  return out;
+}
+function renderTransition() {
+  const tabs = [['traffic','Ball traffic'],['entry','Entry'],['breakpoint','Breakpoint'],['speed','Speed']]
+    .map(([v,l]) => `<button class="tab ${transTab===v?'on':''}" data-ttab="${v}" type="button">${l}</button>`).join('');
+  const head = panelHead('Lane Transition Analysis', `<div class="tabs" role="group" aria-label="Lane view">${tabs}</div>`);
+  const firstN = S.cards.filter(c=>c.status==='done'&&c.kind==='first'&&c.path&&c.path.length).length;
+  const heatCells = firstN ? buildHeat(transTab).map(c=>`<span style="background:${c}"></span>`).join('') : '';
+  const legendLabel = transTab==='speed' ? ['Faster','Slower'] : ['Most balls','Fewest'];
+  const heat = firstN ? `<div style="display:flex;gap:10px;align-items:stretch">
+      <div style="display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:#9AA8BC;padding:2px 0 30px;text-align:right"><span>60</span><span>45</span><span>30</span><span>15</span><span>0 ft</span></div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+        <div style="perspective:520px;width:100%;display:flex;justify-content:center">
+          <div role="img" aria-label="Where the ball traveled this session; brightest where most shots went" style="display:grid;grid-template-columns:repeat(39,minmax(0,1fr));grid-template-rows:repeat(24,9px);width:230px;transform:rotateX(38deg);transform-origin:bottom;background:#0B1A3A;border-left:4px solid #1B2433;border-right:4px solid #1B2433">${heatCells}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;width:230px;font-size:11px;color:#9AA8BC"><span>39</span><span>30</span><span>20</span><span>10</span><span>1</span></div>
+        <div style="font-size:11px;color:#9AA8BC">Boards</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:#C9D3E2">
+        <span>${legendLabel[0]}</span><span style="width:12px;flex:1;border-radius:3px;background:linear-gradient(180deg,#F2552C,#F5D33C,#33D17A,#0FA3D8,#1446A0,#0B1A3A)"></span><span>${legendLabel[1]}</span>
+      </div></div>` : `<div class="ph">The ball-traffic map builds from your first-ball paths.</div>`;
+  const takeaways = transTakeaways().map(t => `<div style="display:flex;gap:10px">
+    <span style="flex:0 0 18px;height:18px;border-radius:50%;background:${t.color};display:grid;place-items:center;color:#06101E;font-size:11px;font-weight:800">${t.icon}</span>
+    <div><div style="font-size:13px;font-weight:600;color:${t.color}">${esc(t.title)}</div><div style="font-size:12px;color:#C9D3E2;line-height:1.4">${esc(t.body)}</div></div></div>`).join('');
+  return head + `<div style="display:flex;flex-wrap:wrap;gap:14px">
+    <div style="flex:1 1 300px;min-width:0">${heat}</div>
+    <div class="sub" style="flex:1 1 230px;padding:14px;display:flex;flex-direction:column;gap:12px">
+      <h3 style="font-size:14px;font-weight:600">Key Takeaways</h3>${takeaways}</div></div>`;
+}
 function renderShots() {
   const cs = S.cards;
   const counts = {strike:0, spare:0, open:0};
@@ -577,7 +640,9 @@ function bindOverview() {
   const cs = $('#ckSpeed'); if (cs) cs.onchange = () => { showSpeed = cs.checked; render(); };
   const cr = $('#ckRev'); if (cr) cr.onchange = () => { showRev = cr.checked; render(); };
 }
-function bindTransition() {}
+function bindTransition() {
+  document.querySelectorAll('[data-ttab]').forEach(b => b.onclick = () => { transTab = b.dataset.ttab; render(); });
+}
 function editSession(sess) {
   const name = prompt('Current ball name', sess.ball_name || ''); if (name == null) return;
   const pat = prompt('Oil pattern name (blank to keep)', sess.pattern_name || '');
