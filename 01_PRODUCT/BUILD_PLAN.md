@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.2  
-Last Updated: 2026-10-14  
+Version: 2.3  
+Last Updated: 2026-10-15  
 Owner: Shayne  
-Supersedes: v2.0 (status update only); v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v2.2 (status update only); v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -36,7 +36,7 @@ Size: S = days · M = 1–3 weeks · L = 1–2 months
 
 Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 
-**Next blocker:** Seed Dataset v1 (M1-15), so prototypes can be eval-verified.
+**Next blocker:** Seed Dataset v1 (M1-15), so prototypes can be eval-verified (~21 shots captured in the 2026-10-15 live session with Ruby S2; none at 240 fps yet). The runner v2 UI is built (`03_ENGINEERING/runner_v2/RUNNER_V2_SPEC.md`) and the sensor comparison (M5-05) is the active next step once Ruby data can be matched by timestamp.
 
 ---
 
@@ -49,7 +49,7 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [x] M1-05 Loft
 - [~] M1-06 Board crossings: laydown, 7 ft dots, arrows (15 ft), 30/40/50 ft, entry. Launch angle and entry angle with confidence (was P0-07)
 - [~] M1-07 Breakpoint: board + distance (geometric), with glare-robust lateral measurement
-- [~] M1-08 Pin reading: before/after pin state, strike/non-strike, leave, with per-pin confidence and occlusion flags (was P0-08)
+- [~] M1-08 Pin reading: before/after pin state, strike/non-strike, leave, with per-pin confidence and occlusion flags (was P0-08). Reads from video only; reports **unreadable** (never a guess) when the deck is blocked or the clip ends before the pins settle — DEC-026 (2026-10-15)
 - [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Blind-validate the sensor-equivalent factor
 - [ ] M1-10 Spin axis: axis rotation + tilt from period-lag surface flow, camera rotation from VP + homography
 - [ ] M1-11 PAP: finger/thumb-hole tracking at 240 fps, a marker option, or entered from the profile with drift detection

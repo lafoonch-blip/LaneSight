@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.4  
-Last Updated: 2026-10-14  
+Version: 1.5  
+Last Updated: 2026-10-15  
 Owner: Shayne  
-Supersedes: v1.3
+Supersedes: v1.4
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -184,6 +184,13 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Date:** 2026-10-14  
 **Status:** ACCEPTED  
 **Supersedes:** The claude.ai Project as the only home of the docs
+
+### DEC-026 — Pin results are read from video, never guessed
+**Decision:** The pin leave / strike comes only from reading the settled deck in the video. When the deck cannot be read — the bowler steps into frame and blocks it, or the clip ends before the pins settle — the result is reported **unreadable** (with the reason), not a strike or an inferred leave. Occlusion is detected by comparing the static masking unit above the pins before vs after impact (a blocked deck drops the correlation far below a clean one). Unreadable shots are excluded from strike %, open %, carry % and the game sheet, and the bowler can record the real result with Fix pins. No recommendation or stat is ever built on a guessed pin result.  
+**Why:** A confident wrong result is worse than "couldn't read it." LaneSight's value is trustworthy numbers; a light/flat shot that reads as a strike because the pins were hidden would mislead the bowler and corrupt the session stats.  
+**Date:** 2026-10-15  
+**Status:** ACCEPTED  
+**Supersedes:** —
 
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
 
