@@ -200,10 +200,15 @@ def _foul(l, m):
                 gap += 1
                 if last is not None and gap > 25: break
         if last and last[1] < h - 3: pts.append(last)
-    P = np.array(pts, float); keep = np.ones(len(P), bool)
+    P = np.array(pts, float)
+    if len(P) < 6:          # no foul line in view: the lane runs off the bottom of the frame (camera too low/close).
+        raise RuntimeError("lane not detected: foul line not found — the lane runs off the bottom of the frame "
+                           "(the foul line must be in view; raise or pull back the camera)")
+    keep = np.ones(len(P), bool)
     for _ in range(8):
         c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
         keep = np.abs(r) < max(2.5 * r[keep].std(), 2)
+        if keep.sum() < 2: keep = np.abs(r) < max(2.5 * r.std(), 2); break    # don't let the trim collapse the fit
     l['foul'] = c; l['foul_res'] = float(r[keep].std()); l['foul_n'] = int(keep.sum())
 
 def lane_x(l, y): return np.polyval(l['left'], y), np.polyval(l['right'], y)
