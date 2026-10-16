@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.6  
-Last Updated: 2026-10-15  
+Version: 1.7  
+Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.5
+Supersedes: v1.6
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -197,6 +197,13 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Why:** Same principle as DEC-026 for pins — a confident wrong number is worse than "couldn't read it." Three live-session shots (IMG_8810/8812/8817) all reported exactly ~672 vs Ruby's ~400; shipping that as a reading would corrupt rev consistency and any advice built on it.  
 **Date:** 2026-10-15  
 **Status:** ACCEPTED  
+**Supersedes:** —
+
+### DEC-028 — In-app capture defaults to the highest supported frame rate; metrics report capture-adaptive precision
+**Decision:** When the live app records a throw, it captures at the highest frame rate the phone supports, targeting 120 fps (falling back to 60, then the DEC-023 minimum of 30). Every metric's reported precision is **derived from the actual capture** — frame rate, camera motion, how much of the shot was tracked — not a fixed figure. Rev rate is the first instance: its uncertainty band is the frame-lag quantum `rev² / (60·fps)`, so it reports ~±40 rpm at 60 fps, ~±20 at 120, ~±10 at 240, automatically tightening on better video. The same principle extends to axis/PAP (≥120 fps) and to moving-camera/glasses capture (precision widens with camera motion and partial framing).
+**Why:** Users bring varying phones and film from varying positions; the engine must adapt to the video it's given rather than assume one tier. Honest, capture-aware precision keeps a sensor-less reading trustworthy (DEC-002, DEC-026/027) and makes the accuracy of resolution-limited metrics (rev now, axis later) a function of capture quality we can improve by defaulting to slo-mo.
+**Date:** 2026-10-16
+**Status:** ACCEPTED (extends DEC-023 capture tiers)
 **Supersedes:** —
 
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*

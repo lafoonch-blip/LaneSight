@@ -1,7 +1,7 @@
 # Sensor vs Video Metrics (Ruby reference)
 Status: DRAFT
-Version: 1.2
-Last Updated: 2026-10-15
+Version: 1.3
+Last Updated: 2026-10-16
 Owner: Shayne
 Source: 18 Ruby app screenshots (IMG_8787–8804, `~/Documents/Ruby Screenshots`), league session 10/13/2026 (23 shots, ball S2); `lanesight_core/sensors.py`; `01_PRODUCT/METRIC_CAPABILITIES.md`.
 
@@ -26,7 +26,7 @@ Purpose: decide which metrics LaneSight calculates from video alone, which come 
 | Entry board, entry angle | Validated (path reaches pins) | Ruby has none |
 | Launch angle | Estimate | Low confidence so far |
 | Breakpoint **distance** (geometric) | Estimate | Not Ruby's breakpoint (see §2) |
-| Rev rate (video) | Estimate; **unavailable** when the spin period can't be read | Until blind-validated vs Ruby. When the surface pattern has no clear repeat the period search hits the band edge and returns the ceiling (~672 sensor-equiv) — that rail landing is reported unavailable, never the wall value (DEC-027) |
+| Rev rate (video) | Estimate **with a precision band**; **unavailable** when the spin period can't be read | Reports `value ± band`, band = `rev²/(60·fps)` ≈ ±40 rpm at 60 fps, halving at 120 (DEC-028). At 60 fps the whole-frame-lag quantum limits resolution — distinct throws (Ruby 378–444) can collapse to one value, so the band, not the centre, is the honest part. Rail landing → unavailable, never the ceiling (DEC-027). Blind-validate the factor; real gain needs 120 fps |
 | Pins / leave / strike / split | Validated; **unreadable** when the deck can't be seen | Ruby can't see pins. Read from video only; reported unreadable (never guessed) when the bowler blocks the deck or the clip ends too soon — DEC-026 |
 | Power | Estimate | Proposed DEC-024 |
 | Strike %, spare %, pocket %, carry %, game score | Calculated | From pins + order |

@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.4  
-Last Updated: 2026-10-15  
+Version: 2.5  
+Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v2.3 (M1-09/M1-10 notes, Stage 2 robustness ordering); v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v2.4 (M1-09 rev band, M1-14 harness built, M5-05 matching done); v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -50,12 +50,12 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [~] M1-06 Board crossings: laydown, 7 ft dots, arrows (15 ft), 30/40/50 ft, entry. Launch angle and entry angle with confidence (was P0-07)
 - [~] M1-07 Breakpoint: board + distance (geometric), with glare-robust lateral measurement
 - [~] M1-08 Pin reading: before/after pin state, strike/non-strike, leave, with per-pin confidence and occlusion flags (was P0-08). Reads from video only; reports **unreadable** (never a guess) when the deck is blocked or the clip ends before the pins settle — DEC-026 (2026-10-15)
-- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Reports **unavailable** when the period search lands on the band rail (no clear repeat → `60 ÷ period` is the 4–10 Hz ceiling/floor, not a reading) — DEC-027, never the wall value. Blind-validate the sensor-equivalent factor
+- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Reports **unavailable** when the period search lands on the band rail (no clear repeat → `60 ÷ period` is the 4–10 Hz ceiling/floor, not a reading) — DEC-027, never the wall value. Reports a **capture-adaptive precision band** `rev² / (60·fps)` (~±40 rpm at 60 fps, halving at 120) rather than false precision — DEC-028; at 60 fps the whole-frame-lag quantum limits it to ~±40 (confirmed vs Ruby: distinct throws collapse to one value). Real gain needs 120 fps. Blind-validate the sensor-equivalent factor
 - [ ] M1-10 Spin axis: axis rotation + tilt from period-lag surface flow, camera rotation from VP + homography. **Needs paired Ruby axis data as ground truth** — enter tilt/rotation on validation shots now so this can be blind-validated later (see `01_PRODUCT/SENSOR_VS_VIDEO_METRICS.md` §3)
 - [ ] M1-11 PAP: finger/thumb-hole tracking at 240 fps, a marker option, or entered from the profile with drift detection
 - [~] M1-12 Per-metric confidence + explicit unavailable states (was P0-09)
 - [ ] M1-13 Automatic delivery segmentation in long clips (several shots per video)
-- [ ] M1-14 Evaluation harness: labeled clip set → MAE / median / p90 / bias / failure rate per metric (was F-07)
+- [~] M1-14 Evaluation harness: labeled clip set → MAE / median / p90 / bias / failure rate per metric (was F-07). Built 2026-10-16: `examples/eval_session.py` (finish rate + per-metric values via the real `core.analyze_clip` path) + `examples/score_vs_ruby.py` (timestamp match to Ruby + variance). Baseline on the 21-clip live session: finish 57 %, speed MAE 1.11 mph (+1.10 bias), rev resolution-limited. Still to add: median/p90, a locked labeled set
 - [ ] M1-15 Capture Seed Dataset v1: 30–50 shots with Ruby data, a few at 240 fps (was P0-02)
 
 **Gate:** On the locked test set, all of the following hold:
@@ -117,7 +117,7 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 - [~] M5-02 Arsenal: BallModel catalog → UserBall → versioned BallConfiguration (layout, pin/PSA, PAP used, weight) → surface and maintenance events (schema) (was P2-02/03/04)
 - [~] M5-03 Ball per shot and per session; per-ball performance and reaction shape
 - [~] M5-04 Oil pattern library: name, length, volume, ratio, source, selectable at session start (schema; seed data still to do)
-- [~] M5-05 `SensorAdapter` + shot matching by timestamp; per-metric LaneSight vs sensor variance per shot and summary (variance done; adapter + matching still to do) (was P0-10, P2-06; DEC-021)
+- [~] M5-05 `SensorAdapter` + shot matching by timestamp; per-metric LaneSight vs sensor variance per shot and summary (variance done; **timestamp matching done 2026-10-16** via QuickTime creation time + set-up delay in `examples/score_vs_ruby.py`, gaps left unmatched; in-runner `SensorAdapter` ingest still to do) (was P0-10, P2-06; DEC-021)
 - [~] M5-06 Measurement provenance everywhere: source, confidence, algorithm version (was P2-07)
 
 ## Stage 6 — Virtual replay payload  (S–M)
