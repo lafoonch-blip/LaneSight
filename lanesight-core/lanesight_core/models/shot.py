@@ -17,11 +17,13 @@ class Measurement:
     source: str = 'lanesight_video'      # lanesight_video | sensor:<vendor> | scoring:<system> | manual
     algorithm_version: str = ALGO_VERSION
     note: str | None = None
+    uncertainty: float | None = None     # ± in `unit`: the honest resolution band (e.g. rev's frame-lag quantum)
 
-def m(metric, value, unit, conf, note=None, min_conf=0.5, status=None, source='lanesight_video'):
+def m(metric, value, unit, conf, note=None, min_conf=0.5, status=None, source='lanesight_video', uncertainty=None):
     if value is None: return Measurement(metric, None, unit, 0.0, 'unavailable', source, note=note)
     st = status or ('ok' if conf >= min_conf else 'low_confidence')
-    return Measurement(metric, round(float(value), 3), unit, round(float(conf), 2), st, source, note=note)
+    unc = None if uncertainty is None else round(float(uncertainty), 3)
+    return Measurement(metric, round(float(value), 3), unit, round(float(conf), 2), st, source, note=note, uncertainty=unc)
 
 @dataclass
 class ShotRecord:

@@ -645,17 +645,18 @@ function renderMetricsGrid(c) {
   const defs=[['Speed','ball_speed','MPH',1],['Rev Rate','rev_rate','RPM',0],['Launch Angle','launch_angle','°',1],['Entry Angle','entry_angle','°',1],['Break Point','breakpoint_board','Boards',1],['Entry Board','entry_board','Boards',1],['Pocket Speed','speed_late','MPH',1],['Power','power','/100',0]];
   const avgs=(S.stats||{}).averages||{};
   const cells=defs.map(([label,key,unit,dec])=>{
-    let val,status,why;
+    let val,status,why,unc=null;
     if(key==='power'){ const p=c.power||{}; val=p.value; status='best_effort'; why=p.why||'Impact energy at pocket speed. Not a carry score.'; }
-    else { const m=metricByKey(c,key); val=m?m.value:null; status=m?m.status:'unavailable'; why=m?m.why:''; }
+    else { const m=metricByKey(c,key); val=m?m.value:null; status=m?m.status:'unavailable'; why=m?m.why:''; unc=m?m.uncertainty:null; }
     const [b,bc]=badgeFor(status), disp=val==null?'—':(dec?val.toFixed(dec):Math.round(val));
+    const band=(val!=null&&unc)?`<span style="font-size:11px;color:#9AA8BC;font-weight:500"> ±${dec?unc.toFixed(dec):Math.round(unc)}</span>`:'';
     // delta vs session average (good=green when toward the better direction isn't known, so stay neutral on color: up/down arrow only)
     let delta='';
     const ak=AVG[key], st=avgs[ak];
     if(val!=null && st && st.n>1){ const d=val-st.mean; if(Math.abs(d)>=(dec?0.05:0.5)){ const up=d>0; delta=`<div style="font-size:10px;color:#8592A6;margin-top:1px">${up?'↑':'↓'} ${Math.abs(d).toFixed(dec||0)} vs avg</div>`; } }
     return `<div title="${esc(why)}" style="background:#0B1322;border:1px solid #1E2C45;border-radius:7px;padding:6px 8px">
       <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#C9D3E2">${label}</span><span class="b ${bc}">${b}</span></div>
-      <div class="num" style="font-size:19px;font-weight:600">${disp}<span style="font-size:11px;color:#9AA8BC;font-weight:500"> ${val==null?'':esc(unit)}</span></div>${delta}</div>`;
+      <div class="num" style="font-size:19px;font-weight:600">${disp}<span style="font-size:11px;color:#9AA8BC;font-weight:500"> ${val==null?'':esc(unit)}</span>${band}</div>${delta}</div>`;
   }).join('');
   return `<div class="sub" style="padding:10px"><h3 style="font-size:14px;font-weight:600;margin-bottom:8px">Shot Metrics</h3>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px">${cells}</div></div>`;

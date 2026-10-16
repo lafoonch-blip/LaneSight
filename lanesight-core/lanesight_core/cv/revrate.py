@@ -38,5 +38,12 @@ def rev_rate(crops, fmin=4.0, fmax=10.0):
     # (shortest or longest period) and 60/P is the ceiling (or floor) value, not a measurement. Flag it so the
     # caller reports the rev rate unavailable instead of a confident wrong number (DEC-026).
     at_rail = ai < 3 or ai > len(score) - 4
-    P = periods[ai]
-    return 60.0 / P, dict(lags=lags * dt, ac=ac, periods=periods, score=score, argmax=ai, at_rail=at_rail)
+    P = periods[ai]; rev = 60.0 / P
+    # Honest resolution: the appearance autocorrelation only resolves whole-frame lags, so the period is known to
+    # ~one frame step. The rev gap between adjacent lags is sigma = rev^2 * dt / 60 (= 60 / (L^2 * dt), L = P/dt
+    # frames per rev). This scales with capture: it halves at 120 fps, quarters at 240 — so the metric reports a
+    # tighter band automatically on better video. n_rev (revolutions observed) is returned for future weighting.
+    sigma = rev * rev * dt / 60.0
+    span = float(t[-1] - t[0]); n_rev = span / P if P > 0 else 0.0
+    return rev, dict(lags=lags * dt, ac=ac, periods=periods, score=score, argmax=ai, at_rail=at_rail,
+                     sigma=sigma, fps=1.0 / dt, n_rev=n_rev)

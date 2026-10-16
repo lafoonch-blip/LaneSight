@@ -64,11 +64,17 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # rev rate
     big = [c for c in ground if c['D'] > 32 and c['t'] <= t_imp]
     rpm, rconf, rev_note = None, 0.0, 'surface-pattern periodicity'
+    rev_sigma, rev_fps = None, None                 # honest resolution band (lane rpm) + capture fps
     if len(big) >= 24:
         rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
         sc = np.sort(info['score']); rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1))
         if info['at_rail']:          # no clear spin period found; 60/P is the search-band edge, not a reading
             rpm, rconf, rev_note = None, 0.0, "couldn't read the ball's spin pattern (no clear repeat)"
+        else:
+            rev_sigma, rev_fps = info['sigma'], info['fps']
+            rel = rev_sigma / rpm                   # false precision is dishonest: temper confidence by the band width
+            rconf = float(rconf * np.clip(1 - rel / 0.15, 0.25, 1.0))
+            rev_note = f'surface-pattern periodicity; ±{rev_sigma:.0f} rpm, frame-lag limited at {rev_fps:.0f} fps (120 fps ~halves it)'
     else:
         rev_note = f'too few ball frames to read spin ({len(big)}<24)'
     # confidences
@@ -86,10 +92,11 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('breakpoint_distance', M['breakpoint_extreme_ft'], 'ft', 0.5 * lat_c, 'geometric breakpoint (DEC-022)'),
         m('entry_board', M['entry_board'], 'board', lat_c), m('entry_angle', M['entry_angle_deg'], 'deg', 0.7 * lat_c),
         m('entry_angle_52_55', M.get('entry_angle_52_55_deg'), 'deg', 0.7 * lat_c, 'Specto-compatible: direction between 52 and 55 ft'),
-        m('rev_rate_lane', rpm, 'rpm', rconf, rev_note),
+        m('rev_rate_lane', rpm, 'rpm', rconf, rev_note, uncertainty=rev_sigma),
         m('rev_rate', rpm * REV_SENSOR_FACTOR if rpm else None, 'rpm', rconf * 0.7,
-          f'sensor-equivalent ×{REV_SENSOR_FACTOR}' if rpm else rev_note,
-          status='calibrated_estimate' if rpm else None),
+          f'sensor-equivalent ×{REV_SENSOR_FACTOR}; ±{rev_sigma * REV_SENSOR_FACTOR:.0f} rpm at {rev_fps:.0f} fps' if rpm else rev_note,
+          status='calibrated_estimate' if rpm else None,
+          uncertainty=rev_sigma * REV_SENSOR_FACTOR if rev_sigma is not None else None),
         m('axis_rotation', None, 'deg', 0, 'not yet measured from video'), m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
         m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)'),
     ]

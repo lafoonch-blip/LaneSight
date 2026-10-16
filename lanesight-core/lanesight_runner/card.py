@@ -81,8 +81,10 @@ def metrics(rec, status):
             s, why = 'best_effort', f"low confidence on this shot ({m.get('confidence')})"
         if m.get('status') == 'calibrated_estimate' and s == 'guaranteed':
             s = 'best_effort'
+        unc = m.get('uncertainty')
         out.append(dict(key=key, label=label, unit=unit, dec=dec, value=round(val, dec) if dec else round(val), status=s,
-                        confidence=m.get('confidence'), why=why or (m.get('note') or '')))
+                        confidence=m.get('confidence'), uncertainty=round(unc, dec) if (unc and dec) else (round(unc) if unc else None),
+                        why=why or (m.get('note') or '')))
     return out
 
 def sensor_variance(rec, sensor):
