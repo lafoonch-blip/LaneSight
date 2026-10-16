@@ -1,6 +1,6 @@
 # Sensor vs Video Metrics (Ruby reference)
 Status: DRAFT
-Version: 1.1
+Version: 1.2
 Last Updated: 2026-10-15
 Owner: Shayne
 Source: 18 Ruby app screenshots (IMG_8787–8804, `~/Documents/Ruby Screenshots`), league session 10/13/2026 (23 shots, ball S2); `lanesight_core/sensors.py`; `01_PRODUCT/METRIC_CAPABILITIES.md`.
@@ -26,7 +26,7 @@ Purpose: decide which metrics LaneSight calculates from video alone, which come 
 | Entry board, entry angle | Validated (path reaches pins) | Ruby has none |
 | Launch angle | Estimate | Low confidence so far |
 | Breakpoint **distance** (geometric) | Estimate | Not Ruby's breakpoint (see §2) |
-| Rev rate (video) | Estimate | Until blind-validated vs Ruby |
+| Rev rate (video) | Estimate; **unavailable** when the spin period can't be read | Until blind-validated vs Ruby. When the surface pattern has no clear repeat the period search hits the band edge and returns the ceiling (~672 sensor-equiv) — that rail landing is reported unavailable, never the wall value (DEC-027) |
 | Pins / leave / strike / split | Validated; **unreadable** when the deck can't be seen | Ruby can't see pins. Read from video only; reported unreadable (never guessed) when the bowler blocks the deck or the clip ends too soon — DEC-026 |
 | Power | Estimate | Proposed DEC-024 |
 | Strike %, spare %, pocket %, carry %, game score | Calculated | From pins + order |
@@ -49,6 +49,15 @@ Purpose: decide which metrics LaneSight calculates from video alone, which come 
 | Metric | Could video do it later? |
 |---|---|
 | Axis tilt, axis rotation | Possibly with 120–240 fps (planned, M1-10/11) |
+
+### Why enter axis tilt + rotation (worth the manual typing)
+Video gives LaneSight **what the ball did** — boards, breakpoint, entry angle, speed. Axis tilt (roller ↔ spinner) and axis rotation (forward-roll ↔ side-roll) are **why it did it**, and that is what makes a recommendation correct:
+- **Separates the lane from the release.** Two shots with identical speed and rev can read completely differently down-lane if the axis differs. Without axis, when the breakpoint moves the adjustment engine (M4-03/05) can't tell "you changed your hand" from "the lane transitioned" — the difference between a feet move and no move.
+- **Makes rev rate actionable.** 400 rpm at 60° rotation hooks nothing like 400 at 20°; axis is the context that turns the rev number into advice (hand-position change vs. ball/surface change).
+- **A directly coachable consistency metric.** Axis SD across a session isolates release repeatability — Ruby's usual "biggest lever" — which path data alone can't separate from lane effects.
+- **Ground truth for M1-10.** The planned video-based axis estimate (period-lag surface flow at 120–240 fps) can't be blind-validated without paired Ruby axis data. Entering tilt/rotation on validation shots now builds that labeled set.
+
+Cost: manual entry, labeled "Ruby," one more field per shot. Worth it on calibration shots and when diagnosing a release problem; skip it on casual shots.
 | PAP (over/up) | Possibly at 240 fps (finger-hole tracking) or from your layout entry |
 | Skid / hook / roll lengths (Ball Phases) | No: needs spin vs speed. Video's geometric turn point is a different thing |
 | Setup time | Only with bowler tracking (scoped out; possible tripod-only extra) |

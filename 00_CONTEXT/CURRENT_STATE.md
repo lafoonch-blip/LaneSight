@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.8  
+Version: 1.9  
 Last Updated: 2026-10-15  
 Owner: Shayne  
-Supersedes: v1.7
+Supersedes: v1.8
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -15,7 +15,7 @@ Supersedes: v1.7
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after.
 
 ## Where things stand
-- `lanesight-core` in `lanesight-core/` (50 tests passing, re-run 2026-10-15):
+- `lanesight-core` in `lanesight-core/` (54 tests passing, re-run 2026-10-15):
   - automatic video pipeline: tripod + handheld, pin reading, rev rate
   - scoring/stats, insights/adjustments, spare targeting
   - Postgres schema
@@ -25,6 +25,7 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
 - **Runner v2 UI rebuilt (2026-10-15, `03_ENGINEERING/runner_v2/RUNNER_V2_SPEC.md`):** single-page dashboard (all panels full-width, no tabs) — Latest Shot (clip/lane view + oil toggle + board/arrow guides, Shot Metrics with vs-avg deltas, split What-went-well / What-to-watch analysis), Session Overview (5 KPIs, metrics chart, accuracy/consistency rings, shot-distribution scatter), Shots list, Lane Transition (status + trend rows). Full **Ruby sensor integration**: per-shot entry (axis tilt/rotation, PAP over/up, setup + pushaway/backswing/downswing/release timing, swing height; "Copy last shot") shown in the Rotation panel with an axis diagram and approach-breakdown bars, all labeled "Ruby" (see `01_PRODUCT/SENSOR_VS_VIDEO_METRICS.md`).
 - **CV accuracy hardening (2026-10-15):** pale / low-contrast lanes now detect via a dark gutter-edge fallback; impact time is fixed to when the ball reaches the pins (its farthest tracked point), correcting an inflated distance scale; the post-shot trim tail was lengthened so pins settle in view, **decoupled** from the stabiliser so it never perturbs the shot metrics; and crash guards were added for off-frame foul lines and sparse tracks.
 - **Pin reading is video-only and honest (DEC-026):** when the deck is blocked (bowler steps in) or the clip ends before the pins settle, the result is reported **unreadable** with a reason and excluded from strike/open/carry stats — never a guessed strike. Fix pins to record the real result.
+- **Rev rate is honest too (DEC-027):** when the ball's surface pattern has no clear repeat, the period search hits the edge of its 4–10 Hz band and `60 ÷ period` returns the band ceiling (~672 sensor-equivalent) — a wall value, not a reading. That rail landing is now detected and rev rate reported **unavailable** with a reason instead of the ceiling. Fixed the three live-session shots that read ~672 vs Ruby ~400; the correct interior reads (404/448/350) are unchanged.
 - **First live lane session held 2026-10-15** (practice, ball + Ruby S2, ~21 shots recorded, 14 analyzed). Next: Ruby↔video shot matching by timestamp (M5-05), continued accuracy on marginal / off-angle clips, and staged results (fast metrics first).
 - Validated against Ruby on 4 shots (pre-session baseline):
   - Speed is within 0.5% on 3 of 4 shots.

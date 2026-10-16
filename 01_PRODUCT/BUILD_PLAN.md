@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.3  
+Version: 2.4  
 Last Updated: 2026-10-15  
 Owner: Shayne  
-Supersedes: v2.2 (status update only); v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v2.3 (M1-09/M1-10 notes, Stage 2 robustness ordering); v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -27,7 +27,7 @@ Size: S = days · M = 1–3 weeks · L = 1–2 months
 ---
 
 ## Status (2026-10-14)
-`lanesight-core` v0.5.0 is a Python package with 17 passing tests:
+`lanesight-core` v0.5.0 is a Python package with 54 passing tests:
 - **Stage 1:** automatic video pipeline for tripod and handheld video, including pin reading (4 of 4 correct) and rev rate.
 - **Stage 3:** scoring and LaneTalk-parity stats.
 - **Stage 4:** insights, adjustments, spare targeting and transition.
@@ -50,8 +50,8 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [~] M1-06 Board crossings: laydown, 7 ft dots, arrows (15 ft), 30/40/50 ft, entry. Launch angle and entry angle with confidence (was P0-07)
 - [~] M1-07 Breakpoint: board + distance (geometric), with glare-robust lateral measurement
 - [~] M1-08 Pin reading: before/after pin state, strike/non-strike, leave, with per-pin confidence and occlusion flags (was P0-08). Reads from video only; reports **unreadable** (never a guess) when the deck is blocked or the clip ends before the pins settle — DEC-026 (2026-10-15)
-- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Blind-validate the sensor-equivalent factor
-- [ ] M1-10 Spin axis: axis rotation + tilt from period-lag surface flow, camera rotation from VP + homography
+- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Reports **unavailable** when the period search lands on the band rail (no clear repeat → `60 ÷ period` is the 4–10 Hz ceiling/floor, not a reading) — DEC-027, never the wall value. Blind-validate the sensor-equivalent factor
+- [ ] M1-10 Spin axis: axis rotation + tilt from period-lag surface flow, camera rotation from VP + homography. **Needs paired Ruby axis data as ground truth** — enter tilt/rotation on validation shots now so this can be blind-validated later (see `01_PRODUCT/SENSOR_VS_VIDEO_METRICS.md` §3)
 - [ ] M1-11 PAP: finger/thumb-hole tracking at 240 fps, a marker option, or entered from the profile with drift detection
 - [~] M1-12 Per-metric confidence + explicit unavailable states (was P0-09)
 - [ ] M1-13 Automatic delivery segmentation in long clips (several shots per video)
@@ -73,6 +73,14 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [ ] M2-03 Rolling-shutter and motion-blur handling; frame quality scoring
 - [ ] M2-04 First-person capture: release is visible but the bowler isn't; handle the foul line at the bottom edge and lane partly out of frame
 - [ ] M2-05 Eval: the same shots filmed tripod + handheld + head-mounted, with per-metric degradation report (was P8-03/04/05)
+
+**Robustness design for shaky / far / occluded POV (Meta glasses end goal).** The current single-reference-frame + background-median stabiliser assumes a near-fixed camera; it holds for tripod (8 px) and mild handheld (380 px) but breaks on a walking/head-turning POV, and lane detection fails when too little lane is in frame (the "1.0% wood" failures on far-back live-session clips). The ordered unlocks, hardest-impact first:
+1. **IMU + chained registration (M2-02)** — register frame-to-frame with optical flow and fuse the glasses' gyro/accel so measurement coasts through motion blur and brief occlusion where pixels alone fail; re-anchor periodically to lane landmarks (foul line, arrows, gutter edges) to kill drift.
+2. **Persistent lane world-model** — once the geometry is seen, hold it and track the *camera pose* against it, so "board 10 at 40 ft" stays known even when the ball is blocked or the lane is partly out of frame (ties into M2-04).
+3. **Frame quality scoring (M2-03)** — score blur / exposure / lane-visibility and drop or downweight bad frames, so a shaky clip degrades to "80 good frames of 120" instead of a hard failure, and metric confidence honestly reflects the clean data behind it.
+4. **Physics-constrained trajectory with explicit gap infill** — a rolling ball's path is smooth with monotonic late curvature; fit that model to the visible arcs and interpolate through occlusion gaps, but **only report an interpolated metric when the visible track brackets it** (extends the existing `far['t']` impact and masking-band pin-occlusion gates). Never fabricate across an un-bracketed gap — report unavailable, per DEC-026/027.
+
+Through-line: robustness means degrading gracefully with calibrated confidence, never a guess. A glasses clip will legitimately yield more `unavailable` states than a tripod; that is correct behaviour and the runner UI already handles it. **Blocker:** none of this can be tuned or validated without a paired tripod + handheld + glasses capture (M2-05) — the same dependency shape as the Seed Dataset.
 
 **Gate:** Moving-camera metrics stay within 1.5× the fixed-camera error on the eval set.
 
