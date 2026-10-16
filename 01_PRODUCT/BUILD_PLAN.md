@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.5  
+Version: 2.6  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v2.4 (M1-09 rev band, M1-14 harness built, M5-05 matching done); v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -126,13 +126,15 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 - [~] M6-03 Server-side replay rendering (image done; video still to do) for sharing
 
 ## Stage 7 — UI  (L) — starts after the Stage 1–6 gates
-- [ ] U-01 Flows + mockups (was B-03); brand per DEC-016
+*Native SwiftUI in Xcode, iOS-first (DEC-029). Xcode project in the repo next to `lanesight-core`. Figma Dev Mode feeds frames + tokens; colors → DEC-016 palette as SwiftUI color assets. SwiftUI models are Codable mirrors of the `ShotRecord` contract (schema v1).*
+- [ ] U-01 Flows + mockups (was B-03; Figma in progress 2026-10); brand per DEC-016
 - [ ] U-02 iOS app per UI Spec §3–4: Home, Session Setup, Live, Shot Details, Lane Transition, Statistics, History, Settings/Arsenal (was P1-01..P1-11)
 - [ ] U-03 Audio feedback (Audio Coach) (was P3-07)
+- [ ] U-04 AVFoundation capture: locked 60 fps + 240 fps slo-mo, **real per-frame timestamps** (not a nominal fps tag), in-app recording per DEC-028/029; upload client to the CV service
 
 ## Stage 8 — Cloud + instant at-lane analysis  (M–L)
 - [ ] C-01 Supabase (auth, Postgres, storage); apply `models/schema.sql` (was F-04)
-- [ ] C-02 FastAPI CV service + job queue; GPU when needed; API per UI Spec §13 (was F-05)
+- [ ] C-02 FastAPI CV service + job queue; GPU when needed; API per UI Spec §13 (was F-05). Analysis entry = `core.analyze_clip` (the DB-free path the runner + eval harness share); Mac first, then cloud (DEC-029). On-device Core ML/Vision is a later latency optimization, not v1
 - [ ] C-03 Latency: ≤10 s cloud and ≤5 s edge after pin impact (UI Spec §10); on-device vs cloud split decided as a DEC (was F-03). The current pipeline runs well over this and must be optimized.
 - [ ] C-04 Offline capture queue; signed uploads; privacy retention controls
 - [ ] C-05 Multi-user accounts, realtime `shot.analysis.completed`

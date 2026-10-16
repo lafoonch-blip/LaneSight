@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.10  
+Version: 1.11  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.9
+Supersedes: v1.10
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -12,7 +12,7 @@ Supersedes: v1.9
 - The September 2026 local docs are archived in `99_ARCHIVE/2026-09-27_local_folder/`. Historical only.
 
 ## Building now
-The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after.
+The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne). The back-end accuracy/robustness work continues in parallel.
 
 ## Where things stand
 - `lanesight-core` in `lanesight-core/` (54 tests passing, re-run 2026-10-15):

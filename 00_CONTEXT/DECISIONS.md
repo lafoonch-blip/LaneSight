@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.7  
+Version: 1.8  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.6
+Supersedes: v1.7
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -204,6 +204,13 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Why:** Users bring varying phones and film from varying positions; the engine must adapt to the video it's given rather than assume one tier. Honest, capture-aware precision keeps a sensor-less reading trustworthy (DEC-002, DEC-026/027) and makes the accuracy of resolution-limited metrics (rev now, axis later) a function of capture quality we can improve by defaulting to slo-mo.
 **Date:** 2026-10-16
 **Status:** ACCEPTED (extends DEC-023 capture tiers)
+**Supersedes:** —
+
+### DEC-029 — The app is native SwiftUI; capture via AVFoundation; backend FastAPI + Supabase
+**Decision:** The LaneSight app is built **native SwiftUI in Xcode** (iOS-first). Camera capture uses **AVFoundation** with locked 60 fps, 240 fps slo-mo, and **real per-frame timestamps** (presentation timestamps, not a nominal fps tag) — the capture requirement that makes the metrics and their capture-adaptive precision (DEC-028) trustworthy. The app is first a **capture + upload client** to the **FastAPI** CV service (on the Mac at first, then cloud) and persists through **Supabase** (Swift SDK); on-device CV via **Core ML / Vision** may follow later as a latency optimization, not v1. The Xcode project lives in the repo next to `lanesight-core` (monorepo). Figma Dev Mode / connector feeds frames and tokens; colors map to the DEC-016 palette as SwiftUI color assets. Distribution: free provisioning for solo-device dev (7-day expiry) → **TestFlight** (Apple Developer Program, $99/yr) for persistent builds and beta bowlers.
+**Why:** LaneSight is iOS-first and its core is precise camera capture (fps lock, slo-mo, frame timestamps); native AVFoundation gives direct control without a cross-platform bridge. The **`ShotRecord` JSON contract (schema v1, `SCHEMA_VERSION`) is the app↔service seam** and stays versioned so the app and the CV service evolve independently. The service reuses `core.analyze_clip` as its analysis entry; today's `lanesight_runner` is a dev dashboard, not the app API.
+**Date:** 2026-10-16
+**Status:** ACCEPTED (realizes Stage 7 UI + Stage 8 cloud; capture per DEC-028, brand per DEC-016)
 **Supersedes:** —
 
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
