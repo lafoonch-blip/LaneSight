@@ -14,6 +14,70 @@ def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=Non
     rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s)
     return json.loads(json.dumps(rec.to_dict(), default=_json_default))
 
+
+def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer, check_decoder=False):
+    """One analysis attempt: trim to the shot window (speed-up; see trim.py), convert HDR->SDR if needed,
+    then run `analyzer`. Trimming is best-effort; a window/trim failure falls back to the whole clip. Pipeline
+    errors propagate so the caller can retry whole-clip (the window may have cut the shot). The pin-settle tail
+    is excluded from the stabiliser (core_end_s) only when the clip was trimmed with a detected burst, and
+    core_end_s / timing_video are passed only when they apply, so a minimal analyzer signature still works."""
+    analysis_src = src
+    if use_window:
+        try:
+            t = time.time(); t0w, t1w, win = detect_window(src, log=log)
+            timings['window_s'] = round(time.time() - t, 2); p['window'] = win
+            if t0w is not None:
+                trimmed = out_prefix + '_trim.mov'; trim_clip(src, trimmed, t0w, t1w)
+                analysis_src = trimmed; win['trimmed'] = True; win['trim_file'] = trimmed
+                log(f"trimmed {win['dur']}s clip to {win['window']} (burst {win.get('burst')})")
+            else:
+                log(f"no trim ({win.get('reason')})")
+        except Exception as e:
+            log(f"windowing skipped: {e}")
+    timing_src = analysis_src; video = analysis_src
+    if p.get('hdr'):
+        t = time.time(); video = os.path.splitext(analysis_src)[0] + '_sdr.mov'
+        conv = convert_sdr(analysis_src, video); p['sdr_conversion'] = conv
+        p['decoded_frames'] = probe(video, check_decoder=check_decoder).get('decoded_frames')
+        timings['convert_s'] = round(time.time() - t, 2)
+        log(f"HDR -> SDR in {timings['convert_s']}s ({conv['method']}, {conv['frames']} frames; times from the original)")
+    # the browser-playable artifact: SDR 8-bit for HDR clips, else the trimmed clip itself
+    if (p.get('window') or {}).get('trimmed'): p['window']['analyzed_file'] = video
+    t = time.time()
+    # cache prefix follows the analyzed file, so an SDR/trimmed copy never reuses a cache built from other frames
+    kw = dict(timing_video=timing_src) if video != timing_src else {}
+    win = p.get('window') or {}
+    if win.get('trimmed') and win.get('burst'):   # exclude the pin-settle tail from the stabiliser (metric stability)
+        kw['core_end_s'] = round(win['burst'][1] - win['window'][0] + METRIC_TAIL_S, 2)
+    rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
+    timings['analyze_s'] = round(time.time() - t, 2)
+    return rec
+
+
+def analyze_clip(src, out_prefix, handed=None, analyzer=None, check_decoder=False, log=print, p=None, timings=None):
+    """DB-free at-lane analysis for one clip, the same path the runner worker uses: probe -> windowed attempt
+    -> retry whole-clip when a wider window could help (not for content failures that look the same whole).
+    Returns (rec, probe_dict, timings). Raises ClipError / RuntimeError on failure. Reusable by the eval harness
+    so the pipeline is scored exactly as it runs in production."""
+    analyzer = analyzer or default_analyzer
+    timings = {} if timings is None else timings
+    if p is None:
+        t = time.time(); p = probe(src, check_decoder=check_decoder); timings['probe_s'] = round(time.time() - t, 2)
+    try:
+        rec = analyze_once(src, out_prefix, p, handed, log, timings, True, analyzer, check_decoder)
+    except (ClipError, RuntimeError) as e:
+        # Content/framing failures (the lane or the ball itself) look the same on the full clip, so a retry just
+        # re-pays the HDR conversion to fail again. Retry only errors a wider window could fix (e.g. the trim cut
+        # the ball's release so the track was too short).
+        content = str(e).startswith('lane not detected') or 'ball not tracked to the pins' in str(e)
+        if (p.get('window') or {}).get('trimmed') and not content:
+            log(f"windowed analysis failed ({e}); retrying on the full clip")
+            timings['windowed_error'] = str(e)
+            rec = analyze_once(src, out_prefix, p, handed, log, timings, False, analyzer, check_decoder)
+        else:
+            raise
+    return rec, p, timings
+
 class Speaker:
     def __init__(self, enabled=True):
         self.cmd = shutil.which('say'); self.enabled = enabled and self.cmd is not None
@@ -116,40 +180,8 @@ class Runner:
             except Exception: traceback.print_exc()
 
     def _analyze(self, src, out_prefix, p, handed, log, timings, use_window):
-        """Trim to the shot window (speed-up; see trim.py), convert HDR->SDR if needed, then run the pipeline.
-        Trimming is best-effort: any failure to detect/trim falls back to the whole clip. Analysis errors are
-        raised so process() can retry on the full clip (the window may have cut the shot)."""
-        analysis_src = src
-        if use_window:
-            try:
-                t = time.time(); t0w, t1w, win = detect_window(src, log=log)
-                timings['window_s'] = round(time.time() - t, 2); p['window'] = win
-                if t0w is not None:
-                    trimmed = out_prefix + '_trim.mov'; trim_clip(src, trimmed, t0w, t1w)
-                    analysis_src = trimmed; win['trimmed'] = True; win['trim_file'] = trimmed
-                    log(f"trimmed {win['dur']}s clip to {win['window']} (burst {win.get('burst')})")
-                else:
-                    log(f"no trim ({win.get('reason')})")
-            except Exception as e:
-                log(f"windowing skipped: {e}")
-        timing_src = analysis_src; video = analysis_src
-        if p.get('hdr'):
-            t = time.time(); video = os.path.splitext(analysis_src)[0] + '_sdr.mov'
-            conv = convert_sdr(analysis_src, video); p['sdr_conversion'] = conv
-            p['decoded_frames'] = probe(video, check_decoder=self.check_decoder).get('decoded_frames')
-            timings['convert_s'] = round(time.time() - t, 2)
-            log(f"HDR -> SDR in {timings['convert_s']}s ({conv['method']}, {conv['frames']} frames; times from the original)")
-        # the browser-playable artifact: SDR 8-bit for HDR clips, else the trimmed clip itself
-        if (p.get('window') or {}).get('trimmed'): p['window']['analyzed_file'] = video
-        t = time.time()
-        # cache prefix follows the analyzed file, so an SDR/trimmed copy never reuses a cache built from other frames
-        kw = dict(timing_video=timing_src) if video != timing_src else {}
-        win = p.get('window') or {}
-        if win.get('trimmed') and win.get('burst'):   # exclude the pin-settle tail from the stabiliser (metric stability)
-            kw['core_end_s'] = round(win['burst'][1] - win['window'][0] + METRIC_TAIL_S, 2)
-        rec = self.analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
-        timings['analyze_s'] = round(time.time() - t, 2)
-        return rec
+        """Thin wrapper over the module-level analyze_once (shared with the eval harness)."""
+        return analyze_once(src, out_prefix, p, handed, log, timings, use_window, self.analyzer, self.check_decoder)
 
     def _keep_only_trimmed(self, clip_path, keep_file, out_prefix, log=print):
         """After a successful windowed analysis, keep just the ~8 s shot that was analysed in place of the full
@@ -183,20 +215,9 @@ class Runner:
             timings['probe_s'] = round(time.time() - t, 2)
             log(f"probe: {p['codec']} {p['width']}x{p['height']} {p['measured_fps']} fps{' HDR' if p.get('hdr') else ''}")
             out_prefix = os.path.splitext(shot['clip_path'])[0]
-            try:
-                rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=True)
-            except (ClipError, RuntimeError) as e:
-                # Content/framing failures (the lane or the ball itself) look the same on the full clip, which only
-                # has the same background and ball visibility - retrying there just re-pays the HDR conversion
-                # (~2-3 min) to fail again. Retry only errors a wider window could actually fix (e.g. the trim cut
-                # the ball's release so the track was too short).
-                content = str(e).startswith('lane not detected') or 'ball not tracked to the pins' in str(e)
-                if (p.get('window') or {}).get('trimmed') and not content:
-                    log(f"windowed analysis failed ({e}); retrying on the full clip")
-                    timings['windowed_error'] = str(e)
-                    rec = self._analyze(shot['clip_path'], out_prefix, p, sess.get('handed'), log, timings, use_window=False)
-                else:
-                    raise
+            rec, p, timings = analyze_clip(shot['clip_path'], out_prefix, handed=sess.get('handed'),
+                                           analyzer=self.analyzer, check_decoder=self.check_decoder,
+                                           log=log, p=p, timings=timings)
             self.db.update_shot(sid, probe_json=p)
             rec.setdefault('context', {}).update(session_id=sess['id'], shot_n=shot['n'], ball=shot.get('ball_name'))
             timings['total_s'] = round(time.time() - t0, 2); timings['steps'] = steps
