@@ -215,6 +215,43 @@ def extend_back(B, track, lane, max_frames=20, log=print):
     if out: log(f'extended track back {len(out)} frames to t={out[-1]["t"]:.3f}s (loft/airborne)')
     return out[::-1] + track
 
+def extend_forward(C, track, lane, vp, max_gap=0.3, max_add=40, log=print):
+    """Walk forward from the last linked point through far candidates the strict RANSAC refine dropped. The ball
+    stays detected near the pins (blobs exist), but the small far ball jitters more than 0.35*D after trim-degraded
+    stabilisation, so the linker rejects real detections and the track stops short — inflating speed_avg and
+    truncating entry board/angle. Fit u(t), frac(t) from the track tail, extrapolate frame by frame, and append the
+    nearest candidate within a depth-relaxed gate (u must keep increasing = ball moving away toward the pins)."""
+    if len(track) < 6: return track
+    def fit(pts):
+        tt = np.array([c['t'] for c in pts]);
+        if len(set(tt)) < 2: return None, None
+        uu = np.array([1.0 / max(c['ct'] - vp[1], 1.0) for c in pts]); ff = np.array([c['frac'] for c in pts])
+        return np.polyfit(tt, uu, 1), np.polyfit(tt, ff, 1)
+    pu, pf = fit(track[-8:])
+    if pu is None: return track
+    byt = {}
+    for cs in C:
+        for c in cs:
+            byt.setdefault(round(c['t'], 4), []).append(c)
+    out = list(track); added = 0
+    for tq in sorted(byt):
+        if tq <= out[-1]['t'] + 1e-6: continue
+        if tq - out[-1]['t'] > max_gap or added >= max_add: break
+        upred = float(np.polyval(pu, tq))
+        if upred <= out[-1].get('u', 1.0 / max(out[-1]['ct'] - vp[1], 1.0)): continue    # must move away
+        ctp = vp[1] + 1.0 / max(upred, 1e-6); frp = float(np.polyval(pf, tq)); best = None
+        for c in byt[tq]:
+            if abs(c['frac'] - frp) > 0.12: continue
+            if abs(c['ct'] - ctp) > max(0.6 * c['D'], 8.0): continue
+            d = abs(c['ct'] - ctp)
+            if best is None or d < best[1]: best = (c, d)
+        if best is None: continue
+        c = dict(best[0]); c['u'] = 1.0 / max(c['ct'] - vp[1], 1.0); out.append(c); added += 1
+        r = fit(out[-8:])
+        if r[0] is not None: pu, pf = r
+    if added: log(f'extended track forward {added} pts toward the pins (far-lane recovery)')
+    return out
+
 def touchdown(B, track, max_pts=20):
     """touchdown = first sharp rise in blob height/width after >=2 flat 'round' airborne frames
     (an airborne ball is a separate round blob; on the lane its reflection/shadow joins it)."""

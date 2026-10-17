@@ -4,7 +4,7 @@ from __future__ import annotations
 import os, json, pickle, argparse, numpy as np
 from .stabilize import stabilize
 from .lanes import find_lanes
-from .track import extract_blobs, candidates, link, detect_impact, extend_back, touchdown
+from .track import extract_blobs, candidates, link, detect_impact, extend_back, extend_forward, touchdown
 from .metrics import compute, lane_homography
 from .refine import refine
 from .pins import read_pins
@@ -35,6 +35,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     pickle.dump(dict(G=G, lane=lane, B=B), open(bcache, 'wb'))
     if len(T) < 10: raise RuntimeError('ball track not found')
     T = extend_back(B, T, lane, log=log)
+    T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
     t_imp, _ = detect_impact(video, S, lane, T, log=log)
     if t_imp is None: raise RuntimeError('pin impact not detected')
     ground = [c for c in T if not c.get('airborne_candidate')]
@@ -81,8 +82,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     lat_c = float(np.clip(1 - M['lateral_res_boards'] / 1.5, 0, 1))
     speed_c = 0.9 if M['release_source'] == 'first_free_ball_detection' else 0.6
     meas = [
-        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'release speed over the skid (foul→arrows); what you put on the ball, robust to back-half tracking'),
-        m('speed_avg', M.get('speed_avg_mph'), 'mph', 0.6, 'average over the lane (foul→pins); varies with ball/friction, needs the ball tracked to the pins'),
+        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, '60 ft foul→pins average (Ruby-comparable); ball tracked to the pins via far-lane recovery'),
+        m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)'),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),

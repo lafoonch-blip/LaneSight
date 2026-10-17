@@ -17,7 +17,7 @@ is ingested; this pass measures finish rate, failure modes, timing and the metri
 """
 import argparse, glob, json, os, time
 
-KEY_METRICS = ['ball_speed', 'speed_early', 'speed_late', 'rev_rate', 'rev_rate_lane',
+KEY_METRICS = ['ball_speed', 'speed_release', 'speed_early', 'speed_late', 'rev_rate', 'rev_rate_lane',
                'entry_board', 'entry_angle', 'breakpoint_board', 'breakpoint_distance',
                'laydown_board', 'arrows_board', 'loft', 'launch_angle']
 

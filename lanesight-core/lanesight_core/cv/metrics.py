@@ -101,8 +101,10 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     # half of the track -- so it is immune to back-half fade that otherwise inflates a fixed 60 ft / interval by up
     # to ~12% when the track stops short of the pins (DEC-022r). The 60 ft average (foul->pins) is kept as a
     # secondary metric; it varies with ball/friction and needs the ball tracked to the pins.
-    out['ball_speed_mph'] = mph(early[0])
-    out['speed_avg_mph'] = mph(60.0 / (t_impact - release_t))
+    out['ball_speed_mph'] = mph(60.0 / (t_impact - release_t))     # 60 ft foul->pins average; reliable again now
+    out['speed_release_mph'] = mph(early[0])                       # that far-lane recovery (extend_forward) tracks
+    # the ball to the pins. speed_release is the front-half skid speed: robust when the back half is lost, but it
+    # reads ~9% low from a near-field homography Z-scale residual, to be settled against Specto (DEC-030r).
     # loft: release -> touchdown (blob h/w step), times early-lane speed. 60 fps limits this to about +/-0.45 ft
     if src == 'first_free_ball_detection' and t_touch is not None and t_touch > release_t:
         out['loft_ft'] = float(early[0] * (t_touch - release_t)); out['t_touchdown'] = float(t_touch)
