@@ -1,9 +1,9 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.2  
-Last Updated: 2026-10-14  
+Version: 1.3  
+Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
+Supersedes: v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
 ## 1. What LaneSight is
 LaneSight is the digital platform for bowlers: a hardware-agnostic bowling intelligence system that combines video, optional sensor telemetry, scoring/league records, equipment history and coaching into one persistent Bowler Profile.
@@ -160,7 +160,7 @@ Current color direction:
 These are current concept colors; production accessibility and print values still need finalization.
 
 ## 18. Current stack direction
-- iOS-first mobile experience
+- native SwiftUI iOS app (DEC-029); CV analysis server-side for MVP (DEC-033)
 - web/debug and later admin tooling
 - Python FastAPI / CV services
 - OpenCV + PyTorch
@@ -205,11 +205,11 @@ Use personal bowling video as Seed Dataset v1. Collect controlled fixed-camera s
 - **First sensor:** which device (F5, Witsee, other) and whether its data is accessible via SDK/API/export.
 - **Calibration:** manual tap-to-calibrate vs assisted auto-detect for MVP; acceptance thresholds.
 - **Accuracy reference:** what serves as ground truth before Specto sessions (sensor speed? manual annotation?).
-- **Client platform:** native iOS (Swift) vs cross-platform for v1; where CV runs (on-device vs server) for Shot Analyzer.
 - **Integrations:** whether USBC, LeaguePals, LaneTalk or scoring systems offer any official partner/API path.
 - **Competition rules:** what live Audio Coach use is permitted in sanctioned league play.
 - **Privacy:** retention window for raw video; how non-user footage is purged in League Mode.
 - **Pricing:** free-tier analysis limits; when to test willingness to pay.
+- **Resolved:** client platform (native SwiftUI, DEC-029); where CV runs (server-side for MVP, DEC-033); Accuracy and Consistency definitions (DEC-031/032); capture default (DEC-028); metric launch bar (DEC-034); MVP screen scope (DEC-035).
 
 ## 21. Explicitly superseded framing
 - LaneSight is **not** primarily a Meta smart-glasses app.

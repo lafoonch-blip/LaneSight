@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.9  
+Version: 1.10  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.8
+Supersedes: v1.9
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -175,7 +175,7 @@ Post-MVP: league integration and registration, league management, and USBC membe
 
 **Why:** In a degradation test (4 shots × 60/720, 30/1080, 30/720), timing-based metrics (speed, impact, pins) held at every tier. Far-end geometry (entry, late speed) and loft need 60 fps. A handheld 30 fps clip failed lane detection.  
 **Date:** 2026-10-14  
-**Status:** PROPOSED (awaiting Shayne's decision)  
+**Status:** PROPOSED. The default frame rate is SUPERSEDED by DEC-028 (highest supported, targeting 120 fps). The 30 fps / 720p minimum and the moving-camera ≥60 fps rule remain proposed.  
 **Supersedes:** UI Spec v1 §7 implicit single-tier assumption
 
 ### DEC-025 — GitHub repo is the source of truth for context docs
@@ -220,7 +220,90 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Status:** ACCEPTED (refines DEC-022 Speed; revisit with Specto ground truth)
 **Supersedes:** DEC-022 Speed definition (release vs average split)
 
+### DEC-031 — Accuracy = execution against intent at the arrows and breakpoint
+**Decision:** Accuracy measures how closely the actual shot follows the bowler's intended line. It never uses pinfall or strike results.
+- Arrow error = |actual arrow board − intended arrow board|. Breakpoint error = |actual breakpoint board − intended breakpoint board| (geometric breakpoint, DEC-022).
+- Arrow score = 100 × max(0, 1 − min(arrow error ÷ 5, 1)). Breakpoint score = 100 × max(0, 1 − min(breakpoint error ÷ 8, 1)).
+- **Accuracy = round(0.60 × arrow score + 0.40 × breakpoint score).** Arrows weigh more because breakpoint also depends on lane reaction.
+- On-target indicator: arrows within 1 board, breakpoint within 2 boards. The continuous score still reflects the size of the miss.
+- No intended line recorded → show "—" with "Set a target line to measure accuracy". Never show 0, which would imply a measured, completely inaccurate shot.
+- Low confidence on either input → "Low confidence" or "Unavailable" with the reason; the shot is excluded from the session average.
+- A session average uses only valid, measured shots with known intent.
+
+**Why:** Accuracy is now a primary metric (DEC-035) and needs a reproducible definition that separates execution from lane reaction (DEC-005).  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED. The 5- and 8-board scales and the 60/40 weights are starting parameters, to be validated against annotated shots before release. Display is gated by DEC-034.  
+**Supersedes:** —
+
+### DEC-032 — Consistency = robust spread of repeated shots, independent of intent
+**Decision:** Consistency measures how repeatable the bowler's shots are around their own center, not their distance from the target. A bowler can be very consistent while repeatedly missing.
+- Components and target spread: speed ≤0.5 mph, rev rate ≤30 rpm, actual arrow board ≤1 board, actual breakpoint board ≤2 boards.
+- Spread = robust standard deviation = 1.4826 × median absolute deviation, so one outlier has little effect.
+- Component score = 100 × max(0, 1 − spread ÷ (3 × target)). Overall = equal-weight average of the available components. An unavailable or too-imprecise component is excluded (never treated as zero spread) and the reduced coverage is shown.
+- Window: the 10 most recent comparable shots (same ball configuration and same intended line). Changing ball or intentionally moving the target starts a new segment.
+- Fewer than 5 valid shots → "Building consistency". 5–9 shots → provisional. 10 → normal rolling score.
+- Rev rate is excluded when its capture-adaptive uncertainty (DEC-028) exceeds the 30 rpm target (e.g. ~±40 rpm at 60 fps).
+
+**Why:** Consistency is a primary metric (DEC-035) and must stay independent of Accuracy (DEC-031) so the two tell the bowler different things.  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED (target spreads and weights provisional until validated). Display gated by DEC-034.  
+**Supersedes:** —
+
+### DEC-033 — MVP analysis runs server-side, staged and asynchronous
+**Decision:** Extends DEC-029.
+- **iPhone:** captures with AVFoundation and real frame timestamps (DEC-028), checks framing and capture quality, uploads the shot to the active session, and shows processing status and results as they arrive.
+- **Server:** runs the full CV pipeline via FastAPI (`core.analyze_clip`): tracking, trajectory, metrics, pin reading. Results are stored with source, confidence and algorithm version.
+- **Persistence:** Supabase for auth and structured data; object storage for video; analysis as asynchronous jobs, not one long request.
+- **Staged results:** a fast pass returns the first reliable results, target ≤30 s; deeper metrics (rev rate, loft) follow in the background. The 30 s target is an engineering requirement, not yet demonstrated (the pipeline takes minutes per clip today). Nothing is fabricated to meet it; a metric that isn't ready or can't be measured says so.
+- **Hosting:** the Mac service during development; cloud with queued jobs and controlled scaling for external beta. Benchmark CPU hosting (processing time, upload size, storage) on the validation set before committing to GPU.
+
+**Why:** Keeps the phone a capture client while the CV pipeline is still changing, and makes cost and latency decisions on measured evidence.  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED  
+**Supersedes:** —
+
+### DEC-034 — Metric launch bar
+**Decision:** No public beta advertises a core metric as validated until it passes on the locked validation set (Seed Dataset + Specto where appropriate):
+
+| Requirement | Gate |
+|---|---|
+| Ball speed | ±0.5 mph |
+| Trajectory / board positions | median ≤1 board |
+| Entry board | median ≤1 board |
+| Strike / non-strike | ≥95% on readable decks |
+| Supported clips processed | ≥90% without manual repair |
+| Failures | every unsupported or failed measurement shows an explicit failure or unavailable state |
+
+Report bias and error distributions, not only averages.
+
+**Accuracy and Consistency** are shown as validated only after their inputs pass these gates and the derived score is itself validated. Until then they carry a provisional / Best effort label.
+
+**May ship as Best effort** (always with source, confidence and an honest unavailable state): rev rate with its uncertainty band (validate against Ruby); Power as a labeled estimate (definition pending DEC-024); loft and launch angle where the capture supports them; axis tilt, rotation and PAP from a sensor, video values unavailable until validated. Pin leave only when the deck is readable (DEC-026).
+
+**Current status:** gate not yet passed. The live-session evaluation in CURRENT_STATE reported 57% clip completion and rev rate resolution-limited at 60 fps; speed bias improved after DEC-030 but still needs Specto ground truth.  
+**Why:** The metrics are the product's credibility (DEC-017).  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED  
+**Supersedes:** —
+
+### DEC-035 — MVP app scope and screen set (Figma, 2026-10-16)
+**Decision:**
+- **Practice is the only session type in MVP.** League and Tournament session types, leagues, tournaments, coaching and USBC are hidden (not shown as disabled controls).
+- **Primary metric hierarchy everywhere:** Rev Rate · Speed · Accuracy · Consistency. Active Session's second row: Breakpoint · Strike % · Power · Entry Angle. Game stats (spare %, pocket %, first-ball average…) are secondary.
+- **Per-shot capture:** the bowler taps to record and stop each shot. Continuous capture / League Mode (DEC-014) stays post-MVP.
+- **No Session Summary screen.** Ending a session saves it and returns to the Sessions tab; a completed session opens read-only.
+- **Post-MVP:** shot replay video ("Play Shot Replay") and importing clips from Photos. The static shot view (simulated lane with target vs actual path, key points and the selected oil pattern as a reference) stays in MVP.
+- **Screen inventory:** Figma file "Lanesight – Product UX – Design", page "01 — Home & Foundation": original session screens, MVP · Profile management (P1–P10), MVP · Stats (S1–S4), MVP · Sessions (X1–X2), MVP · Session flow & states (F1–F8), MVP · Empty states & permissions (E1–E5).
+
+**Why:** Locks the reduced MVP agreed during the Figma pass so development and the docs match the screens.  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED  
+**Supersedes:** DEC-019 in part (video replay deferred; session types reduced to Practice); FEATURE_REVIEW §2.7 session types
+
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
 
 ## Superseded decisions
 - DEC-001 — partially superseded by DEC-018 (see entry above).
+- DEC-019 — partially superseded by DEC-035 (video replay deferred; Practice-only sessions).
+- DEC-022 — Speed definition refined by DEC-030.
+- DEC-023 — default frame rate superseded by DEC-028.
