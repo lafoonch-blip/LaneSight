@@ -1,6 +1,6 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.9  
+Version: 3.0  
 Last Updated: 2026-10-16  
 Owner: Shayne  
 Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
@@ -42,7 +42,7 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 
 ## Stage 1 — Back-end metrics engine (fixed camera)  (L)
 *Every shot metric as close to ground truth as video allows, with confidence and "unavailable" states.*
-- [x] M1-01 Auto lane geometry: edges, foul line, vanishing point, pin deck (was P0-04, now automatic)
+- [x] M1-01 Auto lane geometry: edges, foul line, vanishing point, pin deck (was P0-04, now automatic). Works on well-framed tripod clips; the 21-clip finish-rate gap is non-standard framing (far / oblique multi-lane / foul off-frame), each failing honestly. Oblique multi-lane diagnosed: the mask close bridges thin gutters and merges adjacent lanes — fix = multi-lane separation + the app framing gate (DEC-033/035). See CURRENT_STATE
 - [x] M1-02 Ball detection + tracking robust to glare, occlusion and loft (was P0-05/06)
 - [x] M1-03 Release, touchdown and impact event detection
 - [x] M1-04 Speed + speed profile. Headline = **60 ft foul→pins average**, reliable after far-lane track recovery (`extend_forward`, DEC-036); release/skid kept as secondary `speed_release`. Validated vs Ruby (live session): MAE 0.83 (≈0.35 excluding outliers). Residual = a ~9 % near-field homography Z-scale on `speed_release` (needs Specto). **Entry board + angle recovered** by the same fix (serves DEC-031 Accuracy)
@@ -55,7 +55,7 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [ ] M1-11 PAP: finger/thumb-hole tracking at 240 fps, a marker option, or entered from the profile with drift detection
 - [~] M1-12 Per-metric confidence + explicit unavailable states (was P0-09)
 - [ ] M1-13 Automatic delivery segmentation in long clips (several shots per video)
-- [~] M1-14 Evaluation harness: labeled clip set → MAE / median / p90 / bias / failure rate per metric (was F-07). Built 2026-10-16: `examples/eval_session.py` (finish rate + per-metric values via the real `core.analyze_clip` path) + `examples/score_vs_ruby.py` (timestamp match to Ruby + variance). Baseline on the 21-clip live session: finish 57 %, speed MAE 1.11 mph (+1.10 bias), rev resolution-limited. Still to add: median/p90, a locked labeled set
+- [~] M1-14 Evaluation harness: labeled clip set → MAE / median / p90 / bias / failure rate per metric (was F-07). Built 2026-10-16: `examples/eval_session.py` (finish rate + per-metric values via the real `core.analyze_clip` path) + `examples/score_vs_ruby.py` (timestamp match to Ruby + variance). Reports MAE / **median / p90** / bias / within-gate per metric (2026-10-16). Baseline on the 21-clip live session: finish 57 %, speed MAE 0.83 (after far-lane recovery, DEC-036), rev MAE 20 (after phase refinement). Still to add: a locked labeled set
 - [ ] M1-15 Capture Seed Dataset v1: 30–50 shots with Ruby data, a few at 240 fps (was P0-02)
 
 **Gate:** On the locked test set, all of the following hold:

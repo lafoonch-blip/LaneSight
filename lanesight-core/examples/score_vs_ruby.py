@@ -67,8 +67,9 @@ def main():
             d = v - r[ruby_key]; errs.append(abs(d)); bias.append(d)
             print(f"  {n}: video {v:.2f}  ruby {r[ruby_key]}  Δ{d:+.2f}" + ('  <-- off' if abs(d) > 2 * gate else ''))
         if errs:
-            print(f"  MAE={st.mean(errs):.2f}  bias={st.mean(bias):+.2f}  within-gate "
-                  f"{sum(e <= gate for e in errs)}/{len(errs)}\n")
+            se = sorted(errs); p90 = se[min(len(se) - 1, int(0.9 * len(se)))]
+            print(f"  MAE={st.mean(errs):.2f}  median={st.median(errs):.2f}  p90={p90:.2f}  "
+                  f"bias={st.mean(bias):+.2f}  within-gate {sum(e <= gate for e in errs)}/{len(errs)}\n")
         return errs
 
     score('ball_speed', 'mph', 'mph', 0.5)
