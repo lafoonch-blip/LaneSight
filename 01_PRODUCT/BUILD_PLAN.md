@@ -1,6 +1,6 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.6  
+Version: 2.7  
 Last Updated: 2026-10-16  
 Owner: Shayne  
 Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
@@ -45,12 +45,12 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [x] M1-01 Auto lane geometry: edges, foul line, vanishing point, pin deck (was P0-04, now automatic)
 - [x] M1-02 Ball detection + tracking robust to glare, occlusion and loft (was P0-05/06)
 - [x] M1-03 Release, touchdown and impact event detection
-- [x] M1-04 Speed (Ruby-comparable definition) + speed profile
+- [x] M1-04 Speed + speed profile. Headline = **release speed** (foul→arrows skid), robust to back-half fade; 60 ft average kept as `speed_avg` (DEC-030). Validated vs Ruby (live session): bias −0.36 mph, MAE ~1.0; residual is a ~6 % near-field homography Z-scale (needs Specto)
 - [x] M1-05 Loft
 - [~] M1-06 Board crossings: laydown, 7 ft dots, arrows (15 ft), 30/40/50 ft, entry. Launch angle and entry angle with confidence (was P0-07)
 - [~] M1-07 Breakpoint: board + distance (geometric), with glare-robust lateral measurement
 - [~] M1-08 Pin reading: before/after pin state, strike/non-strike, leave, with per-pin confidence and occlusion flags (was P0-08). Reads from video only; reports **unreadable** (never a guess) when the deck is blocked or the clip ends before the pins settle — DEC-026 (2026-10-15)
-- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Reports **unavailable** when the period search lands on the band rail (no clear repeat → `60 ÷ period` is the 4–10 Hz ceiling/floor, not a reading) — DEC-027, never the wall value. Reports a **capture-adaptive precision band** `rev² / (60·fps)` (~±40 rpm at 60 fps, halving at 120) rather than false precision — DEC-028; at 60 fps the whole-frame-lag quantum limits it to ~±40 (confirmed vs Ruby: distinct throws collapse to one value). Real gain needs 120 fps. Blind-validate the sensor-equivalent factor
+- [~] M1-09 Rev rate: surface-periodicity estimator, confidence-gated. Reports **unavailable** when the period search lands on the band rail (no clear repeat → `60 ÷ period` is the 4–10 Hz ceiling/floor, not a reading) — DEC-027, never the wall value. Reports a **capture-adaptive precision band** `rev² / (60·fps)` (~±40 rpm at 60 fps, halving at 120) rather than false precision — DEC-028; at 60 fps the whole-frame-lag quantum limits it to ~±40 (confirmed vs Ruby: distinct throws collapse to one value). Real gain needs 120 fps. **Planned (from the community Speed & Revs calculator):** a **rotation-counting / total-phase** estimator — track a surface feature's angle across the whole span, unwrap, total rotations ÷ total time — is higher-resolution than single-period autocorrelation (resolution scales with rotations observed, beating the integer-lag quantum); and a **high-contrast ball mark** (tape) makes this far more reliable — add to capture guidance. Blind-validate the sensor-equivalent factor
 - [ ] M1-10 Spin axis: axis rotation + tilt from period-lag surface flow, camera rotation from VP + homography. **Needs paired Ruby axis data as ground truth** — enter tilt/rotation on validation shots now so this can be blind-validated later (see `01_PRODUCT/SENSOR_VS_VIDEO_METRICS.md` §3)
 - [ ] M1-11 PAP: finger/thumb-hole tracking at 240 fps, a marker option, or entered from the profile with drift detection
 - [~] M1-12 Per-metric confidence + explicit unavailable states (was P0-09)

@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.8  
+Version: 1.9  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.7
+Supersedes: v1.8
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -212,6 +212,13 @@ Post-MVP: league integration and registration, league management, and USBC membe
 **Date:** 2026-10-16
 **Status:** ACCEPTED (realizes Stage 7 UI + Stage 8 cloud; capture per DEC-028, brand per DEC-016)
 **Supersedes:** —
+
+### DEC-030 — Headline ball speed is RELEASE speed (foul→arrows); refines DEC-022
+**Decision:** The headline `ball_speed` is the **release speed** — the ball's velocity over the skid (foul line → arrows, ~4–24 ft), what the bowler imparts — not the full-lane average. The 60 ft foul→pins **average** (the old DEC-022 definition) is kept as a secondary metric `speed_avg`. Release speed needs only the reliable front half of the track, so unlike a fixed 60 ft ÷ interval it is immune to back-half tracking fade (which was inflating speed up to ~12 % when the track stopped short of the pins). This matches the bowling convention (release = the number bowlers quote; average varies with ball/friction).
+**Why:** Validated on the 21-clip live session vs Ruby (10–11 matched): switching to release speed moved bias +1.10 → −0.36 mph and removed the advice-flipping +2–4 mph over-reads, while needing only the front half of the track (robust for shaky/far/glasses capture, DEC-028). Source of the insight: a well-known community "Speed & Revs calculator" (Reddit) that separates release speed (15 ft, `10.22727·fps/frames`) from average (60 ft, `40.909·fps/frames`) and prefers release. A residual ~1 mph MAE + under-reads on well-tracked clips trace to a ~6 % near-field Z-scale in the lane homography — a geometry-calibration issue affecting all speed definitions, to settle against Specto.
+**Date:** 2026-10-16
+**Status:** ACCEPTED (refines DEC-022 Speed; revisit with Specto ground truth)
+**Supersedes:** DEC-022 Speed definition (release vs average split)
 
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
 
