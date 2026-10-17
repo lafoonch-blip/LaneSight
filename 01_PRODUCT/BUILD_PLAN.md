@@ -1,6 +1,6 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 2.8  
+Version: 2.9  
 Last Updated: 2026-10-16  
 Owner: Shayne  
 Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
@@ -45,7 +45,7 @@ Validation vs Ruby: `02_RESEARCH/VIDEO_VS_RUBY_VALIDATION.md`.
 - [x] M1-01 Auto lane geometry: edges, foul line, vanishing point, pin deck (was P0-04, now automatic)
 - [x] M1-02 Ball detection + tracking robust to glare, occlusion and loft (was P0-05/06)
 - [x] M1-03 Release, touchdown and impact event detection
-- [x] M1-04 Speed + speed profile. Headline = **release speed** (foul→arrows skid), robust to back-half fade; 60 ft average kept as `speed_avg` (DEC-030). Validated vs Ruby (live session): bias −0.36 mph, MAE ~1.0; residual is a ~6 % near-field homography Z-scale (needs Specto)
+- [x] M1-04 Speed + speed profile. Headline = **60 ft foul→pins average**, reliable after far-lane track recovery (`extend_forward`, DEC-036); release/skid kept as secondary `speed_release`. Validated vs Ruby (live session): MAE 0.83 (≈0.35 excluding outliers). Residual = a ~9 % near-field homography Z-scale on `speed_release` (needs Specto). **Entry board + angle recovered** by the same fix (serves DEC-031 Accuracy)
 - [x] M1-05 Loft
 - [~] M1-06 Board crossings: laydown, 7 ft dots, arrows (15 ft), 30/40/50 ft, entry. Launch angle and entry angle with confidence (was P0-07)
 - [~] M1-07 Breakpoint: board + distance (geometric), with glare-robust lateral measurement

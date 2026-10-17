@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.10  
+Version: 1.11  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.9
+Supersedes: v1.10
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -300,10 +300,18 @@ Report bias and error distributions, not only averages.
 **Status:** ACCEPTED  
 **Supersedes:** DEC-019 in part (video replay deferred; session types reduced to Practice); FEATURE_REVIEW §2.7 session types
 
+### DEC-036 — Far-lane track recovery; headline speed reverts to the 60 ft average (supersedes DEC-030)
+**Decision:** The tracker now recovers the back half of the ball path (`extend_forward`): the ball stays detected near the pins (blobs exist to ~61 ft), but on trim-degraded stabilisation the small far ball jitters and the RANSAC refine / trailing-segment trim dropped it, stopping the track ~6 ft short. `extend_forward` walks forward through those dropped far candidates along the fitted trajectory. With the ball reaching the pins, the impact anchor sits at the true 59.44 ft (not mid-lane), so the **60 ft foul→pins average is accurate again and is the headline `ball_speed`** — reverting DEC-030's release-speed workaround. The skid/front-half speed stays as a secondary `speed_release`.
+**Why:** DEC-030 switched the headline to release speed because a short back-half track inflated the 60 ft average; `extend_forward` fixes that at the source. Validated vs Ruby (live session): `ball_speed` MAE 0.83 (≈0.35 excluding the corrupted IMG_8815 and geometry-outlier IMG_8819), **entry board recovered** (was unavailable) and **entry angle corrected** (implausible ~1.4° → realistic 3.8–5.6°) — directly required for the new primary Accuracy metric (DEC-031, arrow + breakpoint) and the DEC-034 entry-board gate. `speed_release` reads ~9 % low from a near-field homography Z-scale residual; which definition is ultimately "correct" is settled against Specto. On capture where the back half can't be recovered, the >30 mph scale-sanity guard still fails the shot honestly rather than emitting an inflated speed.
+**Date:** 2026-10-16
+**Status:** ACCEPTED (headline revisited with Specto ground truth, alongside the near-field Z-scale)
+**Supersedes:** DEC-030 (release-speed headline; release is now the secondary `speed_release`)
+
 *(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
 
 ## Superseded decisions
 - DEC-001 — partially superseded by DEC-018 (see entry above).
 - DEC-019 — partially superseded by DEC-035 (video replay deferred; Practice-only sessions).
-- DEC-022 — Speed definition refined by DEC-030.
+- DEC-022 — Speed definition refined by DEC-030, then DEC-036.
 - DEC-023 — default frame rate superseded by DEC-028.
+- DEC-030 — release-speed headline superseded by DEC-036 (60 ft average, after far-lane track recovery); release kept as the secondary `speed_release`.
