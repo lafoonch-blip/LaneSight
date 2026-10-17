@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.11  
+Version: 1.12  
 Last Updated: 2026-10-16  
 Owner: Shayne  
-Supersedes: v1.10
+Supersedes: v1.11
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -307,11 +307,38 @@ Report bias and error distributions, not only averages.
 **Status:** ACCEPTED (headline revisited with Specto ground truth, alongside the near-field Z-scale)
 **Supersedes:** DEC-030 (release-speed headline; release is now the secondary `speed_release`)
 
-*(DEC-024 is reserved for the Power metric definition proposed in `01_PRODUCT/FEATURE_REVIEW.md`.)*
+### DEC-024 — "Power" becomes Impact Energy: translational kinetic energy at lane entry
+**Decision:** The metric shown as "Power" is renamed **Impact Energy** (unit: joules), because power is energy per unit time (watts) and that is not what is measured.
+- **E = ½ · m · v²**, where m = ball mass in kg from the user's selected ball weight (lb × 0.45359), and v = measured **entry speed** in m/s (mph × 0.44704) — the late/pocket speed, not the headline ball speed (the 60 ft average, DEC-036).
+- Example: a 15 lb ball (6.80 kg) entering at 15.4 mph (6.88 m/s) → ~161 J. At 17.5 mph it would be ~208 J; using the slower entry speed is what makes it an impact value.
+- Calculated only when the ball weight is known and entry speed is measured with sufficient confidence; otherwise **unavailable** with the reason. Shown as Best effort until entry speed passes validation (DEC-034).
+- Info text: translational kinetic energy only. It ignores rotational energy and is not a prediction of strikes or carry.
+
+**Why:** A simple, physically defensible number that helps compare balls and speeds, built from inputs LaneSight already has.  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED  
+**Supersedes:** "Power" as proposed in `01_PRODUCT/FEATURE_REVIEW.md`
+
+### DEC-037 — LaneSight Score: 0–1,000 personal performance index
+**Decision:** Home's LaneSight Score is computed, never assigned.
+- **Scoring Performance index S** = 0.50 × (average game ÷ 300 × 100) + 0.25 × strike % + 0.25 × spare conversion % (percentages as points, e.g. 62).
+- **LaneSight Score L = 10 × (0.50·S + 0.25·A + 0.25·C)**, where A = Accuracy (DEC-031) and C = Consistency (DEC-032), each 0–100. L ranges 0–1,000.
+- Worked example: average 200, strike 40 %, spare conversion 70 %, A = 85, C = 80 → S = 60.83, **L = 717**. (The draft example's 697 was an arithmetic slip.)
+- Shown only with at least 10 completed games with readable or corrected results, 30 valid shots with recorded intent (for A), 10 comparable shots (for C), and sufficient measurement confidence. Until then: "Building your LaneSight Score".
+- If any component is unavailable the whole score is unavailable; weights are never silently re-balanced, so scores stay comparable over time.
+- Trend: rolling 90-day score vs the preceding 90 days; the Home delta is that calculated change.
+- It is a personal index, not a percentile or ranking against other bowlers.
+
+**Why:** A summary number that rewards scoring, execution and repeatability together and gives bowlers a reason to come back, without fabricated values.  
+**Date:** 2026-10-16  
+**Status:** ACCEPTED. Weights are an initial product definition, not a validated predictor of ability; test across skill levels and sample sizes before presenting it as definitive.  
+**Supersedes:** —
+
 
 ## Superseded decisions
 - DEC-001 — partially superseded by DEC-018 (see entry above).
 - DEC-019 — partially superseded by DEC-035 (video replay deferred; Practice-only sessions).
 - DEC-022 — Speed definition refined by DEC-030, then DEC-036.
 - DEC-023 — default frame rate superseded by DEC-028.
+- FEATURE_REVIEW "Power" — replaced by DEC-024 Impact Energy.
 - DEC-030 — release-speed headline superseded by DEC-036 (60 ft average, after far-lane track recovery); release kept as the secondary `speed_release`.
