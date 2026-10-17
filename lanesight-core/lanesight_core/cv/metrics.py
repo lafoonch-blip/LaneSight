@@ -96,7 +96,13 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
         else: release_t, src = t_foul - RELEASE_OFFSET_S, 'foul_cross_minus_offset'
     else: src = 'given'
     out['t_release'] = float(release_t); out['release_source'] = src
-    out['ball_speed_mph'] = mph(60.0 / (t_impact - release_t))      # Ruby-equivalent: 60 ft / release->impact time
+    # Headline speed = RELEASE speed: the velocity over the skid (foul->arrows, ~4-24 ft), i.e. what the bowler
+    # imparts. This is the bowling-standard number and, unlike the full-lane average, needs only the reliable front
+    # half of the track -- so it is immune to back-half fade that otherwise inflates a fixed 60 ft / interval by up
+    # to ~12% when the track stops short of the pins (DEC-022r). The 60 ft average (foul->pins) is kept as a
+    # secondary metric; it varies with ball/friction and needs the ball tracked to the pins.
+    out['ball_speed_mph'] = mph(early[0])
+    out['speed_avg_mph'] = mph(60.0 / (t_impact - release_t))
     # loft: release -> touchdown (blob h/w step), times early-lane speed. 60 fps limits this to about +/-0.45 ft
     if src == 'first_free_ball_detection' and t_touch is not None and t_touch > release_t:
         out['loft_ft'] = float(early[0] * (t_touch - release_t)); out['t_touchdown'] = float(t_touch)

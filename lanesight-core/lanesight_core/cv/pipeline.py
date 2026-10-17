@@ -81,7 +81,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     lat_c = float(np.clip(1 - M['lateral_res_boards'] / 1.5, 0, 1))
     speed_c = 0.9 if M['release_source'] == 'first_free_ball_detection' else 0.6
     meas = [
-        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'release→impact, 60 ft (Ruby-comparable)'),
+        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'release speed over the skid (foul→arrows); what you put on the ball, robust to back-half tracking'),
+        m('speed_avg', M.get('speed_avg_mph'), 'mph', 0.6, 'average over the lane (foul→pins); varies with ball/friction, needs the ball tracked to the pins'),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),
