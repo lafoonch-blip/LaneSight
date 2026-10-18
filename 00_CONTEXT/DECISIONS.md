@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.12  
-Last Updated: 2026-10-16  
+Version: 1.13  
+Last Updated: 2026-10-18  
 Owner: Shayne  
-Supersedes: v1.11
+Supersedes: v1.12
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -331,11 +331,38 @@ Report bias and error distributions, not only averages.
 
 **Why:** A summary number that rewards scoring, execution and repeatability together and gives bowlers a reason to come back, without fabricated values.  
 **Date:** 2026-10-16  
-**Status:** ACCEPTED. Weights are an initial product definition, not a validated predictor of ability; test across skill levels and sample sizes before presenting it as definitive.  
+**Status:** SUPERSEDED by DEC-038 for the overall composite formula and eligibility. Historical 50/25/25 formula retained here; never use it for the new four-pillar score. DEC-031 and DEC-032 component definitions remain current.  
+**Supersedes:** —
+
+### DEC-038 — LaneSight Score four-pillar model and tier presentation
+**Decision:** Replace DEC-037's three-pillar composite with the agreed four-pillar design: **L = 10 × (0.40·S + 0.25·A + 0.25·C + 0.10·P)**, where S = Scoring Performance, A = intent-based Accuracy (DEC-031), C = delivery Consistency (DEC-032), and P = **Power & Carry composite**, each normalized to 0–100. L is rounded to an integer in [0, 1000]. Keep the DEC-037 Performance *subformula* as the provisional S definition until separately superseded: `S = 0.50·(average_game/300×100) + 0.25·strike% + 0.25·spare_conversion%`. Preserve DEC-031/032 component formulas, limitations and confidence gating.
+
+**Critical distinction:** The user-facing `Power & Carry` pillar **is not** DEC-024 `Impact Energy` (joules). Impact Energy is a physical input/diagnostic, not a normalized 0–100 skill score. The exact P normalization (effective energy, pocket/carry behavior, and difficulty adjustments) is **not yet defined or validated**. Do not normalize joules ad hoc or silently set P=0 or redistribute its 10%; **the new full L is SPEC-ONLY / unavailable until P is defined, calibrated and all four pillars are available and validated**. Component scores may be displayed individually with proper provisional status. Existing DEC-037 worked example L=717 is historical, not valid under this four-pillar formula.
+
+**Eligibility & time:** rolling 90-day scoring history; compare with previous 90 days only where both complete windows meet eligibility; start with DEC-037 floors (≥10 completed games, ≥30 intent-labeled valid shots, ≥10 comparable shots), plus sufficient qualifying data for P once established. Never fabricate values for missing game/shot data; no silent reweighting. Standard (score-result-based) vs Advanced (shot-telemetry-enhanced) **are product goals, not currently calibrated interchangeable formulas**; do not issue comparable numeric L from the Standard-only subset until an evidence-based calibration is separately approved. Show Provisional / Building / Unavailable with reason; distinguish measured, estimated and verified.
+
+**Tiers (working thresholds; not validated against populations):** Bronze 0–399, Silver 400–549, Gold 550–699, Platinum 700–849, Onyx 850–1000. Tiers apply to the **overall** eligible L, not a session result. Session Score may use 0–1000 and the same pillar intent but requires its own approved aggregation/gates; no tier promotion from one session. Tiers reflect an absolute scale; peer percentiles are separate and must never be invented. Home hero shows numeric L, badge/tier, 90-day delta, and next-tier progression. Directly underneath, show four component tiles: Performance (40%), Accuracy (25%), Consistency (25%), Power & Carry (10%), with individual values or explicit unavailable states.
+
+**Why:** A recognizable score and tier provide long-term identity; execution and effective delivery augment conventional scoring. Incomplete inputs must not cause higher scores for owners of better sensors.
+**Date:** 2026-10-18
+**Status:** ACCEPTED PRODUCT SPEC; all composite scores SPEC-ONLY, weights and tier cutoffs provisional pending real-world validation and P-definition DEC.
+**Supersedes:** DEC-037 overall weighting (50/25/25), not DEC-037 S subformula, minimum baseline guidance or the DEC-031/032 component definitions.
+
+### DEC-039 — Achievements independent of LaneSight Score
+**Decision:** Achievements award permanent, non-scoring accomplishments. Unlocking or progressing an achievement must **never** affect LaneSight Score, individual score pillars or tiers. Track structured definitions, progress, unlock history, source evidence, quality/verification and notifications. Display in Profile → Achievements: earned showcase (up to 3 pinned earned badges), up to 3 pinned goals, In Progress (nearest relevant goals), categorized Collection, and individual detail/progress. First verified unlock per achievement **level** creates exactly one celebratory in-app pop-up and exactly one Recent Activity record; subsequent repeats may increase a separate occurrence count but do not replay first-unlock celebration. Larger events (300, 800) may use elevated treatment. Defer notification until results are finalized; deduplicate by user + achievement + level and source event; handle corrected scores with transparent revocation/reconciliation policy. Historical imports require provenance and eligibility.
+
+**Achievement rule types:** single-game high; three-game-series high; consecutive strikes/spares/frames; cumulative shot/session counters; rolling-period improvement vs qualifying baseline; intent-qualified accuracy; comparable-shot spread; competition-result verified milestones; LaneSight tier first reached. Show best-to-date vs live streak separately; never treat a series best as additive progress. An achievement that lacks qualified data is **unavailable / not trackable**, not 0% or failed. Define a meaningful minimum sample and quality gate per rule. Tier badges belong to LaneSight Score; achievements use separate collection/level visual language.
+
+**Launch:** activate only rules fed by supported, sufficiently verified inputs. Scoring/core streak/onboarding milestones first; advanced accuracy/consistency next; league/tournament achievements when official/verified event records exist (DEC-035 Practice-only MVP). Full proposed catalog and exact draft criteria live in `01_PRODUCT/ACHIEVEMENTS.md`; these thresholds are **product proposals** until validation, not measured or code-implemented.
+
+**Why:** Celebrate measurable milestones and encourage engagement without distorting the skill index or rewarding missing data.
+**Date:** 2026-10-18
+**Status:** ACCEPTED FEATURE SPEC; implementation NOT STARTED; individual achievement thresholds/provisional gates require validation.
 **Supersedes:** —
 
 
 ## Superseded decisions
+- DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
 - DEC-001 — partially superseded by DEC-018 (see entry above).
 - DEC-019 — partially superseded by DEC-035 (video replay deferred; Practice-only sessions).
 - DEC-022 — Speed definition refined by DEC-030, then DEC-036.
