@@ -1,6 +1,6 @@
 # Metric & Scoring Logic (current-state register)
 Status: CANONICAL
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-10-18
 Owner: Shayne
 
@@ -18,16 +18,26 @@ Owner: Shayne
 
 ## 1. Composite scores (all **spec-only** today — defined, not yet in `lanesight_core`)
 
-### LaneSight Score — `L` (0–1,000) · DEC-037
-`L = 10 × (0.50·S + 0.25·A + 0.25·C)` where S, A, C are each 0–100.
-- **Inputs:** S (Performance), A (Accuracy), C (Consistency) — all below.
-- **Gating:** shown only with ≥10 completed games (readable/corrected), ≥30 valid shots with recorded intent (for A), ≥10 comparable shots (for C), and sufficient confidence. Otherwise "Building your LaneSight Score". If any component is unavailable, the whole score is unavailable — weights are never re-balanced, so scores stay comparable over time.
-- **Trend:** rolling 90-day score vs the preceding 90 days. Personal index, **not** a percentile/ranking.
-- **Worked example:** avg 200, strike 40 %, spare-conv 70 %, A=85, C=80 → S=60.83 → **L=717**.
+### LaneSight Score — `L` (0–1,000) · DEC-038 (supersedes DEC-037 composite)
+`L = round(10 × (0.40·S + 0.25·A + 0.25·C + 0.10·P))`, S/A/C/P each 0–100.
+- **Inputs:** Performance S (DEC-037 subformula carried forward by DEC-038), Accuracy A (DEC-031), Consistency C (DEC-032), Power & Carry P (DEC-038; **normalization NOT DEFINED**).
+- **Status:** **SPEC-ONLY / currently unavailable**: P formula and validation do not exist. Never substitute Impact Energy joules (DEC-024) as normalized P, set P=0, or reweight other components.
+- **Gating:** all four components required; baseline ≥10 readable/corrected games, ≥30 valid intent-labeled shots, ≥10 comparable shots, and sufficient validated P inputs (minimum TBD). Missing/unreliable input → “Building your LaneSight Score” or explicit unavailable reason. No invented scores.
+- **Windows:** 90-day rolling index, trend vs prior 90-day qualifying window only. Provisional/calibration status until real-world validation.
+- **Tiers (provisional):** Bronze 0–399; Silver 400–549; Gold 550–699; Platinum 700–849; Onyx 850–1000. No percentiles without a real sample. Tiers attach to overall qualifying L only.
+- **Home:** badge + L + tier + qualified trend + next-tier progress; directly beneath four tiles S 40%, A 25%, C 25%, P 10%, displaying unknown values as unavailable.
+- **Standard vs Advanced:** envisioned complementary data-coverage modes, **not yet defined/calibrated score alternatives**. Do not issue Standard-only L on the advanced formula.
 
-### Performance index — `S` (0–100) · DEC-037
+### Performance index — `S` (0–100) · DEC-037 subformula retained by DEC-038
 `S = 0.50 × (avg game ÷ 300 × 100) + 0.25 × strike% + 0.25 × spare-conversion%` (percentages as points, e.g. 62).
-- **Inputs:** average game score, strike %, spare-conversion % — from game stats (strike%/spare% partly implemented in `lanesight_runner/card.py session_stats`; full game model is M3-01/02).
+- **Inputs:** average game score, strike %, spare conversion % — game statistics (partially implemented). **Status: SPEC-ONLY composite**, provisional weighting, sample/verification gates apply.
+
+### Power & Carry — `P` (0–100) · DEC-038
+- **Formula:** **TBD, not approved**; candidate evidence includes measured entry speed, weight/Impact Energy (DEC-024), pocket-hit and carry outcomes, with accuracy and scoring double-counting explicitly audited.
+- **Status:** SPEC-ONLY / undefined; **gating:** unavailable until a normalized, validated formula and minimum dataset are approved by a new DEC. Not equivalent to joules.
+
+### Session Score (0–1,000) · DEC-038
+- **Formula:** TBD (same four-pillar concept but separate session aggregation/sample eligibility). SPEC-ONLY, unavailable until defined; never grants overall tier.
 
 ### Accuracy — `A` (0–100) · DEC-031
 Execution vs **intent**; never uses pinfall.
@@ -89,3 +99,8 @@ Headline hierarchy (DEC-035): **Rev Rate · Speed · Accuracy · Consistency**; 
 ---
 
 ## 4. Validation bar (DEC-034) — none of these advertise "validated" until they pass on the locked set (Seed Dataset + Specto). Current: speed median at gate, rev median at gate, entry board + Accuracy/Consistency pending Specto; the five composite scores are spec-only. Report bias and distributions, not just averages (`examples/score_vs_ruby.py` now gives MAE / median / p90 / bias).
+
+---
+
+## 5. Achievement rules register · DEC-039
+Achievements are **not** scoring inputs; their triggers, statuses, tier-independent progress, first-unlock notification, Recent Activity event, and draft catalog live in [ACHIEVEMENTS.md](ACHIEVEMENTS.md). No unlock may modify L, S, A, C, P or tier. All achievement evaluation is **spec-only** until independently implemented and verified; missing data never yields fabricated progress.
