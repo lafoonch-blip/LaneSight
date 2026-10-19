@@ -1,7 +1,7 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.1  
-Last Updated: 2026-10-18  
+Version: 3.2  
+Last Updated: 2026-10-19  
 Owner: Shayne  
 Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
@@ -176,3 +176,13 @@ All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs re
 - [ ] PL-06 Evaluate Ruby/F5 sensor exports or SDK rights and optional adapter ingest; do not assume access.
 - [ ] PL-07 Explore authorized Conqueror X/Brunswick scoring pilot and shot/pin event availability.
 - [ ] PL-08 Implement single-score history/trend/PB only after DEC-038 P formula and recency smoothing are approved; no separate Improvement Score.
+
+
+## Newly approved UX / deferred capability — 2026-10-19 (DEC-042)
+- [ ] **UX-PL-01 (MVP):** Performance Lab hub presents **Start Live Session**, **Upload Video to Analyze**, **Compare to a PBA Pro (Coming Soon; disabled)**. Preserve Shot/Form capture-mode choice and session activity semantics (DEC-040, DEC-035). Never route disabled tile to a nonfunctional view.
+- [ ] **UX-PL-02 (MVP):** Accessibility and empty/loading/error states for hub, returning to active session, and uploaded-video ingestion; measure against proposed SLOs without presenting them as achieved SLAs.
+- [ ] **PBA-01 (POST-MVP):** rights-cleared limited pro benchmark catalog and licensing provenance; no unlicensed pro video hosted or analyzed.
+- [ ] **PBA-02 (POST-MVP):** synchronized user/pro clip comparison with validated approach/timing metrics; source, confidence, angle comparability and unavailability gating.
+- [ ] **PBA-03 (POST-MVP):** optional verified compatible speed/rev comparison; separate pro reference from personal/coach baseline and LaneSight Score.
+- [ ] **OPS-01 (MVP instrumentation):** capture-to-feedback timestamps, analysis p50/p95/p99, valid metric yield, failure reasons, job trace, upload retry and compute/storage cost per 1,000 shots. Initial targets are proposals in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md`.
+- **Design instruction:** no Figma updates until image mockup review and approval; concept images are illustrative only.
