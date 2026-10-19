@@ -1,11 +1,18 @@
 # Performance Lab: Compare to a PBA Pro — Feature Proposal
-Status: PROPOSED — not approved/shipped
-Version: 1.0
+Status: APPROVED ROADMAP DIRECTION — NOT MVP / NOT SHIPPED
+Version: 1.1
 Last Updated: 2026-10-19
 Owner: LaneSight Product
 
 ## Goal
-Introduce **third Performance Lab entry tile** for comparing a bowler's validated form and (where data exists) shot metrics to a reference performance from a professional PBA bowler. Make this educational, motivating, permissioned and transparent about comparability. Avoid implying there is one universally correct form.
+Introduce a **third Performance Lab entry tile, visible but disabled in MVP** for comparing a bowler's validated form and (where data exists) shot metrics to a reference performance from a professional PBA bowler. Make this educational, motivating, permissioned and transparent about comparability. Avoid implying there is one universally correct form.
+
+## Confirmed release scope (2026-10-19)
+- MVP: Show a third **Compare to a PBA Pro** tile with disabled/non-interactive appearance and an explicit **Coming Soon** badge. No navigation into unfinished features and no accidental capture/upload prompt.
+- Accessibility: disabled state announced clearly; do not present as an actionable button. Optional short explanatory copy can describe future experience without suggesting it works now.
+- Post-MVP: enable only once rights-cleared professional benchmark assets and validated form comparison exist. Speed/revs remain conditional on licensed, comparable measurements.
+- Figma: **do not update Figma yet**. Image-only conceptual mockups are requested for design review; design implementation waits for approval.
+- One initial personal baseline and optional future coach targets are independent of professional reference comparison; comparison does not influence LaneSight Score.
 
 ## Performance Lab entry UX
 1. **Start Live Session** — Practice / League / Tournament activity type, then select **Shot Analysis** or **Form Analysis** according to DEC-040.
@@ -53,7 +60,7 @@ For style variance, compare normalized event timings (% approach duration) as we
 - Each unavailable or estimated metric must explain why. No pro synthetic stat or misleading coach endorsement.
 
 ## MVP / phases
-**Design MVP (uncommitted):** third tile; small rights-cleared catalog; own-session selection; side-by-side playback, event synchronization, a limited validated form-metric subset, source badges and manually curated coaching observations.
+**Post-MVP Phase 1 (approved direction; delivery not scheduled):** enable third tile once ready; small rights-cleared catalog; own-session selection; side-by-side playback, event synchronization, a limited validated form-metric subset, source badges and manually curated coaching observations.
 **MVP+ candidate:** annotated pose overlays, reliable normalized timing comparisons, saved comparison history, personal/coach goal links.
 **Later:** opt-in paid athlete collaborations, broader pro inventory, speed/rev comparisons from vetted sensor+video references, multi-angle views.
 
