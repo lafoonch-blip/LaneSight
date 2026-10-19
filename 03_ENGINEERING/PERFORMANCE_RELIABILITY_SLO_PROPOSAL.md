@@ -1,8 +1,23 @@
 # Performance, Reliability & SLA Requirements (Proposal)
-Status: PROPOSED — review before acceptance
-Version: 1.0
+Status: ACCEPTED AS TARGET STATE (DEC-043) — not a dev, testing or beta gate
+Version: 1.1
 Last Updated: 2026-10-19
 Owner: LaneSight Product / Engineering
+
+## Phase applicability (DEC-043, 2026-10-19)
+| Requirement group | Dev / testing | Private beta | Public launch / scale |
+|---|---|---|---|
+| Latency / responsiveness tables below | Measure + report | Measure + report | **Target** |
+| Availability, upload, job-resolution SLOs | — | Measure + report | **Target** |
+| Honesty: explicit unavailable, no placeholder numbers | **Required** | **Required** | **Required** |
+| No silent loss of accepted shots; 0 cross-user access | **Required** | **Required** | **Required** |
+| Stage 1 / DEC-034 accuracy gates | Unchanged | Unchanged | Unchanged |
+| Cost caps: ≤$100/mo beta infra; ≤$5 per 1,000 analyzed shots (alert $25) | Track | **Required** | **Required** (re-set by DEC as scale grows) |
+
+- **Upload Video to Analyze is MVP.** An uploaded clip is analyzed as one shot until M1-13 delivery segmentation exists; the multi-shot upload row below depends on M1-13.
+- **One analysis at a time per session.** The next shot's analysis starts when the current one finishes; no in-session concurrency or backlog SLO in MVP.
+- **Cost caps bound performance work.** Any latency improvement (GPU, higher fps, more workers, on-device CV) is checked against the caps with measured cost before adoption; the cap wins unless a later DEC changes it.
+- **Today's baseline:** 35–80 s per clip on the Mac after shot-window trimming; Stage A/B split not built. All latency rows are **not met**. Review: `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_REVIEW.md`.
 
 ## Purpose and governance
 Define measurable user-experience targets, internal service objectives, and release gates for Performance Lab live capture, video uploads, analytics and future PBA comparison. **These are proposed targets, not achieved measurements or customer contractual SLAs.** Read AGENTS.md, CURRENT_STATE.md, DECISIONS.md, BUILD_PLAN.md first; do not override DEC-017/018/028/029/035/040/041 or existing Stage 1 accuracy gates.

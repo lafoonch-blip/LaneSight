@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.2  
+Version: 3.3  
 Last Updated: 2026-10-19  
 Owner: Shayne  
-Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -135,7 +135,8 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 ## Stage 8 — Cloud + instant at-lane analysis  (M–L)
 - [ ] C-01 Supabase (auth, Postgres, storage); apply `models/schema.sql` (was F-04)
 - [ ] C-02 FastAPI CV service + job queue; GPU when needed; API per UI Spec §13 (was F-05). Analysis entry = `core.analyze_clip` (the DB-free path the runner + eval harness share); Mac first, then cloud (DEC-029). On-device Core ML/Vision is a later latency optimization, not v1
-- [ ] C-03 Latency: ≤10 s cloud and ≤5 s edge after pin impact (UI Spec §10); on-device vs cloud split decided as a DEC (was F-03). The current pipeline runs well over this and must be optimized.
+- [ ] C-03 Latency: ≤10 s cloud and ≤5 s edge after pin impact (UI Spec §10); on-device vs cloud split decided as a DEC (was F-03). The current pipeline runs well over this and must be optimized. **Target state for public launch, not a dev/beta gate (DEC-043)**; every optimization is checked against the DEC-043 cost caps (≤$100/mo beta, ≤$5 per 1,000 analyzed shots) before adoption.
+- [ ] C-02a Serial analysis per session: the next shot's analysis starts only when the current one has finished (DEC-043); no in-session concurrency in MVP
 - [ ] C-04 Offline capture queue; signed uploads; privacy retention controls
 - [ ] C-05 Multi-user accounts, realtime `shot.analysis.completed`
 
@@ -179,10 +180,10 @@ All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs re
 
 
 ## Newly approved UX / deferred capability — 2026-10-19 (DEC-042)
-- [ ] **UX-PL-01 (MVP):** Performance Lab hub presents **Start Live Session**, **Upload Video to Analyze**, **Compare to a PBA Pro (Coming Soon; disabled)**. Preserve Shot/Form capture-mode choice and session activity semantics (DEC-040, DEC-035). Never route disabled tile to a nonfunctional view.
+- [ ] **UX-PL-01 (MVP):** Performance Lab hub presents **Start Live Session**, **Upload Video to Analyze** (MVP per DEC-043; an uploaded clip is analyzed as one shot until M1-13 exists), **Compare to a PBA Pro (Coming Soon; disabled)**. Preserve Shot/Form capture-mode choice and session activity semantics (DEC-040, DEC-035). Never route disabled tile to a nonfunctional view.
 - [ ] **UX-PL-02 (MVP):** Accessibility and empty/loading/error states for hub, returning to active session, and uploaded-video ingestion; measure against proposed SLOs without presenting them as achieved SLAs.
 - [ ] **PBA-01 (POST-MVP):** rights-cleared limited pro benchmark catalog and licensing provenance; no unlicensed pro video hosted or analyzed.
 - [ ] **PBA-02 (POST-MVP):** synchronized user/pro clip comparison with validated approach/timing metrics; source, confidence, angle comparability and unavailability gating.
 - [ ] **PBA-03 (POST-MVP):** optional verified compatible speed/rev comparison; separate pro reference from personal/coach baseline and LaneSight Score.
-- [ ] **OPS-01 (MVP instrumentation):** capture-to-feedback timestamps, analysis p50/p95/p99, valid metric yield, failure reasons, job trace, upload retry and compute/storage cost per 1,000 shots. Initial targets are proposals in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md`.
+- [ ] **OPS-01 (MVP instrumentation):** capture-to-feedback timestamps, analysis p50/p95/p99, valid metric yield, failure reasons, job trace, upload retry and compute/storage cost per 1,000 shots. Targets in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md` are **target state** (DEC-043): measured and reported in dev/beta, not enforced. Cost per 1,000 shots is reported against the DEC-043 caps. First slice: p50/p95/p99 per pipeline step from `examples/eval_session.py` over the live-session clips (no new infrastructure).
 - **Design instruction:** no Figma updates until image mockup review and approval; concept images are illustrative only.

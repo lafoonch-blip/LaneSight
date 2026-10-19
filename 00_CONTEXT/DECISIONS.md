@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.15  
+Version: 1.16  
 Last Updated: 2026-10-19  
 Owner: Shayne  
-Supersedes: v1.12
+Supersedes: v1.15
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -297,7 +297,7 @@ Report bias and error distributions, not only averages.
 
 **Why:** Locks the reduced MVP agreed during the Figma pass so development and the docs match the screens.  
 **Date:** 2026-10-16  
-**Status:** ACCEPTED  
+**Status:** ACCEPTED; Photos import partially SUPERSEDED by DEC-043 (upload is MVP)  
 **Supersedes:** DEC-019 in part (video replay deferred; session types reduced to Practice); FEATURE_REVIEW §2.7 session types
 
 ### DEC-036 — Far-lane track recovery; headline speed reverts to the 60 ft average (supersedes DEC-030)
@@ -384,6 +384,19 @@ Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slid
 **Status:** ACCEPTED PRODUCT DIRECTION; MVP tile only, comparison post-MVP.
 **Supersedes:** any prior implication that full pro comparison is MVP.
 
+### DEC-043 — Performance/reliability SLOs are target state; upload is MVP; one analysis at a time; cost caps bound performance work
+**Decision:**
+- **Target state, not a beta gate.** The latency, availability and reliability targets in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md`, together with BUILD_PLAN C-03 (≤10 s cloud / ≤5 s edge) and DEC-033's ≤30 s fast pass, are **target-state requirements for public launch and scale**. They do **not** gate development, testing or private beta. During those phases they are measured and reported (OPS-01), not enforced.
+- **Binding in every phase:** honesty rules (no placeholder or fabricated metric to meet a time; explicit unavailable with reason, DEC-026/027), no silent loss of an accepted shot, zero cross-user video/metric access, and the Stage 1 / DEC-034 accuracy gates, which are unchanged.
+- **Upload Video to Analyze is MVP** (confirms DEC-042). Until M1-13 delivery segmentation exists, an uploaded clip is analyzed as one shot; multi-shot uploads depend on M1-13.
+- **One analysis at a time per session.** The next shot's analysis starts only when the current one has finished. MVP needs no in-session concurrency or backlog SLO.
+- **Cost caps bound performance work.** Private-beta infrastructure stays **≤$100/month**, and unit cost targets **≤$5 per 1,000 analyzed shots** (COST_PLAN target efficiency; alert at $25 per 1,000, the unoptimized case). Every latency or throughput improvement (GPU hosting, higher capture fps, more workers, on-device CV) is checked against these caps with measured cost before adoption. If a speed-up breaks a cap, the cap wins unless a later DEC changes it.
+
+**Why:** Keeps real targets on record without blocking testing on numbers the pipeline can't reach yet (35–80 s per clip today). Upload is part of the Performance Lab MVP. Serial analysis matches how a bowler uses one shot's feedback before the next. Cost per clip is the variable that decides whether LaneSight can launch cheaply (COST_PLAN §1).
+**Date:** 2026-10-19
+**Status:** ACCEPTED
+**Supersedes:** DEC-035 in part (importing clips from Photos moves into MVP as Upload Video to Analyze). Recasts the C-03 and DEC-033 latency targets as target state; the targets themselves are unchanged.
+
 ## Superseded decisions
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
 - DEC-001 — partially superseded by DEC-018 (see entry above).
@@ -392,3 +405,4 @@ Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slid
 - DEC-023 — default frame rate superseded by DEC-028.
 - FEATURE_REVIEW "Power" — replaced by DEC-024 Impact Energy.
 - DEC-030 — release-speed headline superseded by DEC-036 (60 ft average, after far-lane track recovery); release kept as the secondary `speed_release`.
+- DEC-035 — "importing clips from Photos is post-MVP" superseded by DEC-043 (Upload Video to Analyze is MVP).
