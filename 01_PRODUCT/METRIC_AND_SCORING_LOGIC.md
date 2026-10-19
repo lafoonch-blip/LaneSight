@@ -1,6 +1,6 @@
 # Metric & Scoring Logic (current-state register)
 Status: CANONICAL
-Version: 1.1
+Version: 1.2
 Last Updated: 2026-10-18
 Owner: Shayne
 
@@ -104,3 +104,9 @@ Headline hierarchy (DEC-035): **Rev Rate · Speed · Accuracy · Consistency**; 
 
 ## 5. Achievement rules register · DEC-039
 Achievements are **not** scoring inputs; their triggers, statuses, tier-independent progress, first-unlock notification, Recent Activity event, and draft catalog live in [ACHIEVEMENTS.md](ACHIEVEMENTS.md). No unlock may modify L, S, A, C, P or tier. All achievement evaluation is **spec-only** until independently implemented and verified; missing data never yields fabricated progress.
+
+## 6. Longitudinal score presentation — DEC-041 (SPEC-ONLY)
+- **One score only:** no separate Improvement Score. Show the same qualifying LaneSight Score as a history line, time-filtered changes and personal best; gradual improvement must arise from measured performance, not uploads or achievements.
+- DEC-038 formula and all gating remain unchanged; **Power & Carry P is still undefined**, so overall L and tier remain unavailable until validated. Do not create illustrative numeric L in production as if measured.
+- Recency-weighted smoothing, baseline comparison windows, minimum eligible samples and tier hysteresis are **TBD**. Preserve prior score snapshots with formula version, eligibility, confidence and date so history is auditable. Missing sensor/form data must not lower ability; never silently reweight the four pillars.
+- Form diagnostics and baseline comparisons are **not** fifth-pillar inputs; achievement unlocks never influence score. Existing DEC-038 Onyx range is 850–1000; no approved Legend tier.

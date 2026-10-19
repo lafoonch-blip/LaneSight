@@ -1,7 +1,7 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.16  
-Last Updated: 2026-10-16  
+Version: 1.17  
+Last Updated: 2026-10-18  
 Owner: Shayne  
 Supersedes: v1.15
 
@@ -79,3 +79,9 @@ Back end first, with moving-camera measurement and coaching/stats in MVP (DEC-01
 - Master brand: LaneSight
 - Preferred mark: LS Monogram with lane/trajectory motif
 - Tagline: See More. Bowl Smarter.
+
+## Product direction update — 2026-10-18 (DEC-040/041)
+- **Approved direction, not shipped:** Performance Lab is the central analytics UX with separate Shot Analysis and Form Analysis capture modes, one camera view selected per recording. Session activity type (Practice/League/Tournament) stays independent of analysis mode. Preserve existing Shot MVP scope; prototype bowler-facing pose/form capture and coach video review as parallel follow-on work.
+- **Coaching roadmap:** original/annotated form video, confidence-labeled metrics, baseline comparisons, coach comments/corrections and drills with explicit sharing consent. Ruby sensor entry exists in runner; vendor API integration is **not verified**. Investigate Ruby/F5 and scoring providers without claiming access.
+- **Score direction:** one LaneSight Score with long-term trends and PB, no separate Improvement Score, no Form pillar. DEC-038's 40/25/25/10 remains spec-only; Power & Carry normalization and recency smoothing remain open. Achievements remain independent.
+- **Implementation next:** add capture-mode field and form video asset metadata; form measurement feasibility/validation harness; coach share permissions; scoring trend UI; preserve source/quality/version for every metric. Update Figma after specifications. See `01_PRODUCT/PERFORMANCE_LAB_STRATEGY.md`.

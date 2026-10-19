@@ -1,6 +1,6 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.13  
+Version: 1.14  
 Last Updated: 2026-10-18  
 Owner: Shayne  
 Supersedes: v1.12
@@ -360,6 +360,22 @@ Report bias and error distributions, not only averages.
 **Status:** ACCEPTED FEATURE SPEC; implementation NOT STARTED; individual achievement thresholds/provisional gates require validation.
 **Supersedes:** —
 
+
+### DEC-040 — Performance Lab, dual capture modes and coaching
+**Decision:** LaneSight is a serious-bowler performance metrics and statistics platform focused on understanding the entire game and improving performance. Performance Lab is the core analytical experience, with **Shot Analysis** (lane/ball/pin-facing video) and **Form Analysis** (bowler/approach-facing video) as distinct selectable capture modes. **One camera/recording perspective per analysis at a time**; do not require simultaneous dual-camera capture. Users may record or upload existing video. Practice/League/Tournament is a session *activity type*, independent of analysis mode; preserve existing Sessions UX and allow separate analyses under one activity when supported.
+
+Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slide, timing/pushaway/swing, posture/balance, release and follow-through, only where angle/frame rate/validation support reliable measurement. Start with a small validated subset; no fabricated pose metrics. Support baseline-vs-current comparison and side-by-side annotated video. Coaching workflow: user-approved share of original/annotated video and measurements, coach timestamped comments/drawings, coach validation/correction, assigned drills, follow-up comparison. Consent and privacy controls govern coach access and use of feedback for model improvement. Unified Shot/Delivery records retain modality, source, timestamp, confidence, model version and sensor data when available. Sensor integrations (Ruby first for feasibility, Storm F5 and others exploratory) are optional, vendor-neutral, subject to API/export rights and validation. Manufacturer scoring partnerships and tournament tools remain strategic parallel/later tracks; do not block Shot MVP for Form or integrations.
+**Why:** A differentiated, credible, unified measurement and coach-feedback system without requiring bowlers to use two cameras.
+**Date:** 2026-10-18
+**Status:** ACCEPTED PRODUCT DIRECTION; Form CV, coaching collaboration and partner APIs NOT IMPLEMENTED.
+**Supersedes:** earlier dual-camera-as-default proposals; any description of form metrics as categorically out of scope. Does not override DEC-035 MVP capture constraints.
+
+### DEC-041 — Single evolving LaneSight Score; no Improvement Score
+**Decision:** Retain **one** overall LaneSight Score (0–1,000) and existing four pillars: Performance 40%, Accuracy 25%, Consistency 25%, Power & Carry 10% (DEC-038). No independent Improvement Score. Improved demonstrated ability appears as gradual change in this same score over time, shown with historical trend (30d, 90d, 6mo, 1y, all-time when qualified), deltas and personal best. Score measures current demonstrated ability, not recording frequency, sensor ownership, achievements or a universal ideal form. Use a stable recency-weighted history and minimum sample/quality gates; exact smoothing and baseline rules remain **TBD and require validation/decision before implementation**. Missing data reduces coverage/confidence and must not automatically lower ability; preserve DEC-038's no-silent-reweighting/no-fabrication requirement. Form metrics remain diagnostic and baseline-relative; do not add Form as a fifth pillar without a later DEC. Tiers and achievement system remain, with achievements independent of score (DEC-039). Provisional tier thresholds follow DEC-038 (Onyx 850–1000); Legend is an **unapproved concept**, not a live sixth tier. Prioritize performance/development milestones over engagement badges; existing provisional catalog remains subject to review. A tier is earned through qualifying score, not number of uploads.
+**Why:** One understandable, trustworthy measure of skill and longitudinal improvement; avoids duplicative score systems and gamified inflation.
+**Date:** 2026-10-18
+**Status:** ACCEPTED PRODUCT DIRECTION; score and smoothing SPEC-ONLY; no formula implementation claimed.
+**Supersedes:** proposed separate Improvement Score and any proposal to incorporate Form directly into overall L at this stage; retains DEC-038 formula/gating and DEC-039 separation.
 
 ## Superseded decisions
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.

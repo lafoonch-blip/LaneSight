@@ -1,7 +1,7 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.3  
-Last Updated: 2026-10-16  
+Version: 1.4  
+Last Updated: 2026-10-18  
 Owner: Shayne  
 Supersedes: v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
@@ -230,3 +230,8 @@ Source of truth: GitHub `lafoonch-blip/LaneSight` (`main`); Google Drive and the
 - Current build state: `00_CONTEXT/CURRENT_STATE.md`
 - Decisions: `00_CONTEXT/DECISIONS.md`
 - Detailed implementation docs: `03_ENGINEERING/`
+
+## 23. 2026-10-18 product direction (DEC-040/041)
+**Positioning:** LaneSight is the comprehensive metrics/stats and improvement platform for serious bowlers. Performance Lab offers user-selected **Shot Analysis** (ball/lane/pins) OR **Form Analysis** (bowler approach/mechanics); never require two cameras. Existing Practice/League/Tournament activity types are independent of mode. Form capture supports recording/upload, baseline comparison, and eventual coach sharing, timestamped annotation, corrections and drill feedback. Prioritize trustworthy measurement, vendor-neutral optional sensors (Ruby feasibility first), scoring integration exploration, and a unified source/confidence-tagged shot record. Form and coaching are new roadmap tracks, not already-shipped capabilities.
+
+**Scoring:** One 0–1000 LaneSight Score only, with the DEC-038 four pillars and tiers; show gradual historical score improvement, no separate Improvement Score. Form measurements are diagnostic, not a fifth score pillar. Achievement unlocks do not alter score (DEC-039). Missing sensor data does not reduce ability; composite remains unavailable until DEC-038's missing Power & Carry normalization is solved. See DEC-041 and the metric register.

@@ -1,6 +1,6 @@
 # LaneSight Achievements — Product Rules & Inventory
 Status: PROPOSED RULE CATALOG (feature behavior governed by DEC-039; thresholds not validated)
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-10-18
 Owner: Shayne
 Governing: DEC-039; score separation DEC-038; Practice-only MVP DEC-035
@@ -101,3 +101,8 @@ Governing: DEC-039; score separation DEC-038; Practice-only MVP DEC-035
 3. No unlock writes to LaneSight Score or score components; no incomplete, low-confidence or duplicated evidence produces an unlock.
 4. Corrected games reconcile awards transparently; historical import retains provenance.
 5. League/tournament awards hidden in Practice-only MVP (DEC-035).
+
+## 2026-10-18 alignment — DEC-041
+- There is **no separate Improvement Score**. ACH-026–031 are milestones triggered by qualified changes in the **same LaneSight Score** or its underlying performance statistics, not a second score.
+- Prioritize meaningful bowling milestones and sustained development over engagement-only achievements; ACH-048–055 remain draft candidates, not mandatory launch requirements. Form-related achievements require a later validated form metric specification.
+- No achievements alter the LaneSight Score; the proposed tier catalog remains Bronze/Silver/Gold/Platinum/Onyx (no approved Legend tier).
