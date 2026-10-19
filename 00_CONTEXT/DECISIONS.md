@@ -1,7 +1,7 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.14  
-Last Updated: 2026-10-18  
+Version: 1.15  
+Last Updated: 2026-10-19  
 Owner: Shayne  
 Supersedes: v1.12
 
@@ -376,6 +376,13 @@ Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slid
 **Date:** 2026-10-18
 **Status:** ACCEPTED PRODUCT DIRECTION; score and smoothing SPEC-ONLY; no formula implementation claimed.
 **Supersedes:** proposed separate Improvement Score and any proposal to incorporate Form directly into overall L at this stage; retains DEC-038 formula/gating and DEC-039 separation.
+
+### DEC-042 — Pro comparison discovery tile now, feature after MVP
+**Decision:** Performance Lab offers three top-level paths: Start Live Session, Upload Video to Analyze, and Compare to a PBA Pro. The third tile is visible but **disabled / Coming Soon during MVP**. No PBA comparison engine, catalog, video reuse license, or pro stats are required for MVP. After MVP, enable comparison only with authorized pro footage/data, validated camera-angle-sensitive form metrics, metric provenance/quality, and explicit non-comparable/unavailable states. Show side-by-side synchronized video and approach/timing differences when validated; speed/revs optional where comparable data exists. A pro profile is a reference, not a universal ideal, performance baseline, coach-prescribed target, or LaneSight Score input. **Do not edit Figma now**; review standalone image mockups first.
+**Why:** Demonstrates the future product story without delaying validated core shot and form analysis or promising rights we don't own.
+**Date:** 2026-10-19
+**Status:** ACCEPTED PRODUCT DIRECTION; MVP tile only, comparison post-MVP.
+**Supersedes:** any prior implication that full pro comparison is MVP.
 
 ## Superseded decisions
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
