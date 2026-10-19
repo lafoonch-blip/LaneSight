@@ -1,7 +1,7 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.0  
-Last Updated: 2026-10-16  
+Version: 3.1  
+Last Updated: 2026-10-18  
 Owner: Shayne  
 Supersedes: v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
@@ -166,3 +166,13 @@ All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs re
 ## Ongoing tracks
 - R-01..R-04, B-01/B-02, L-01..L-03, G-01..G-03 unchanged from v1.0
 - F-02 (git/monorepo) done 2026-10-14: code in `lanesight-core/`. F-06 (CI) is still needed for the Stage 1–6 back end
+
+## Performance Lab workstream (DEC-040/041; planned, not implemented)
+- [ ] PL-01 Specify Shot vs Form mode selection and independent Practice/League/Tournament activity type; preserve current Shot MVP.
+- [ ] PL-02 Extend Session/VideoAsset/Measurement contracts with mode, perspective, confidence, model version, consent and retention.
+- [ ] PL-03 Assemble annotated bowler-view video dataset and validate initial approach metrics by angle/fps; report unavailable honestly.
+- [ ] PL-04 Design Form Analysis results, baseline/side-by-side replay, and Home Performance Lab entry in Figma.
+- [ ] PL-05 Prototype coach video sharing, timestamped annotations, corrections and drill assignments with revocable permissions.
+- [ ] PL-06 Evaluate Ruby/F5 sensor exports or SDK rights and optional adapter ingest; do not assume access.
+- [ ] PL-07 Explore authorized Conqueror X/Brunswick scoring pilot and shot/pin event availability.
+- [ ] PL-08 Implement single-score history/trend/PB only after DEC-038 P formula and recency smoothing are approved; no separate Improvement Score.
