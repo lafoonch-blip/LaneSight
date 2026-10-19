@@ -1,7 +1,7 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.17  
-Last Updated: 2026-10-18  
+Version: 1.18  
+Last Updated: 2026-10-19  
 Owner: Shayne  
 Supersedes: v1.15
 
@@ -85,3 +85,11 @@ Back end first, with moving-camera measurement and coaching/stats in MVP (DEC-01
 - **Coaching roadmap:** original/annotated form video, confidence-labeled metrics, baseline comparisons, coach comments/corrections and drills with explicit sharing consent. Ruby sensor entry exists in runner; vendor API integration is **not verified**. Investigate Ruby/F5 and scoring providers without claiming access.
 - **Score direction:** one LaneSight Score with long-term trends and PB, no separate Improvement Score, no Form pillar. DEC-038's 40/25/25/10 remains spec-only; Power & Carry normalization and recency smoothing remain open. Achievements remain independent.
 - **Implementation next:** add capture-mode field and form video asset metadata; form measurement feasibility/validation harness; coach share permissions; scoring trend UI; preserve source/quality/version for every metric. Update Figma after specifications. See `01_PRODUCT/PERFORMANCE_LAB_STRATEGY.md`.
+
+
+## Performance Lab roadmap decision — 2026-10-19 (DEC-042)
+- Three entry tiles: **Start Live Session**, **Upload Video to Analyze**, and **Compare to a PBA Pro**.
+- Pro comparison tile is visible but **disabled / Coming Soon for MVP**; full pro comparison is **post-MVP**, depends on footage rights and validated form/shot comparisons.
+- Image concept mockups requested for review; **do not edit Figma yet**.
+- Performance and reliability targets are **proposed**, not achieved SLAs: `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md`.
+- Pro reference requirements: `01_PRODUCT/PBA_PRO_COMPARISON_PROPOSAL.md` v1.1. Maintain approved Shot/Form analysis modes from DEC-040, capture limitations per DEC-035.
