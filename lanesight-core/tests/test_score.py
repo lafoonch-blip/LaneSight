@@ -77,6 +77,12 @@ def test_consistency_building_under_min_n():
     shots = [shot(i) for i in range(3)]
     assert consistency(shots)['value'] is None
 
+def test_consistency_rev_uncertainty_none_does_not_crash():
+    # real records may have rev_rate value but no uncertainty -> must not raise (regression)
+    shots = [shot(i, rev_unc=None) for i in range(6)]
+    c = consistency(shots)
+    assert 'rev_rate' in c['components']   # included (no band to exclude on)
+
 
 # --------------------------------------------------------------------------- Power P'
 def test_power_unavailable_without_ranges():

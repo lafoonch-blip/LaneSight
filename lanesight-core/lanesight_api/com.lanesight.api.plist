@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd agent for the LaneSight Mac API. Copy to ~/Library/LaunchAgents/ and `launchctl load` it.
+     Edit the two paths below to match your checkout. Binds localhost only; expose via `tailscale serve`.
+     Secrets come from the Keychain at runtime (see README) — none are stored here. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.lanesight.api</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/shaynel/Documents/LaneSight/lanesight-core/.venv/bin/uvicorn</string>
+    <string>lanesight_api.app:app</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8787</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/shaynel/Documents/LaneSight/lanesight-core</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/Users/shaynel/LaneSightData/logs/api.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/shaynel/LaneSightData/logs/api.err.log</string>
+</dict>
+</plist>

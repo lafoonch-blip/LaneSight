@@ -106,7 +106,8 @@ def consistency(shots) -> dict:
         if metric == 'rev_rate':   # exclude rev when its reported uncertainty is wider than the target
             bands = [s['metrics']['rev_rate'].get('uncertainty') for s in shots
                      if _val(s, 'rev_rate') is not None]
-            if bands and max(b for b in bands if b is not None) > target:
+            bands = [b for b in bands if b is not None]
+            if bands and max(bands) > target:
                 excluded[metric] = f'capture band > {target:g} rpm (needs 120 fps)'
                 continue
         sd = _robust_sd(vals)
