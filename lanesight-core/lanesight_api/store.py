@@ -18,7 +18,15 @@ def _new_id():
 class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
-        self.profiles, self.sensors = {}, {}
+        self.profiles, self.sensors, self.arsenal = {}, {}, {}
+
+    def list_arsenal(self, user_id):
+        return [b for b in self.arsenal.values() if b['user_id'] == user_id]
+
+    def add_ball(self, user_id, data):
+        b = dict(id=_new_id(), user_id=user_id, **(data or {}))
+        self.arsenal[b['id']] = b
+        return b
 
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
     def get_profile(self, user_id):
@@ -213,6 +221,17 @@ class PgStore(MemoryStore):
 
     def oil_patterns(self):
         return self._get('oil_patterns', 'select=*&order=name')
+
+    def list_arsenal(self, user_id):
+        return self._get('user_balls',
+                         f'user_id=eq.{user_id}&select=*,ball_models(manufacturer,name,image_url)&order=created_at')
+
+    def add_ball(self, user_id, data):
+        row = {'id': _new_id(), 'user_id': user_id,
+               **{k: v for k, v in (data or {}).items()
+                  if k in ('ball_model_id', 'nickname', 'serial', 'weight_lb', 'color_desc')}}
+        self._req('user_balls', 'POST', row)
+        return row
 
 
 def session_csv(shots: list[dict], feedback: list[dict]) -> str:

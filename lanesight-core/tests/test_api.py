@@ -74,6 +74,11 @@ def test_catalog_and_oil_shape_offline():
     assert client.get('/catalog/balls', headers=H).json() == []
     assert client.get('/oil-patterns', headers=H).json() == []
 
+def test_arsenal_add_list():
+    b = client.post('/me/arsenal', json={'nickname': 'Phaze', 'weight_lb': 15}, headers=H).json()
+    assert b['nickname'] == 'Phaze' and b['user_id'] == 'u1'
+    assert any(x['id'] == b['id'] for x in client.get('/me/arsenal', headers=H).json())
+
 def test_upload_enqueues_serial_job():
     sid = client.post('/sessions', json={}, headers=H).json()['id']
     # dummy bytes are not a video; the job will fail with a reason — we assert the queue plumbing, not CV

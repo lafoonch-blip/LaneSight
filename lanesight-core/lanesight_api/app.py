@@ -198,9 +198,17 @@ def catalog_balls(q: str | None = None, user=Depends(current_user)):
 def oil_patterns(user=Depends(current_user)):
     return get_store().oil_patterns()
 
+@app.get('/me/arsenal')
+def get_arsenal(user=Depends(current_user)):
+    return get_store().list_arsenal(user)
+
+@app.post('/me/arsenal')
+def add_ball(body: dict, user=Depends(current_user)):
+    return get_store().add_ball(user, body or {})
+
 
 # ----------------------------------------------------------------- declared-but-not-yet-implemented (§3)
-_TODO = ['GET /me/arsenal', 'POST /me/arsenal', 'POST /me/arsenal/{id}/surface',
+_TODO = ['POST /me/arsenal/{id}/surface',
          'POST /uploads', 'GET /me/achievements', 'GET /me/achievements/{id}', 'PUT /me/achievements/pins',
          'GET /me/notifications', 'POST /me/notifications/{id}/delivered', 'POST /me/notifications/{id}/dismiss',
          'GET /me/activity', 'GET /me/stats', 'DELETE /me', '/admin/*']
