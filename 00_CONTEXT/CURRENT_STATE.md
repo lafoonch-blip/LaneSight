@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.22  
+Version: 1.23  
 Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.21
+Supersedes: v1.22
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -106,7 +106,8 @@ The active build. A **developer build of the LaneSight iOS app on Shayne's iPhon
 - **Out of scope:** pinfall/game scoring (DEC-050), leagues/tournaments ("Soon"), PBA comparison (disabled tile), cloud workers / R2, smart glasses, replay playback, coach sharing, Ruby references in app UI, payments.
 - **Score:** `L-dev-0` (DEC-048), a no-pinfall dev/Beta formula; see `01_PRODUCT/METRIC_AND_SCORING_LOGIC.md`. The target formula remains DEC-038.
 - **Capture is never blocked by framing (DEC-045):** an advisory spot check suggests a better position; it never gates recording.
-- **Build phases:** recorded in `BUILD_PLAN.md` as the Dev Build v0 stage (`DV-00…DV-05`).
+- **Build phases:** recorded in `BUILD_PLAN.md` as the Dev Build v0 stage (`DV-00…DV-05`). DV-00 (docs), DV-01 (DB, migrations 006–010 live) and most of DV-02 (engines) are done.
+- **DV-02 engines (2026-10-22):** pure, DB-free packages in `lanesight_core/` — `score/` (L-dev-0 + Accuracy/Consistency/Performance/Power + tiers), `benchmarks/`, `achievements/`, `insights/routing.py` (target-vs-actual + form routing), `owner.py` (reset). 127 tests pass. **Deferred, honestly unavailable:** Form P1 metric *values* (need a pose backend + the 2026-10-17/20 clips), rule/drill YAML content (owner-reviewed), and Power P′ reference ranges (pending Shayne) — so the score stays "building" until ranges are set.
 
 **Open before Phase 1 (Shayne-side / to confirm):**
 - **Supabase project (confirmed 2026-10-22):** LaneSight = `europwryibstnmipbvam`, ACTIVE_HEALTHY, us-east-1, in the **VendHub** org (`wmprtjakyzfgszjqjtky`). Never touch the org's other projects (`vendhub`, `LandForge`).
