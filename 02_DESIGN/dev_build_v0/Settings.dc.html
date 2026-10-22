@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#38B6FF}a:hover{color:#8AD3FF}
+</style>
+</helmet>
+<div style="width: 390px; height: 1080px; box-sizing: border-box; background: #020A14; color: #F2F5FA; font-family: Inter, system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<a href="Profile.dc.html" aria-label="Back" style="width: 44px; height: 44px; color: #C9D4EA; display: flex; align-items: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="font-size: 20px; font-weight: 800">Settings</span>
+<span style="width: 44px"></span>
+</div>
+<span style="font-size: 16px; font-weight: 800">Units</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button aria-pressed="true" style="height: 44px; border-radius: 12px; background: #0A9BFF; border: 0; color: #04121F; font-family: inherit; font-size: 14px; font-weight: 700">mph</button>
+<button aria-pressed="false" style="height: 44px; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 14px; font-weight: 600">km/h</button>
+<button aria-pressed="true" style="height: 44px; border-radius: 12px; background: #0A9BFF; border: 0; color: #04121F; font-family: inherit; font-size: 14px; font-weight: 700">feet</button>
+<button aria-pressed="false" style="height: 44px; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 14px; font-weight: 600">meters</button>
+</div>
+<span style="font-size: 16px; font-weight: 800; margin-top: 4px">Capture</span>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Recording quality</span><span style="color: #9AA8C3">Highest available ›</span></button>
+<div style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-size: 14px"><span>Speak adjustments</span><span role="switch" aria-checked="true" aria-label="Speak adjustments" style="width: 48px; height: 28px; border-radius: 14px; background: #0A9BFF; display: flex; align-items: center; justify-content: flex-end; padding: 2px; box-sizing: border-box"><span style="width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></span></div>
+</div>
+<span style="font-size: 12px; color: #9AA8C3">Records at 120 fps when the phone supports it, then 60, then 30. HDR is turned off for analysis.</span>
+<span style="font-size: 16px; font-weight: 800; margin-top: 4px">Privacy</span>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A">
+<button style="width: 100%; padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Raw video retention</span><span style="color: #9AA8C3">30 days ›</span></button>
+</div>
+<span style="font-size: 12px; color: #9AA8C3">Shot results are kept. Raw video is deleted after the retention period unless you save a clip.</span>
+<span style="font-size: 16px; font-weight: 800; margin-top: 4px">Account</span>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Face ID unlock</span><span style="color: #9AA8C3">On ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Terms of Service</span><span style="color: #9AA8C3">›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Privacy Policy</span><span style="color: #9AA8C3">›</span></button>
+<a href="Dev.dc.html" style="text-decoration: none; padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-size: 14px"><span>Developer</span><span style="font-size: 11px; font-weight: 700; color: #C3A6FF">DEV BUILD ›</span></a>
+<a href="Welcome.dc.html" style="text-decoration: none; padding: 0 14px; min-height: 48px; display: flex; align-items: center; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-size: 14px">Sign out</a>
+<a href="DeleteAccount.dc.html" style="text-decoration: none; padding: 0 14px; min-height: 48px; display: flex; align-items: center; color: #FF9A5A; font-size: 14px; font-weight: 600">Delete account</a>
+</div>
+<span style="text-align: center; font-size: 11px; color: #8A97B2">LaneSight 0.1 (7) · Dev build</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1080}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Profile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#38B6FF}a:hover{color:#8AD3FF}
+</style>
+</helmet>
+<div style="width: 390px; height: 1500px; box-sizing: border-box; background: #020A14; color: #F2F5FA; font-family: Inter, system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<a href="Main.dc.html" aria-label="Back" style="width: 44px; height: 44px; color: #C9D4EA; display: flex; align-items: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="font-size: 20px; font-weight: 800">Profile</span>
+<a href="Settings.dc.html" aria-label="Settings" style="width: 44px; height: 44px; color: #C9D4EA; display: flex; align-items: center; justify-content: flex-end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="M4.9 4.9l2.1 2.1"></path><path d="M17 17l2.1 2.1"></path><path d="M4.9 19.1L7 17"></path><path d="M17 7l2.1-2.1"></path></svg></a>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<button aria-label="Add photo" style="width: 84px; height: 84px; border-radius: 50%; background: transparent; border: 2px solid #0A9BFF; color: #0A9BFF; font-size: 30px; font-family: inherit">+</button>
+<span style="font-size: 12px; color: #38B6FF">Add photo (optional)</span>
+</div>
+<a href="Achievements.dc.html" style="text-decoration: none; color: #F2F5FA; border-radius: 14px; background: #0B1A3A; border: 1px solid #24407A; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<svg width="40" height="44" viewBox="0 0 104 112" aria-hidden="true"><path d="M52 4 L96 22 L96 70 Q96 94 52 108 Q8 94 8 70 L8 22 Z" fill="#14264D" stroke="#8FB4E8" stroke-width="4"></path><ellipse cx="52" cy="56" rx="11" ry="20" fill="#E9EEF7"></ellipse></svg>
+<span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 15px; font-weight: 700">Platinum · 782</span><span style="font-size: 12px; color: #9AA8C3">9 achievements · see all</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A97B2" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Name</span><span style="color: #9AA8C3">Shayne L. ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Email</span><span style="color: #9AA8C3">[your email] ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Phone <span style="color: #8A97B2">(optional)</span></span><span style="color: #9AA8C3">Add ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Date of birth</span><span style="color: #9AA8C3">Mar 14, 1988 ›</span></button>
+</div>
+<span style="font-size: 16px; font-weight: 800">Bowler profile</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button aria-pressed="true" style="height: 44px; border-radius: 12px; background: #0A9BFF; border: 0; color: #04121F; font-family: inherit; font-size: 14px; font-weight: 700">Right-handed</button>
+<button aria-pressed="false" style="height: 44px; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 14px; font-weight: 600">Left-handed</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button aria-pressed="true" style="min-height: 48px; border-radius: 12px; background: #0A9BFF; border: 0; color: #04121F; font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px">One-handed, thumb</button>
+<button aria-pressed="false" style="min-height: 48px; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px">One-handed, no thumb</button>
+<button aria-pressed="false" style="min-height: 48px; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px">Two-handed</button>
+</div>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Approach steps</span><span style="color: #9AA8C3">5 ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Location <span style="color: #8A97B2">(optional)</span></span><span style="color: #9AA8C3">Richmond, VA ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; font-size: 14px"><span>Home center <span style="color: #8A97B2">(optional)</span></span><span style="color: #9AA8C3">Search ›</span></button>
+<div style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #8A97B2"><span>USBC member ID</span><span style="font-size: 11px; font-weight: 700; color: #FFB547">COMING SOON</span></div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 800">Sensors</span><button style="background: transparent; border: 0; color: #38B6FF; font-family: inherit; font-size: 13px; font-weight: 600; min-height: 44px">+ Add sensor</button></div>
+<div style="border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-size: 14px"><span>[Sensor name you enter]</span><span style="color: #9AA8C3">Default ›</span></div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 800">Arsenal</span><a href="AddBall.dc.html" style="font-size: 13px; font-weight: 600; min-height: 44px; display: flex; align-items: center">+ Add ball</a></div>
+<a href="BallSetup.dc.html" style="text-decoration: none; color: #F2F5FA; border-radius: 14px; background: #0B1626; border: 1.5px solid #0A9BFF; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 50%; background: #1E3A8A; border: 2px solid #3B5BB5; flex-shrink: 0"></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 15px; font-weight: 700">[Ball 1] <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 5px; background: #0E2A22; color: #7BE8B5">CURRENT</span></span><span style="font-size: 12px; color: #9AA8C3">15 lb · 2000 Abralon · 24 games since resurface</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A97B2" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<a href="BallSetup.dc.html" style="text-decoration: none; color: #F2F5FA; border-radius: 14px; background: #0B1626; border: 1px solid #1C2A4A; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 50%; background: #5B3FA8; border: 2px solid #7C5CFF; flex-shrink: 0"></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 15px; font-weight: 700">[Ball 2]</span><span style="font-size: 12px; color: #9AA8C3">15 lb · Polished · 61 games</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A97B2" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<span style="font-size: 16px; font-weight: 800">Advanced <span style="font-size: 12px; font-weight: 500; color: #9AA8C3">(optional)</span></span>
+<span style="font-size: 12px; color: #9AA8C3; margin-top: -8px">Only needed for layout-aware ball reaction. Skip it if you just want to bowl.</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-pitch" style="font-size: 12px; color: #9AA8C3">Middle pitch</label><input id="pf-pitch" value="¼&quot; forward" style="height: 46px; box-sizing: border-box; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-span" style="font-size: 12px; color: #9AA8C3">Span</label><input id="pf-span" value="4⅜&quot;" style="height: 46px; box-sizing: border-box; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-over" style="font-size: 12px; color: #9AA8C3">PAP over</label><input id="pf-over" value="5¼&quot;" style="height: 46px; box-sizing: border-box; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-up" style="font-size: 12px; color: #9AA8C3">PAP up</label><input id="pf-up" value="½&quot;" style="height: 46px; box-sizing: border-box; border-radius: 12px; background: #0B1626; border: 1px solid #24324F; color: #F2F5FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1500}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session feedback</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#7FB2FF}a:hover{color:#B3D1FF}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #03060F; color: #F2F5FA; font-family: Inter, system-ui, sans-serif; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 56px; display: flex; flex-direction: column; gap: 12px; opacity: 0.2">
+<div style="font-size: 20px; font-weight: 700">Practice · Lane 14</div>
+<div style="height: 120px; border-radius: 14px; background: #0D1830"></div>
+</div>
+<div role="dialog" aria-modal="true" aria-labelledby="fb-title" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 24px 24px 0 0; background: #0D1830; border-top: 1px solid #24407A; padding: 20px 20px 34px; display: flex; flex-direction: column; gap: 16px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #2A3858"></span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span id="fb-title" style="font-size: 22px; font-weight: 800">How was this session in the app?</span>
+<span style="font-size: 13px; color: #9AA8C3">24 shots · 52 min · dev build 0.1 (7)</span>
+</div>
+<div role="radiogroup" aria-label="Rating, 1 to 5" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{stars}}" as="s" hint-placeholder-count="5">
+<button role="radio" aria-checked="{{s.checked}}" aria-label="{{s.label}}" onClick="{{s.pick}}" style="height: 56px; border-radius: 14px; background: {{s.bg}}; border: 1px solid {{s.border}}; color: {{s.fg}}; display: flex; align-items: center; justify-content: center; padding: 0"><svg width="28" height="28" viewBox="0 0 24 24" fill="{{s.fill}}" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.4 7L12 17.6 5.8 21l1.4-7L2 9.3l7-.8z"></path></svg></button>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #8A97B2; margin-top: -8px"><span>Rough</span><span>{{ratingText}}</span><span>Great</span></div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; font-weight: 700">What's this about? <span style="font-weight: 500; color: #9AA8C3">(pick any)</span></span>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{tags}}" as="t" hint-placeholder-count="6">
+<button aria-pressed="{{t.on}}" onClick="{{t.toggle}}" style="height: 36px; padding: 0 12px; border-radius: 999px; background: {{t.bg}}; border: 1px solid {{t.border}}; color: {{t.fg}}; font-family: inherit; font-size: 13px; font-weight: 600">{{t.label}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="fb-text" style="font-size: 13px; font-weight: 700">Feedback, bugs or observations</label>
+<textarea id="fb-text" rows="5" placeholder="e.g. Shot 7 said light but it looked high. Upload stalled twice on cellular." style="box-sizing: border-box; border-radius: 12px; background: #060C1C; border: 1px solid #24324F; color: #F2F5FA; padding: 12px; font-family: inherit; font-size: 14px; line-height: 1.4; resize: none"></textarea>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #C9D4EA; min-height: 44px"><input type="checkbox" checked style="width: 18px; height: 18px">Attach session diagnostics (timings, errors, versions)</label>
+<a href="Summary.dc.html" style="text-decoration: none; height: 54px; border-radius: 16px; background: #2F7DFF; color: #FFFFFF; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center">Submit</a>
+<a href="Summary.dc.html" style="text-decoration: none; text-align: center; font-size: 14px; font-weight: 600; color: #9AA8C3; min-height: 32px">Skip</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { rating: 4, tags: { 'Bug': true, 'Metric looked wrong': true } }; }
+  renderVals() {
+    const r = this.state.rating;
+    const words = ['', 'Rough', 'Meh', 'OK', 'Good', 'Great'];
+    const stars = [1,2,3,4,5].map((n) => ({
+      label: n + (n === 1 ? ' star' : ' stars'),
+      checked: String(n === r),
+      fill: n <= r ? '#FFB547' : 'none',
+      fg: n <= r ? '#FFB547' : '#5D6A86',
+      bg: n <= r ? '#2A1E0A' : '#060C1C',
+      border: n <= r ? '#6B4A12' : '#24324F',
+      pick: () => this.setState({ rating: n })
+    }));
+    const names = ['Bug', 'Metric looked wrong', 'Advice', 'Camera / upload', 'Workflow', 'Idea'];
+    const tags = names.map((name) => {
+      const on = !!this.state.tags[name];
+      return {
+        label: name, on: String(on),
+        bg: on ? '#13284F' : '#060C1C', border: on ? '#2F7DFF' : '#24324F', fg: on ? '#B3D1FF' : '#C9D4EA',
+        toggle: () => this.setState({ tags: Object.assign({}, this.state.tags, { [name]: !on }) })
+      };
+    });
+    return { stars, tags, ratingText: words[r] };
+  }
+}
+</script>
+</body>
+</html>
