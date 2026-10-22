@@ -96,6 +96,16 @@ The catalog reaction is the ball **out of the box**. A bowler's ball usually dif
 
 **Next step:** once a bowler has measured shots with a given layout and surface (breakpoint and entry angle on known patterns), those measurements should override these estimates. That isn't built yet. Oil absorption and games since the last resurface aren't modeled yet either.
 
+## Weekly refresh
+A scheduled task runs `REFRESH.md` every week:
+1. It loads anything merged to `main` into Supabase, upserting only rows whose `source_hash` changed.
+2. It checks every brand's current lineup and adds new balls in full, following `RECORD_SPEC.md`.
+3. Balls no longer listed are **retired, never deleted** (`status = 'discontinued'`, `discontinued_on`), because arsenals point at them.
+4. It picks up a new Brunswick motion chart when one is issued.
+5. It opens a pull request for review. Nothing reaches `main` or Supabase without a merge.
+
+A collection that would retire over 30% of a brand at once is refused as a likely broken scrape. Tools: `lanesight_core/arsenal/refresh.py` (`merge`, `summarize`, `check-images`, `digest`, `sync-sql`); migration `005_ball_catalog_refresh.sql`.
+
 ## Recommendations
 `lanesight_core/arsenal/recommend.py` (status `best_effort`, provisional until coach / pro-shop review, BUILD_PLAN M4-08):
 - `rank_for_condition(balls, Condition(...))` — target hook/length from oil volume or level, pattern length, rev rate and speed; ranks balls and explains misfits ("stronger than needed", "built for heavy oil").

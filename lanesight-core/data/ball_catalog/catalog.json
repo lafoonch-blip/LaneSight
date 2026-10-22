@@ -66,7 +66,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "54b1946feaa2922457d7c031fef7de45a879565befdf312b39e56a9b54989a66"
   },
   {
    "manufacturer": "900 Global",
@@ -136,7 +138,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1e8935cd16ef3f90e03011fb5d6a6f3a6885281b805ce5ad5c70efac7671daf1"
   },
   {
    "manufacturer": "900 Global",
@@ -207,7 +211,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1729f378cb0ba1927a7192ffd3027ab7a6c864e4333c00ed097d0dcbaa015624"
   },
   {
    "manufacturer": "900 Global",
@@ -278,7 +284,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "3bfc125e55f9cf970fc0cd6b39bb58139faa7d98e41ad4a0feec89c5e3a001ed"
   },
   {
    "manufacturer": "900 Global",
@@ -348,7 +356,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "901b785fb42abb001502997e25ecad433325fe0de4313d1b2c8d606270d16916"
   },
   {
    "manufacturer": "Brunswick",
@@ -420,7 +430,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "06d39b445ec4415cf7ae564ea0f7ffca6f14aa143718d74de3f7356cc0f5aec2"
   },
   {
    "manufacturer": "Brunswick",
@@ -489,7 +501,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "36102ede3eb5cc2b176f0ee4f4223417aaadd4dc1869ced02a9fd615acd82755"
   },
   {
    "manufacturer": "Brunswick",
@@ -559,7 +573,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1b29c5597b5b86c7637e22b3c872161074b91863e757fc56ae6ca0487fe58d0f"
   },
   {
    "manufacturer": "Brunswick",
@@ -635,7 +651,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "75c497b2ac9ee41f50c843e4f8f4c49724962f97ad4ff785f3952187d1e6f3f0"
   },
   {
    "manufacturer": "Brunswick",
@@ -714,7 +732,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "922c2f044d2703898762019a9f1b31442381a60a5ff0feeb4cb81e70a7604aff"
   },
   {
    "manufacturer": "Brunswick",
@@ -793,7 +813,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1461e06ff8dc8ca8aac51419b6cf8ea845fd163daaf26cfc0b5ddf7b6fd5dff7"
   },
   {
    "manufacturer": "Brunswick",
@@ -871,7 +893,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "53893b7714396b229b8fef60bb9661a53218653cce880d0ea4c1cfef46164199"
   },
   {
    "manufacturer": "Brunswick",
@@ -950,7 +974,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8b170abecb12b099bffae44fd7cd674c7d5f8e9d522156212107eb00b367da76"
   },
   {
    "manufacturer": "Brunswick",
@@ -1028,7 +1054,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "9e98bf449623641b9df0ded44df84e1fcbd054c8f939d52652c2bc309bf5a787"
   },
   {
    "manufacturer": "Brunswick",
@@ -1107,7 +1135,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a9f27c3b7e897e203ac7792f52b4132fadfd4627ab73aa198eb2851515c8deec"
   },
   {
    "manufacturer": "Brunswick",
@@ -1186,7 +1216,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ab149ada2b0fdc706e4ac09b6b7bfabb8ed0c3167f250786d9a3564106a4408d"
   },
   {
    "manufacturer": "Brunswick",
@@ -1266,7 +1298,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b3fde76395032be96db51f7fcfb7c8b388345a9cb378de86964b481236c957aa"
   },
   {
    "manufacturer": "Brunswick",
@@ -1338,7 +1372,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b3eafe38daccfc7d4946658eec88a75a6b152fa8ff0d5ef5b724eda376e8450f"
   },
   {
    "manufacturer": "Brunswick",
@@ -1410,7 +1446,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "537624c7040050dfe674d2ebd42b7ee347f389f991673a1500a7aa989e59d662"
   },
   {
    "manufacturer": "Brunswick",
@@ -1479,7 +1517,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "d601ac711ba8e5ed1621c20aa666c9aaa765a5ffecb795f1d156703ec6681e55"
   },
   {
    "manufacturer": "Brunswick",
@@ -1555,7 +1595,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "48c06dd4964ba93d2234a65f640855e1325766fc95d233eb3b0a267384d33fd5"
   },
   {
    "manufacturer": "Brunswick",
@@ -1624,7 +1666,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ea1fb50f624819aeead10bf1bb424facfd4d5509e1b837e19a2a1b29aec62e22"
   },
   {
    "manufacturer": "Brunswick",
@@ -1702,7 +1746,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "447466cf0f49c4d79a0d73d87b9dc0352af07433e6b6177171ca3ae6d30efb7c"
   },
   {
    "manufacturer": "Brunswick",
@@ -1781,7 +1827,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "f2955308b51bb0259f6d8b844a713e7bf74fa57c361072765222c8036c47c7a7"
   },
   {
    "manufacturer": "Brunswick",
@@ -1859,7 +1907,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "927c9391c0db9acad7f9969b562bd0f4c4c7e5fc715d1a039727f3a22de70b77"
   },
   {
    "manufacturer": "Brunswick",
@@ -1939,7 +1989,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b03be0bb5915f410c54e37ae4ed7cfa509db3d22ccb133cca9407ef9e206d84b"
   },
   {
    "manufacturer": "Brunswick",
@@ -2019,7 +2071,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "67145df78048f99cac288a8a320c063d0ebffdb9a395d084327bf711c25c68ac"
   },
   {
    "manufacturer": "Brunswick",
@@ -2099,7 +2153,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cbbc5e1c2f5eb4042675adc53d3560ba35ee3bac4c14c44d7859c6b624f02492"
   },
   {
    "manufacturer": "Brunswick",
@@ -2179,7 +2235,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "151d837327f20422f54014a8134f85f87a6054137b06d509e37e8b01e012b237"
   },
   {
    "manufacturer": "Brunswick",
@@ -2260,7 +2318,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "41503e04580d3fb69dcbdf852050463a8f4aee7261effcf8aa258d0c775eb606"
   },
   {
    "manufacturer": "Brunswick",
@@ -2338,7 +2398,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "83fbc8b509c7edd7ee7cbe20c8b38f0265594547bcbcb25900b4d323f7e0b8d4"
   },
   {
    "manufacturer": "Brunswick",
@@ -2416,7 +2478,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "85f274a9ab8d9c4de67123b325e7cab8b7f6a02eb325abeed0c96c152ef22e23"
   },
   {
    "manufacturer": "Brunswick",
@@ -2485,7 +2549,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cce884b74fa9fb2c8a573e5505fc6864130f4e490d3ae7c3a909db92052b92af"
   },
   {
    "manufacturer": "Brunswick",
@@ -2563,7 +2629,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "33a128882942050e0dd8bfb150903835d5b8358a7ee2b4020090a423cc256d93"
   },
   {
    "manufacturer": "Brunswick",
@@ -2633,7 +2701,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1f84fd155ce1332b634cc2b2322fbe279e47bc57d4063d2b743f380f24b442f8"
   },
   {
    "manufacturer": "Brunswick",
@@ -2709,7 +2779,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "25183d74028472de3e2b7aadaac69163a48ed1b151ded0b45d3d3f09fa18b65d"
   },
   {
    "manufacturer": "Brunswick",
@@ -2785,7 +2857,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "2ade33af365cea72bfdfc7d536842baa6d32ebf996f69af38065f35bd5f317cf"
   },
   {
    "manufacturer": "Brunswick",
@@ -2863,7 +2937,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5e58720c4f1999aed7a471a32fc8561c6e2d40d2baf94bfa95600174b079ab54"
   },
   {
    "manufacturer": "Brunswick",
@@ -2941,7 +3017,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "25940bc78761cf9101a4a1f32fb85529fa3661d6aebdbbf29057e6bbd2efad01"
   },
   {
    "manufacturer": "Brunswick",
@@ -3016,7 +3094,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "516cc74e5fffbad3ea342dde0213f3dabfb74b50fa088940b899a25be29dd491"
   },
   {
    "manufacturer": "Brunswick",
@@ -3091,7 +3171,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ec545d08ded5acd2223557d866ac7c122fb8fbc69a64dea837a8e0cf50a5a7ec"
   },
   {
    "manufacturer": "Brunswick",
@@ -3168,7 +3250,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "86c191e722da2705f8fb05d1247b2ea3959b684b8e8ddac0c0881da8797367f2"
   },
   {
    "manufacturer": "Brunswick",
@@ -3245,7 +3329,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "554beacabb7a42b088d2aad8bd81cf74ea1d55cfc697bc0d218545ae1da392e8"
   },
   {
    "manufacturer": "Brunswick",
@@ -3322,7 +3408,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c9bc93c1a5060b019a5692ae2a2e333fadbd2a99c6910f33d6bca4bbff5d1165"
   },
   {
    "manufacturer": "Brunswick",
@@ -3399,7 +3487,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5cef8e96dadecb976e6287f01767fa3a80d01f6ddbde46c3fa9f4b4e43582f2d"
   },
   {
    "manufacturer": "Brunswick",
@@ -3475,7 +3565,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1bd44046bf2cdacaef448a6d09df144e193ecea8bb085207ec978ebb50584e3f"
   },
   {
    "manufacturer": "Brunswick",
@@ -3551,7 +3643,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ea1a211a87616039a7a7f29ffac4d247184de7659149524b50d588cbedc4da2d"
   },
   {
    "manufacturer": "Brunswick",
@@ -3626,7 +3720,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8c68332cb9ea3bf34905fcf01e6bb33c64f065ae56e01fb8b7944ff44be14d72"
   },
   {
    "manufacturer": "Brunswick",
@@ -3701,7 +3797,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a3ea9c50c9fdc4d077fae50267c370baef26bc02a75b2c19b83323b4607fd05c"
   },
   {
    "manufacturer": "Brunswick",
@@ -3778,7 +3876,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "00fcf8704fcaab7e56f7cd399e75a7958792b5a5c5251debdc1a91983a47c0f8"
   },
   {
    "manufacturer": "Brunswick",
@@ -3853,7 +3953,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1ffad1bc2e72cca72ce2abeb6a5ce65a69f3a51daf93971e40b1549e5968e165"
   },
   {
    "manufacturer": "Brunswick",
@@ -3931,7 +4033,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "394b55342520220d809fcd5a3c4ff41eaf67dd87640d1dfb61899b8ceffa42e9"
   },
   {
    "manufacturer": "Brunswick",
@@ -4009,7 +4113,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e95bd096f5e04e6ee2f40b0fb9ddbcee006ab94cf1d9627df5315a00f829c1a0"
   },
   {
    "manufacturer": "Brunswick",
@@ -4077,7 +4183,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c9b67943c2d55730df47ee3c88e36da72d630d3d26f4eb69e6699b428b29fde3"
   },
   {
    "manufacturer": "Brunswick",
@@ -4146,7 +4254,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "dbcd22e9f39d35b6cd386fa9dd9bf2cf93bb81a31297fdbf85e5b3466671a198"
   },
   {
    "manufacturer": "DV8",
@@ -4215,7 +4325,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "f409a9f51712d4f65f414407c6c558e4d33949cd9d6c4981942a3cc19077e6f7"
   },
   {
    "manufacturer": "DV8",
@@ -4284,7 +4396,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "53f4b4d0df2bd594a11c7467477b3939bdbbea8a86300c0ef022706db8773ec3"
   },
   {
    "manufacturer": "DV8",
@@ -4357,7 +4471,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6e0a7a24bb4faf60f53a2e6be827014d747f8229b43f539e88e330547c1aefe1"
   },
   {
    "manufacturer": "DV8",
@@ -4430,7 +4546,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "968449098e27e2d9544e36ceae2ecf3cb661234a69d9f744c39442c9eccd042d"
   },
   {
    "manufacturer": "DV8",
@@ -4503,7 +4621,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "129afdd509123943237c1c20ac3824fb5722bcf0f8d7e6d83d534b41e33b5f5c"
   },
   {
    "manufacturer": "DV8",
@@ -4579,7 +4699,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bf324b55239ab033e3e18219c20eea7371a94616298c10c8f80b1b5024ff0ef7"
   },
   {
    "manufacturer": "Ebonite",
@@ -4661,7 +4783,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8a32b10f8617b95b938533d8cb84a038c54b77d215b27b8f760b9859cf52d989"
   },
   {
    "manufacturer": "Ebonite",
@@ -4750,7 +4874,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "7922b1d3913c034de4db989a67235d76108e1d44df4a58aff2d6645a29138fa8"
   },
   {
    "manufacturer": "Ebonite",
@@ -4832,7 +4958,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a1d45ea17e18a8793f7dad12c0a37870da77a838eada46ae1e8612b7bf508ba8"
   },
   {
    "manufacturer": "Ebonite",
@@ -4922,7 +5050,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "9c26f97a38bbce0afdfd629721fc739fdd17cfe0f3a18a37f356e1d6fb65f200"
   },
   {
    "manufacturer": "Ebonite",
@@ -5003,7 +5133,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "721e32e3a51d29e2c723d5ea46a06b104862977f1ac439138d3a6e0a06bf7c2e"
   },
   {
    "manufacturer": "Ebonite",
@@ -5092,7 +5224,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "f39ae26867a30a348d8d41dd4adc5367c42466565d6849c730bc3f12d82d5ad8"
   },
   {
    "manufacturer": "Ebonite",
@@ -5179,7 +5313,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cbf0ab7a271512420b53500cd3b6f91d0b5d38a32d322b33efcee599d8f4de30"
   },
   {
    "manufacturer": "Ebonite",
@@ -5268,7 +5404,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a5655173c8b06eb60c99d7e06062c86fbf1be5744ce6d2a0b28988d1699d79ee"
   },
   {
    "manufacturer": "Ebonite",
@@ -5357,7 +5495,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "7b77fd9e8f71611f6d814171b4a3a17e6a6bc3e09bf55aa3606c03ab4d8421d1"
   },
   {
    "manufacturer": "Ebonite",
@@ -5443,7 +5583,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6cc91aed1f4973e58fe656eeee67332b7db010abb65c122edcc8bc2cc8527583"
   },
   {
    "manufacturer": "Hammer",
@@ -5521,7 +5663,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "eb83a1f2115276f201c99fc15ed0c04294b779066645cbabb6c1907a34a9b728"
   },
   {
    "manufacturer": "Hammer",
@@ -5601,7 +5745,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c9720ec41d1864c9f0e245d093a320567c89bc424ebf0c16c5626c8cda4e3a0c"
   },
   {
    "manufacturer": "Hammer",
@@ -5681,7 +5827,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "0dd977770d5f61358e92611b71df730dd7010955f1c79f34a2d6d62291a272a4"
   },
   {
    "manufacturer": "Hammer",
@@ -5761,7 +5909,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a9e7395cc7663c87497f604bbac054590d0e10a837f023d688dd6701c80f7292"
   },
   {
    "manufacturer": "Hammer",
@@ -5841,7 +5991,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "de7c3606630b65493703016da50a83e184960c8215180933918d0b98d853b371"
   },
   {
    "manufacturer": "Hammer",
@@ -5928,7 +6080,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1e563c3156a36f60b2f030b2f78fe893fc3858ad1f5cb670f1c1c08e2874a2cd"
   },
   {
    "manufacturer": "Hammer",
@@ -6004,7 +6158,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "f42536bb0008028c0a10bb042b0f18ead9753fa3d7bb2286b56e63aa1f5c74ac"
   },
   {
    "manufacturer": "Hammer",
@@ -6080,7 +6236,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "124c717cbbe33dbf077a48b1a20d37caf9ba8d5d9892dc239e47196d23033b3d"
   },
   {
    "manufacturer": "Hammer",
@@ -6164,7 +6322,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "19a1aa6979d1e906dbbfed1e48ee431c44dfc7683b549a1e3ebe8509a833335e"
   },
   {
    "manufacturer": "Hammer",
@@ -6248,7 +6408,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "dd3090a8e96f9b3b6d6fa8da0d7788fde63fb37f65254dc4242cc5656260df38"
   },
   {
    "manufacturer": "Hammer",
@@ -6330,7 +6492,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "637471eb6578477342a0b21f2fc880a0c4305c5954c78cd64d9f1822b5da9274"
   },
   {
    "manufacturer": "Hammer",
@@ -6406,7 +6570,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e9f62bcef8cef3514ada8b43b5fbdea778d426eb3c5e6caafc4073bcac33178a"
   },
   {
    "manufacturer": "Hammer",
@@ -6477,7 +6643,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ec77044d218bc938c4a4bd70765030b39a22711224065cc69038147f6185c317"
   },
   {
    "manufacturer": "Hammer",
@@ -6562,7 +6730,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "2c104614193e3ff10802364597e2eb6ee15163496ee809bb98ab2cc9881e4b67"
   },
   {
    "manufacturer": "Hammer",
@@ -6646,7 +6816,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8b81b9de035735a9ed0026dbd3cbc022eb9a65838553ea896b01511fb39cd01e"
   },
   {
    "manufacturer": "Hammer",
@@ -6732,7 +6904,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ea18967b97c4d08507d16e3917b990e1290a37c671f847c51cdef3f5e12af3e7"
   },
   {
    "manufacturer": "Hammer",
@@ -6809,7 +6983,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "286361f3f142192abbed54e9eacb9c07c464673c740ee0316b120018572e279e"
   },
   {
    "manufacturer": "Hammer",
@@ -6894,7 +7070,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ada572bd597c2a9fb55a168e3039108bafa3ee2a51d14facc2cc10d2aba689ec"
   },
   {
    "manufacturer": "Hammer",
@@ -6978,7 +7156,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "53470d4254a9fde6c0ddb8f2b678585d3b08c71c721b5d7fca413902db60d2b8"
   },
   {
    "manufacturer": "Hammer",
@@ -7054,7 +7234,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5feac49d11a6c1b56908696378294896773859eae8306bcdfaeb6453cdf7101f"
   },
   {
    "manufacturer": "Hammer",
@@ -7140,7 +7322,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b813bb37999316f6517cc58a2dda3d6ba342587184df9796e1cbd56d4c2619cd"
   },
   {
    "manufacturer": "Hammer",
@@ -7226,7 +7410,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "0bc7ae9311d1bfbd53db8ccbe28019b2588c17e0fa52e55df78c6e5d6a744ad3"
   },
   {
    "manufacturer": "Hammer",
@@ -7313,7 +7499,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bdee46916bd90b80e275a72b91d9661888de791c41eb32984562e7dc6835d9cd"
   },
   {
    "manufacturer": "Hammer",
@@ -7399,7 +7587,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "3991a803ecede254ccf57e885d7f7049036ca697c642042b4e2b40b46ea154cf"
   },
   {
    "manufacturer": "Hammer",
@@ -7485,7 +7675,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8f98b475ca4bbfd5079618106d3e6b18368eefed38427440564648eaac70cb61"
   },
   {
    "manufacturer": "Hammer",
@@ -7563,7 +7755,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bb65b9970a9fd6dc2e0cdf604a804a05836ab656d78d99055143de14d8e03636"
   },
   {
    "manufacturer": "Hammer",
@@ -7641,7 +7835,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "27dedc8240c631ffac31fc7f287834de285f6087a0cb7b2eca2502cbcdab2614"
   },
   {
    "manufacturer": "Hammer",
@@ -7727,7 +7923,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5dfca40478845d17af7ae705355bb51c9f45b2b5a3416aa34a5f55a54528f14c"
   },
   {
    "manufacturer": "Hammer",
@@ -7813,7 +8011,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "7369bf1319d3667a36ad27e5363ed4637a86744a638c8e9fd56558acc880ef56"
   },
   {
    "manufacturer": "Hammer",
@@ -7898,7 +8098,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e86011f0c50cc6098ffc2520e9b3c61d40fda206ff4dbb74e0e1a4e77556ea98"
   },
   {
    "manufacturer": "Hammer",
@@ -7983,7 +8185,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "253f10bcb102a7fcbd4bee3664664c94001f743218f4e6ed5b8478161fbedcb0"
   },
   {
    "manufacturer": "Hammer",
@@ -8060,7 +8264,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "87dabc9ce45ae89d5c1575fd164650bfc6b1fbf54bc929c9e44f289d80b0e6e8"
   },
   {
    "manufacturer": "Hammer",
@@ -8144,7 +8350,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b0a34bd2677b9bf2bda890a9e979146b7d8d36f8fb8ec712856a43ce9f999bbe"
   },
   {
    "manufacturer": "Hammer",
@@ -8228,7 +8436,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "3f37f6b08e8ff2c7705317071e405b4b6646851965fa273ee72f24bef25b27b9"
   },
   {
    "manufacturer": "Hammer",
@@ -8312,7 +8522,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cfb38b0de241e9d59eff795be8115c11d34bf2269a409d02a9a7727198381a1b"
   },
   {
    "manufacturer": "Hammer",
@@ -8396,7 +8608,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b7a385079a23d51f9c9ed7ceec8fd071912bc8c331f828b78ad6803fb7d03839"
   },
   {
    "manufacturer": "Motiv",
@@ -8463,7 +8677,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "784d5b747c6785d9e4acadbbb2debfff04ec7edd29e7eb2300305a2ebdf7e7cf"
   },
   {
    "manufacturer": "Motiv",
@@ -8537,7 +8753,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "2e87ec7501037e5a9cfc2ca914516e3f533a909bb32a23504222c9e00af94367"
   },
   {
    "manufacturer": "Motiv",
@@ -8611,7 +8829,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b675c8586ab211a1692b39b29a4bacdebf25eaf5b64cc9f85cc06e7c5bd9a5e0"
   },
   {
    "manufacturer": "Motiv",
@@ -8678,7 +8898,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "80f459344efaaf33cea543d2d2942f0732f806b151c57b1680475d18bfa49311"
   },
   {
    "manufacturer": "Motiv",
@@ -8736,7 +8958,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "131fdb901e6dca312cbba29c7f4cdc6d4a0453c9b840a8f015639702cfe6a0af"
   },
   {
    "manufacturer": "Motiv",
@@ -8809,7 +9033,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a4a98d73df40cd2beec0a5c419543f5e49273dbb9a4aca0737f3a80a34eab118"
   },
   {
    "manufacturer": "Motiv",
@@ -8878,7 +9104,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6bde42737a8cda649bde551b8657c19c1a8738d81cd4144292abd4ad6569ae77"
   },
   {
    "manufacturer": "Motiv",
@@ -8947,7 +9175,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "87f9b28f5a4a0318da34197bfe79eb4eb4c21f263d079b2845c960367624f905"
   },
   {
    "manufacturer": "Motiv",
@@ -9016,7 +9246,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "7131109a95497e117c1e7451d22e7bcd437c35c14364fe6f95fac6c355bfba9b"
   },
   {
    "manufacturer": "Motiv",
@@ -9086,7 +9318,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "68e45393456b46e9031a46cc9f0a6a481618bbc15a52bc0faefef11dd7bdcb89"
   },
   {
    "manufacturer": "Motiv",
@@ -9153,7 +9387,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "760b0470be357d9ae1adb182311184f2914542f99cef593f29947a127daa3e46"
   },
   {
    "manufacturer": "Motiv",
@@ -9220,7 +9456,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "38de14e75e80da8919bea9fa3ef69e3d2fe297a32abbd6c0950f88ff9abcc3f9"
   },
   {
    "manufacturer": "Motiv",
@@ -9290,7 +9528,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "adecd75b5663d94072d6d75791fa3fc84e7781812628407ca6c74ba2af44a536"
   },
   {
    "manufacturer": "Motiv",
@@ -9357,7 +9597,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "dd22015d9778c64b25d7a415112e33bf478c71bd8dc274f94d7fe51f7db15c75"
   },
   {
    "manufacturer": "Motiv",
@@ -9424,7 +9666,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "78927ad7f1c9c06ca581944854d9bba07a2b40941156ff4a322e5dbd770870f3"
   },
   {
    "manufacturer": "Motiv",
@@ -9492,7 +9736,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a27d081d17253295c8a66c8b7611c4125b638344c4909e6bf3466e9413164ef8"
   },
   {
    "manufacturer": "Motiv",
@@ -9561,7 +9807,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c43c80d25d6d970c6ae044cfcdd0f6004057523ba6c3ace1b95444ce5bb82144"
   },
   {
    "manufacturer": "Motiv",
@@ -9628,7 +9876,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "78cdfe80e2185ee044655a9ebafc75bc0e22545d1527bec81f8e94f897d181dc"
   },
   {
    "manufacturer": "Motiv",
@@ -9697,7 +9947,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a41bc0b3604604431520d095de76d5dea5c38d2a785d05bded1add192cae2b86"
   },
   {
    "manufacturer": "Motiv",
@@ -9766,7 +10018,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "f5ac30d2a39623e79601cabd160bc3b39249e34b965f6f70ff330f49ef818fbc"
   },
   {
    "manufacturer": "Motiv",
@@ -9835,7 +10089,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a2595adb131fcf92f41a44a2ac767b3657e90f4996f68d986784c462b6c326c1"
   },
   {
    "manufacturer": "Motiv",
@@ -9902,7 +10158,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "82d274db6dac51633f59260b6335a7832efab7a2d71451cb32db7282185266f3"
   },
   {
    "manufacturer": "Motiv",
@@ -9972,7 +10230,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "d2c14928b3a35af092d7d8c2c91910724999a15bfda173e4b23df8e1591a89a2"
   },
   {
    "manufacturer": "Motiv",
@@ -10039,7 +10299,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "637848f84413b9774ce67b4b2aba3a54e22702b8cd1f56bb60e2368b17bf904f"
   },
   {
    "manufacturer": "Motiv",
@@ -10106,7 +10368,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "7bf3bb0577ff9fbe39a31b476e0e7285671993fe13069b75fa9daf1b08ed1a12"
   },
   {
    "manufacturer": "Motiv",
@@ -10173,7 +10437,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "high",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "302c54106308b7c0618995e85a4771b13d604402e41a6088bfdfd32829c54da4"
   },
   {
    "manufacturer": "Radical",
@@ -10224,7 +10490,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c3ab1d4394411645fb0f05e12200b1d49430191bb0d6bed8a7da918be3c940c2"
   },
   {
    "manufacturer": "Radical",
@@ -10285,7 +10553,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "77b3abb9b6d681b5aca76e9a24a6c73f7c19f754cdf4b8cab3492fceede96dae"
   },
   {
    "manufacturer": "Radical",
@@ -10353,7 +10623,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "235407f991ebf2ed3e5adc90de755bbe7b30ef9377d02aec5c0f0c2bf5e3f706"
   },
   {
    "manufacturer": "Radical",
@@ -10420,7 +10692,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "0fbe25e3be23c3ee707d3b854662a25d3a0729110d066c5a223d4b72d053d2e4"
   },
   {
    "manufacturer": "Radical",
@@ -10488,7 +10762,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "398c7ef8d75b12fc1fdc7100a2fd8df14895d8c1348282174334d3cf1f1564bd"
   },
   {
    "manufacturer": "Radical",
@@ -10556,7 +10832,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "37f7362ee46bac6302229c9a353e84492865dd47d62594e5389d1dfa4feafa78"
   },
   {
    "manufacturer": "Radical",
@@ -10615,7 +10893,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "2aaa5b9d50aa3f47b7304fde797715c474d2b8ae9f4a0b1ac72e841e9035175d"
   },
   {
    "manufacturer": "Radical",
@@ -10675,7 +10955,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "aac941f724613d2d3188c573ef9f4241dfbc7d537d45e84990117f561ee42e1f"
   },
   {
    "manufacturer": "Radical",
@@ -10743,7 +11025,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5f0580d9bd33ce48a952795dd596d7a7281eb21cbc5b2aa175c0a9e328326c7a"
   },
   {
    "manufacturer": "Radical",
@@ -10811,7 +11095,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1c30bbb0e6652921f1ae3bb809d7294c7c6a7c82db423615dd6ab014d87ac262"
   },
   {
    "manufacturer": "Radical",
@@ -10872,7 +11158,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c3d7598b1c62c2bbdea4248213364d504753e31e3b6a0a1224f4b294c1b3770b"
   },
   {
    "manufacturer": "Radical",
@@ -10932,7 +11220,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a8c51ba11d4e39eee17828a066bbad6bb9296fe2215e069ea2de6e6c3b7e1d54"
   },
   {
    "manufacturer": "Radical",
@@ -10999,7 +11289,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1158b166d11f1131d546bf0dfb6165f1ecaf927ab13b0d7fbedadf86a7f22837"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11063,7 +11355,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "52fabe08c157f2d6557e4a9c637cb569f62d169fc714427e282ab1540376b01d"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11135,7 +11429,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bacbd7c159a78a337effcbfe7eb480c8c995ba33738063e5c20c7293b7f5e56d"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11205,7 +11501,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6d331e55540315d7c09a35827267c32f4030fe365faa2eea258b2d6bcd53da68"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11267,7 +11565,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "5c4920cad605e3dfb0f5c7be3c17864e62aa1e196822f23cf9f8feff085a7d64"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11329,7 +11629,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6491d95a7a01d87d0792d594aefc227d1cd6733e0218a12a72cb0c117f28471b"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11393,7 +11695,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "729ea4cf4152a8b31c714407a790c50a12134023a0a9bc072d6fa75bd2c584b3"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11465,7 +11769,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "33bd030b989266614b0b55e1016de23aed91221de7a6fc20774bfc1f1f47f858"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11527,7 +11833,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "be4920677f3440c811ada154cce65fe099e2deafed4e071f0441dc769c5a2ae7"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11591,7 +11899,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c5187bb5d574f1c87db192fc9c7ce7ca4abcb8c52b79f3e0bee6ecf5811ce2fa"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11662,7 +11972,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "07122276dc17b5541098e83dcd8456036e4b6d7cdc5895907d83f17f84741f1e"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11726,7 +12038,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "3cff19f2b3fd071676e615e8f613d2ac1237c8710e81ed3a80ba3239f6bb1579"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11796,7 +12110,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e9e8b9194c6d5e18afef0c09f9087f7bd7bce62938055bb1f2285e1537ece1ea"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11866,7 +12182,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "d74b3d94d027563112aef2f35325b0cdd85070388e48a45169c3901b8588f338"
   },
   {
    "manufacturer": "Roto Grip",
@@ -11936,7 +12254,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "4afd28ab626aba714aa59136f0410b2afb5bc8bfad1ca6151cb41e6d28635034"
   },
   {
    "manufacturer": "Roto Grip",
@@ -12006,7 +12326,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a1256baefca7c22c6c998b3691225c28523d6ad579140dc9222e31438f9890f1"
   },
   {
    "manufacturer": "Roto Grip",
@@ -12077,7 +12399,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e37148fb4cd830c7f508b9604d3b4b82e3d8d8e41145e239bb41bec7124c40fc"
   },
   {
    "manufacturer": "Storm",
@@ -12145,7 +12469,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e02a3842c43746c5998df06a2be4a859b136e0738394446279ea9cb55f1a51be"
   },
   {
    "manufacturer": "Storm",
@@ -12213,7 +12539,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "07a4f9aabce251b7c22aae04e22d44375754a66c321b259647283efc21e9d81e"
   },
   {
    "manufacturer": "Storm",
@@ -12279,7 +12607,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "d58a7149c3b421084b1ebdec5e3107ef8cd1c1455729a202fc3967c2b16d915a"
   },
   {
    "manufacturer": "Storm",
@@ -12344,7 +12674,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "06d35707d525dd0bf20381c5b543f253cd0154effcdc924a1d8188604b08386c"
   },
   {
    "manufacturer": "Storm",
@@ -12410,7 +12742,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bd6fbe4ccb27fe7b1f4ed93f7d57ceb4f332681c97bb3e226f866b763c8c0d1e"
   },
   {
    "manufacturer": "Storm",
@@ -12477,7 +12811,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "276e33fa3e1aa3a6be0ebb72d6fee9af0750fbe6e9d728369e6eb8d84fcb29c0"
   },
   {
    "manufacturer": "Storm",
@@ -12543,7 +12879,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "823ff5d1765a752b4dec148ffe4343d089d2e7a36cdbaa3f9083e1ab8739329f"
   },
   {
    "manufacturer": "Storm",
@@ -12608,7 +12946,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cf2d540d341ae5a45f3116daa31dcc55ff4ac5d8f1db2c7ef38c9dd7179e3a69"
   },
   {
    "manufacturer": "Storm",
@@ -12673,7 +13013,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "14d98941a74857e7556de32f4d774bfb30b245b149b47e211a6d3374d48c6666"
   },
   {
    "manufacturer": "Storm",
@@ -12741,7 +13083,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "fe723ca0d0e2079a5e99874c51dca3cb2795ce352428fa11fbcc560eb8b3e319"
   },
   {
    "manufacturer": "Storm",
@@ -12808,7 +13152,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "88bcd69be7805804db268a0f321d1b7504ba8db25097150b26155f16a93e3a36"
   },
   {
    "manufacturer": "Storm",
@@ -12877,7 +13223,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "997b92df799d1cb95898d979a5c02b04bb054618aea809f5ea60857abb6f0ad9"
   },
   {
    "manufacturer": "Storm",
@@ -12946,7 +13294,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "3d65966215d4f4dd2379cd9a8558d082c48d5957fb0a8ce6a65e1427a1ea73a0"
   },
   {
    "manufacturer": "Storm",
@@ -13011,7 +13361,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "97a0403d15657bef57a7d075c096be989c343cc114bc5feee8d8b0580515b9bb"
   },
   {
    "manufacturer": "Storm",
@@ -13076,7 +13428,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "70ffea266ca384f2d9944e0833e0dd4d655e203548ee8dbaadbae52a8c3c5277"
   },
   {
    "manufacturer": "Storm",
@@ -13141,7 +13495,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a4bc4f7db2ea96421774e390260536952b36a939d472da6bef77b8c3c9df0af1"
   },
   {
    "manufacturer": "Storm",
@@ -13206,7 +13562,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "0d6f5c52d1f1ab67b2ba43d3f956bbac923c16decf959771c39211d8a540ef7e"
   },
   {
    "manufacturer": "Storm",
@@ -13271,7 +13629,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e73960cc75c525bcd31cf2291558945a90d36e0a624d7408f5c00714c3bab267"
   },
   {
    "manufacturer": "Storm",
@@ -13337,7 +13697,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "d17fea10e2fa5c5f8f8b4f24d179a934d65832ed4421b441438b4bc9bce01981"
   },
   {
    "manufacturer": "Storm",
@@ -13405,7 +13767,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "46446036d8ff10b2082253d36fca48782aebed257a5b83a81cd02ad313ca8e13"
   },
   {
    "manufacturer": "Storm",
@@ -13473,7 +13837,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "431e7518ebdaae0a6d0f9ce8bb9448995cc16a85c0a8f8e47765f66632090d49"
   },
   {
    "manufacturer": "Storm",
@@ -13540,7 +13906,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "8ad0fec1af644dcaeeef077c2097fe7ee9f20f014693cf679569d9845ff458a5"
   },
   {
    "manufacturer": "Storm",
@@ -13607,7 +13975,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e7fb7a57ac18b019d7707b65e13235e4351f95afbf8495d13fa15ed79cb5ec10"
   },
   {
    "manufacturer": "Storm",
@@ -13674,7 +14044,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c824235f72ca077caae45101e2134944112971a79cd875d232f69efd03561f52"
   },
   {
    "manufacturer": "Storm",
@@ -13741,7 +14113,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "fc0cbf2d719ddc7f50cc299e30924c66daffd9fc8eea907d5eb94601a3e9013b"
   },
   {
    "manufacturer": "Storm",
@@ -13808,7 +14182,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "44a58fdea2b8c290ce44531f00b7a34f9d40b3073a1dbaa86ec09837bf926f9c"
   },
   {
    "manufacturer": "Storm",
@@ -13874,7 +14250,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bf00652e5005b12ba2ef4d56c181f6fbf481a8bb6e8878f08337f44da3e718de"
   },
   {
    "manufacturer": "Storm",
@@ -13939,7 +14317,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "52a6ae1c7d187a29b870008cf5a8bbf37f5c0588c92d6e6124a74927e96fdeb0"
   },
   {
    "manufacturer": "Storm",
@@ -14005,7 +14385,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b087eab8c488c8ce2b2817b372f200f88f41d3d91ef02019e8013c25b9bc7468"
   },
   {
    "manufacturer": "Storm",
@@ -14072,7 +14454,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "54faee1f9138e105958d89979bde12b8227d0862c3dd051114dc017261fe1b34"
   },
   {
    "manufacturer": "Storm",
@@ -14138,7 +14522,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "e12ee101b414b2ebb7fb1d97dc3f3b24b7fcf9be52eef92ef3453a0214c410ec"
   },
   {
    "manufacturer": "Storm",
@@ -14206,7 +14592,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "ccebec2c9b1df48ebe4f36d2787fee3b69263da27db04ed187eb4698c43dbc62"
   },
   {
    "manufacturer": "Storm",
@@ -14272,7 +14660,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "78557b3cca4a43abf2ac00cdadc96604bf571b5fbcda284c26b3bbbdc8338d24"
   },
   {
    "manufacturer": "Storm",
@@ -14340,7 +14730,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "1d2a4b72a9a12174add3f6b977b3ca6ce881f22ce95ba8ec468b5058c5a54caf"
   },
   {
    "manufacturer": "Storm",
@@ -14409,7 +14801,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "77eb3958e4e539987a18d59561cceec4936436d7513e059b5c3bec28da9a8ab8"
   },
   {
    "manufacturer": "Storm",
@@ -14478,7 +14872,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "bc7d18d34236bd7f6ce99ca0291276da3348463468f75a4108c40f5e20b15078"
   },
   {
    "manufacturer": "Storm",
@@ -14547,7 +14943,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "756d1a9dd8a5eaec4162194fe5dcd7febe713edf2d440708c44a713b92899bc7"
   },
   {
    "manufacturer": "Storm",
@@ -14616,7 +15014,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "b79d37ece5eff848b15836bb1f1c96930a28198f3956f54fdb4c649d6bff7c16"
   },
   {
    "manufacturer": "Storm",
@@ -14685,7 +15085,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6f7c660a0f2059e7fe1679b28cfea5e3b1c4bb536f76dc4c3373770159848ca5"
   },
   {
    "manufacturer": "Storm",
@@ -14753,7 +15155,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c5aae49edb3607e5f9153390d12c7e5301d51cd58660617527103f553a5713fe"
   },
   {
    "manufacturer": "Storm",
@@ -14822,7 +15226,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "4908454280b6f628fd8c44ba7a3d32f73889a19ebf8fad4b8a5a98bdb2c01ec2"
   },
   {
    "manufacturer": "Storm",
@@ -14888,7 +15294,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cd37b3fc46b94d64b68191e08f38bfc61c9773c9db9f4be2ae2366b758dfe813"
   },
   {
    "manufacturer": "Track",
@@ -14974,7 +15382,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "c76a36e24e3ebc1a782fb2e7f03c387b54b1f178a325e700cb656bd0d76a7149"
   },
   {
    "manufacturer": "Track",
@@ -15060,7 +15470,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a3d9199f7793c41f295e5c2ba055709f27bc2c2d3d37d70f9dcc5920f20dce51"
   },
   {
    "manufacturer": "Track",
@@ -15141,7 +15553,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "17a7ced6a534944b369230f7ff6e0501b55bec81a7d314080bcef6a3d3b6ea1a"
   },
   {
    "manufacturer": "Track",
@@ -15223,7 +15637,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "low",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "6f02ee483ccbc3e6fd134b6f1862154e07f1a14e417bc6a24be7ee68fe85ae9c"
   },
   {
    "manufacturer": "Track",
@@ -15311,7 +15727,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "a872dbc5821e6ee4443fd3d0ee7d2c2469c86ae808ba66d63cd8a134c6cf58c3"
   },
   {
    "manufacturer": "Track",
@@ -15397,7 +15815,9 @@
     "oil": "mfr_rating"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "827db29ce6deeec21998fb98f7767462644fc6911a1fdef91485d60880f4f6a9"
   },
   {
    "manufacturer": "Track",
@@ -15483,7 +15903,9 @@
     "oil": "derived_from_hook"
    },
    "reaction_confidence": "medium",
-   "normalizer_version": "ls-reaction-1.0"
+   "normalizer_version": "ls-reaction-1.0",
+   "status": "current",
+   "source_hash": "cf07fbd2c6303a2080246fc292cc374e18ffd27addeccc80d6555a421e198b02"
   }
  ]
 }

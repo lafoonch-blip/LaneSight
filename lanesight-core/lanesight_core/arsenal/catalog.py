@@ -409,6 +409,14 @@ def validate(rec: dict) -> list[str]:
             errs.append(f'{k} not https')
     if not rec.get('spec_source_urls'):
         errs.append('no spec_source_urls')
+    st = rec.get('status') or 'current'
+    if st not in ('current', 'discontinued'):
+        errs.append(f'bad status {st!r}')
+    if rec.get('discontinued_on'):
+        if st != 'discontinued':
+            errs.append('discontinued_on set on a current ball')
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', str(rec['discontinued_on'])):
+            errs.append('discontinued_on not YYYY-MM-DD')
     return errs
 
 
