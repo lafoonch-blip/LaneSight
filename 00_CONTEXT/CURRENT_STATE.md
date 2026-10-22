@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.23  
+Version: 1.24  
 Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.22
+Supersedes: v1.23
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -68,6 +68,7 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
 - Payments
 
 ## Current blockers / discovery
+- **BETA GATE (DEC-046 / security):** before ANY non-owner data enters the LaneSight Supabase project, **rotate the Supabase secret/service_role key and disable the legacy keys** (the keys were transmitted in plaintext during DV-03 setup 2026-10-22; the project still exposes a legacy HS256 service token alongside the new ES256 asymmetric keys). Then update the Keychain item. Dev Build v0 is owner-only (Shayne), so this gates the friends Beta, not the dev build.
 - Seed Dataset v1: 30–50 varied shots with sensor data, some at 240 fps (~21 captured in the 2026-10-15 live session with Ruby S2, varied camera distance; none at 240 fps yet)
 - Ruby export: no confirmed file export; Ruby data is hand-entered today. Confirm what the app can export (R-02) so shot-matching (M5-05) can be automated
 - Specto session(s): find a local Specto center and confirm data access/export
@@ -107,7 +108,8 @@ The active build. A **developer build of the LaneSight iOS app on Shayne's iPhon
 - **Score:** `L-dev-0` (DEC-048), a no-pinfall dev/Beta formula; see `01_PRODUCT/METRIC_AND_SCORING_LOGIC.md`. The target formula remains DEC-038.
 - **Capture is never blocked by framing (DEC-045):** an advisory spot check suggests a better position; it never gates recording.
 - **Build phases:** recorded in `BUILD_PLAN.md` as the Dev Build v0 stage (`DV-00…DV-05`). DV-00 (docs), DV-01 (DB, migrations 006–010 live) and most of DV-02 (engines) are done.
-- **DV-02 engines (2026-10-22):** pure, DB-free packages in `lanesight_core/` — `score/` (L-dev-0 + Accuracy/Consistency/Performance/Power + tiers), `benchmarks/`, `achievements/`, `insights/routing.py` (target-vs-actual + form routing), `owner.py` (reset). 127 tests pass. **Deferred, honestly unavailable:** Form P1 metric *values* (need a pose backend + the 2026-10-17/20 clips), rule/drill YAML content (owner-reviewed), and Power P′ reference ranges (pending Shayne) — so the score stays "building" until ranges are set.
+- **DV-02 engines (2026-10-22):** pure, DB-free packages in `lanesight_core/` — `score/` (L-dev-0 + Accuracy/Consistency/Performance/Power + tiers), `benchmarks/`, `achievements/`, `insights/routing.py` (target-vs-actual + form routing), `owner.py` (reset). **Deferred, honestly unavailable:** Form P1 metric *values* (need a pose backend + the 2026-10-17/20 clips), rule/drill YAML content (owner-reviewed, draft in `03_ENGINEERING/dev_build_v0/RULES_AND_POWER_REVIEW.md`), and Power P′ reference ranges (ball weight 15 lb confirmed; ranges still await approval).
+- **DV-03 lanesight_api (2026-10-22):** FastAPI Mac service — Keychain creds (PostgREST via service_role; ES256/JWKS auth), serial job queue (DEC-043), reuses `analyze_clip`, committed OpenAPI spec, launchd + `tailscale serve`. **Live e2e PASSED** against the real project (IMG_8807): real analyze (~24 s) → L-dev-0 → feedback → CSV, with score_snapshots + feedback written to Supabase and cascade-cleaned. Follow-ups: persist `shots`/`measurements`; remaining §3 endpoints. Full suite 134 tests pass.
 
 **Open before Phase 1 (Shayne-side / to confirm):**
 - **Supabase project (confirmed 2026-10-22):** LaneSight = `europwryibstnmipbvam`, ACTIVE_HEALTHY, us-east-1, in the **VendHub** org (`wmprtjakyzfgszjqjtky`). Never touch the org's other projects (`vendhub`, `LandForge`).

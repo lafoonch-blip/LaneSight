@@ -30,10 +30,10 @@ power_ref_ranges:
   entry_speed_mph: [14.0, 20.0]   # your pocket speed ~16-17 -> ~0.4-0.5; USBC design-basis ~17
   rev_rate_rpm:    [250, 500]     # your ~400-425 -> ~0.6-0.7; USBC average bowler ~250
   entry_angle_deg: [2.0, 6.0]     # your 3-5 deg -> ~0.3-0.75; USBC "good" entry ~4-6
-  weight_lb:       [14.0, 16.0]   # typical; set to your ball weight
+  weight_lb:       [14.0, 16.0]   # your ball = 15 lb -> normalizes to 0.5 (confirmed 2026-10-22)
 ```
 
-**Questions for you:** (a) your ball weight; (b) do you want the ranges anchored to *your* data (above) or to a population reference? (c) rev uses the video `rev_rate` which is a calibrated estimate — OK to include, or weight it lower?
+**Questions for you:** (a) ~~ball weight~~ **answered: 15 lb**; (b) do you want the ranges anchored to *your* data (above) or to a population reference? (c) rev uses the video `rev_rate` which is a calibrated estimate — OK to include, or weight it lower?
 
 ---
 
