@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.24  
+Version: 1.25  
 Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.23
+Supersedes: v1.24
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -68,7 +68,6 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
 - Payments
 
 ## Current blockers / discovery
-- **BETA GATE (DEC-046 / security):** before ANY non-owner data enters the LaneSight Supabase project, **rotate the Supabase secret/service_role key and disable the legacy keys** (the keys were transmitted in plaintext during DV-03 setup 2026-10-22; the project still exposes a legacy HS256 service token alongside the new ES256 asymmetric keys). Then update the Keychain item. Dev Build v0 is owner-only (Shayne), so this gates the friends Beta, not the dev build.
 - Seed Dataset v1: 30–50 varied shots with sensor data, some at 240 fps (~21 captured in the 2026-10-15 live session with Ruby S2, varied camera distance; none at 240 fps yet)
 - Ruby export: no confirmed file export; Ruby data is hand-entered today. Confirm what the app can export (R-02) so shot-matching (M5-05) can be automated
 - Specto session(s): find a local Specto center and confirm data access/export
