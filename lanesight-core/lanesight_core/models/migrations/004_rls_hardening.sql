@@ -7,6 +7,8 @@
 --   4. rewrites policies to `(select auth.uid())` (evaluated once per query, not per row) and scopes them to `authenticated`;
 --   5. indexes every foreign key used by those policies and by common joins.
 -- Writes to centers / ball_models stay service-role only (seed loaders).
+-- Applied to Supabase 2026-10-22 as an equivalent drop-free variant (`alter policy` on the existing own_rows policies,
+-- `create policy` for new ones) because the MCP connector cancels statements containing DROP. End state is identical.
 
 -- ---------- 4. own_rows on user_id tables: per-query auth.uid(), authenticated only ----------
 do $$ declare t text; begin

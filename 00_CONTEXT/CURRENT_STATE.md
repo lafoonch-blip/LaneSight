@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.19  
-Last Updated: 2026-10-21  
+Version: 1.20  
+Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.18
+Supersedes: v1.19
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -15,7 +15,7 @@ Supersedes: v1.18
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne). The back-end accuracy/robustness work continues in parallel.
 
 ## Where things stand
-- **Ball catalog + configured reaction (2026-10-21, DEC-044):** 211 current balls from 10 brands with stock-photo links, 15 lb specs, published ratings and a normalized expected reaction; a bowler's ball reaction is adjusted for its layout and current surface. Code and data in `lanesight-core` (`lanesight_core/arsenal/`, `data/ball_catalog/`); migrations 002/003 written and verified locally, **not yet applied to Supabase**. Adjustment sizes and recommendation weights are provisional (M4-08).
+- **Ball catalog + configured reaction (2026-10-21, DEC-044):** 211 current balls from 10 brands with stock-photo links, 15 lb specs, published ratings and a normalized expected reaction; a bowler's ball reaction is adjusted for its layout and current surface. Code and data in `lanesight-core` (`lanesight_core/arsenal/`, `data/ball_catalog/`); **live in Supabase** (project `LaneSight`, ref `europwryibstnmipbvam`, VendHub org, us-east-1; schema v1 + migrations 002–004, 211 balls loaded and checksum-verified against the repo; RLS on every table, Supabase security advisor clean, 2026-10-22). Adjustment sizes and recommendation weights are provisional (M4-08).
 - `lanesight-core` in `lanesight-core/` (54 tests passing, re-run 2026-10-15):
   - automatic video pipeline: tripod + handheld, pin reading, rev rate
   - scoring/stats, insights/adjustments, spare targeting

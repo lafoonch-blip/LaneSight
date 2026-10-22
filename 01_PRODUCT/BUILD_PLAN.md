@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.4  
-Last Updated: 2026-10-21  
+Version: 3.5  
+Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v3.4; v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -115,8 +115,9 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 ## Stage 5 — Profile, arsenal, oil patterns, sensor variance (back end)  (M)
 - [~] M5-01 Bowler profile: handedness, style, baseline speed/rev/axis, PAP (schema) (was P2-01)
 - [~] M5-02 Arsenal: BallModel catalog → UserBall → versioned BallConfiguration (layout, pin/PSA, PAP used, weight) → surface and maintenance events (schema) (was P2-02/03/04)
-  - **2026-10-21 (DEC-044):** ball catalog built — 211 current balls, 10 brands, photo link + 15 lb specs + published ratings + normalized reaction (`lanesight-core/data/ball_catalog/`, migration `002_ball_catalog.sql`, `seed_ball_catalog.sql`, `lanesight_core/arsenal/`). Configured reaction from layout + current surface (`configured.py`, migration `003_ball_configuration_surface.sql`). Provisional recommenders: `rank_for_condition`, `arsenal_gaps`. Tested; migrations verified on Postgres 16; **not yet applied to Supabase**.
-  - Still to do: apply 002/003 + seed to Supabase; arsenal UI (photo, layout entry, surface log); measured-shot calibration per configuration; oil absorption / games since resurface; periodic catalog refresh.
+  - **2026-10-21 (DEC-044):** ball catalog built — 211 current balls, 10 brands, photo link + 15 lb specs + published ratings + normalized reaction (`lanesight-core/data/ball_catalog/`, migration `002_ball_catalog.sql`, `seed_ball_catalog.sql`, `lanesight_core/arsenal/`). Configured reaction from layout + current surface (`configured.py`, migration `003_ball_configuration_surface.sql`). Provisional recommenders: `rank_for_condition`, `arsenal_gaps`. Tested; migrations verified on Postgres 16.
+  - **2026-10-22:** live in Supabase project `LaneSight` (`europwryibstnmipbvam`): schema v1 + 002 + 003 + 004 (RLS hardening — the first deploy's security advisor found 14 tables without RLS and a security-definer view), 211 balls loaded and checksum-verified. Security advisor clean. Leftover: drop the temporary `http` extension used for seeding (needs dashboard SQL editor).
+  - Still to do: arsenal UI (photo, layout entry, surface log); measured-shot calibration per configuration; oil absorption / games since resurface; periodic catalog refresh.
 - [~] M5-03 Ball per shot and per session; per-ball performance and reaction shape
 - [~] M5-04 Oil pattern library: name, length, volume, ratio, source, selectable at session start (schema; seed data still to do)
 - [~] M5-05 `SensorAdapter` + shot matching by timestamp; per-metric LaneSight vs sensor variance per shot and summary (variance done; **timestamp matching done 2026-10-16** via QuickTime creation time + set-up delay in `examples/score_vs_ruby.py`, gaps left unmatched; in-runner `SensorAdapter` ingest still to do) (was P0-10, P2-06; DEC-021)
