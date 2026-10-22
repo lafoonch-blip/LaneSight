@@ -57,6 +57,23 @@ def test_end_session_returns_score_block():
     r = client.post(f'/sessions/{sid}/end', headers=H)
     assert r.status_code == 200 and 'score' in r.json()
 
+def test_profile_put_get():
+    client.put('/me/profile', json={'handed': 'R', 'delivery_style': 'one_handed_thumb', 'approach_steps': 4}, headers=H)
+    p = client.get('/me/profile', headers=H).json()
+    assert p['handed'] == 'R' and p['delivery_style'] == 'one_handed_thumb' and p['user_id'] == 'u1'
+
+def test_sensors_crud():
+    s = client.post('/me/sensors', json={'name': 'My blue sensor', 'is_default': True}, headers=H).json()
+    assert s['name'] == 'My blue sensor' and s['user_id'] == 'u1'
+    assert any(x['id'] == s['id'] for x in client.get('/me/sensors', headers=H).json())
+    assert client.delete(f"/me/sensors/{s['id']}", headers=H).json()['deleted'] is True
+    assert all(x['id'] != s['id'] for x in client.get('/me/sensors', headers=H).json())
+
+def test_catalog_and_oil_shape_offline():
+    # MemoryStore has no catalog/oil; endpoints must still respond with a list (live reads tested separately)
+    assert client.get('/catalog/balls', headers=H).json() == []
+    assert client.get('/oil-patterns', headers=H).json() == []
+
 def test_upload_enqueues_serial_job():
     sid = client.post('/sessions', json={}, headers=H).json()['id']
     # dummy bytes are not a video; the job will fail with a reason — we assert the queue plumbing, not CV

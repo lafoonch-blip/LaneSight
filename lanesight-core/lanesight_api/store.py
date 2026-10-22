@@ -18,6 +18,37 @@ def _new_id():
 class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
+        self.profiles, self.sensors = {}, {}
+
+    # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
+    def get_profile(self, user_id):
+        return self.profiles.get(user_id)
+
+    def put_profile(self, user_id, data):
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **(data or {}))
+        self.profiles[user_id] = p
+        return p
+
+    def list_sensors(self, user_id):
+        return [s for s in self.sensors.values() if s['user_id'] == user_id]
+
+    def add_sensor(self, user_id, data):
+        s = dict(id=_new_id(), user_id=user_id, **(data or {}))
+        self.sensors[s['id']] = s
+        return s
+
+    def delete_sensor(self, user_id, sensor_id):
+        s = self.sensors.get(sensor_id)
+        if s and s['user_id'] == user_id:
+            del self.sensors[sensor_id]
+            return True
+        return False
+
+    def catalog_balls(self, q=None, limit=50):
+        return []
+
+    def oil_patterns(self):
+        return []
 
     # sessions
     def create_session(self, user_id, data):
@@ -129,6 +160,59 @@ class PgStore(MemoryStore):
                    'c_cons': snapshot.get('c_cons'), 'p_power': snapshot.get('p_power'),
                    'eligibility': snapshot.get('eligibility'), 'inputs': snapshot.get('inputs'),
                    'tier': snapshot.get('tier')})
+
+    # --- reads / profile / sensors / catalog (PostgREST) ---
+    def _get(self, table, query=''):
+        import json, urllib.request
+        url = self._rest + table + (('?' + query) if query else '')
+        req = urllib.request.Request(url, headers={'apikey': self._key, 'Authorization': f'Bearer {self._key}',
+                                                   'Accept': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            txt = r.read().decode()
+        return json.loads(txt) if txt.strip() else []
+
+    def _req(self, path, method, body=None, prefer='return=minimal'):
+        import json, urllib.request
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self._rest + path, data=data, method=method, headers={
+            'apikey': self._key, 'Authorization': f'Bearer {self._key}',
+            'Content-Type': 'application/json', 'Prefer': prefer})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            if r.status not in (200, 201, 204):
+                raise RuntimeError(f'PostgREST {method} {path} -> {r.status}')
+
+    def get_profile(self, user_id):
+        rows = self._get('profiles', f'user_id=eq.{user_id}&select=*')
+        return rows[0] if rows else None
+
+    def put_profile(self, user_id, data):
+        row = {'user_id': user_id, **{k: v for k, v in (data or {}).items() if k != 'user_id'}}
+        self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
+        return self.get_profile(user_id)
+
+    def list_sensors(self, user_id):
+        return self._get('sensor_devices', f'user_id=eq.{user_id}&select=*')
+
+    def add_sensor(self, user_id, data):
+        row = {'id': _new_id(), 'user_id': user_id, **(data or {})}
+        self._req('sensor_devices', 'POST', row)
+        return row
+
+    def delete_sensor(self, user_id, sensor_id):
+        self._req(f'sensor_devices?id=eq.{sensor_id}&user_id=eq.{user_id}', 'DELETE')
+        return True
+
+    def catalog_balls(self, q=None, limit=50):
+        qp = ('select=id,manufacturer,name,coverstock,core_type,ls_hook,ls_length,ls_backend,image_url'
+              f'&order=manufacturer,name&limit={int(limit)}')
+        if q:
+            from urllib.parse import quote
+            qq = quote(str(q), safe='')
+            qp += f'&or=(name.ilike.*{qq}*,manufacturer.ilike.*{qq}*)'
+        return self._get('ball_models', qp)
+
+    def oil_patterns(self):
+        return self._get('oil_patterns', 'select=*&order=name')
 
 
 def session_csv(shots: list[dict], feedback: list[dict]) -> str:

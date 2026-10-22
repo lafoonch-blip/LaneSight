@@ -169,11 +169,41 @@ def export_csv(sid: str, user=Depends(current_user)):
     return Response(csv_text, media_type='text/csv')
 
 
+# ----------------------------------------------------------------- profile / sensors / catalog / oil
+@app.get('/me/profile')
+def get_profile(user=Depends(current_user)):
+    return get_store().get_profile(user) or {'user_id': user}
+
+@app.put('/me/profile')
+def put_profile(body: dict, user=Depends(current_user)):
+    return get_store().put_profile(user, body or {})
+
+@app.get('/me/sensors')
+def list_sensors(user=Depends(current_user)):
+    return get_store().list_sensors(user)
+
+@app.post('/me/sensors')
+def add_sensor(body: dict, user=Depends(current_user)):
+    return get_store().add_sensor(user, body or {})      # user-entered name + default flag (no brand names, DEC-049)
+
+@app.delete('/me/sensors/{sensor_id}')
+def delete_sensor(sensor_id: str, user=Depends(current_user)):
+    return {'deleted': get_store().delete_sensor(user, sensor_id)}
+
+@app.get('/catalog/balls')
+def catalog_balls(q: str | None = None, user=Depends(current_user)):
+    return get_store().catalog_balls(q)
+
+@app.get('/oil-patterns')
+def oil_patterns(user=Depends(current_user)):
+    return get_store().oil_patterns()
+
+
 # ----------------------------------------------------------------- declared-but-not-yet-implemented (§3)
-_TODO = ['GET /me/profile', 'PUT /me/profile', 'GET /me/sensors', 'POST /me/sensors', 'DELETE /me/sensors',
-         'GET /catalog/balls', 'GET /me/arsenal', 'POST /me/arsenal', 'GET /oil-patterns',
-         'POST /uploads', 'GET /me/achievements', 'GET /me/notifications', 'GET /me/activity',
-         'GET /me/stats', 'DELETE /me', '/admin/*']
+_TODO = ['GET /me/arsenal', 'POST /me/arsenal', 'POST /me/arsenal/{id}/surface',
+         'POST /uploads', 'GET /me/achievements', 'GET /me/achievements/{id}', 'PUT /me/achievements/pins',
+         'GET /me/notifications', 'POST /me/notifications/{id}/delivered', 'POST /me/notifications/{id}/dismiss',
+         'GET /me/activity', 'GET /me/stats', 'DELETE /me', '/admin/*']
 
 @app.get('/_unimplemented')
 def unimplemented(user=Depends(current_user)):
