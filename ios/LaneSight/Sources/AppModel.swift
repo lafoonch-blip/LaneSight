@@ -55,7 +55,8 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        apiBaseURL = defaults.string(forKey: Keys.baseURL) ?? ""
+        // Default to this Mac's tailnet API (dev build). Edit in Settings; HTTP over the tailnet (see TEST_ON_PHONE.md).
+        apiBaseURL = defaults.string(forKey: Keys.baseURL) ?? "http://shaynes-macbook-pro.tail7fa640.ts.net:8787"
         devUser = defaults.string(forKey: Keys.devUser) ?? "dev-shayne"
         handed = defaults.string(forKey: Keys.handed) ?? "R"
     }

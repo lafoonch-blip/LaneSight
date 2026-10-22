@@ -8,7 +8,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Mac API") {
-                    TextField("https://your-mac.your-tailnet.ts.net", text: $model.apiBaseURL)
+                    TextField("http://<mac>.<tailnet>.ts.net:8787", text: $model.apiBaseURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)

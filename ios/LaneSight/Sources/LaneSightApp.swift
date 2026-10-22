@@ -26,9 +26,13 @@ struct RootView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .onAppear {
-            // First run (no API URL yet): land on Settings so you can configure + Check connection
-            // before the full-screen camera. Once a URL is saved, open on Capture.
-            if model.apiBaseURL.trimmingCharacters(in: .whitespaces).isEmpty { tab = 1 }
+            // First launch ever: land on Settings so you can confirm the (pre-filled) API URL and tap
+            // Check connection before the full-screen camera. Subsequent launches open on Capture.
+            let d = UserDefaults.standard
+            if !d.bool(forKey: "ls.launchedBefore") {
+                tab = 1
+                d.set(true, forKey: "ls.launchedBefore")
+            }
         }
     }
 }
