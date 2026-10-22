@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.16  
-Last Updated: 2026-10-19  
+Version: 1.17  
+Last Updated: 2026-10-21  
 Owner: Shayne  
-Supersedes: v1.15
+Supersedes: v1.16
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -396,6 +396,19 @@ Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slid
 **Date:** 2026-10-19
 **Status:** ACCEPTED
 **Supersedes:** DEC-035 in part (importing clips from Photos moves into MVP as Upload Video to Analyze). Recasts the C-03 and DEC-033 latency targets as target state; the targets themselves are unchanged.
+
+### DEC-044 — Ball catalog and configured ball reaction drive arsenal recommendations
+**Decision:**
+- **Shared catalog.** `ball_models` holds every ball in the major brands' current lineups (ball-catalog-1.0: 211 balls — Storm, Roto Grip, 900 Global, Brunswick, DV8, Radical, Hammer, Ebonite, Track, Motiv). Each ball has its manufacturer stock photo **linked, not hosted** (copying images needs manufacturer permission), 15 lb out-of-box specs, and the published manufacturer, bowling.com and Brunswick motion-chart ratings stored untouched with source URLs. Unpublished values are null, never guessed.
+- **Normalized box reaction.** For cross-brand comparison every ball also gets `ls_hook`, `ls_length`, `ls_backend` (1–10), an oil range and a reaction shape. Each value records its basis — motion chart, in-scale retailer number, manufacturer rating, word rating, or a spec estimate (always low confidence and labeled).
+- **Configured reaction.** A bowler's own ball is not the box ball. When the bowler has entered a layout (Dual Angle, VLS, or just pin up/down) and/or a surface change, its expected reaction = box reaction + one explained adjustment per recorded variable (`lanesight_core/arsenal/configured.py`). Directions come from manufacturer layout/surface guides; magnitudes are provisional (`best_effort`), scaled by differential and capped at ±2.5 per axis for layout and for surface. Recommendations rank the bowler's balls on this configured reaction.
+- **Surface is history.** Re-sanding or polishing is a new append-only `surface_events` row; each shot stores the `surface_event_id` it was thrown with (DEC-007).
+- **Measured beats rated.** Once a configuration + surface has enough measured shots, its observed breakpoint and entry should replace the catalog/configured estimate (not built yet).
+
+**Why:** Ball recommendations need a per-ball expected reaction that is comparable across brands and reflects how this bowler's ball is actually drilled and surfaced. No public live ball database exists (FEATURE_REVIEW §2.4), so LaneSight curates one with provenance.
+**Date:** 2026-10-21
+**Status:** ACCEPTED (catalog + schema + code in `lanesight-core`); configured-reaction magnitudes and recommendation weights PROVISIONAL pending coach / pro-shop review (M4-08) and measured-shot calibration.
+**Supersedes:** —
 
 ## Superseded decisions
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
