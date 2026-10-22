@@ -25,14 +25,16 @@ exist). `GET /health` reports which (presence booleans only, never values).
 
 ## Run
 ```
-uvicorn lanesight_api.app:app --host 127.0.0.1 --port 8787
-# expose to your iPhone over Tailscale (HTTPS -> localhost):
-tailscale serve --bg --https=443 http://127.0.0.1:8787
-# the app points at https://<this-mac>.<tailnet>.ts.net
-tailscale serve status      # verify
+lanesight_api/serve.sh            # live mode; binds to the tailnet IP, prints the app URL
+lanesight_api/serve.sh --memory   # in-memory (first phone test; no Supabase users needed)
 ```
-Keep the Mac awake while serving (`caffeinate -s` or Energy Saver). `launchd` plist to start on login:
-`com.lanesight.api.plist` → copy to `~/Library/LaunchAgents/`, then `launchctl load` it.
+`serve.sh` binds uvicorn to the Mac's **Tailscale IP** so it's reachable by your phone (a tailnet peer)
+but not the public internet or the LAN. This account can't issue HTTPS certs for `tailscale serve`, so the
+app connects over plain **HTTP on the tailnet** (`http://<mac>.<tailnet>.ts.net:8787`) — WireGuard encrypts
+it peer-to-peer. If you enable HTTPS Certificates + MagicDNS in the Tailscale admin console, switch back to
+`tailscale serve --bg --https=443 http://127.0.0.1:8787` and bind uvicorn to 127.0.0.1.
+Keep the Mac awake (`caffeinate -s`). `launchd` plist to start on login: `com.lanesight.api.plist` → copy
+to `~/Library/LaunchAgents/`, then `launchctl load` it.
 
 ## Health check
 ```

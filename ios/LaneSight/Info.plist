@@ -28,6 +28,23 @@
 	<dict/>
 	<key>NSCameraUsageDescription</key>
 	<string>LaneSight records your delivery to analyze your shot.</string>
+	<!-- Dev build: the Mac API is reached over Tailscale (WireGuard-encrypted peer-to-peer). This account
+	     can't provision HTTPS certs for tailscale serve, so we allow plain HTTP ONLY to the tailnet
+	     (*.ts.net) MagicDNS domain — the WireGuard tunnel provides the transport encryption. Not arbitrary
+	     loads; scoped to the tailnet. Replaced by HTTPS when sign-in/cloud land. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>ts.net</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
