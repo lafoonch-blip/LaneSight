@@ -1,5 +1,7 @@
 """Form P1 contract, capture-view classifier, advisory spot check (DEC-047/045), owner reset (DEC-051)."""
+import pytest
 from lanesight_core.form import FORM_P1, analyze_form_clip, classify_view, spot_check
+from lanesight_core.form import pose
 from lanesight_core.owner import reset_plan, RESET_CLEAR_ORDER
 
 
@@ -19,6 +21,25 @@ def test_form_uses_pose_backend_when_supplied():
     assert r['status'] == 'ok'
     assert r['metrics']['swing_time']['value'] == 0.46
     assert r['metrics']['step_count']['status'] == 'unavailable'   # not returned by backend -> unavailable
+
+
+# ---------------------------------------------------------------- Pose backend (pure helpers; no MediaPipe)
+def test_pose_model_checksum_guard():
+    with pytest.raises(pose.PoseBackendError):
+        pose.verify_model('/nonexistent/pose_model.task')          # missing -> clear error
+    with pytest.raises(pose.PoseBackendError):
+        pose.verify_model(__file__)                                # wrong checksum -> refuse to run
+
+def test_pose_detect_slowmo():
+    # normal 60 fps cadence: not slo-mo
+    assert pose.detect_slowmo([0.37, 0.40, 0.58], 1.47) == (False, 1, '')
+    # ~4x-stretched cadence: slo-mo, factor snapped to 4
+    is_slow, factor, note = pose.detect_slowmo([1.5, 1.6, 2.5], 5.9)
+    assert is_slow and factor == 4 and 'slo-mo' in note.lower()
+
+def test_pose_backend_is_a_callable_factory():
+    be = pose.build_backend(log=lambda *a: None)
+    assert callable(be)                                            # drops into analyze_form_clip(pose_backend=be)
 
 
 def test_classify_view():
