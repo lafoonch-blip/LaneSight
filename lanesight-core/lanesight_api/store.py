@@ -169,6 +169,32 @@ class PgStore(MemoryStore):
                    'eligibility': snapshot.get('eligibility'), 'inputs': snapshot.get('inputs'),
                    'tier': snapshot.get('tier')})
 
+    def create_shot(self, user_id, session_id, meta):
+        sh = MemoryStore.create_shot(self, user_id, session_id, meta)
+        self._req('shots', 'POST', {'id': sh['id'], 'user_id': user_id, 'session_id': session_id,
+                  'record': {}, 'handed': meta.get('handed'), 'capture_mode': meta.get('capture_mode'),
+                  'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
+                  'sensor_id': meta.get('sensor_id')})
+        intent = meta.get('intent') or {}
+        if intent.get('arrows_board') is not None or intent.get('breakpoint_board') is not None:
+            self._req('shot_intents', 'POST', {'shot_id': sh['id'], 'arrows_board': intent.get('arrows_board'),
+                      'breakpoint_board': intent.get('breakpoint_board')})
+        return sh
+
+    def save_shot_result(self, shot_id, record, result):
+        MemoryStore.save_shot_result(self, shot_id, record, result)
+        insights = record.get('insights') or {}
+        self._req(f'shots?id=eq.{shot_id}', 'PATCH', {
+            'record': record, 'trajectory': record.get('trajectory'), 'key_points': record.get('key_points'),
+            'classification': insights.get('classification')})
+        rows = [{'shot_id': shot_id, 'metric': name, 'value': mm.get('value'), 'unit': mm.get('unit'),
+                 'confidence': mm.get('confidence'), 'status': mm.get('status'),
+                 'source': mm.get('source', 'lanesight_video'),
+                 'algorithm_version': mm.get('algorithm_version'), 'note': mm.get('note')}
+                for name, mm in (record.get('metrics') or {}).items()]
+        if rows:
+            self._req('measurements', 'POST', rows, prefer='resolution=merge-duplicates,return=minimal')
+
     # --- reads / profile / sensors / catalog (PostgREST) ---
     def _get(self, table, query=''):
         import json, urllib.request
