@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.21  
+Version: 1.22  
 Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.20
+Supersedes: v1.21
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -110,6 +110,6 @@ The active build. A **developer build of the LaneSight iOS app on Shayne's iPhon
 
 **Open before Phase 1 (Shayne-side / to confirm):**
 - **Supabase project (confirmed 2026-10-22):** LaneSight = `europwryibstnmipbvam`, ACTIVE_HEALTHY, us-east-1, in the **VendHub** org (`wmprtjakyzfgszjqjtky`). Never touch the org's other projects (`vendhub`, `LandForge`).
-- **Migrations (reconciled 2026-10-22):** Supabase has `001_core_schema_v1` (= repo `schema.sql`) → `002` → `003` → `004_rls_hardening` → `005_ball_catalog_refresh` applied. 004 and 005 were missing from the repo and have been pulled into `lanesight_core/models/migrations/` verbatim. **New Dev Build v0 migrations number from 006**, and must diff against the already-live tables (`oil_patterns`, `recommendations`, `recommendation_outcomes`, `shot_intents`, `shot_feedback`, `sensor_devices`, …) rather than re-create them.
+- **Migrations (DV-01 done 2026-10-22):** LaneSight Supabase (`europwryibstnmipbvam`) is now at **001→010**. 001–005 were already applied (004/005 reconciled into the repo verbatim); **006–010 (Dev Build v0 schema) applied 2026-10-22** after local validation (PG16 + Supabase shim) and a timestamped backup — branching wasn't available (Free plan), so applied to the empty project with Shayne's OK. 006 rules/benchmarks (owner-only), 007 score/tiers/achievements + `L-dev-0`, 008 dev-build fields, 009 oil-pattern library, 010 invoker-view fix. **Security advisor: no errors** (only intended INFO `rls_enabled_no_policy` on owner-only rule tables, DEC-046). RLS verified (rules/`params` unreadable by clients, own-rows-only); permanent test at `lanesight_core/models/tests/run_rls_tests.sh`. `ball_models` unchanged (211, md5 `c02f62043c64cfe80d99be12e40ab2ae`). New migrations extend the live tables (`oil_patterns`, `recommendations`, `shot_intents`, `sensor_devices`, …), never re-create them.
 - **OAuth:** Google (iOS + web client IDs → Supabase Auth) and Sign in with Apple (App ID capability + Services ID/key → Supabase Auth) need setup on Shayne's side.
 - **`lanesight-core/tailscale/`** is an untracked folder of unknown purpose — ask Shayne before using or deleting it.
