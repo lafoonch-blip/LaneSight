@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.4  
-Last Updated: 2026-10-21  
+Version: 3.5  
+Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -142,8 +142,18 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 - [ ] C-04 Offline capture queue; signed uploads; privacy retention controls
 - [ ] C-05 Multi-user accounts, realtime `shot.analysis.completed`
 
+## Dev Build v0 — iPhone developer build  (L) — DEC-045…053
+*The first iOS build, for Shayne's iPhone, run live against the real pipeline on his Mac over Tailscale. Purpose: exercise every core feature end to end, collect feasibility data (coverage, failure reasons, timings) and capture session feedback. Full brief and acceptance detail: `03_ENGINEERING/dev_build_v0/HANDOFF.md`. Builds on the Stage 1–8 back end; does not replace those stages. No pinfall (DEC-050); rules are owner-only (DEC-046); no mock numbers.*
+
+- [ ] **DV-00 Record & reconcile (docs).** Add DEC-045…053 to DECISIONS.md; add this stage + `L-dev-0` to the registers; fix MVP exit (DEC-047). **Done when** docs are consistent and Shayne has reviewed the diff.
+- [ ] **DV-01 Database (Supabase migrations).** Reconcile migration 004 into the repo first, then `005` rules & benchmarks, `006` score/tiers/achievements, `007` dev-build fields (profile/sensor/shot/session_feedback + deletion cascade), `008` oil pattern library + seeds; seed `L-dev-0`, achievement definitions (FORM-001/002 active) and starter rules from `lanesight-core/rules/` YAML. Apply to a **Supabase branch first**, run the security advisor, then the LaneSight project. **Done when** migrations apply clean, the advisor is clean, and RLS tests show a normal user can't read rules/`params` and sees only their own rows.
+- [ ] **DV-02 Engines in `lanesight-core`.** Rules/benchmarks engine (L3→L2→L1→L0, Within/Watch/Outside, N=10 personal baseline per DEC-046, one primary focus, template cues only); recommendations fed by form findings into M4 routing with reason/evidence/version; target-vs-actual misses + execution class (no "did you hit your mark", DEC-049); `L-dev-0` (DEC-048) with snapshots; tiers at session end (15×2 hysteresis); achievements (idempotent, revocable, streak-safe); Form P1 (`analyze_form_clip`); bowler-in-view on shot clips; advisory spot check (never blocks, DEC-045); owner reset (DEC-051). **Done when** unit tests cover each rule type/score/hysteresis/idempotency, IMG_8751–8754 still reproduce their numbers, and form metrics run on the 2026-10-17/20 training clips with results reported.
+- [ ] **DV-03 `lanesight_api` (Mac service).** FastAPI with a committed OpenAPI spec at `lanesight-core/lanesight_api/openapi.json` (the iOS contract); endpoints per HANDOFF §3; serial job queue (DEC-043) with states + reasons + per-step timings (OPS-01); frame-timestamp verification against decoded video; launchd plist + `tailscale serve` notes + health check + start/stop README. **Done when** a scripted end-to-end test (real clip → job → shot result → score/achievement → summary → feedback → CSV) passes against the real Supabase project with a test user, with timings logged.
+- [ ] **DV-04 iOS app (`ios/LaneSight`).** Xcode project (bundle `com.lanesight.app`, Dev/Beta/Prod xcconfig, Swift 6 strict concurrency, `LaneSightKit` generated from the OpenAPI spec); every screen in `02_DESIGN/dev_build_v0/` (map in HANDOFF §4) to `IOS_STANDARDS.md`; AVFoundation capture (1080p120 SDR preferred, real per-frame timestamps, advisory spot check, intent entry); background upload queue; notification ordering (≤1 popup/shot, never while recording, tier > achievement); session-end feedback sheet → summary (DEC-053); Supabase auth + Keychain + 13+ DOB gate + in-app deletion; privacy (purpose strings, `PrivacyInfo.xcprivacy`, Supabase-only SDKs); dev panel. **Done when** the app installs from Xcode, every screen is reachable, a real shot shows real results/recommendation/score/achievement/sensor question, session end → feedback → summary, and nothing on screen is hardcoded sample data.
+- [ ] **DV-05 First live session.** Pre-flight the Mac service over Tailscale from cellular; Shayne bowls 2–3 games (Shot, a few Form, one upload); review feedback/coverage/failure reasons/timings/recommendation 👍👎/unlocks; write a findings note in `02_RESEARCH/`; fix, rebuild, send to TestFlight internal.
+
 ## MVP exit
-All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs real sessions (was P1-12).
+**MVP exit is Shayne's call (DEC-047).** He runs the MVP (and the Dev Build v0 that feeds it) indefinitely and decides when it's ready for the friends Beta. The Stage 1–8 gates and the DV acceptance criteria are **readiness evidence, not automatic exit criteria** — they inform the judgment; they don't trip it. (Supersedes the former automatic gate: "all Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs real sessions"; was P1-12.)
 
 ---
 

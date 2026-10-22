@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.19  
-Last Updated: 2026-10-21  
+Version: 1.20  
+Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.18
+Supersedes: v1.19
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -12,7 +12,9 @@ Supersedes: v1.18
 - The September 2026 local docs are archived in `99_ARCHIVE/2026-09-27_local_folder/`. Historical only.
 
 ## Building now
-The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne). The back-end accuracy/robustness work continues in parallel.
+**Active workstream (2026-10-22): Dev Build v0** — the first iOS build, for Shayne's iPhone, running against the real pipeline on his Mac over Tailscale (DEC-045…053; see the Dev Build v0 section below and `03_ENGINEERING/dev_build_v0/HANDOFF.md`). The back-end accuracy/robustness work continues in parallel.
+
+The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 
 ## Where things stand
 - **Ball catalog + configured reaction (2026-10-21, DEC-044):** 211 current balls from 10 brands with stock-photo links, 15 lb specs, published ratings and a normalized expected reaction; a bowler's ball reaction is adjusted for its layout and current surface. Code and data in `lanesight-core` (`lanesight_core/arsenal/`, `data/ball_catalog/`); migrations 002/003 written and verified locally, **not yet applied to Supabase**. Adjustment sizes and recommendation weights are provisional (M4-08).
@@ -94,3 +96,20 @@ Back end first, with moving-camera measurement and coaching/stats in MVP (DEC-01
 - Image concept mockups requested for review; **do not edit Figma yet**.
 - Performance and reliability targets are **proposed**, not achieved SLAs: `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md`.
 - Pro reference requirements: `01_PRODUCT/PBA_PRO_COMPARISON_PROPOSAL.md` v1.1. Maintain approved Shot/Form analysis modes from DEC-040, capture limitations per DEC-035.
+
+
+## Dev Build v0 — 2026-10-22 (DEC-045…053)
+The active build. A **developer build of the LaneSight iOS app on Shayne's iPhone**, used live at the lanes, exercising every core feature end to end against the **real** `lanesight-core` pipeline on his Mac. Three purposes: test all core functionality, collect feasibility data on every core metric (coverage, failure reasons, timings), and capture session feedback after every session. Full brief: `03_ENGINEERING/dev_build_v0/HANDOFF.md`; approved screens: `02_DESIGN/dev_build_v0/` (24 `.dc.html` + `canvas.json`).
+
+- **Architecture:** SwiftUI app (`ios/LaneSight`, bundle id `com.lanesight.app`) → Supabase Auth (Apple/Google/email) → `lanesight_api` (FastAPI, launchd) on the Mac, reached over **Tailscale** (`tailscale serve` → localhost HTTPS). The API reuses `lanesight_runner/core.py` (`analyze_clip`); the pipeline is not forked. Video stays on the Mac (`~/LaneSightData`); the Supabase service key is Mac-only.
+- **In scope:** Shot + Form (P1) analysis, live capture + upload, recommendations/benchmarks (owner-only rules), LaneSight Score `L-dev-0` + tiers + achievements, Score/Throw/Form stats, profile/arsenal/sensors/settings/account deletion, session feedback, dev panel + CSV export.
+- **Out of scope:** pinfall/game scoring (DEC-050), leagues/tournaments ("Soon"), PBA comparison (disabled tile), cloud workers / R2, smart glasses, replay playback, coach sharing, Ruby references in app UI, payments.
+- **Score:** `L-dev-0` (DEC-048), a no-pinfall dev/Beta formula; see `01_PRODUCT/METRIC_AND_SCORING_LOGIC.md`. The target formula remains DEC-038.
+- **Capture is never blocked by framing (DEC-045):** an advisory spot check suggests a better position; it never gates recording.
+- **Build phases:** recorded in `BUILD_PLAN.md` as the Dev Build v0 stage (`DV-00…DV-05`).
+
+**Open before Phase 1 (Shayne-side / to confirm):**
+- **Supabase project:** confirm which project is LaneSight before any migration. BUILD_PLAN names `europwryibstnmipbvam`; the project was being moved between orgs. Never touch other projects in the org (e.g. vendhub).
+- **Migration 004** (RLS hardening) is applied in Supabase but not in the repo (`lanesight_core/models/migrations/` has 002/003). **Reconcile it into the repo before adding 005+.**
+- **OAuth:** Google (iOS + web client IDs → Supabase Auth) and Sign in with Apple (App ID capability + Services ID/key → Supabase Auth) need setup on Shayne's side.
+- **`lanesight-core/tailscale/`** is an untracked folder of unknown purpose — ask Shayne before using or deleting it.
