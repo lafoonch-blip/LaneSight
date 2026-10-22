@@ -45,6 +45,8 @@ class Settings:
 
     @property
     def db_url(self):
+        if os.environ.get('LANESIGHT_FORCE_MEMORY') == '1':
+            return None          # safety: force MemoryStore even if Keychain creds exist (tests/offline)
         self._load(); return self._db_url
 
     @property
@@ -60,14 +62,24 @@ class Settings:
         return 'live' if self.db_url else 'memory'
 
     @property
+    def jwks_url(self):
+        """Public JWKS for verifying user JWTs. This project uses asymmetric keys (ES256), so there is no
+        HS256 shared secret — tokens verify against this endpoint. Derived from the REST base."""
+        if not self.db_url:
+            return None
+        from urllib.parse import urlparse
+        p = urlparse(self.db_url)
+        return f'{p.scheme}://{p.netloc}/auth/v1/.well-known/jwks.json'
+
+    @property
     def dev_insecure(self):
-        """Only true when explicitly opted in AND no JWT secret is configured — local testing only."""
-        return os.environ.get('LANESIGHT_API_DEV') == '1' and not self.jwt_secret
+        """Only true when explicitly opted in (LANESIGHT_API_DEV=1) — local testing only, never in prod."""
+        return os.environ.get('LANESIGHT_API_DEV') == '1'
 
     def redacted(self) -> dict:
         """Safe-to-log view: presence booleans only, never the values."""
         return {'mode': self.mode, 'db_url_present': bool(self.db_url),
-                'service_role_present': bool(self.service_role), 'jwt_secret_present': bool(self.jwt_secret),
+                'service_role_present': bool(self.service_role), 'jwks_url_present': bool(self.jwks_url),
                 'dev_insecure': self.dev_insecure}
 
 

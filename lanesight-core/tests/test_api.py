@@ -3,8 +3,8 @@ needs the Keychain creds + a real down-lane clip; here we exercise the plumbing 
 validation ShotRecord as a stand-in for an analyzed result so the score + export wiring runs for real."""
 import os, json, pathlib, tempfile
 
-os.environ['LANESIGHT_API_DEV'] = '1'                      # dev auth (no JWT secret configured)
-os.environ.pop('LANESIGHT_DB_URL', None)                   # force MemoryStore
+os.environ['LANESIGHT_API_DEV'] = '1'                      # dev auth
+os.environ['LANESIGHT_FORCE_MEMORY'] = '1'                 # never touch the live project from tests
 os.environ['LANESIGHT_DATA'] = tempfile.mkdtemp()          # keep uploads out of ~/LaneSightData
 
 import pytest

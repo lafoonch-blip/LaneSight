@@ -8,18 +8,20 @@ the Mac under `~/LaneSightData`; the Supabase service key lives only in the **ma
 ## Install
 ```
 cd lanesight-core && source .venv/bin/activate
-pip install -e ".[api]"        # fastapi, uvicorn, python-multipart, pyjwt, psycopg
+pip install -e ".[api]"        # fastapi, uvicorn, python-multipart, pyjwt[crypto]
 ```
 
 ## Secrets (macOS Keychain — never in the repo or a log)
-The service reads three items on the `lanesight` account:
+Two items on the `lanesight` account. `db_url` is the **PostgREST base** (the service writes via PostgREST
+with the service_role key — no direct Postgres password needed):
 ```
-security add-generic-password -a lanesight -s lanesight.supabase.db_url       -w '<postgres connection string>'
+security add-generic-password -a lanesight -s lanesight.supabase.db_url       -w 'https://<ref>.supabase.co/rest/v1/'
 security add-generic-password -a lanesight -s lanesight.supabase.service_role -w '<service_role key>'
-security add-generic-password -a lanesight -s lanesight.supabase.jwt_secret   -w '<project JWT secret (HS256)>'
 ```
-With `db_url` present the service runs in **live** mode (writes to Supabase). With none present it runs in
-**memory** mode for local testing. `GET /health` reports which (presence booleans only, never values).
+User JWTs are verified with the project's **public JWKS (ES256)** derived from `db_url` — there is no HS256
+shared secret to store. With both items present the service runs in **live** mode (writes to Supabase);
+with neither, **memory** mode for local testing (`LANESIGHT_FORCE_MEMORY=1` forces memory even if creds
+exist). `GET /health` reports which (presence booleans only, never values).
 
 ## Run
 ```

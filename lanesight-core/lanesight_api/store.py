@@ -88,49 +88,47 @@ class MemoryStore:
 
 
 class PgStore(MemoryStore):
-    """Writes through to Postgres (service role via db_url) while keeping the same interface.
-    NOTE: validated only by the live e2e (needs the Keychain db_url). Until then it is code-reviewed,
-    not run. Falls back to the in-memory structures for reads not yet backed here."""
-    def __init__(self, db_url):
+    """Writes through to Supabase via PostgREST (the service_role key over the REST base in `rest_url`),
+    keeping the same interface. The service role bypasses RLS, so ownership is enforced here in code.
+    In-memory structures still mirror writes so reads work without extra round-trips."""
+    def __init__(self, rest_url, service_key):
         super().__init__()
-        self._db_url = db_url
+        self._rest = rest_url.rstrip('/') + '/'
+        self._key = service_key
 
-    def _conn(self):
-        import psycopg
-        return psycopg.connect(self._db_url, autocommit=True)
+    def _post(self, table, row):
+        import json, urllib.request
+        body = json.dumps(row).encode()
+        req = urllib.request.Request(self._rest + table, data=body, method='POST', headers={
+            'apikey': self._key, 'Authorization': f'Bearer {self._key}',
+            'Content-Type': 'application/json', 'Prefer': 'return=minimal'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            if r.status not in (200, 201, 204):
+                raise RuntimeError(f'PostgREST {table} -> {r.status}')
 
     def create_session(self, user_id, data):
         s = super().create_session(user_id, data)
-        with self._conn() as c:
-            c.execute("insert into sessions (id, user_id, mode, lane_pair, oil_pattern_id) "
-                      "values (%s,%s,%s,%s,%s)",
-                      (s['id'], user_id, data.get('mode', 'practice'), data.get('lane_pair'),
-                       data.get('oil_pattern_id')))
+        self._post('sessions', {'id': s['id'], 'user_id': user_id, 'mode': data.get('mode', 'practice'),
+                                'lane_pair': data.get('lane_pair'), 'oil_pattern_id': data.get('oil_pattern_id')})
         return s
 
     def save_feedback(self, user_id, session_id, fb):
         row = super().save_feedback(user_id, session_id, fb)
-        with self._conn() as c:
-            c.execute("insert into session_feedback (id, session_id, user_id, rating, tags, text, "
-                      "diagnostics, app_version, core_version, formula_version) "
-                      "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                      (row['id'], session_id, user_id, fb.get('rating'), fb.get('tags', []),
-                       fb.get('text'), __import__('json').dumps(fb.get('diagnostics')),
-                       fb.get('app_version'), fb.get('core_version'), fb.get('formula_version')))
+        self._post('session_feedback', {'id': row['id'], 'session_id': session_id, 'user_id': user_id,
+                   'rating': fb.get('rating'), 'tags': fb.get('tags', []), 'text': fb.get('text'),
+                   'diagnostics': fb.get('diagnostics'), 'app_version': fb.get('app_version'),
+                   'core_version': fb.get('core_version'), 'formula_version': fb.get('formula_version')})
         return row
 
     def save_snapshot(self, user_id, snapshot):
         super().save_snapshot(user_id, snapshot)
-        with self._conn() as c:
-            import json
-            c.execute("insert into score_snapshot (user_id, formula_version, trigger, session_id, eligible, "
-                      "score, s_perf, a_acc, c_cons, p_power, eligibility, inputs, tier) "
-                      "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                      (user_id, snapshot.get('formula_version'), snapshot.get('trigger', 'shot'),
-                       snapshot.get('session_id'), snapshot.get('eligible'), snapshot.get('score'),
-                       snapshot.get('s_perf'), snapshot.get('a_acc'), snapshot.get('c_cons'),
-                       snapshot.get('p_power'), json.dumps(snapshot.get('eligibility')),
-                       json.dumps(snapshot.get('inputs')), snapshot.get('tier')))
+        self._post('score_snapshot', {'user_id': user_id, 'formula_version': snapshot.get('formula_version'),
+                   'trigger': snapshot.get('trigger', 'shot'), 'session_id': snapshot.get('session_id'),
+                   'eligible': snapshot.get('eligible'), 'score': snapshot.get('score'),
+                   's_perf': snapshot.get('s_perf'), 'a_acc': snapshot.get('a_acc'),
+                   'c_cons': snapshot.get('c_cons'), 'p_power': snapshot.get('p_power'),
+                   'eligibility': snapshot.get('eligibility'), 'inputs': snapshot.get('inputs'),
+                   'tier': snapshot.get('tier')})
 
 
 def session_csv(shots: list[dict], feedback: list[dict]) -> str:
@@ -160,5 +158,5 @@ def get_store():
     global _store
     if _store is None:
         s = settings()
-        _store = PgStore(s.db_url) if s.db_url else MemoryStore()
+        _store = PgStore(s.db_url, s.service_role) if (s.db_url and s.service_role) else MemoryStore()
     return _store
