@@ -76,9 +76,122 @@ struct Eligibility: Codable {
     let met: Bool?
 }
 
+// MARK: - Lenient scalar
+//
+// Several catalog / profile / oil fields can arrive as a number or a string depending on the row.
+// FlexString decodes any JSON scalar into a display string so a type mismatch never breaks decoding.
+struct FlexString: Codable, Equatable {
+    let value: String?
+    init(value: String?) { self.value = value }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { value = nil }
+        else if let s = try? c.decode(String.self) { value = s }
+        else if let d = try? c.decode(Double.self) {
+            value = (d.rounded() == d) ? String(Int(d)) : String(format: "%g", d)
+        } else if let b = try? c.decode(Bool.self) { value = String(b) }
+        else { value = nil }
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(value)
+    }
+}
+
+// MARK: - Sessions
+
+struct SessionRow: Codable, Identifiable, Equatable {
+    let id: String
+    let mode: String?
+    let started_at: Double?
+    let ended_at: Double?
+    let lane_pair: FlexString?
+    let oil_pattern_id: String?
+}
+
+struct EndSessionResponse: Codable {
+    let session_id: String?
+    let shots: Int?
+    let ended_at: Double?
+    let score: ScoreBrief?
+}
+
+struct ScoreBrief: Codable {
+    let eligible: Bool?
+    let score: Double?
+    let tier: String?
+}
+
+// MARK: - Profile & sensors
+
+struct Profile: Codable, Equatable {
+    var user_id: String?
+    var name: String?
+    var email: String?
+    var dob: String?
+    var handedness: String?           // "right" | "left"
+    var delivery_style: String?       // one_handed_thumb | one_handed_no_thumb | two_handed
+    var approach_steps: FlexString?
+    var location: String?
+}
+
+struct Sensor: Codable, Identifiable, Equatable {
+    let id: String
+    let user_id: String?
+    let name: String?
+    let `default`: Bool?
+}
+
+// MARK: - Catalog & oil
+
+struct CatalogBall: Codable, Identifiable, Equatable {
+    let id: String
+    let manufacturer: String?
+    let name: String?
+    let coverstock: String?
+    let core_type: String?
+    let ls_hook: FlexString?
+    let ls_length: FlexString?
+    let ls_backend: FlexString?
+    let image_url: String?
+}
+
+struct OilPattern: Codable, Identifiable, Equatable {
+    let id: String?
+    let name: String?
+    let length: Double?
+    let volume: Double?
+    let ratio: FlexString?
+    let source: String?
+
+    // Decode numeric fields leniently so a string/number mismatch never breaks the list.
+    enum CodingKeys: String, CodingKey { case id, name, length, volume, ratio, source }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? c.decodeIfPresent(String.self, forKey: .id)
+        name = try? c.decodeIfPresent(String.self, forKey: .name)
+        length = (try? c.decodeIfPresent(Double.self, forKey: .length)) ?? nil
+        volume = (try? c.decodeIfPresent(Double.self, forKey: .volume)) ?? nil
+        ratio = try? c.decodeIfPresent(FlexString.self, forKey: .ratio)
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+    }
+
+    var identity: String { id ?? name ?? UUID().uuidString }
+}
+
+// MARK: - Spot check (advisory only; never blocks capture — DEC-045)
+
+struct SpotCheckResponse: Codable {
+    let blocks: Bool?
+    let tips: [String]?
+    let status: String?
+    let version: String?
+}
+
 // MARK: - Request payloads
 
 struct ShotIntent {
+    var feetBoard: Double?
     var arrowsBoard: Double?
     var breakpointBoard: Double?
 }
@@ -93,6 +206,7 @@ struct ShotMetadata {
     /// Intent values are emitted explicitly as `null` when absent (matches the contract).
     func jsonString() -> String {
         let intentDict: [String: Any] = [
+            "feet_board": intent.feetBoard as Any? ?? NSNull(),
             "arrows_board": intent.arrowsBoard as Any? ?? NSNull(),
             "breakpoint_board": intent.breakpointBoard as Any? ?? NSNull(),
         ]

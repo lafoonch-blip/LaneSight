@@ -6,40 +6,46 @@ struct CaptureView: View {
     @State private var busy = false      // a shot is uploading/analyzing
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                switch camera.state {
-                case .ready, .recording:
-                    CameraPreview(session: camera.session).ignoresSafeArea()
-                case .unavailable(let reason):
-                    unavailableView(reason)
-                case .idle:
-                    ProgressView("Starting camera…").tint(.white).foregroundStyle(.white)
-                }
-
-                VStack {
-                    topBar
-                    Spacer()
-                    if busy {
-                        pipelineOverlay
-                    } else {
-                        controls
-                    }
-                }
-                .padding()
+            switch camera.state {
+            case .ready, .recording:
+                CameraPreview(session: camera.session).ignoresSafeArea()
+            case .unavailable(let reason):
+                unavailableView(reason)
+            case .idle:
+                ProgressView("Starting camera…").tint(.white).foregroundStyle(.white)
             }
-            .navigationTitle("Capture")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .task { await camera.start() }
-            .onDisappear { camera.stopSession() }
-            .sheet(isPresented: $model.showResult) {
-                if let result = model.result {
-                    ResultView(result: result)
-                        .environmentObject(model)
+
+            VStack {
+                topBar
+                Spacer()
+                if busy {
+                    pipelineOverlay
+                } else {
+                    controls
                 }
+            }
+            .padding()
+        }
+        .navigationTitle("Capture")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink { SessionView() } label: {
+                    Image(systemName: "list.bullet.rectangle").foregroundStyle(.white)
+                }
+                .accessibilityLabel("Live session")
+            }
+        }
+        .task { await camera.start() }
+        .onDisappear { camera.stopSession() }
+        .sheet(isPresented: $model.showResult) {
+            if let result = model.result {
+                ShotCardView(result: result)
+                    .environmentObject(model)
             }
         }
     }
@@ -65,9 +71,10 @@ struct CaptureView: View {
 
     private var controls: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 12) {
-                intentField("Arrows board", text: $model.arrowsBoardText)
-                intentField("Breakpoint board", text: $model.breakpointBoardText)
+            HStack(spacing: 10) {
+                intentField("Feet", text: $model.feetBoardText)
+                intentField("Arrows", text: $model.arrowsBoardText)
+                intentField("Breakpoint", text: $model.breakpointBoardText)
             }
 
             recordButton

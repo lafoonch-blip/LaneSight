@@ -95,6 +95,103 @@ struct APIClient {
         try await send(makeRequest("me/score"), as: ScoreResponse.self)
     }
 
+    func scoreHistory() async throws -> [ScoreResponse] {
+        try await send(makeRequest("me/score/history"), as: [ScoreResponse].self)
+    }
+
+    // MARK: sessions
+
+    func listSessions() async throws -> [SessionRow] {
+        try await send(makeRequest("sessions"), as: [SessionRow].self)
+    }
+
+    func createSessionFull(mode: String, lanePair: String?, oilPatternId: String?) async throws -> SessionRow {
+        var req = makeRequest("sessions", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["mode": mode]
+        if let lanePair, !lanePair.isEmpty { body["lane_pair"] = lanePair }
+        if let oilPatternId, !oilPatternId.isEmpty { body["oil_pattern_id"] = oilPatternId }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await send(req, as: SessionRow.self)
+    }
+
+    func endSession(_ sid: String) async throws -> EndSessionResponse {
+        try await send(makeRequest("sessions/\(sid)/end", method: "POST"), as: EndSessionResponse.self)
+    }
+
+    // MARK: shots
+
+    /// Records the sensor answer for a shot (No / Yes + the user's sensor). PATCH /shots/{id}.
+    func patchShotSensor(shotId: String, sensorUsed: Bool, sensorId: String?) async throws {
+        var req = makeRequest("shots/\(shotId)", method: "PATCH")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["sensor_used": sensorUsed]
+        body["sensor_id"] = sensorId ?? NSNull()
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try await sendRaw(req)
+    }
+
+    // MARK: spot check (advisory)
+
+    func spotCheck(framing: [String: Any]) async throws -> SpotCheckResponse {
+        var req = makeRequest("spot-check", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["framing": framing])
+        return try await send(req, as: SpotCheckResponse.self)
+    }
+
+    // MARK: profile & sensors
+
+    func getProfile() async throws -> Profile {
+        try await send(makeRequest("me/profile"), as: Profile.self)
+    }
+
+    func putProfile(_ fields: [String: Any]) async throws -> Profile {
+        var req = makeRequest("me/profile", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: fields)
+        return try await send(req, as: Profile.self)
+    }
+
+    func listSensors() async throws -> [Sensor] {
+        try await send(makeRequest("me/sensors"), as: [Sensor].self)
+    }
+
+    func addSensor(name: String, isDefault: Bool) async throws -> Sensor {
+        var req = makeRequest("me/sensors", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["name": name, "default": isDefault])
+        return try await send(req, as: Sensor.self)
+    }
+
+    func deleteSensor(_ id: String) async throws {
+        try await sendRaw(makeRequest("me/sensors/\(id)", method: "DELETE"))
+    }
+
+    // MARK: catalog & oil
+
+    func catalogBalls(query: String?) async throws -> [CatalogBall] {
+        var path = "catalog/balls"
+        if let q = query?.trimmingCharacters(in: .whitespaces), !q.isEmpty {
+            let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? q
+            path += "?q=\(enc)"
+        }
+        return try await send(makeRequest(path), as: [CatalogBall].self)
+    }
+
+    func oilPatterns() async throws -> [OilPattern] {
+        try await send(makeRequest("oil-patterns"), as: [OilPattern].self)
+    }
+
+    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool) async throws {
+        var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["rating": rating, "tags": tags, "diagnostics": diagnostics]
+        if let text, !text.isEmpty { body["text"] = text }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try await sendRaw(req)
+    }
+
     func feedback(sessionId: String, rating: Int, text: String?) async throws {
         var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")

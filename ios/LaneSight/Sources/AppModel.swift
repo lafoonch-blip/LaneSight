@@ -30,11 +30,23 @@ final class AppModel: ObservableObject {
     @Published var apiBaseURL: String { didSet { defaults.set(apiBaseURL, forKey: Keys.baseURL) } }
     @Published var devUser: String { didSet { defaults.set(devUser, forKey: Keys.devUser) } }
     @Published var handed: String { didSet { defaults.set(handed, forKey: Keys.handed) } }
+    @Published var onboarded: Bool { didSet { defaults.set(onboarded, forKey: Keys.onboarded) } }
+    @Published var speedUnit: String { didSet { defaults.set(speedUnit, forKey: Keys.speedUnit) } }   // "mph" | "kmh"
+    @Published var speakAdjustments: Bool { didSet { defaults.set(speakAdjustments, forKey: Keys.speak) } }
 
-    // Capture options
+    // Capture / session options
     @Published var captureMode: String = "shot"   // "shot" | "form"
     @Published var arrowsBoardText: String = ""
     @Published var breakpointBoardText: String = ""
+    @Published var feetBoardText: String = ""
+    @Published var laneText: String = ""
+    @Published var selectedOilPatternName: String?
+    @Published var selectedOilPatternId: String?
+    @Published var currentBallName: String?
+    @Published var shotCount: Int = 0
+
+    // End-of-session summary (POST /sessions/{id}/end)
+    @Published var endSummary: EndSessionResponse?
 
     // Pipeline + result
     @Published var pipeline: PipelineState = .idle
@@ -52,6 +64,9 @@ final class AppModel: ObservableObject {
         static let baseURL = "ls.apiBaseURL"
         static let devUser = "ls.devUser"
         static let handed = "ls.handed"
+        static let onboarded = "ls.onboarded"
+        static let speedUnit = "ls.speedUnit"
+        static let speak = "ls.speakAdjustments"
     }
 
     init() {
@@ -59,6 +74,9 @@ final class AppModel: ObservableObject {
         apiBaseURL = defaults.string(forKey: Keys.baseURL) ?? "http://shaynes-macbook-pro.tail7fa640.ts.net:8787"
         devUser = defaults.string(forKey: Keys.devUser) ?? "dev-shayne"
         handed = defaults.string(forKey: Keys.handed) ?? "R"
+        onboarded = defaults.bool(forKey: Keys.onboarded)
+        speedUnit = defaults.string(forKey: Keys.speedUnit) ?? "mph"
+        speakAdjustments = defaults.bool(forKey: Keys.speak)
     }
 
     func makeClient() throws -> APIClient {
@@ -108,7 +126,8 @@ final class AppModel: ObservableObject {
                 handed: handed,
                 captureMode: captureMode,
                 source: "live",
-                intent: ShotIntent(arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
+                intent: ShotIntent(feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
+                                   arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
                                    breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
             )
             let created = try await client.uploadShot(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
@@ -135,6 +154,7 @@ final class AppModel: ObservableObject {
             let score = try await client.score()
             let metrics = MetricDisplay.ordered(shot.record?.metrics ?? [:])
             result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score)
+            shotCount += 1
             pipeline = .done
             showResult = true
 
@@ -154,5 +174,46 @@ final class AppModel: ObservableObject {
     func resetPipeline() {
         pipeline = .idle
         showResult = false
+    }
+
+    var activeSessionId: String? { sessionId }
+
+    /// Starts a new live session from the Setup screen (mode, lane, oil pattern) and resets counters.
+    func startLiveSession(mode: String, lane: String?, oilPatternId: String?) async throws {
+        let client = try makeClient()
+        let session = try await client.createSessionFull(mode: "practice", lanePair: lane, oilPatternId: oilPatternId)
+        sessionId = session.id
+        shotCount = 0
+        endSummary = nil
+        captureMode = mode
+    }
+
+    /// Records the sensor answer for the shot shown on the shot card (PATCH /shots/{id}).
+    func answerSensor(shotId: String, used: Bool, sensorId: String?) async throws {
+        let client = try makeClient()
+        try await client.patchShotSensor(shotId: shotId, sensorUsed: used, sensorId: sensorId)
+    }
+
+    /// Full session feedback (rating + tags + diagnostics), used by the feedback sheet.
+    func submitSessionFeedback(rating: Int, tags: [String], text: String, diagnostics: Bool) async throws {
+        guard let sid = sessionId else { return }
+        let client = try makeClient()
+        try await client.feedbackFull(sessionId: sid, rating: rating, tags: tags,
+                                      text: text.isEmpty ? nil : text, diagnostics: diagnostics)
+    }
+
+    /// Ends the active session; stores the returned summary for the summary screen.
+    func endCurrentSession() async throws {
+        guard let sid = sessionId else { return }
+        let client = try makeClient()
+        endSummary = try await client.endSession(sid)
+        sessionId = nil
+    }
+
+    /// Dev-stub "create account": set the dev user id, mark onboarded. No real Supabase auth in this slice.
+    func completeOnboarding(devUserId: String) {
+        let trimmed = devUserId.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty { devUser = trimmed }
+        onboarded = true
     }
 }
