@@ -1,0 +1,35 @@
+name: LaneSight
+options:
+  bundleIdPrefix: com.lanesight
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  minimumXcodeGenVersion: "2.40.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    # Swift 6 "approachable concurrency": make types MainActor-isolated by default so the
+    # SwiftUI + AVFoundation glue compiles cleanly; background work is explicitly `nonisolated`.
+    SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: "MainActor"
+
+targets:
+  LaneSight:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_NAME: LaneSight
+        PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: "YES"
