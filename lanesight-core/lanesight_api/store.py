@@ -15,6 +15,37 @@ def _new_id():
     return uuid.uuid4().hex
 
 
+# profiles has columns display_name/handed/style/units/usbc_id/dob/delivery_style/approach_steps. The app
+# speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
+# location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
+_PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style', 'approach_steps'}
+
+
+def _profile_in(data: dict) -> dict:
+    d = dict(data or {})
+    out = {}
+    if d.get('display_name') is not None or d.get('name') is not None:
+        out['display_name'] = d.get('display_name', d.get('name'))
+    h = d.get('handed', d.get('handedness'))
+    if h is not None:
+        out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
+    if d.get('dob'):
+        out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
+    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps'):
+        if d.get(k) is not None:
+            out[k] = d[k]
+    return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
+
+
+def _profile_out(row: dict | None) -> dict | None:
+    if not row:
+        return row
+    r = dict(row)
+    r['handedness'] = {'R': 'right', 'L': 'left'}.get(r.get('handed'))   # alias the app reads
+    r.setdefault('name', r.get('display_name'))
+    return r
+
+
 class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
@@ -41,12 +72,12 @@ class MemoryStore:
 
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
     def get_profile(self, user_id):
-        return self.profiles.get(user_id)
+        return _profile_out(self.profiles.get(user_id))
 
     def put_profile(self, user_id, data):
-        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **(data or {}))
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **_profile_in(data))
         self.profiles[user_id] = p
-        return p
+        return _profile_out(p)
 
     def list_sensors(self, user_id):
         return [s for s in self.sensors.values() if s['user_id'] == user_id]
@@ -432,10 +463,10 @@ class PgStore(MemoryStore):
 
     def get_profile(self, user_id):
         rows = self._get('profiles', f'user_id=eq.{user_id}&select=*')
-        return rows[0] if rows else None
+        return _profile_out(rows[0]) if rows else None
 
     def put_profile(self, user_id, data):
-        row = {'user_id': user_id, **{k: v for k, v in (data or {}).items() if k != 'user_id'}}
+        row = {'user_id': user_id, **_profile_in(data)}
         self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
         return self.get_profile(user_id)
 
