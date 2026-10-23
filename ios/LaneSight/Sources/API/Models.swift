@@ -36,6 +36,26 @@ struct JobResponse: Codable {
     let state: String          // queued | running | done | failed
     let reason: String?
     let timings: [String: Double]?
+    var result: ShotFooter?    // analyze-job footer (score_delta + achievement_nudges + unlocked)
+}
+
+/// The analyze job's result footer (engines.after_shot_analyzed). All optional — present only on a
+/// finished analyze job. Nothing here is fabricated; absent fields stay absent.
+struct ShotFooter: Codable, Equatable {
+    let shot_id: String?
+    let eligible: Bool?
+    let score: Double?
+    let score_delta: Double?
+    let achievement_nudges: [AchievementNudge]?
+    let unlocked: [String]?
+}
+
+struct AchievementNudge: Codable, Equatable, Identifiable {
+    let achievement_id: String?
+    let name: String?
+    let current: Flex?
+    let target: Flex?
+    var id: String { achievement_id ?? name ?? UUID().uuidString }
 }
 
 struct ShotResponse: Codable {
@@ -114,12 +134,197 @@ struct EndSessionResponse: Codable {
     let shots: Int?
     let ended_at: Double?
     let score: ScoreBrief?
+    // Richer session-end payload (POST /sessions/{id}/end)
+    let tier_event: TierEvent?
+    let personal_best: Bool?
+    let unlocked: [String]?
+    let notifications: [AppNotification]?
 }
 
 struct ScoreBrief: Codable {
     let eligible: Bool?
     let score: Double?
     let tier: String?
+}
+
+struct TierEvent: Codable, Equatable {
+    let kind: String?        // promotion | demotion
+    let from_tier: String?
+    let to_tier: String?
+    let first_time: Bool?
+    let score: Double?
+}
+
+// MARK: - Live session shot rows (GET /sessions/{id}/shots)
+
+struct SessionShotRow: Codable, Identifiable, Equatable {
+    let id: String
+    let state: String?           // pending | analyzed | failed
+    let created_at: Double?
+    let classification: String?  // e.g. pocket / light / high (from insights)
+    let source: String?          // live | upload
+    let metrics: ShotRowMetrics?
+}
+
+struct ShotRowMetrics: Codable, Equatable {
+    let ball_speed: Double?
+    let rev_rate: Double?
+    let entry_board: Double?
+    let entry_angle: Double?
+    let arrows_board: Double?
+}
+
+// MARK: - Stats (GET /me/stats?view=throw|form)
+
+struct StatsResponse: Codable, Equatable {
+    let view: String?
+    let empty: Bool?
+    let n_shots: Int?
+    let averages: [String: MetricAverage]?
+    let metric_coverage: [String: MetricCoverage]?
+    let top_failure_reasons: [FailureReason]?
+    let note: String?
+}
+
+struct MetricAverage: Codable, Equatable {
+    let mean: Double?
+    let n: Int?
+}
+
+struct MetricCoverage: Codable, Equatable {
+    let measured: Int?
+    let total: Int?
+    let pct: Double?
+}
+
+struct FailureReason: Codable, Equatable, Identifiable {
+    let metric: String?
+    let reason: String?
+    let count: Int?
+    var id: String { (metric ?? "") + "|" + (reason ?? "") }
+}
+
+// MARK: - Achievements (GET /me/achievements, /{id}, PUT /pins)
+
+struct AchievementsResponse: Codable, Equatable {
+    let unlocked_count: Int?
+    let categories: [String: [Achievement]]?
+    let pins: [AchievementPin]?
+}
+
+struct Achievement: Codable, Equatable, Identifiable {
+    let id: String
+    let name: String?
+    let description: String?
+    let category: String?
+    let status: String?            // active | coming_later
+    let inactive_reason: String?
+    let progress_status: String?   // locked | in_progress | not_trackable | unlocked
+    let current_value: Flex?
+    let target_value: Flex?
+    let best_value: Flex?
+    let qualifying_count: Int?
+    let sample_count: Int?
+    let unavailable_reason: String?
+    let unlocked: Bool?
+}
+
+struct AchievementPin: Codable, Equatable, Identifiable {
+    let achievement_id: String
+    let kind: String?              // showcase | pursuit
+    let position: Int?
+    var id: String { achievement_id }
+}
+
+struct PinsResponse: Codable, Equatable {
+    let pins: [AchievementPin]?
+}
+
+struct AchievementDetail: Codable, Equatable {
+    let id: String
+    let name: String?
+    let description: String?
+    let category: String?
+    let status: String?
+    let inactive_reason: String?
+    let progress: AchievementProgress?
+    let evidence_shot_ids: [String]?
+    let unlocked: Bool?
+    let unlocked_at: Double?
+    let rule_version: Int?
+}
+
+struct AchievementProgress: Codable, Equatable {
+    let status: String?
+    let current_value: Flex?
+    let target_value: Flex?
+    let best_value: Flex?
+    let qualifying_count: Int?
+    let sample_count: Int?
+    let unavailable_reason: String?
+}
+
+// MARK: - Notifications / celebrations (GET /me/notifications)
+
+struct AppNotification: Codable, Identifiable, Equatable {
+    let id: String
+    let kind: String               // achievement_popup | tier_celebration | tier_banner
+    let ref_id: String?
+    let priority: Int?
+    let payload: NotifPayload?
+    let created_at: Double?
+    let delivered_at: Double?
+    let dismissed_at: Double?
+}
+
+/// Union of the two notification payload shapes (achievement_popup vs tier_*). Every field optional.
+struct NotifPayload: Codable, Equatable {
+    // achievement_popup
+    let achievement_id: String?
+    let name: String?
+    let description: String?
+    let category: String?
+    let value: Flex?
+    let target: Flex?
+    // tier_celebration / tier_banner
+    let kind: String?
+    let from_tier: String?
+    let to_tier: String?
+    let first_time: Bool?
+    let score: Double?
+    let next_tier: String?
+    let points: Double?
+}
+
+// MARK: - Lenient number-or-string scalar
+//
+// Several achievement fields (current_value / target_value) are numeric for most rules but a tier
+// *name* string for first_tier rules. Flex decodes either without breaking and exposes both views:
+// `.double` for progress math, `.display` for an honest label. Never fabricates a value.
+struct Flex: Codable, Equatable {
+    let double: Double?
+    let display: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() {
+            double = nil; display = nil
+        } else if let d = try? c.decode(Double.self) {
+            double = d
+            display = (d.rounded() == d) ? String(Int(d)) : String(format: "%g", d)
+        } else if let s = try? c.decode(String.self) {
+            display = s; double = Double(s)
+        } else if let b = try? c.decode(Bool.self) {
+            display = String(b); double = nil
+        } else {
+            double = nil; display = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        if let double { try c.encode(double) } else { try c.encode(display) }
+    }
 }
 
 // MARK: - Profile & sensors

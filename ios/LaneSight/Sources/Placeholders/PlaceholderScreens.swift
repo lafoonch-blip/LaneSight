@@ -1,9 +1,15 @@
 import SwiftUI
 
-/// Delete account (DeleteAccount.dc.html). DELETE /me isn't implemented in this slice, so the
-/// destructive action is disabled with an honest note rather than faking success.
+/// Delete account (DeleteAccount.dc.html). Real DELETE /me behind a type-DELETE confirm step.
+/// On success the account + its videos are removed on the Mac and the app signs out.
 struct DeleteAccountView: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     @State private var confirmText = ""
+    @State private var deleting = false
+    @State private var errorText: String?
+
+    private var canDelete: Bool { confirmText.trimmingCharacters(in: .whitespaces).uppercased() == "DELETE" && !deleting }
 
     var body: some View {
         ScrollView {
@@ -16,20 +22,39 @@ struct DeleteAccountView: View {
                     bullet("All sessions, shots, videos and stats")
                     bullet("LaneSight Score history, tier and achievements")
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TYPE DELETE TO CONFIRM").lsEyebrow()
                     TextField("DELETE", text: $confirmText)
                         .textInputAutocapitalization(.characters)
-                        .padding(10).background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                        .autocorrectionDisabled()
+                        .padding(12).background(LS.card, in: RoundedRectangle(cornerRadius: 10))
                         .foregroundStyle(LS.textPrimary)
                 }
-                Label("Account deletion (DELETE /me) isn't available in this dev build yet.",
-                      systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(LS.bestEffort)
-                Button("Delete account") { }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .tint(.red)
-                    .disabled(true)   // not backed yet
+
+                if let errorText {
+                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(LS.bestEffort)
+                }
+
+                Button {
+                    Task { await deleteAccount() }
+                } label: {
+                    HStack {
+                        Text("Delete account")
+                        if deleting { ProgressView().tint(.white) }
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .tint(.red)
+                .disabled(!canDelete)
+                .opacity(canDelete ? 1 : 0.5)
+
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SecondaryButtonStyle())
             }
             .padding(16)
         }
@@ -45,28 +70,15 @@ struct DeleteAccountView: View {
             Text(text).font(.callout).foregroundStyle(LS.textSecondary)
         }
     }
-}
 
-/// Achievements (Achievements.dc.html). GET /me/achievements isn't in this slice — honest placeholder.
-struct AchievementsView: View {
-    var body: some View {
-        ComingSoonView("Achievements",
-                       message: "Your badges, showcase and progress appear here once the achievements endpoint is live. Nothing is shown until it returns real data.",
-                       symbol: "rosette")
-        .navigationTitle("Achievements")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-    }
-}
-
-/// Upload a video (Upload.dc.html). POST /uploads isn't in this slice — honest placeholder.
-struct UploadView: View {
-    var body: some View {
-        ComingSoonView("Upload a clip",
-                       message: "Analyzing a clip from Photos needs the uploads endpoint, which isn't in this dev build yet. Use Start Live Session to record and analyze in real time.",
-                       symbol: "square.and.arrow.up")
-        .navigationTitle("Upload video")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+    private func deleteAccount() async {
+        deleting = true
+        errorText = nil
+        do {
+            try await model.deleteAccount()      // flips onboarded=false → app returns to onboarding
+        } catch {
+            errorText = "Couldn't delete the account: \(error.localizedDescription)"
+            deleting = false
+        }
     }
 }

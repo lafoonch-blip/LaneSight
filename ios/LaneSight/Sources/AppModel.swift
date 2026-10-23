@@ -18,9 +18,10 @@ struct ShotResult: Equatable {
     var shotId: String
     var metrics: [(String, Metric)]
     var score: ScoreResponse
+    var footer: ShotFooter?        // score_delta + achievement_nudges from the analyze job
 
     static func == (lhs: ShotResult, rhs: ShotResult) -> Bool {
-        lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0)
+        lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0) && lhs.footer == rhs.footer
     }
 }
 
@@ -106,7 +107,12 @@ final class AppModel: ObservableObject {
 
     // MARK: full shot pipeline
 
-    func processShot(fileURL: URL) async {
+    func processShot(fileURL: URL) async { await runPipeline(fileURL: fileURL, source: "live") }
+
+    /// Analyze a clip picked from Photos/Files (POST /uploads) through the same job pipeline + Shot card.
+    func processUpload(fileURL: URL) async { await runPipeline(fileURL: fileURL, source: "upload") }
+
+    private func runPipeline(fileURL: URL, source: String) async {
         do {
             let client = try makeClient()
 
@@ -125,17 +131,24 @@ final class AppModel: ObservableObject {
             let metadata = ShotMetadata(
                 handed: handed,
                 captureMode: captureMode,
-                source: "live",
+                source: source,
                 intent: ShotIntent(feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
                                    arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
                                    breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
             )
-            let created = try await client.uploadShot(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
-                self?.pipeline = .uploading(frac)
+            let created: CreateShotResponse
+            if source == "upload" {
+                created = try await client.uploadClip(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
+                    self?.pipeline = .uploading(frac)
+                }
+            } else {
+                created = try await client.uploadShot(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
+                    self?.pipeline = .uploading(frac)
+                }
             }
 
             // 3. Poll the analysis job until done/failed.
-            var last = JobResponse(id: created.job_id, kind: nil, state: "queued", reason: nil, timings: nil)
+            var last = JobResponse(id: created.job_id, kind: nil, state: "queued", reason: nil, timings: nil, result: nil)
             pipeline = .analyzing(state: last.state, timings: [:])
             while true {
                 last = try await client.job(created.job_id)
@@ -148,12 +161,12 @@ final class AppModel: ObservableObject {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
             }
 
-            // 4. Fetch the shot record + score.
+            // 4. Fetch the shot record + score; carry the analyze-job footer onto the card.
             pipeline = .fetching
             let shot = try await client.shot(created.shot_id)
             let score = try await client.score()
             let metrics = MetricDisplay.ordered(shot.record?.metrics ?? [:])
-            result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score)
+            result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score, footer: last.result)
             shotCount += 1
             pipeline = .done
             showResult = true
@@ -163,6 +176,41 @@ final class AppModel: ObservableObject {
         } catch {
             pipeline = .failed(error.localizedDescription)
         }
+    }
+
+    // MARK: notifications / celebrations
+    //
+    // Surface at most one pending notification at a quiet moment (never during recording). The server
+    // sorts undelivered notifications by priority (tier > achievement), so the first is the one to show;
+    // the rest stay undelivered and get batched into the Summary.
+
+    func fetchTopPendingNotification() async -> AppNotification? {
+        guard let client = try? makeClient() else { return nil }
+        let list = (try? await client.notifications(undelivered: true)) ?? []
+        guard let top = list.first else { return nil }
+        try? await client.markNotificationDelivered(top.id)
+        return top
+    }
+
+    func markNotificationDelivered(_ id: String) async {
+        guard let client = try? makeClient() else { return }
+        try? await client.markNotificationDelivered(id)
+    }
+
+    func dismissNotification(_ id: String) async {
+        guard let client = try? makeClient() else { return }
+        try? await client.dismissNotification(id)
+    }
+
+    /// Permanently delete the account (DELETE /me), then sign out locally.
+    func deleteAccount() async throws {
+        let client = try makeClient()
+        try await client.deleteAccount()
+        sessionId = nil
+        shotCount = 0
+        endSummary = nil
+        result = nil
+        onboarded = false
     }
 
     func submitFeedback(rating: Int, text: String) async throws {

@@ -12,6 +12,7 @@ struct ShotCardView: View {
     @State private var sensorAnswer: String?         // nil = unanswered, "none" or a sensor id / "yes"
     @State private var sensorError: String?
     @State private var helpful: Bool?
+    @State private var pendingNotification: AppNotification?
 
     // Form metric names: anything that looks like approach/swing lives in the form section.
     private static let formKeys: Set<String> = [
@@ -33,6 +34,7 @@ struct ShotCardView: View {
                     if !formMetrics.isEmpty { formSection }
                     sensorSection
                     ScoreCard(score: result.score, showBreakdown: false)
+                    if result.footer != nil { footerSection }
                     helpfulSection
                 }
                 .padding(16)
@@ -47,7 +49,44 @@ struct ShotCardView: View {
                 }
             }
             .task { await loadSensors() }
+            .task { pendingNotification = await model.fetchTopPendingNotification() }
+            .fullScreenCover(item: $pendingNotification) { n in
+                NavigationStack {
+                    CelebrationRouter(notification: n, onClose: { pendingNotification = nil })
+                        .environmentObject(model)
+                }
+            }
         }
+    }
+
+    // MARK: score delta + achievement nudges (the analyze job's footer)
+
+    private var footerSection: some View {
+        let footer = result.footer
+        return VStack(alignment: .leading, spacing: 10) {
+            if let delta = footer?.score_delta {
+                HStack(spacing: 6) {
+                    Image(systemName: delta >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                        .font(.caption)
+                    Text("\(delta >= 0 ? "+" : "")\(Fmt.number(delta)) to your score this shot")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(delta >= 0 ? LS.measured : LS.bestEffort)
+            }
+            if let nudges = footer?.achievement_nudges, !nudges.isEmpty {
+                Text("CLOSE TO UNLOCKING").lsEyebrow()
+                ForEach(nudges.prefix(3)) { nudge in
+                    HStack {
+                        Text(nudge.name ?? "").font(.caption).foregroundStyle(LS.textPrimary)
+                        Spacer()
+                        if let c = nudge.current?.display, let t = nudge.target?.display {
+                            Text("\(c) / \(t)").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                        }
+                    }
+                }
+            }
+        }
+        .lsCard()
     }
 
     // MARK: target vs actual

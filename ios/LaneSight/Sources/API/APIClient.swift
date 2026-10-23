@@ -119,6 +119,118 @@ struct APIClient {
         try await send(makeRequest("sessions/\(sid)/end", method: "POST"), as: EndSessionResponse.self)
     }
 
+    /// Per-shot rows for the live Session screen (GET /sessions/{id}/shots).
+    func sessionShots(_ sid: String) async throws -> [SessionShotRow] {
+        try await send(makeRequest("sessions/\(sid)/shots"), as: [SessionShotRow].self)
+    }
+
+    // MARK: stats
+
+    func stats(view: String, range: String?) async throws -> StatsResponse {
+        var path = "me/stats?view=\(view)"
+        if let range, !range.isEmpty { path += "&range=\(range)" }
+        return try await send(makeRequest(path), as: StatsResponse.self)
+    }
+
+    // MARK: achievements
+
+    func achievements() async throws -> AchievementsResponse {
+        try await send(makeRequest("me/achievements"), as: AchievementsResponse.self)
+    }
+
+    func achievementDetail(_ id: String) async throws -> AchievementDetail {
+        try await send(makeRequest("me/achievements/\(id)"), as: AchievementDetail.self)
+    }
+
+    /// Replaces the showcase/pursuit pin set (PUT /me/achievements/pins). Returns the stored pins.
+    @discardableResult
+    func setPins(_ pins: [[String: Any]]) async throws -> [AchievementPin] {
+        var req = makeRequest("me/achievements/pins", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["pins": pins])
+        return (try await send(req, as: PinsResponse.self)).pins ?? []
+    }
+
+    // MARK: notifications
+
+    func notifications(undelivered: Bool) async throws -> [AppNotification] {
+        try await send(makeRequest("me/notifications?undelivered=\(undelivered ? 1 : 0)"),
+                       as: [AppNotification].self)
+    }
+
+    func markNotificationDelivered(_ id: String) async throws {
+        try await sendRaw(makeRequest("me/notifications/\(id)/delivered", method: "POST"))
+    }
+
+    func dismissNotification(_ id: String) async throws {
+        try await sendRaw(makeRequest("me/notifications/\(id)/dismiss", method: "POST"))
+    }
+
+    // MARK: account
+
+    func deleteAccount() async throws {
+        try await sendRaw(makeRequest("me", method: "DELETE"))
+    }
+
+    /// Multipart upload of a Photos/Files clip (POST /uploads). Same analyze pipeline as a live shot,
+    /// but the server stamps source=upload. Reports upload progress (0...1) on the main actor.
+    func uploadClip(sessionId: String,
+                    fileURL: URL,
+                    metadata: ShotMetadata,
+                    progress: @escaping @MainActor (Double) -> Void) async throws -> CreateShotResponse {
+        let boundary = "LaneSight-\(UUID().uuidString)"
+        var req = makeRequest("uploads", method: "POST")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let fileData: Data
+        do {
+            fileData = try Data(contentsOf: fileURL)
+        } catch {
+            throw APIError.transport("Could not read the selected clip: \(error.localizedDescription)")
+        }
+
+        var body = Data()
+        func appendString(_ s: String) { body.append(s.data(using: .utf8)!) }
+        let filename = fileURL.lastPathComponent
+
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"sid\"\r\n\r\n")
+        appendString(sessionId)
+        appendString("\r\n")
+
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"metadata\"\r\n\r\n")
+        appendString(metadata.jsonString())
+        appendString("\r\n")
+
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        appendString("Content-Type: video/quicktime\r\n\r\n")
+        body.append(fileData)
+        appendString("\r\n")
+        appendString("--\(boundary)--\r\n")
+
+        let progressDelegate = UploadProgressDelegate { fraction in
+            Task { @MainActor in progress(fraction) }
+        }
+
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.upload(for: req, from: body, delegate: progressDelegate)
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+        do {
+            return try JSONDecoder().decode(CreateShotResponse.self, from: data)
+        } catch {
+            let snippet = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.decoding("\(error.localizedDescription) [\(snippet.prefix(200))]")
+        }
+    }
+
     // MARK: shots
 
     /// Records the sensor answer for a shot (No / Yes + the user's sensor). PATCH /shots/{id}.
