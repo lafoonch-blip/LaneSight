@@ -51,6 +51,9 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
         if intent:
             from lanesight_core.insights.adjust import suggested_target
             geom = (store.engine_config() or {}).get('line_geometry') if hasattr(store, 'engine_config') else None
+            # TODO(form): when rear-view form analysis measures the bowler's actual stance distance, override
+            # geom['approach_offset_ft'] with that per-shot measured value and fall back to this config only
+            # when it's unavailable. (Owner's current config value is their measured ~12 ft.)
             bp_ft = ((rec.get('key_points') or {}).get('breakpoint') or {}).get('z_ft')  # measured this shot
             st = suggested_target(rec.get('insights') or {}, intent, geometry=geom, breakpoint_ft=bp_ft)
             if st:
