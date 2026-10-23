@@ -443,23 +443,29 @@ class PgStore(MemoryStore):
 
     # --- reads / profile / sensors / catalog (PostgREST) ---
     def _get(self, table, query=''):
-        import json, urllib.request
+        import json, urllib.request, urllib.error
         url = self._rest + table + (('?' + query) if query else '')
         req = urllib.request.Request(url, headers={'apikey': self._key, 'Authorization': f'Bearer {self._key}',
                                                    'Accept': 'application/json'})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            txt = r.read().decode()
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                txt = r.read().decode()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f'PostgREST GET {table} -> {e.code}: {e.read().decode()[:300]}')
         return json.loads(txt) if txt.strip() else []
 
     def _req(self, path, method, body=None, prefer='return=minimal'):
-        import json, urllib.request
+        import json, urllib.request, urllib.error
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(self._rest + path, data=data, method=method, headers={
             'apikey': self._key, 'Authorization': f'Bearer {self._key}',
             'Content-Type': 'application/json', 'Prefer': prefer})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            if r.status not in (200, 201, 204):
-                raise RuntimeError(f'PostgREST {method} {path} -> {r.status}')
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                if r.status not in (200, 201, 204):
+                    raise RuntimeError(f'PostgREST {method} {path} -> {r.status}')
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f'PostgREST {method} {path} -> {e.code}: {e.read().decode()[:300]}')
 
     def get_profile(self, user_id):
         rows = self._get('profiles', f'user_id=eq.{user_id}&select=*')
@@ -525,10 +531,13 @@ class PgStore(MemoryStore):
     # ----------------------------------------------------------------- shot history read-back (from Supabase)
     def read_shot_records(self, user_id, window_days=None):
         import datetime as _dt
+        from urllib.parse import quote
         q = f'user_id=eq.{user_id}&select=id,handed,created_at&order=created_at'
         if window_days is not None:
-            since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=window_days)).isoformat()
-            q += f'&created_at=gte.{since}'
+            # 'Z' (not +00:00) and URL-encode: an unencoded '+'/':' in the timestamp makes PostgREST 400.
+            since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=window_days)) \
+                .strftime('%Y-%m-%dT%H:%M:%SZ')
+            q += f'&created_at=gte.{quote(since, safe="")}'
         shots = self._get('shots', q)
         if not shots:
             return [], {}, 'R'
@@ -591,13 +600,21 @@ class PgStore(MemoryStore):
 
     # ----------------------------------------------------------------- achievement progress / unlocks
     def upsert_ach_progress(self, user_id, progress):
+        def _num(v):
+            # current/best/target_value are numeric columns; some rule types (e.g. first_tier) carry a
+            # non-numeric current (the tier name) -> keep numbers, drop non-numeric to None.
+            try:
+                return float(v) if v is not None and not isinstance(v, bool) else None
+            except (TypeError, ValueError):
+                return None
         row = {'user_id': user_id, 'achievement_id': progress['achievement_id'],
                'level': progress.get('level', 1), 'status': progress['status'],
-               'current_value': progress.get('current_value'), 'best_value': progress.get('best_value'),
-               'target_value': progress.get('target_value'), 'qualifying_count': progress.get('qualifying_count'),
+               'current_value': _num(progress.get('current_value')), 'best_value': _num(progress.get('best_value')),
+               'target_value': _num(progress.get('target_value')), 'qualifying_count': progress.get('qualifying_count'),
                'sample_count': progress.get('sample_count'), 'unavailable_reason': progress.get('unavailable_reason'),
                'evidence_ref': progress.get('evidence_ref')}
-        self._req('user_achievement_progress', 'POST', row,
+        # composite PK (user_id, achievement_id, level) -> merge-duplicates needs an explicit on_conflict
+        self._req('user_achievement_progress?on_conflict=user_id,achievement_id,level', 'POST', row,
                   prefer='resolution=merge-duplicates,return=minimal')
         return row
 
