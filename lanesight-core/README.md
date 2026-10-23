@@ -51,7 +51,7 @@ A local web app on your Mac: the iPhone records, you AirDrop the clip, and the M
 **One-time setup (Terminal):**
 ```
 brew install ffmpeg                                  # if you don't have it
-cd ~/Documents/LaneSight && git pull
+cd ~/Developer/LaneSight && git pull
 cd lanesight-core
 brew install python@3.12                             # macOS's built-in python3 is 3.9: too old
 python3.12 -m venv .venv && source .venv/bin/activate
@@ -63,7 +63,7 @@ The first time it reads `~/Downloads`, macOS asks whether Terminal may access Do
 
 **Each session:**
 ```
-cd ~/Documents/LaneSight/lanesight-core && source .venv/bin/activate
+cd ~/Developer/LaneSight/lanesight-core && source .venv/bin/activate
 python3 -m lanesight_runner          # opens http://127.0.0.1:8765
 ```
 1. Start a session: type, ball, weight (needed for Power), pattern.

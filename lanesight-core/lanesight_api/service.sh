@@ -87,17 +87,28 @@ case "${1:-status}" in
     else
       echo "launchd: NOT loaded (run: lanesight_api/service.sh install)"
     fi
-    IP="$(/opt/homebrew/bin/tailscale ip -4 2>/dev/null | head -1 || true)"
-    DNS="$(/opt/homebrew/bin/tailscale status --json 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+    IP="$(/opt/homebrew/bin/tailscale ip -4 2>/dev/null | awk 'NR==1' || true)"
+    DNS="$(/opt/homebrew/bin/tailscale status --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null || true)"
+    # Server binds the tailnet IP (not loopback), so probe that first. Parse the /health body with simple
+    # %-formatting and single-quoted keys — no shell/f-string backslash escaping to get wrong.
+    show_health() {
+      python3 -c "import sys,json
+try:
+    d = json.load(sys.stdin)
+    print('health:  %s  supabase_reachable=%s  mode=%s' % (d['status'], d['supabase_reachable'], d['config']['mode']))
+except Exception:
+    sys.exit(1)"
+    }
     for host in "${IP:-}" 127.0.0.1; do
       [ -z "$host" ] && continue
-      if curl -s --max-time 4 "http://$host:8787/health" >/tmp/.ls_health 2>/dev/null; then
-        python3 -c 'import sys,json;d=json.load(open("/tmp/.ls_health"));print(f"health:  {d[\"status\"]}  supabase_reachable={d[\"supabase_reachable\"]}  mode={d[\"config\"][\"mode\"]}")' 2>/dev/null \
-          && { [ -n "$DNS" ] && echo "app URL: http://$DNS:8787"; rm -f /tmp/.ls_svc /tmp/.ls_health; exit 0; }
+      if curl -s --max-time 4 "http://$host:8787/health" | show_health; then
+        [ -n "$DNS" ] && echo "app URL: http://$DNS:8787"
+        rm -f /tmp/.ls_svc 2>/dev/null || true
+        exit 0
       fi
     done
     echo "health:  UNREACHABLE (check $LOGDIR/api.err.log)"
-    rm -f /tmp/.ls_svc /tmp/.ls_health 2>/dev/null || true
+    rm -f /tmp/.ls_svc 2>/dev/null || true
     ;;
   *) echo "usage: $0 {install|status|restart|logs|uninstall}"; exit 2;;
 esac

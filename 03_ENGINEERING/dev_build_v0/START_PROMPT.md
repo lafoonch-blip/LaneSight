@@ -1,5 +1,5 @@
 # Start prompt for Claude Code
-Paste this into Claude Code from `~/Documents/LaneSight`:
+Paste this into Claude Code from `~/Developer/LaneSight`:
 
 ---
 

@@ -130,7 +130,7 @@ The runner processes **one clip at a time** (spec §3), and today a clip takes 3
 6. Then revise the proposal to v1.1 with §2–3 applied and today's baselines filled in.
 
 ## 6. Note
-The proposal is on GitHub `main` but wasn't in `~/Documents/LaneSight` because the local clone hadn't pulled it. Pull before working locally (CURRENT_STATE, "Where these docs live").
+The proposal is on GitHub `main` but wasn't in `~/Developer/LaneSight` because the local clone hadn't pulled it. Pull before working locally (CURRENT_STATE, "Where these docs live").
 
 ## 7. Outcome (Shayne, 2026-10-19) → DEC-043
 - The SLOs are **target-state requirements**, not gates for dev, testing or beta (resolves §2.1–2.2; C-03 and DEC-033 targets kept as targets).

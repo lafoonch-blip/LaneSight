@@ -20,7 +20,7 @@ from lanesight_core.form import pose
 from lanesight_core.form.analyze import analyze_form_clip
 
 CLIP_DIR = os.environ.get('LANESIGHT_FORM_CLIPS',
-                          os.path.expanduser('~/Documents/LaneSight/Training Videos'))
+                          os.path.expanduser('~/Developer/LaneSight/Training Videos'))
 OUT_DIR = os.environ.get('LANESIGHT_FORM_OUT', os.path.join(tempfile.gettempdir(), 'lanesight_form'))
 
 # Reference values (from the research tables). Swing splits are session means; footwork is per clip.

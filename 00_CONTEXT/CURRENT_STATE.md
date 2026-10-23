@@ -1,14 +1,14 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.25  
+Version: 1.26  
 Last Updated: 2026-10-22  
 Owner: Shayne  
-Supersedes: v1.24
+Supersedes: v1.25
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
 - **Mirrors (read-only):** the Google Drive LaneSight folder and the claude.ai LaneSight Project. Re-sync them after every change.
-- **Code:** `lanesight-core/` in this repo (F-02 done 2026-10-14). On Shayne's Mac, `~/Documents/LaneSight/` is a clone of this repo; pull before working.
+- **Code:** `lanesight-core/` in this repo (F-02 done 2026-10-14). On Shayne's Mac, `~/Developer/LaneSight/` is a clone of this repo; pull before working. (Relocated from `~/Documents/LaneSight` on 2026-10-22 so the launchd API service can start at login — macOS TCC blocks background jobs from reading `~/Documents`, `~/Desktop`, `~/Downloads`.)
 - The September 2026 local docs are archived in `99_ARCHIVE/2026-09-27_local_folder/`. Historical only.
 
 ## Building now

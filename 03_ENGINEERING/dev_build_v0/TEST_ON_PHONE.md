@@ -8,7 +8,7 @@ real shot metrics + LaneSight Score, session feedback. Dev-user auth (no Apple/G
 
 ## 1. Start the Mac API (binds to your tailnet IP — reachable by your phone, not the public internet)
 ```
-cd ~/Documents/LaneSight/lanesight-core
+cd ~/Developer/LaneSight/lanesight-core
 lanesight_api/serve.sh --memory        # first test: in-memory, no Supabase auth users needed
 ```
 (Drop `--memory` later to write to the real Supabase project — that needs a real signed-in user.)
@@ -22,7 +22,7 @@ console, we can switch back to `tailscale serve --https` and drop the exception.
 
 ## 3. Build + run the app on your iPhone
 ```
-cd ~/Documents/LaneSight/ios/LaneSight
+cd ~/Developer/LaneSight/ios/LaneSight
 xcodegen generate                      # if the .xcodeproj isn't present
 open LaneSight.xcodeproj
 ```
