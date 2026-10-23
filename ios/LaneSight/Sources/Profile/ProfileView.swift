@@ -136,25 +136,54 @@ struct ProfileView: View {
     }
 
     private var arsenalCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let balls = model.arsenal.filter { $0.retired != true }
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("ARSENAL").lsEyebrow()
                 Spacer()
                 NavigationLink { AddBallView() } label: { Label("Add ball", systemImage: "plus").font(.caption) }
                     .tint(LS.blue)
             }
-            Text("Browse the 211-ball catalog to add a ball. Saving a personal arsenal is coming soon (the arsenal endpoint isn't in this slice).")
-                .font(.caption).foregroundStyle(LS.textSecondary)
-            if let ball = model.currentBallName {
-                HStack {
-                    Image(systemName: "circle.circle.fill").foregroundStyle(LS.blue)
-                    Text(ball).foregroundStyle(LS.textPrimary)
-                    Spacer()
-                    Text("SELECTED").font(.caption2.bold()).foregroundStyle(LS.cyan)
+            if balls.isEmpty {
+                Text("No balls yet. Browse the catalog to add one — tap a ball to make it current.")
+                    .font(.caption).foregroundStyle(LS.textSecondary)
+            } else {
+                Text("Tap a ball to make it your current ball.")
+                    .font(.caption2).foregroundStyle(LS.textFaint)
+                ForEach(balls) { ball in
+                    Button { Task { await setCurrent(ball) } } label: { arsenalRow(ball) }
+                        .buttonStyle(.plain)
                 }
             }
         }
         .lsCard()
+    }
+
+    private func arsenalRow(_ ball: ArsenalBall) -> some View {
+        let isCurrent = ball.is_current == true
+        return HStack(spacing: 10) {
+            Image(systemName: isCurrent ? "circle.circle.fill" : "circle.circle")
+                .foregroundStyle(isCurrent ? LS.blue : LS.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ball.displayName).font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                let specs = [ball.layout.map { "Layout \($0)" }, ball.surface,
+                             ball.weight_lb.map { "\(Fmt.number($0)) lb" }].compactMap { $0 }
+                if !specs.isEmpty {
+                    Text(specs.joined(separator: " · ")).font(.caption2).foregroundStyle(LS.textSecondary)
+                }
+            }
+            Spacer()
+            if isCurrent {
+                Text("CURRENT").font(.caption2.bold()).foregroundStyle(LS.cyan)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func setCurrent(_ ball: ArsenalBall) async {
+        guard ball.is_current != true else { return }
+        do { try await model.setCurrentBall(id: ball.id) }
+        catch { saveNote = "Couldn't set current ball: \(error.localizedDescription)" }
     }
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
@@ -179,6 +208,7 @@ struct ProfileView: View {
             location = p.location ?? ""
             sensors = (try? await client.listSensors()) ?? []
             score = try? await client.score()
+            await model.syncArsenal()
             profile = .loaded(p)
         } catch { profile = .failed(error.localizedDescription) }
     }

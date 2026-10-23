@@ -67,6 +67,38 @@ struct ShotResponse: Codable {
 struct ShotRecord: Codable {
     let shot_id: String?
     let metrics: [String: Metric]?
+    let insights: ShotInsights?
+}
+
+/// Analyzed-shot insights (record.insights). `suggested_target` is the server-computed target line for
+/// the NEXT shot (null fields where the thrown intent didn't set that board); `recommendations` carries
+/// the actionable "Apply this move" rec. Everything optional — absent fields stay absent.
+struct ShotInsights: Codable, Equatable {
+    let recommendations: [Recommendation]?
+    let suggested_target: SuggestedTarget?
+}
+
+struct Recommendation: Codable, Equatable {
+    let type: String?
+    let direction: String?       // "left" | "right"
+    let move_feet: Double?
+    let move_target: Double?      // whole boards (backend sends a number, not a string)
+    let reason: String?
+    let confidence: Double?
+}
+
+/// The next-shot target line computed server-side from the thrown intent. Null board fields mean the
+/// intent didn't set that board — leave those unchanged when applying. Do NOT recompute boards in Swift.
+struct SuggestedTarget: Codable, Equatable {
+    let feet_board: Double?
+    let arrows_board: Double?
+    let breakpoint_board: Double?
+    let direction: String?
+    let move_feet: Double?
+    let move_target: Double?
+
+    /// True only when there is at least one board value to apply.
+    var hasBoard: Bool { feet_board != nil || arrows_board != nil || breakpoint_board != nil }
 }
 
 struct Metric: Codable {
@@ -362,6 +394,58 @@ struct CatalogBall: Codable, Identifiable, Equatable {
     let image_url: String?
 }
 
+// MARK: - Arsenal (GET/POST /me/arsenal, PATCH /me/arsenal/{id})
+
+/// A ball in the user's arsenal. `name` is the display name (catalog "Manufacturer Model", else the
+/// custom nickname). Exactly one row has `is_current == true` (server-enforced). `ball_configuration_id`
+/// + `id` are sent with every shot so the analyzer knows which ball was thrown.
+struct ArsenalBall: Codable, Identifiable, Equatable {
+    let id: String
+    let name: String?
+    let nickname: String?
+    let ball_model_id: String?
+    let manufacturer: String?
+    let model_name: String?
+    let image_url: String?
+    let weight_lb: Double?
+    let color_desc: String?
+    let is_current: Bool?
+    let retired: Bool?
+    let ball_configuration_id: String?
+    let layout_system: String?
+    let layout: String?
+    let surface: String?
+
+    var displayName: String { name ?? nickname ?? model_name ?? "Ball" }
+
+    // Decode leniently: weight can arrive as a number or string; booleans/strings tolerate nulls.
+    enum CodingKeys: String, CodingKey {
+        case id, name, nickname, ball_model_id, manufacturer, model_name, image_url,
+             weight_lb, color_desc, is_current, retired, ball_configuration_id,
+             layout_system, layout, surface
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try? c.decodeIfPresent(String.self, forKey: .name)
+        nickname = try? c.decodeIfPresent(String.self, forKey: .nickname)
+        ball_model_id = try? c.decodeIfPresent(String.self, forKey: .ball_model_id)
+        manufacturer = try? c.decodeIfPresent(String.self, forKey: .manufacturer)
+        model_name = try? c.decodeIfPresent(String.self, forKey: .model_name)
+        image_url = try? c.decodeIfPresent(String.self, forKey: .image_url)
+        if let d = try? c.decodeIfPresent(Double.self, forKey: .weight_lb) { weight_lb = d }
+        else if let s = try? c.decodeIfPresent(String.self, forKey: .weight_lb) { weight_lb = Double(s) }
+        else { weight_lb = nil }
+        color_desc = try? c.decodeIfPresent(String.self, forKey: .color_desc)
+        is_current = (try? c.decodeIfPresent(Bool.self, forKey: .is_current)) ?? false
+        retired = (try? c.decodeIfPresent(Bool.self, forKey: .retired)) ?? false
+        ball_configuration_id = try? c.decodeIfPresent(String.self, forKey: .ball_configuration_id)
+        layout_system = try? c.decodeIfPresent(String.self, forKey: .layout_system)
+        layout = try? c.decodeIfPresent(String.self, forKey: .layout)
+        surface = try? c.decodeIfPresent(String.self, forKey: .surface)
+    }
+}
+
 struct OilPattern: Codable, Identifiable, Equatable {
     let id: String?
     let name: String?
@@ -396,10 +480,13 @@ struct SpotCheckResponse: Codable {
 
 // MARK: - Request payloads
 
-struct ShotIntent {
+struct ShotIntent: Equatable {
     var feetBoard: Double?
     var arrowsBoard: Double?
     var breakpointBoard: Double?
+
+    /// True when at least one board target is set (i.e. Accuracy can be scored for the shot).
+    var isEmpty: Bool { feetBoard == nil && arrowsBoard == nil && breakpointBoard == nil }
 }
 
 struct ShotMetadata {
@@ -407,21 +494,27 @@ struct ShotMetadata {
     var captureMode: String     // "shot" / "form"
     var source: String          // "live"
     var intent: ShotIntent
+    /// Current ball's `ball_configuration_id` and arsenal row `id` (sent so the analyzer knows the ball).
+    var ballConfigurationId: String?
+    var userBallId: String?
 
     /// Builds the exact JSON string the API expects for the `metadata` multipart field.
-    /// Intent values are emitted explicitly as `null` when absent (matches the contract).
+    /// Intent values are emitted explicitly as `null` when absent (matches the contract); the ball ids
+    /// are included only when known (the server falls back to the current ball if omitted).
     func jsonString() -> String {
         let intentDict: [String: Any] = [
             "feet_board": intent.feetBoard as Any? ?? NSNull(),
             "arrows_board": intent.arrowsBoard as Any? ?? NSNull(),
             "breakpoint_board": intent.breakpointBoard as Any? ?? NSNull(),
         ]
-        let dict: [String: Any] = [
+        var dict: [String: Any] = [
             "handed": handed,
             "capture_mode": captureMode,
             "source": source,
             "intent": intentDict,
         ]
+        if let ballConfigurationId { dict["ball_configuration_id"] = ballConfigurationId }
+        if let userBallId { dict["user_ball_id"] = userBallId }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let str = String(data: data, encoding: .utf8) else {
             return "{}"

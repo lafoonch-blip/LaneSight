@@ -13,6 +13,7 @@ struct ShotCardView: View {
     @State private var sensorError: String?
     @State private var helpful: Bool?
     @State private var pendingNotification: AppNotification?
+    @State private var moveApplied = false
 
     // Form metric names: anything that looks like approach/swing lives in the form section.
     private static let formKeys: Set<String> = [
@@ -30,6 +31,7 @@ struct ShotCardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     targetVsActual
+                    if let suggested = result.suggestedTarget, suggested.hasBoard { applyMoveSection(suggested) }
                     ballSection
                     if !formMetrics.isEmpty { formSection }
                     sensorSection
@@ -89,14 +91,60 @@ struct ShotCardView: View {
         .lsCard()
     }
 
+    // MARK: apply this move
+
+    /// Shows the server's actionable move and a button that sets the carry-forward target to the
+    /// server-computed `suggested_target` (non-null boards only). No board math is done here.
+    private func applyMoveSection(_ suggested: SuggestedTarget) -> some View {
+        let rec = result.recommendation
+        let direction = (rec?.direction ?? suggested.direction)?.capitalized
+        let moveFeet = rec?.move_feet ?? suggested.move_feet
+        let headline: String = {
+            if let direction, let moveFeet { return "Move \(direction) \(Fmt.number(moveFeet)) ft" }
+            if let direction { return "Move \(direction)" }
+            return "Adjust your target"
+        }()
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("NEXT SHOT").lsEyebrow()
+            Text(headline).font(.headline).foregroundStyle(LS.textPrimary)
+            if let reason = rec?.reason, !reason.isEmpty {
+                Text(reason).font(.caption).foregroundStyle(LS.textSecondary)
+            }
+            newTargetSummary(suggested)
+            if moveApplied {
+                Label("Applied — it's now your target for the next shot", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(LS.measured)
+            } else {
+                Button {
+                    model.applySuggestedTarget(suggested)
+                    moveApplied = true
+                } label: {
+                    Text("Apply this move").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .lsCard()
+    }
+
+    private func newTargetSummary(_ s: SuggestedTarget) -> some View {
+        func part(_ label: String, _ v: Double?) -> String? { v.map { "\(label) \(Fmt.number($0))" } }
+        let parts = [part("Feet", s.feet_board), part("Arrows", s.arrows_board),
+                     part("Breakpoint", s.breakpoint_board)].compactMap { $0 }
+        return Text("New target · \(parts.joined(separator: " · "))")
+            .font(.caption.monospacedDigit()).foregroundStyle(LS.cyan)
+    }
+
     // MARK: target vs actual
 
     private var targetVsActual: some View {
+        func tgt(_ v: Double?) -> String { v.map(Fmt.number) ?? "" }
+        let t = model.sessionTarget
         let rows: [(String, String, Metric?)] = [
-            ("Feet", model.feetBoardText, nil),
+            ("Feet", tgt(t.feetBoard), nil),
             ("Laydown", "", metricDict["laydown_board"]),
-            ("Arrows", model.arrowsBoardText, metricDict["arrows_board"]),
-            ("Breakpoint", model.breakpointBoardText, metricDict["breakpoint_board"]),
+            ("Arrows", tgt(t.arrowsBoard), metricDict["arrows_board"]),
+            ("Breakpoint", tgt(t.breakpointBoard), metricDict["breakpoint_board"]),
             ("Entry", "", metricDict["entry_board"]),
         ]
         return VStack(alignment: .leading, spacing: 10) {

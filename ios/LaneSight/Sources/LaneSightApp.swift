@@ -27,6 +27,7 @@ struct LaneSightApp: App {
 /// is intercepted: selection never moves to them (the current working tab stays selected) and a
 /// clearly-labeled "Coming soon" sheet appears — they can never be mistaken for working, empty screens.
 struct RootTabs: View {
+    @EnvironmentObject var model: AppModel
     @State private var tab = 0
     @State private var comingSoon: ComingSoonItem?
 
@@ -65,6 +66,9 @@ struct RootTabs: View {
         .sheet(item: $comingSoon) { item in
             ComingSoonSheet(item: item)
         }
+        // Make the server the source of truth for the arsenal on authed load (also runs the one-time
+        // migration of any locally-stored ball). Harmless in dev-user mode.
+        .task { await model.syncArsenal() }
     }
 }
 

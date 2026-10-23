@@ -4,6 +4,7 @@ struct CaptureView: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var camera = CameraController()
     @State private var busy = false      // a shot is uploading/analyzing — drives the full-screen cover
+    @State private var showTargetEditor = false
 
     var body: some View {
         ZStack {
@@ -21,6 +22,7 @@ struct CaptureView: View {
             VStack {
                 topBar
                 Spacer()
+                chipRow
                 controls
             }
             .padding()
@@ -30,6 +32,9 @@ struct CaptureView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
         .onDisappear { camera.stopSession() }
+        .sheet(isPresented: $showTargetEditor) {
+            TargetEditorSheet(target: $model.sessionTarget).environmentObject(model)
+        }
         // A shot that's processing takes over the WHOLE screen (camera + tab bar) so the user stays
         // in the capture context — they never see the live preview or a highlighted Home tab mid-shot.
         .fullScreenCover(isPresented: $busy) {
@@ -55,6 +60,48 @@ struct CaptureView: View {
                 .background(.ultraThinMaterial, in: Capsule())
                 .accessibilityLabel("Mode: \(model.captureMode == "form" ? "Form" : "Shot")")
         }
+    }
+
+    /// Editable target chip + current-ball chip, shown just above the record button. The target chip
+    /// opens a lightweight steppers editor so the bowler can change the carry-forward target BETWEEN
+    /// shots without reopening Setup. Hidden while recording to keep the frame clean.
+    private var chipRow: some View {
+        HStack(spacing: 8) {
+            Button { showTargetEditor = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "scope").font(.caption2)
+                    Text(targetChipText).font(.caption.weight(.semibold))
+                    Image(systemName: "slider.horizontal.3").font(.caption2).foregroundStyle(LS.cyan)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .accessibilityLabel("Edit target. Current target \(targetChipText)")
+
+            if let ball = model.currentBall {
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.circle.fill").font(.caption2).foregroundStyle(LS.blue)
+                    Text(ball.displayName).font(.caption.weight(.semibold)).lineLimit(1)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.ultraThinMaterial, in: Capsule())
+                .foregroundStyle(.white)
+                .accessibilityLabel("Current ball \(ball.displayName)")
+            }
+            Spacer(minLength: 0)
+        }
+        .opacity(camera.state == .recording ? 0 : 1)
+        .animation(.easeInOut(duration: 0.15), value: camera.state)
+    }
+
+    private var targetChipText: String {
+        let t = model.sessionTarget
+        if t.isEmpty { return "Set target" }
+        func part(_ label: String, _ v: Double?) -> String? { v.map { "\(label) \(Fmt.number($0))" } }
+        return [part("F", t.feetBoard), part("A", t.arrowsBoard), part("B", t.breakpointBoard)]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private var controls: some View {
@@ -211,5 +258,63 @@ private struct ProcessingCover: View {
             Text(title).font(.title3.bold()).foregroundStyle(LS.textPrimary)
             if let detail { Text(detail).font(.callout).foregroundStyle(LS.textSecondary) }
         }
+    }
+}
+
+/// Lightweight editor for the carry-forward target. Steppers change feet / arrows / breakpoint boards
+/// between shots; "Clear" removes a board (skips Accuracy on it). Edits write straight to the bound
+/// session target used for the NEXT shot — no need to reopen Setup.
+private struct TargetEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var target: ShotIntent
+
+    // Sensible starting values when a board is toggled on from "off".
+    private let defaults: [String: Double] = ["Feet": 15, "Arrows": 10, "Breakpoint": 8]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Change your target between shots. It carries forward until you change it again or apply a move from a shot card.")
+                        .font(.caption).foregroundStyle(LS.textSecondary)
+                    boardRow("Feet", value: $target.feetBoard)
+                    boardRow("Arrows", value: $target.arrowsBoard)
+                    boardRow("Breakpoint", value: $target.breakpointBoard)
+                }
+                .padding(16)
+            }
+            .background(LSBackground())
+            .navigationTitle("Target")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium])
+    }
+
+    private func boardRow(_ title: String, value: Binding<Double?>) -> some View {
+        HStack {
+            Text(title).font(.subheadline).foregroundStyle(LS.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let current = value.wrappedValue {
+                Stepper(value: Binding(get: { current },
+                                       set: { value.wrappedValue = max(0, min(60, $0)) }),
+                        in: 0...60, step: 1) {
+                    Text(Fmt.number(current)).font(.body.monospacedDigit().bold())
+                        .foregroundStyle(LS.textPrimary).frame(width: 40, alignment: .trailing)
+                }
+                .labelsHidden()
+                Button("Clear") { value.wrappedValue = nil }
+                    .font(.caption).tint(LS.bestEffort)
+            } else {
+                Text("Off").font(.subheadline).foregroundStyle(LS.textFaint)
+                Button("Set") { value.wrappedValue = defaults[title] ?? 0 }
+                    .font(.caption).tint(LS.blue)
+            }
+        }
+        .lsCard()
     }
 }

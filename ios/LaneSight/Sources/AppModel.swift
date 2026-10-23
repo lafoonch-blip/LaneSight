@@ -19,10 +19,13 @@ struct ShotResult: Equatable {
     var shotId: String
     var metrics: [(String, Metric)]
     var score: ScoreResponse
-    var footer: ShotFooter?        // score_delta + achievement_nudges from the analyze job
+    var footer: ShotFooter?              // score_delta + achievement_nudges from the analyze job
+    var suggestedTarget: SuggestedTarget?  // server-computed next-shot target (drives "Apply this move")
+    var recommendation: Recommendation?    // the actionable move rec (reason/direction label)
 
     static func == (lhs: ShotResult, rhs: ShotResult) -> Bool {
-        lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0) && lhs.footer == rhs.footer
+        lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0)
+            && lhs.footer == rhs.footer && lhs.suggestedTarget == rhs.suggestedTarget
     }
 }
 
@@ -72,8 +75,19 @@ final class AppModel: ObservableObject {
     @Published var laneText: String = ""
     @Published var selectedOilPatternName: String?
     @Published var selectedOilPatternId: String?
+    /// Legacy on-device "current ball" name from the pre-arsenal build. Kept only as a display mirror and
+    /// the one-time migration source; the arsenal API is the source of truth after `syncArsenal()`.
     @Published var currentBallName: String?
     @Published var shotCount: Int = 0
+
+    // Arsenal (server-backed). `arsenal` is the source of truth after an authed load; `currentBall` is
+    // the one row with is_current == true (server-enforced single current ball).
+    @Published private(set) var arsenal: [ArsenalBall] = []
+    var currentBall: ArsenalBall? { arsenal.first { $0.is_current == true } }
+
+    /// The session's carry-forward target. Seeded from Setup, held across shots, edited by the capture
+    /// chip, and updated by "Apply this move". Every live shot sends this as its `intent`.
+    @Published var sessionTarget = ShotIntent()
 
     // End-of-session summary (POST /sessions/{id}/end)
     @Published var endSummary: EndSessionResponse?
@@ -99,6 +113,7 @@ final class AppModel: ObservableObject {
         static let speedUnit = "ls.speedUnit"
         static let speak = "ls.speakAdjustments"
         static let preferredFPS = "ls.preferredFPS"
+        static let arsenalMigrated = "ls.arsenalMigrated"
     }
 
     init() {
@@ -162,6 +177,8 @@ final class AppModel: ObservableObject {
         shotCount = 0
         endSummary = nil
         result = nil
+        arsenal = []
+        sessionTarget = ShotIntent()
         Keychain.delete(Keychain.Account.accessToken)
         Keychain.delete(Keychain.Account.refreshToken)
         Keychain.delete(Keychain.Account.userId)
@@ -205,6 +222,59 @@ final class AppModel: ObservableObject {
             if p.dob?.isEmpty == false { profileComplete = true }
             if let h = p.handedness { handed = (h == "left") ? "L" : "R" }
         }
+    }
+
+    // MARK: arsenal
+
+    /// Fetches the arsenal and makes the server the source of truth. On the FIRST authed launch, migrates
+    /// any locally-stored ball (the pre-arsenal `currentBallName`) to /me/arsenal as the current ball,
+    /// then persists a flag so migration runs exactly once. After this, read/write only through the API.
+    func syncArsenal() async {
+        guard let client = try? makeClient() else { return }
+        if !defaults.bool(forKey: Keys.arsenalMigrated) {
+            if let legacy = currentBallName?.trimmingCharacters(in: .whitespaces), !legacy.isEmpty {
+                // Map the local name → `name`; mark it current. Weight/layout/surface weren't stored locally.
+                _ = try? await client.addBall(name: legacy, makeCurrent: true)
+            }
+            defaults.set(true, forKey: Keys.arsenalMigrated)
+        }
+        if let balls = try? await client.getArsenal() {
+            arsenal = balls
+            currentBallName = currentBall?.displayName        // keep the legacy display mirror in sync
+        }
+    }
+
+    /// Adds a ball (catalog via `ballModelId`, or custom via `name`) and re-syncs the arsenal.
+    func addBall(ballModelId: String? = nil, name: String? = nil, nickname: String? = nil,
+                 weightLb: Double? = nil, colorDesc: String? = nil, layoutSystem: String? = nil,
+                 layout: String? = nil, surface: String? = nil, makeCurrent: Bool = false) async throws {
+        let client = try makeClient()
+        _ = try await client.addBall(ballModelId: ballModelId, name: name, nickname: nickname,
+                                     weightLb: weightLb, colorDesc: colorDesc, layoutSystem: layoutSystem,
+                                     layout: layout, surface: surface, makeCurrent: makeCurrent)
+        await syncArsenal()
+    }
+
+    /// Makes `id` the one current ball (PATCH is_current) and re-syncs.
+    func setCurrentBall(id: String) async throws {
+        let client = try makeClient()
+        try await client.setCurrentBall(id: id)
+        await syncArsenal()
+    }
+
+    /// Patches an arsenal row (layout/surface/weight/nickname/retired/…) and re-syncs.
+    func updateBall(id: String, patch: [String: Any]) async throws {
+        let client = try makeClient()
+        try await client.updateBall(id: id, patch: patch)
+        await syncArsenal()
+    }
+
+    /// Applies a server-computed next-shot target to the carry-forward target. Only the non-null boards
+    /// are applied; a null board leaves the current value unchanged. No board math is done in Swift.
+    func applySuggestedTarget(_ t: SuggestedTarget) {
+        if let f = t.feet_board { sessionTarget.feetBoard = f }
+        if let a = t.arrows_board { sessionTarget.arrowsBoard = a }
+        if let b = t.breakpoint_board { sessionTarget.breakpointBoard = b }
     }
 
     // MARK: connection check
@@ -262,13 +332,22 @@ final class AppModel: ObservableObject {
 
             // 3. Upload the clip (multipart) with progress.
             pipeline = .uploading(0)
+            // Live shots carry the session's current target (carry-forward / chip / Apply-this-move).
+            // Uploads seed that target from the Upload screen's fields so the Shot card shows it too.
+            if source != "live" {
+                sessionTarget = ShotIntent(
+                    feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
+                    arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
+                    breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
+            }
+            let ball = currentBall
             let metadata = ShotMetadata(
                 handed: handed,
                 captureMode: captureMode,
                 source: source,
-                intent: ShotIntent(feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
-                                   arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
-                                   breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
+                intent: sessionTarget,
+                ballConfigurationId: ball?.ball_configuration_id,
+                userBallId: ball?.id
             )
             let created: CreateShotResponse
             if source == "upload" {
@@ -300,7 +379,15 @@ final class AppModel: ObservableObject {
             let shot = try await client.shot(created.shot_id)
             let score = try await client.score()
             let metrics = MetricDisplay.ordered(shot.record?.metrics ?? [:])
-            result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score, footer: last.result)
+            let insights = shot.record?.insights
+            // The actionable move rec (reason/direction for the "Apply this move" label): first rec that
+            // names a direction + move distance; otherwise the first rec with a reason.
+            let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
+                ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
+            result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
+                                footer: last.result,
+                                suggestedTarget: insights?.suggested_target,
+                                recommendation: moveRec)
             shotCount += 1
             pipeline = .done
             showResult = true
@@ -365,6 +452,12 @@ final class AppModel: ObservableObject {
         shotCount = 0
         endSummary = nil
         captureMode = mode
+        // Seed the carry-forward target from the Setup fields (optional). It then carries shot-to-shot
+        // and is edited only via the capture chip or "Apply this move" — no need to reopen Setup.
+        sessionTarget = ShotIntent(
+            feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
+            arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
+            breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
     }
 
     /// Records the sensor answer for the shot shown on the shot card (PATCH /shots/{id}).

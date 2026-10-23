@@ -342,6 +342,54 @@ struct APIClient {
         try await send(makeRequest("oil-patterns"), as: [OilPattern].self)
     }
 
+    // MARK: arsenal (GET/POST /me/arsenal, PATCH /me/arsenal/{id})
+
+    func getArsenal() async throws -> [ArsenalBall] {
+        try await send(makeRequest("me/arsenal"), as: [ArsenalBall].self)
+    }
+
+    /// Adds a ball. Pass `ballModelId` for a catalog ball (optionally with `nickname`) OR `name` for a
+    /// custom ball. Optional config fields and `makeCurrent` match the live contract.
+    func addBall(ballModelId: String? = nil,
+                 name: String? = nil,
+                 nickname: String? = nil,
+                 weightLb: Double? = nil,
+                 colorDesc: String? = nil,
+                 layoutSystem: String? = nil,
+                 layout: String? = nil,
+                 surface: String? = nil,
+                 makeCurrent: Bool = false) async throws -> ArsenalBall {
+        var req = makeRequest("me/arsenal", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = [:]
+        if let ballModelId, !ballModelId.isEmpty { body["ball_model_id"] = ballModelId }
+        if let name, !name.isEmpty { body["name"] = name }
+        if let nickname, !nickname.isEmpty { body["nickname"] = nickname }
+        if let weightLb { body["weight_lb"] = weightLb }
+        if let colorDesc, !colorDesc.isEmpty { body["color_desc"] = colorDesc }
+        if let layoutSystem, !layoutSystem.isEmpty { body["layout_system"] = layoutSystem }
+        if let layout, !layout.isEmpty { body["layout"] = layout }
+        if let surface, !surface.isEmpty { body["surface"] = surface }
+        if makeCurrent { body["make_current"] = true }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await send(req, as: ArsenalBall.self)
+    }
+
+    /// Patches an arsenal row. Pass any subset of the editable fields as a `[String: Any]` patch.
+    @discardableResult
+    func updateBall(id: String, patch: [String: Any]) async throws -> ArsenalBall {
+        var req = makeRequest("me/arsenal/\(id)", method: "PATCH")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: patch)
+        return try await send(req, as: ArsenalBall.self)
+    }
+
+    /// Makes `id` the one current ball (server unsets the others). PATCH is_current:true.
+    @discardableResult
+    func setCurrentBall(id: String) async throws -> ArsenalBall {
+        try await updateBall(id: id, patch: ["is_current": true])
+    }
+
     func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool) async throws {
         var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
