@@ -81,13 +81,11 @@ private struct SignInStep: View {
                 Button {
                     Task { await submit() }
                 } label: {
-                    HStack {
-                        Text("Sign In")
-                        if busy { Spacer(); ProgressView().tint(.white) }
-                    }
+                    LoadingLabel("Sign In", busy: busy)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!canSubmit)
+                .opacity(canSubmit ? 1 : 0.5)
             }
             .padding(20)
         }
@@ -114,11 +112,21 @@ private struct CreateAccountStep: View {
     @State private var agree = false
     @State private var busy = false
     @State private var errorText: String?
+    @State private var showLegal = false
     @FocusState private var focus: Field?
     private enum Field { case email, password }
 
-    private var canSubmit: Bool {
-        !email.trimmingCharacters(in: .whitespaces).isEmpty && password.count >= 6 && agree && !busy
+    private var emailOK: Bool {
+        let e = email.trimmingCharacters(in: .whitespaces)
+        return e.contains("@") && e.contains(".") && e.count >= 5
+    }
+    private var canSubmit: Bool { emailOK && password.count >= 6 && agree && !busy }
+
+    private var hintText: String {
+        if !emailOK { return "Enter a valid email address." }
+        if password.count < 6 { return "Password must be at least 6 characters." }
+        if !agree { return "Accept the Terms of Service and Privacy Policy to continue." }
+        return ""
     }
 
     var body: some View {
@@ -134,9 +142,14 @@ private struct CreateAccountStep: View {
                     .focused($focus, equals: .password)
 
                 Toggle(isOn: $agree) {
-                    Text("I agree to the Terms of Service and Privacy Policy")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("I agree to the Terms of Service and Privacy Policy")
+                            .font(.caption).foregroundStyle(LS.textPrimary)
+                        Button("Read the Terms of Service & Privacy Policy") { showLegal = true }
+                            .font(.caption2).tint(LS.cyan)
+                    }
                 }.tint(LS.blue)
+                .accessibilityHint("Required before you can create an account")
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -148,16 +161,21 @@ private struct CreateAccountStep: View {
                 Button {
                     Task { await submit() }
                 } label: {
-                    HStack {
-                        Text("Create Account")
-                        if busy { Spacer(); ProgressView().tint(.white) }
-                    }
+                    LoadingLabel("Create Account", busy: busy)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!canSubmit)
+                .opacity(canSubmit ? 1 : 0.5)
+
+                if !canSubmit && !busy {
+                    Text(hintText)
+                        .font(.caption2).foregroundStyle(LS.textFaint)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
             .padding(20)
         }
+        .sheet(isPresented: $showLegal) { LegalNoticeSheet() }
         .background(LSBackground(auth: true))
         .navigationTitle("Create account")
         .navigationBarTitleDisplayMode(.inline)
@@ -205,6 +223,34 @@ private struct AuthField: View {
     }
 }
 
+/// Honest interim notice for the ToS / Privacy links. The full legal documents aren't written yet
+/// for this dev build, so we say so plainly rather than show fabricated terms.
+private struct LegalNoticeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Terms of Service & Privacy Policy")
+                        .font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("LaneSight is a development build. The full Terms of Service and Privacy Policy will be published before public release. By creating an account now you agree to take part in testing and to the handling of your account data, shot videos and stats for the purpose of running and improving the app.")
+                        .font(.callout).foregroundStyle(LS.textSecondary)
+                    Text("You can delete your account and all associated data at any time from Settings → Delete account.")
+                        .font(.callout).foregroundStyle(LS.textSecondary)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(LSBackground(auth: true))
+            .navigationTitle("Legal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 // MARK: - Profile setup flow (shown once signed in, until the profile is complete)
 
 struct ProfileSetupFlow: View {
@@ -219,11 +265,11 @@ struct ProfileSetupFlow: View {
 private struct ProfileSetupStep: View {
     @EnvironmentObject var model: AppModel
 
-    @State private var name = ""
+    @State private var firstName = ""
+    @State private var lastName = ""
     @State private var dob = Calendar.current.date(byAdding: .year, value: -25, to: Date()) ?? Date()
     @State private var handedness = "right"
     @State private var delivery = "one_handed_thumb"
-    @State private var steps = "5"
     @State private var saving = false
     @State private var saveError: String?
 
@@ -244,12 +290,23 @@ private struct ProfileSetupStep: View {
                 Text("Step 1 of 2").font(.caption).foregroundStyle(LS.cyan)
                 Text("Set up your bowler profile").font(.title2.bold()).foregroundStyle(LS.textPrimary)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Name").font(.subheadline).foregroundStyle(LS.textPrimary)
-                    TextField("Your name", text: $name)
-                        .foregroundStyle(LS.textPrimary)
-                        .padding(12).frame(minHeight: 44)
-                        .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("First name").font(.subheadline).foregroundStyle(LS.textPrimary)
+                        TextField("First", text: $firstName)
+                            .textContentType(.givenName)
+                            .foregroundStyle(LS.textPrimary)
+                            .padding(12).frame(minHeight: 44)
+                            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Last name").font(.subheadline).foregroundStyle(LS.textPrimary)
+                        TextField("Last", text: $lastName)
+                            .textContentType(.familyName)
+                            .foregroundStyle(LS.textPrimary)
+                            .padding(12).frame(minHeight: 44)
+                            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -276,14 +333,6 @@ private struct ProfileSetupStep: View {
                     }.pickerStyle(.menu).tint(LS.cyan)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("How many steps in your approach?").font(.subheadline).foregroundStyle(LS.textPrimary)
-                    TextField("5", text: $steps).keyboardType(.numberPad)
-                        .foregroundStyle(LS.textPrimary)
-                        .padding(12).frame(minHeight: 44)
-                        .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
-                }
-
                 if let saveError {
                     Label(saveError, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(LS.bestEffort)
@@ -293,10 +342,11 @@ private struct ProfileSetupStep: View {
                 NavigationLink {
                     AddBallStep()
                 } label: {
-                    HStack { Text("Next: add your ball"); if saving { Spacer(); ProgressView().tint(.white) } }
+                    LoadingLabel("Next: add your ball", busy: saving)
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!ageOK || saving)
+                .opacity(ageOK ? 1 : 0.5)
                 .simultaneousGesture(TapGesture().onEnded { Task { await saveProfile() } })
             }
             .padding(20)
@@ -309,11 +359,14 @@ private struct ProfileSetupStep: View {
     private func saveProfile() async {
         saving = true
         saveError = nil
-        var fields: [String: Any] = [
-            "name": name, "handedness": handedness, "delivery_style": delivery,
+        let fullName = [firstName, lastName]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let fields: [String: Any] = [
+            "name": fullName, "handedness": handedness, "delivery_style": delivery,
             "dob": ISO8601DateFormatter().string(from: dob),
         ]
-        if let n = Int(steps) { fields["approach_steps"] = n }
         model.handed = (handedness == "left") ? "L" : "R"
         do { _ = try await model.makeClient().putProfile(fields) }
         catch { saveError = "Couldn't save profile (you can still continue): \(error.localizedDescription)" }
@@ -327,9 +380,9 @@ private struct AddBallStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Step 2 of 2").font(.caption).foregroundStyle(LS.cyan)
+                Text("Step 2 of 2 · Optional").font(.caption).foregroundStyle(LS.cyan)
                 Text("Add your first ball").font(.title2.bold()).foregroundStyle(LS.textPrimary)
-                Text("Browse the catalog and pick a ball, or skip and add one later from your Profile.")
+                Text("Optional — you can skip this and add a ball later from your Profile at any time.")
                     .font(.caption).foregroundStyle(LS.textSecondary)
 
                 NavigationLink { AddBallView() } label: {
@@ -344,7 +397,8 @@ private struct AddBallStep: View {
                 }
                 .buttonStyle(.plain)
 
-                Button("Finish — go to Home") {
+                // Primary action adapts: continue if a ball was added, otherwise an explicit Skip.
+                Button(model.currentBallName == nil ? "Skip for now — go to Home" : "Finish — go to Home") {
                     model.finishProfileSetup()
                 }
                 .buttonStyle(PrimaryButtonStyle())

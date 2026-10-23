@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SetupView: View {
     @EnvironmentObject var model: AppModel
-    @State private var lane: Int = 1
     @State private var oilPatterns: [OilPattern] = []
     @State private var oilLoadError: String?
     @State private var healthText: String?
@@ -15,7 +14,7 @@ struct SetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 modeSection
-                laneSection
+                if model.captureMode == "shot" { intentSection }
                 ballSection
                 oilSection
                 preflightSection
@@ -72,19 +71,32 @@ struct SetupView: View {
         .buttonStyle(.plain)
     }
 
-    private var laneSection: some View {
-        HStack {
-            Text("Lane").font(.headline).foregroundStyle(LS.textPrimary)
-            Spacer()
-            Stepper(value: $lane, in: 1...99) {
-                Text("\(lane)").font(.title3.bold().monospacedDigit()).foregroundStyle(LS.textPrimary)
+    /// Target boards for this shot (optional). Collected here, BEFORE capture — not on the camera.
+    /// The pipeline sends these as model intent; without them Accuracy is skipped for the shot.
+    private var intentSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("YOUR TARGET FOR THIS SHOT (OPTIONAL)").lsEyebrow()
+            HStack(spacing: 8) {
+                intentField("Feet", text: $model.feetBoardText)
+                intentField("Arrows", text: $model.arrowsBoardText)
+                intentField("Breakpoint", text: $model.breakpointBoardText)
             }
-            .labelsHidden().fixedSize()
-            Text("\(lane)").font(.title3.bold().monospacedDigit()).foregroundStyle(LS.textPrimary)
-                .frame(minWidth: 36)
+            Text("Set where you're aiming. Leave blank to skip Accuracy on this shot.")
+                .font(.caption2).foregroundStyle(LS.textFaint)
         }
         .lsCard()
-        .onChange(of: lane) { _, newValue in model.laneText = String(newValue) }
+    }
+
+    private func intentField(_ title: String, text: Binding<String>) -> some View {
+        VStack(spacing: 4) {
+            Text(title).font(.caption2).foregroundStyle(LS.textSecondary)
+            TextField("—", text: text)
+                .keyboardType(.decimalPad).multilineTextAlignment(.center)
+                .foregroundStyle(LS.textPrimary)
+                .padding(10).frame(maxWidth: .infinity, minHeight: 44)
+                .background(LS.bg, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStroke))
+        }
     }
 
     private var ballSection: some View {
@@ -140,7 +152,7 @@ struct SetupView: View {
             }
             HStack(spacing: 8) {
                 Image(systemName: "camera.fill").foregroundStyle(LS.cyan)
-                Text("Camera 1080p · up to 120 fps · SDR").font(.caption).foregroundStyle(LS.textSecondary)
+                Text("Camera 1080p · \(model.preferredFPS) fps · SDR").font(.caption).foregroundStyle(LS.textSecondary)
             }
         }
         .lsCard()
@@ -169,7 +181,7 @@ struct SetupView: View {
         startError = nil
         do {
             try await model.startLiveSession(mode: model.captureMode,
-                                             lane: String(lane),
+                                             lane: nil,
                                              oilPatternId: model.selectedOilPatternId)
             goCapture = true
         } catch { startError = error.localizedDescription }

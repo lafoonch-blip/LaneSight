@@ -50,6 +50,24 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// A button title that stays centered and shows a trailing spinner when busy — the spinner is an
+/// overlay, so the label never shifts left while the action runs.
+struct LoadingLabel: View {
+    let title: String
+    let busy: Bool
+    init(_ title: String, busy: Bool) { self.title = title; self.busy = busy }
+    var body: some View {
+        Text(title)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .trailing) {
+                if busy {
+                    ProgressView().tint(.white).padding(.trailing, 4)
+                        .transition(.opacity)
+                }
+            }
+    }
+}
+
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

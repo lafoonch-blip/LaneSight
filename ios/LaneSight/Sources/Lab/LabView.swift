@@ -3,15 +3,11 @@ import SwiftUI
 struct LabView: View {
     @EnvironmentObject var model: AppModel
     @State private var sessions: Loadable<[SessionRow]> = .idle
-    @State private var health: String?
-    @State private var healthOK = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    hostStatus
-
                     NavigationLink { SetupView() } label: {
                         actionTile("Start Live Session", "Shot or Form · record each delivery",
                                    symbol: "record.circle", tint: LS.blue)
@@ -34,18 +30,9 @@ struct LabView: View {
             .background(LSBackground())
             .navigationTitle("Performance Lab")
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .task { await loadAll() }
-            .refreshable { await loadAll() }
+            .task { await loadSessions() }
+            .refreshable { await loadSessions() }
         }
-    }
-
-    private var hostStatus: some View {
-        HStack(spacing: 8) {
-            Circle().fill(healthOK ? LS.measured : LS.bestEffort).frame(width: 8, height: 8)
-            Text(health ?? "Checking host…").font(.caption).foregroundStyle(LS.textSecondary)
-            Spacer()
-        }
-        .lsCard(padding: 12)
     }
 
     private func actionTile(_ title: String, _ subtitle: String, symbol: String, tint: Color) -> some View {
@@ -78,22 +65,6 @@ struct LabView: View {
                     }
                 }
             }
-        }
-    }
-
-    private func loadAll() async {
-        await loadHealth()
-        await loadSessions()
-    }
-
-    private func loadHealth() async {
-        do {
-            let h = try await model.makeClient().health()
-            health = "Mac \(h.status ?? "?")"
-            healthOK = (h.status == "ok")
-        } catch {
-            health = "Mac unreachable"
-            healthOK = false
         }
     }
 

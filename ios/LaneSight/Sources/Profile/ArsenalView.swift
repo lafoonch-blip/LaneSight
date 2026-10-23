@@ -3,9 +3,12 @@ import SwiftUI
 /// Add ball from the catalog (AddBall.dc.html). Searches GET /catalog/balls?q=.
 struct AddBallView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: Loadable<[CatalogBall]> = .idle
     @State private var searchTask: Task<Void, Never>?
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         ScrollView {
@@ -22,9 +25,9 @@ struct AddBallView: View {
 
                 LoadableView(state: results, retry: { Task { await search() } }) { balls in
                     if balls.isEmpty {
-                        Text(query.isEmpty
-                             ? "Type to search the 211-ball catalog. Photos and specs come from the manufacturer's published data."
-                             : "No catalog balls matched “\(query)”.")
+                        Text(trimmedQuery.isEmpty
+                             ? "Type to search the ball catalog. Photos and specs come from the manufacturer's published data."
+                             : "No catalog balls matched “\(trimmedQuery)”.")
                             .font(.callout).foregroundStyle(LS.textSecondary)
                     } else {
                         Text("RESULTS · \(balls.count)").lsEyebrow()
@@ -34,6 +37,12 @@ struct AddBallView: View {
                         }
                     }
                 }
+
+                // Custom ball: let the bowler add a free-text name when it isn't in the catalog
+                // (e.g. older balls), so they're never blocked from logging shots.
+                if !trimmedQuery.isEmpty {
+                    customBallButton
+                }
             }
             .padding(16)
         }
@@ -42,6 +51,27 @@ struct AddBallView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { if case .idle = results { await search() } }
+    }
+
+    private var customBallButton: some View {
+        Button {
+            model.currentBallName = trimmedQuery
+            dismiss()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(LS.cyan)
+                    .frame(width: 40, height: 40).background(LS.cyan.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add “\(trimmedQuery)” as a custom ball")
+                        .font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Not in the catalog? Use your own name.")
+                        .font(.caption).foregroundStyle(LS.textSecondary)
+                }
+                Spacer()
+            }
+            .lsCard(padding: 12)
+        }
+        .buttonStyle(.plain)
     }
 
     private func ballRow(_ ball: CatalogBall) -> some View {

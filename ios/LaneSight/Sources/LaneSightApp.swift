@@ -22,11 +22,29 @@ struct LaneSightApp: App {
 
 /// Bottom tabs per HANDOFF §4/§5: Home · Stats · Lab · Leagues (Soon) · Tourneys (Soon).
 /// Capture is reached via Lab → Start Live Session → Setup.
+///
+/// Leagues/Tourneys are not built yet. A TabView tab can't be made un-tappable, so tapping either
+/// is intercepted: selection never moves to them (the current working tab stays selected) and a
+/// clearly-labeled "Coming soon" sheet appears — they can never be mistaken for working, empty screens.
 struct RootTabs: View {
     @State private var tab = 0
+    @State private var comingSoon: ComingSoonItem?
+
+    private var selection: Binding<Int> {
+        Binding(
+            get: { tab },
+            set: { newValue in
+                switch newValue {
+                case 3: comingSoon = ComingSoonItem(title: "Leagues", symbol: "person.3.fill")
+                case 4: comingSoon = ComingSoonItem(title: "Tourneys", symbol: "trophy.fill")
+                default: tab = newValue
+                }
+            }
+        )
+    }
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: selection) {
             HomeView()
                 .tag(0)
                 .tabItem { Label("Home", systemImage: "house.fill") }
@@ -36,27 +54,41 @@ struct RootTabs: View {
             LabView()
                 .tag(2)
                 .tabItem { Label("Lab", systemImage: "flask.fill") }
-            ComingSoonTab(title: "Leagues", symbol: "person.3.fill")
+            // Placeholder content — never actually shown because selection is intercepted above.
+            ComingSoonView("Leagues", symbol: "person.3.fill")
                 .tag(3)
-                .tabItem { Label("Leagues", systemImage: "person.3.fill") }
-            ComingSoonTab(title: "Tourneys", symbol: "trophy.fill")
+                .tabItem { Label("Leagues · Soon", systemImage: "lock.fill") }
+            ComingSoonView("Tourneys", symbol: "trophy.fill")
                 .tag(4)
-                .tabItem { Label("Tourneys", systemImage: "trophy.fill") }
+                .tabItem { Label("Tourneys · Soon", systemImage: "lock.fill") }
+        }
+        .sheet(item: $comingSoon) { item in
+            ComingSoonSheet(item: item)
         }
     }
 }
 
-/// Disabled "Soon" tabs (Leagues / Tournaments) — reachable but clearly not available yet, never empty.
-struct ComingSoonTab: View {
+struct ComingSoonItem: Identifiable {
     let title: String
     let symbol: String
+    var id: String { title }
+}
+
+/// The unmistakable "Coming soon" state shown when a locked tab (Leagues / Tourneys) is tapped.
+private struct ComingSoonSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: ComingSoonItem
     var body: some View {
         NavigationStack {
-            ComingSoonView(title,
-                           message: "\(title) are out of scope for this dev build. They'll arrive in a later release.",
-                           symbol: symbol)
-                .navigationTitle(title)
+            ComingSoonView(item.title,
+                           message: "\(item.title) aren't available in this dev build yet. They'll arrive in a later release.",
+                           symbol: item.symbol)
+                .navigationTitle(item.title)
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium])
     }
 }

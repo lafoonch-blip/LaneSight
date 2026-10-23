@@ -28,6 +28,10 @@ final class CameraController: NSObject, ObservableObject {
     @Published private(set) var activeFPS: Double = 0
     @Published private(set) var resolution: String = ""
 
+    /// User-chosen capture frame rate (120 / 60 / 30). The camera clamps to the highest supported
+    /// rate ≤ this value. Set from Settings before `start()`; defaults to 120.
+    var preferredFPS: Double = 120
+
     let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
     private var configured = false
@@ -37,7 +41,8 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: setup
 
-    func start() async {
+    func start(preferredFPS: Double = 120) async {
+        self.preferredFPS = preferredFPS
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             break
@@ -72,7 +77,7 @@ final class CameraController: NSObject, ObservableObject {
             guard session.canAddOutput(movieOutput) else { throw CameraError.notReady }
             session.addOutput(movieOutput)
 
-            let chosen = bestFormat(for: device)
+            let chosen = bestFormat(for: device, preferred: preferredFPS)
             session.sessionPreset = (chosen != nil) ? .inputPriority : .high
             session.commitConfiguration()
 
@@ -100,10 +105,12 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// Picks a >=1080p (falling back to >=720p) format with the best supported frame rate
-    /// among 120/60/30. Returns nil if none qualify (then we keep the device default).
-    private func bestFormat(for device: AVCaptureDevice) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
-        let targets: [Double] = [120, 60, 30]
+    /// Picks a >=1080p (falling back to >=720p) format at the highest supported frame rate that is
+    /// ≤ the user's `preferred` choice (never faster than they asked — higher fps = bigger files).
+    /// Returns nil if none qualify (then we keep the device default).
+    private func bestFormat(for device: AVCaptureDevice, preferred: Double) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
+        // Candidate rates no higher than the user's choice, highest first.
+        let targets = [120.0, 60.0, 30.0].filter { $0 <= preferred + 0.5 }.sorted(by: >)
         var best: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
         for minHeight: Int32 in [1080, 720] {
             for format in device.formats {

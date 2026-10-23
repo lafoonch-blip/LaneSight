@@ -6,6 +6,7 @@ import Combine
 enum PipelineState: Equatable {
     case idle
     case creatingSession
+    case trimming                          // on-device clip trim to the shot window (live capture)
     case uploading(Double)                 // 0...1
     case analyzing(state: String, timings: [String: Double])
     case fetching
@@ -43,6 +44,11 @@ final class AppModel: ObservableObject {
     @Published var handed: String { didSet { defaults.set(handed, forKey: Keys.handed) } }
     @Published var speedUnit: String { didSet { defaults.set(speedUnit, forKey: Keys.speedUnit) } }   // "mph" | "kmh"
     @Published var speakAdjustments: Bool { didSet { defaults.set(speakAdjustments, forKey: Keys.speak) } }
+    /// Preferred capture frame rate (120 / 60 / 30). Defaults to 120 — required for the rev band,
+    /// axis/PAP and form release-timing measurements. Changed in Settings only. The camera clamps
+    /// this to the highest supported rate ≤ the chosen value. Uploads are kept small by trimming the
+    /// clip on-device (VideoTrimmer), NOT by lowering fps.
+    @Published var preferredFPS: Int { didSet { defaults.set(preferredFPS, forKey: Keys.preferredFPS) } }
 
     // Auth session (tokens live in the Keychain, not here/UserDefaults).
     @Published private(set) var session: AuthSession?
@@ -92,6 +98,7 @@ final class AppModel: ObservableObject {
         static let profileComplete = "ls.profileComplete"
         static let speedUnit = "ls.speedUnit"
         static let speak = "ls.speakAdjustments"
+        static let preferredFPS = "ls.preferredFPS"
     }
 
     init() {
@@ -103,6 +110,7 @@ final class AppModel: ObservableObject {
         profileComplete = defaults.bool(forKey: Keys.profileComplete)
         speedUnit = defaults.string(forKey: Keys.speedUnit) ?? "mph"
         speakAdjustments = defaults.bool(forKey: Keys.speak)
+        preferredFPS = (defaults.object(forKey: Keys.preferredFPS) as? Int) ?? 120
 
         // Restore a persisted Keychain session (tokens survive relaunch; cleared on sign out).
         if let access = Keychain.get(Keychain.Account.accessToken) {
@@ -241,7 +249,18 @@ final class AppModel: ObservableObject {
                 sessionId = sid
             }
 
-            // 2. Upload the clip (multipart) with progress.
+            // 2. For a live capture, trim the clip to the shot window ON-DEVICE before uploading.
+            // Original fps + resolution are preserved (passthrough export) — we only cut dead time
+            // at the head/tail so the upload is smaller. Photos uploads are sent as-is.
+            let uploadURL: URL
+            if source == "live" {
+                pipeline = .trimming
+                uploadURL = await VideoTrimmer.trimToShotWindow(fileURL)
+            } else {
+                uploadURL = fileURL
+            }
+
+            // 3. Upload the clip (multipart) with progress.
             pipeline = .uploading(0)
             let metadata = ShotMetadata(
                 handed: handed,
@@ -253,16 +272,16 @@ final class AppModel: ObservableObject {
             )
             let created: CreateShotResponse
             if source == "upload" {
-                created = try await client.uploadClip(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
+                created = try await client.uploadClip(sessionId: sid, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
                     self?.pipeline = .uploading(frac)
                 }
             } else {
-                created = try await client.uploadShot(sessionId: sid, fileURL: fileURL, metadata: metadata) { [weak self] frac in
+                created = try await client.uploadShot(sessionId: sid, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
                     self?.pipeline = .uploading(frac)
                 }
             }
 
-            // 3. Poll the analysis job until done/failed.
+            // 4. Poll the analysis job until done/failed.
             var last = JobResponse(id: created.job_id, kind: nil, state: "queued", reason: nil, timings: nil, result: nil)
             pipeline = .analyzing(state: last.state, timings: [:])
             while true {
@@ -276,7 +295,7 @@ final class AppModel: ObservableObject {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
             }
 
-            // 4. Fetch the shot record + score; carry the analyze-job footer onto the card.
+            // 5. Fetch the shot record + score; carry the analyze-job footer onto the card.
             pipeline = .fetching
             let shot = try await client.shot(created.shot_id)
             let score = try await client.score()
@@ -286,8 +305,9 @@ final class AppModel: ObservableObject {
             pipeline = .done
             showResult = true
 
-            // Clean up the temp clip.
+            // Clean up the temp clips (the original recording and, if different, the trimmed upload).
             try? FileManager.default.removeItem(at: fileURL)
+            if uploadURL != fileURL { try? FileManager.default.removeItem(at: uploadURL) }
         } catch {
             pipeline = .failed(error.localizedDescription)
         }

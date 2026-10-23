@@ -15,11 +15,15 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Speak adjustments", isOn: $model.speakAdjustments)
-                HStack { Text("Recording quality"); Spacer(); Text("Highest available").foregroundStyle(.secondary) }
+                Picker("Capture frame rate", selection: $model.preferredFPS) {
+                    Text("120 fps").tag(120)
+                    Text("60 fps").tag(60)
+                    Text("30 fps").tag(30)
+                }
             } header: {
                 Text("Capture")
             } footer: {
-                Text("Records at 120 fps when the phone supports it, then 60, then 30. HDR is off for analysis.")
+                Text("120 fps is the default — it's needed for rev rate, axis/PAP and release-timing. The camera clamps to the highest rate your phone supports at 1080p (then 60, then 30). HDR is off for analysis. Uploads stay small because each clip is trimmed to the shot on-device before upload — never by lowering fps.")
             }
 
             Section {
