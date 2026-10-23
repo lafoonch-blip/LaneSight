@@ -9,15 +9,18 @@ import os
 import time
 from pathlib import Path
 
+import shutil
+
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response
 
 from . import API_VERSION, APP_COMPAT
+from . import engines
 from .auth import current_user
 from .config import settings
 from .jobs import SerialJobQueue
 from .store import get_store, session_csv
 from lanesight_core.models.shot import ALGO_VERSION
-from lanesight_core.score import compute as score_compute, SCORE_VERSION, DEFAULT_LDEV0_PARAMS
+from lanesight_core.score import SCORE_VERSION
 from lanesight_core.benchmarks import BENCHMARK_VERSION
 from lanesight_core.form import spot_check
 
@@ -41,23 +44,11 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
         job.timings['analyze'] = time.monotonic() - t0
         store = get_store()
         store.save_shot_result(shot_id, rec, {'ok': True})
-        snap = _recompute_score(user_id, session_id, trigger='shot')
-        return {'shot_id': shot_id, 'eligible': snap['eligible'], 'score': snap['score']}
+        # After each analyzed shot: recompute score over the 90-day window, run achievements, findings.
+        footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
+        return dict(shot_id=shot_id, **footer)
 
     return _queue.submit('analyze', run)
-
-
-def _recompute_score(user_id, session_id=None, trigger='shot') -> dict:
-    store = get_store()
-    shots = [sh for sh in store.user_shots(user_id) if sh.get('record')]
-    records = [sh['record'] for sh in shots]
-    intents = {sh['record']['shot_id']: sh['intent'] for sh in shots if sh.get('intent')}
-    handed = (shots[-1].get('handed') if shots else None) or 'R'
-    snap = score_compute(records, intents=intents, params=DEFAULT_LDEV0_PARAMS, handed=handed)
-    snap['trigger'] = trigger
-    snap['session_id'] = session_id
-    store.save_snapshot(user_id, snap)
-    return snap
 
 
 # ----------------------------------------------------------------- health (no auth)
@@ -86,11 +77,17 @@ def get_session(sid: str, user=Depends(current_user)):
 
 @app.post('/sessions/{sid}/end')
 def end_session(sid: str, user=Depends(current_user)):
-    summary = get_store().end_session(user, sid)
+    store = get_store()
+    summary = store.end_session(user, sid)
     if not summary:
         raise HTTPException(404, 'session not found')
-    snap = _recompute_score(user, sid, trigger='session_end')
+    snap, tier, ach = engines.at_session_end(store, user, sid)
     summary['score'] = {'eligible': snap['eligible'], 'score': snap['score'], 'tier': snap['tier']}
+    summary['tier_event'] = tier.get('event')
+    summary['personal_best'] = tier.get('personal_best')
+    # extra unlocks batched into the summary (SCORE_TIERS §6)
+    summary['unlocked'] = ach['unlocked']
+    summary['notifications'] = store.list_notifications(user, undelivered=True)
     return summary
 
 
@@ -145,8 +142,9 @@ def do_spot_check(body: dict | None = None, user=Depends(current_user)):
 # ----------------------------------------------------------------- score
 @app.get('/me/score')
 def me_score(user=Depends(current_user)):
-    snap = get_store().latest_score(user)
-    return snap or _recompute_score(user, trigger='shot')
+    store = get_store()
+    snap = store.latest_score(user)
+    return snap or engines.recompute_score(store, user, trigger='shot')
 
 @app.get('/me/score/history')
 def me_score_history(user=Depends(current_user)):
@@ -206,14 +204,139 @@ def get_arsenal(user=Depends(current_user)):
 def add_ball(body: dict, user=Depends(current_user)):
     return get_store().add_ball(user, body or {})
 
+@app.post('/me/arsenal/{ball_id}/surface')
+def add_surface(ball_id: str, body: dict | None = None, user=Depends(current_user)):
+    row = get_store().add_surface_event(user, ball_id, body or {})
+    if not row:
+        raise HTTPException(404, 'ball not found')
+    return row
 
-# ----------------------------------------------------------------- declared-but-not-yet-implemented (§3)
-_TODO = ['POST /me/arsenal/{id}/surface',
-         'POST /uploads', 'GET /me/achievements', 'GET /me/achievements/{id}', 'PUT /me/achievements/pins',
-         'GET /me/notifications', 'POST /me/notifications/{id}/delivered', 'POST /me/notifications/{id}/dismiss',
-         'GET /me/activity', 'GET /me/stats', 'DELETE /me', '/admin/*']
 
-@app.get('/_unimplemented')
-def unimplemented(user=Depends(current_user)):
-    """Transparency: the §3 endpoints still to implement in a later DV-03 slice."""
-    return {'not_implemented': _TODO}
+# ----------------------------------------------------------------- live session screen
+@app.get('/sessions/{sid}/shots')
+def session_shots(sid: str, user=Depends(current_user)):
+    store = get_store()
+    if not store.get_session(user, sid):
+        raise HTTPException(404, 'session not found')
+    return store.session_shots(user, sid)
+
+
+# ----------------------------------------------------------------- Photos upload (same serial analyze path)
+@app.post('/uploads')
+async def upload_clip(sid: str = Form(...), file: UploadFile = File(...), metadata: str = Form('{}'),
+                      user=Depends(current_user)):
+    store = get_store()
+    if not store.get_session(user, sid):
+        raise HTTPException(404, 'session not found')
+    meta = json.loads(metadata or '{}')
+    shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
+                                         'source': 'upload', 'sensor_used': meta.get('sensor_used'),
+                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed')})
+    dest = DATA_ROOT / 'sessions' / sid
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / f"{shot['id']}.mov"
+    with open(path, 'wb') as f:
+        f.write(await file.read())
+    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid)
+    return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
+
+
+# ----------------------------------------------------------------- stats
+@app.get('/me/stats')
+def me_stats(view: str = 'throw', range: str | None = None, user=Depends(current_user)):
+    return engines.user_stats(get_store(), user, view=view, range_=range)
+
+
+# ----------------------------------------------------------------- achievements
+def _grouped_achievements(store, user):
+    engines.run_achievements(store, user, 'read')             # idempotent: keep progress fresh
+    defs = store.achievement_defs()
+    prog = {(p['achievement_id'], p.get('level', 1)): p for p in store.list_ach_progress(user)}
+    unlocked = {u['achievement_id'] for u in store.list_ach_unlocks(user)}
+    cats: dict[str, list] = {}
+    active_unlocked = 0
+    for d in defs:
+        p = prog.get((d['id'], 1), {})
+        is_unlocked = d['id'] in unlocked
+        if is_unlocked and d['status'] == 'active':
+            active_unlocked += 1
+        cats.setdefault(d['category'], []).append({
+            'id': d['id'], 'name': d['name'], 'description': d['description'], 'category': d['category'],
+            'status': d['status'], 'inactive_reason': d.get('inactive_reason'),
+            'progress_status': 'unlocked' if is_unlocked else p.get('status', 'locked'),
+            'current_value': p.get('current_value'), 'target_value': p.get('target_value'),
+            'best_value': p.get('best_value'), 'qualifying_count': p.get('qualifying_count'),
+            'sample_count': p.get('sample_count'), 'unavailable_reason': p.get('unavailable_reason'),
+            'unlocked': is_unlocked})
+    return {'unlocked_count': active_unlocked, 'categories': cats, 'pins': store.get_pins(user)}
+
+@app.get('/me/achievements')
+def me_achievements(user=Depends(current_user)):
+    return _grouped_achievements(get_store(), user)
+
+@app.get('/me/achievements/{ach_id}')
+def me_achievement_detail(ach_id: str, user=Depends(current_user)):
+    store = get_store()
+    engines.run_achievements(store, user, 'read')
+    d = next((x for x in store.achievement_defs() if x['id'] == ach_id), None)
+    if not d:
+        raise HTTPException(404, 'achievement not found')
+    p = next((x for x in store.list_ach_progress(user)
+              if x['achievement_id'] == ach_id and x.get('level', 1) == 1), {})
+    unlock = store.get_ach_unlock(user, ach_id, 1)
+    evidence = (p.get('evidence_ref') or {}).get('shot_ids', []) if p else []
+    return {'id': d['id'], 'name': d['name'], 'description': d['description'], 'category': d['category'],
+            'status': d['status'], 'inactive_reason': d.get('inactive_reason'),
+            'progress': {k: p.get(k) for k in ('status', 'current_value', 'target_value', 'best_value',
+                                               'qualifying_count', 'sample_count', 'unavailable_reason')},
+            'evidence_shot_ids': evidence,
+            'unlocked': bool(unlock), 'unlocked_at': (unlock or {}).get('unlocked_at'),
+            'rule_version': d.get('rule_version', 1)}
+
+@app.put('/me/achievements/pins')
+def me_achievement_pins(body: dict, user=Depends(current_user)):
+    return {'pins': get_store().set_pins(user, (body or {}).get('pins', []))}
+
+
+# ----------------------------------------------------------------- notifications
+@app.get('/me/notifications')
+def me_notifications(undelivered: int = 0, user=Depends(current_user)):
+    return get_store().list_notifications(user, undelivered=bool(undelivered))
+
+@app.post('/me/notifications/{notif_id}/delivered')
+def notification_delivered(notif_id: str, user=Depends(current_user)):
+    r = get_store().mark_notification(user, notif_id, 'delivered_at')
+    if not r:
+        raise HTTPException(404, 'notification not found')
+    return r
+
+@app.post('/me/notifications/{notif_id}/dismiss')
+def notification_dismiss(notif_id: str, user=Depends(current_user)):
+    r = get_store().mark_notification(user, notif_id, 'dismissed_at')
+    if not r:
+        raise HTTPException(404, 'notification not found')
+    return r
+
+
+# ----------------------------------------------------------------- recent activity
+@app.get('/me/activity')
+def me_activity(user=Depends(current_user)):
+    return get_store().list_activity(user)
+
+
+# ----------------------------------------------------------------- account deletion
+@app.delete('/me')
+def delete_me(user=Depends(current_user)):
+    store = get_store()
+    session_ids = [s['id'] for s in store.list_sessions(user)]
+    shot_ids = [sh['id'] for sh in store.user_shots(user)]
+    store.delete_user(user)                                   # auth user + cascaded rows (live)
+    for sid in session_ids:                                   # remove the user's videos on this Mac
+        shutil.rmtree(DATA_ROOT / 'sessions' / sid, ignore_errors=True)
+    for shid in shot_ids:
+        for f in (DATA_ROOT / 'out').glob(f'{shid}*'):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    return {'deleted': True}

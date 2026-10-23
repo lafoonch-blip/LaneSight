@@ -64,21 +64,25 @@ do $$ begin
 exception when insufficient_privilege then raise notice 'PASS: achievement_definition.params denied';
 end $$;
 
--- 3. only active/coming_later rows visible on the base table (draft/retired hidden by policy)
-do $$ declare n int; begin
-  select count(*) into n from achievement_definition;   -- safe columns are column-granted
-  if n = 2 then raise notice 'PASS: base table shows only active/coming_later (2)';
-  else raise exception 'FAIL: base table showed % rows (expected 2, draft/retired must be hidden)', n; end if;
+-- 3. only active/coming_later rows visible on the base table (draft/retired hidden by policy).
+-- Membership check (robust to the real 011 catalog also being present): the test active/coming_later rows
+-- are visible, the test draft/retired rows are not.
+do $$ declare vis int; hid int; begin
+  select count(*) into vis from achievement_definition where id in ('ACH-ACT','ACH-SOON');
+  select count(*) into hid from achievement_definition where id in ('ACH-DRAFT','ACH-RET');
+  if vis = 2 and hid = 0 then raise notice 'PASS: base table shows active/coming_later, hides draft/retired';
+  else raise exception 'FAIL: base table visibility wrong (visible=%, hidden-leaked=%)', vis, hid; end if;
 end $$;
 
--- 4. public view: no params column, readable, only active/coming_later
-do $$ declare has_params int; n int; begin
+-- 4. public view: no params column, readable, only active/coming_later (membership check).
+do $$ declare has_params int; vis int; hid int; begin
   select count(*) into has_params from information_schema.columns
     where table_name = 'achievement_definition_public' and column_name = 'params';
   if has_params > 0 then raise exception 'FAIL: achievement_definition_public exposes params'; end if;
-  select count(*) into n from achievement_definition_public;
-  if n <> 2 then raise exception 'FAIL: public view showed % rows (expected 2)', n; end if;
-  raise notice 'PASS: achievement_definition_public ok (2 rows, no params column)';
+  select count(*) into vis from achievement_definition_public where id in ('ACH-ACT','ACH-SOON');
+  select count(*) into hid from achievement_definition_public where id in ('ACH-DRAFT','ACH-RET');
+  if vis <> 2 or hid <> 0 then raise exception 'FAIL: public view visibility wrong (visible=%, leaked=%)', vis, hid; end if;
+  raise notice 'PASS: achievement_definition_public ok (no params column; active/coming_later only)';
 end $$;
 
 -- 5. own-rows only

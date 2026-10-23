@@ -1,0 +1,22 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+power_ref_ranges:
+  entry_speed_mph:
+  - 14.0
+  - 20.0
+  rev_rate_rpm:
+  - 250
+  - 500
+  entry_angle_deg:
+  - 2.0
+  - 6.0
+  weight_lb:
+  - 14.0
+  - 16.0
+prioritizer_weights:
+  timing: 1.2
+  drift: 1.0
+  finish: 0.8
+baseline_min_n: 10
+confidence_min: 0.5
+repetition_rule: 3
+focus_hold_shots: 10

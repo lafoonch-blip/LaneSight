@@ -1,0 +1,112 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+form_rules:
+- id: RULE-timing-inconsistency
+  status: draft
+  drill_ref: DRILL-one-step
+  cue: Groove a repeatable ball start
+  trigger:
+    metric: phase_splits
+    comparison: consistency
+    repetition: SD>baseline band
+  candidate_causes:
+  - variable_ball_start
+  - variable_step1
+  verify:
+    metric: split_sd
+    over_shots: 10
+- id: RULE-short-finish
+  status: draft
+  drill_ref: DRILL-post
+  cue: Post the shot until it hits
+  trigger:
+    metric: finish_hold
+    comparison: level
+    rule: < baseline
+  candidate_causes:
+  - early_timing
+  - over_speed
+  - fast_approach
+  verify:
+    metric: finish_hold
+    over_shots: 10
+- id: RULE-rhythm-inverted
+  status: draft
+  drill_ref: DRILL-slow-first
+  cue: Slow the first steps, speed up to the line
+  trigger:
+    metric: cadence_ratio
+    rule: last 3 not quicker than first 2
+  candidate_causes:
+  - rushing_early_steps
+  verify:
+    metric: cadence_ratio
+    over_shots: 10
+- id: RULE-drift-excessive
+  status: draft
+  drill_ref: DRILL-walk-spot
+  cue: Walk to your spot
+  trigger:
+    metric: drift_boards
+    rule: '|finish-start|>2 or > coach tol'
+  candidate_causes:
+  - ball_start_across_body
+  - walking_to_target
+  verify:
+    metric: drift_boards
+    over_shots: 10
+- id: RULE-early-timing
+  status: draft
+  drill_ref: DRILL-ball-start
+  cue: Start the ball a touch later
+  trigger:
+    metric: timing_at_slide
+    rule: ball ahead of slide vs baseline, repeated
+    min_fps: 120
+  candidate_causes:
+  - early_ball_start
+  - short_pushaway
+  - slow_feet
+  verify:
+    metric: timing_at_slide
+    over_shots: 10
+- id: RULE-late-timing
+  status: draft
+  drill_ref: DRILL-get-going
+  cue: Get it going with the key step
+  trigger:
+    metric: timing_at_slide
+    rule: ball behind at slide
+    min_fps: 120
+  candidate_causes:
+  - late_ball_start
+  - short_key_step
+  - tension
+  verify:
+    metric: timing_at_slide
+    over_shots: 10
+- id: RULE-backswing-variance
+  status: draft
+  drill_ref: DRILL-free-swing
+  cue: Same ball-start height, free swing
+  trigger:
+    metric: backswing_height_rel
+    comparison: consistency
+    rule: apex SD>band
+  candidate_causes:
+  - muscled_swing
+  - variable_ball_start_height
+  verify:
+    metric: apex_sd
+    over_shots: 10
+- id: RULE-swing-line-off
+  status: draft
+  drill_ref: DRILL-place-it
+  cue: Place the ball start behind the target
+  trigger:
+    metric: swing_line_offset
+    rule: bottom-of-arc offset vs shoulder line > band (rear)
+  candidate_causes:
+  - pushaway_direction
+  verify:
+    metric: swing_line_offset
+    over_shots: 10
