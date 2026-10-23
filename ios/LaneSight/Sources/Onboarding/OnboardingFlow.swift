@@ -1,9 +1,12 @@
 import SwiftUI
 
-/// Onboarding: Welcome → Create account (dev stub) → Profile setup (13+ gate) → Add ball → Home.
-/// There is no real Supabase auth in this slice; "Create account" just sets the dev user id and saves
-/// the profile. Clearly labeled dev throughout.
-struct OnboardingFlow: View {
+// MARK: - Auth flow (real email/password)
+//
+// Welcome → Sign in OR Create account. Both hit the Mac API's /auth/* endpoints (server-mediated
+// Supabase); tokens are stored in the Keychain by AppModel. There is no dev stub and no memory/dev
+// default on this path — a real session is required. Bad credentials / taken email / network errors
+// are shown inline. After auth the app root re-evaluates `model.gate` (profile setup or Home).
+struct AuthFlow: View {
     var body: some View {
         NavigationStack {
             WelcomeStep()
@@ -27,9 +30,9 @@ private struct WelcomeStep: View {
                 .font(.system(size: 90)).foregroundStyle(LS.blue.opacity(0.7))
                 .padding(.vertical, 24)
             Spacer()
-            NavigationLink { CreateAccountStep() } label: { Text("Get Started") }
+            NavigationLink { CreateAccountStep() } label: { Text("Create Account") }
                 .buttonStyle(PrimaryButtonStyle())
-            NavigationLink { CreateAccountStep() } label: { Text("Sign In") }
+            NavigationLink { SignInStep() } label: { Text("Sign In") }
                 .buttonStyle(SecondaryButtonStyle())
             Text("Track your stats · Improve your game · Coaching insights")
                 .font(.caption2).foregroundStyle(LS.textFaint)
@@ -41,65 +44,182 @@ private struct WelcomeStep: View {
     }
 }
 
+// MARK: - Sign in
+
+private struct SignInStep: View {
+    @EnvironmentObject var model: AppModel
+    @State private var email = ""
+    @State private var password = ""
+    @State private var busy = false
+    @State private var errorText: String?
+    @FocusState private var focus: Field?
+    private enum Field { case email, password }
+
+    private var canSubmit: Bool {
+        !email.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty && !busy
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Welcome back").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                Text("Sign in with your email and password.")
+                    .font(.caption).foregroundStyle(LS.textSecondary)
+
+                AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
+                    .focused($focus, equals: .email)
+                AuthField("Password", text: $password, keyboard: .default, secure: true)
+                    .focused($focus, equals: .password)
+
+                if let errorText {
+                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Sign in error: \(errorText)")
+                }
+
+                Button {
+                    Task { await submit() }
+                } label: {
+                    HStack {
+                        Text("Sign In")
+                        if busy { Spacer(); ProgressView().tint(.white) }
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!canSubmit)
+            }
+            .padding(20)
+        }
+        .background(LSBackground(auth: true))
+        .navigationTitle("Sign in")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { focus = .email }
+    }
+
+    private func submit() async {
+        busy = true; errorText = nil
+        do { try await model.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password) }
+        catch { errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+        busy = false
+    }
+}
+
+// MARK: - Create account
+
 private struct CreateAccountStep: View {
-    @State private var firstName = ""
-    @State private var lastName = ""
+    @EnvironmentObject var model: AppModel
     @State private var email = ""
     @State private var password = ""
     @State private var agree = false
+    @State private var busy = false
+    @State private var errorText: String?
+    @FocusState private var focus: Field?
+    private enum Field { case email, password }
+
+    private var canSubmit: Bool {
+        !email.trimmingCharacters(in: .whitespaces).isEmpty && password.count >= 6 && agree && !busy
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Create your account").font(.title2.bold()).foregroundStyle(LS.textPrimary)
-                Text("Dev build: this sets your dev user id and profile — no real sign-in yet.")
-                    .font(.caption).foregroundStyle(LS.bestEffort)
+                Text("Use a real email and a password of at least 6 characters.")
+                    .font(.caption).foregroundStyle(LS.textSecondary)
 
-                field("First name", text: $firstName)
-                field("Last name", text: $lastName)
-                field("Email address", text: $email, keyboard: .emailAddress)
-                field("Password", text: $password, secure: true)
+                AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
+                    .focused($focus, equals: .email)
+                AuthField("Password (min 6 characters)", text: $password, keyboard: .default, secure: true)
+                    .focused($focus, equals: .password)
 
                 Toggle(isOn: $agree) {
                     Text("I agree to the Terms of Service and Privacy Policy")
                         .font(.caption).foregroundStyle(LS.textSecondary)
                 }.tint(LS.blue)
 
-                NavigationLink {
-                    ProfileSetupStep(name: [firstName, lastName].filter { !$0.isEmpty }.joined(separator: " "),
-                                     email: email)
-                } label: { Text("Create Account") }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!agree)
+                if let errorText {
+                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Create account error: \(errorText)")
+                }
+
+                Button {
+                    Task { await submit() }
+                } label: {
+                    HStack {
+                        Text("Create Account")
+                        if busy { Spacer(); ProgressView().tint(.white) }
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!canSubmit)
             }
             .padding(20)
         }
         .background(LSBackground(auth: true))
         .navigationTitle("Create account")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { focus = .email }
     }
 
-    private func field(_ label: String, text: Binding<String>, secure: Bool = false,
-                       keyboard: UIKeyboardType = .default) -> some View {
+    private func submit() async {
+        busy = true; errorText = nil
+        do { try await model.signUp(email: email.trimmingCharacters(in: .whitespaces), password: password) }
+        catch { errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
+        busy = false
+    }
+}
+
+/// Shared labeled auth text field (44pt target, Dynamic Type, no autocorrect/autocap on email).
+private struct AuthField: View {
+    let label: String
+    @Binding var text: String
+    let keyboard: UIKeyboardType
+    let secure: Bool
+
+    init(_ label: String, text: Binding<String>, keyboard: UIKeyboardType, secure: Bool) {
+        self.label = label; self._text = text; self.keyboard = keyboard; self.secure = secure
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label).font(.caption).foregroundStyle(LS.textSecondary)
             Group {
-                if secure { SecureField("", text: text) }
-                else { TextField("", text: text).keyboardType(keyboard).textInputAutocapitalization(keyboard == .emailAddress ? .never : .words) }
+                if secure {
+                    SecureField("", text: $text).textContentType(.password)
+                } else {
+                    TextField("", text: $text)
+                        .keyboardType(keyboard)
+                        .textInputAutocapitalization(keyboard == .emailAddress ? .never : .words)
+                        .textContentType(keyboard == .emailAddress ? .emailAddress : .none)
+                }
             }
             .foregroundStyle(LS.textPrimary)
-            .padding(10)
+            .padding(12)
+            .frame(minHeight: 44)
             .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
             .autocorrectionDisabled()
         }
     }
 }
 
+// MARK: - Profile setup flow (shown once signed in, until the profile is complete)
+
+struct ProfileSetupFlow: View {
+    var body: some View {
+        NavigationStack {
+            ProfileSetupStep()
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 private struct ProfileSetupStep: View {
     @EnvironmentObject var model: AppModel
-    let name: String
-    let email: String
 
+    @State private var name = ""
     @State private var dob = Calendar.current.date(byAdding: .year, value: -25, to: Date()) ?? Date()
     @State private var handedness = "right"
     @State private var delivery = "one_handed_thumb"
@@ -121,8 +241,16 @@ private struct ProfileSetupStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Step 2 of 3").font(.caption).foregroundStyle(LS.cyan)
+                Text("Step 1 of 2").font(.caption).foregroundStyle(LS.cyan)
                 Text("Set up your bowler profile").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name").font(.subheadline).foregroundStyle(LS.textPrimary)
+                    TextField("Your name", text: $name)
+                        .foregroundStyle(LS.textPrimary)
+                        .padding(12).frame(minHeight: 44)
+                        .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Date of birth").font(.subheadline).foregroundStyle(LS.textPrimary)
@@ -152,13 +280,20 @@ private struct ProfileSetupStep: View {
                     Text("How many steps in your approach?").font(.subheadline).foregroundStyle(LS.textPrimary)
                     TextField("5", text: $steps).keyboardType(.numberPad)
                         .foregroundStyle(LS.textPrimary)
-                        .padding(10).background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(12).frame(minHeight: 44)
+                        .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
                 }
 
-                if let saveError { Text(saveError).font(.caption).foregroundStyle(LS.bestEffort) }
+                if let saveError {
+                    Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-                NavigationLink { AddBallStep(email: email) } label: {
-                    HStack { Text("Next: add your ball"); if saving { ProgressView().tint(.white) } }
+                NavigationLink {
+                    AddBallStep()
+                } label: {
+                    HStack { Text("Next: add your ball"); if saving { Spacer(); ProgressView().tint(.white) } }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!ageOK || saving)
@@ -174,11 +309,8 @@ private struct ProfileSetupStep: View {
     private func saveProfile() async {
         saving = true
         saveError = nil
-        // Set the dev user id first so the PUT lands on the right user.
-        let devId = devUserId(from: email, name: name)
-        if !devId.isEmpty { model.devUser = devId }
         var fields: [String: Any] = [
-            "name": name, "email": email, "handedness": handedness, "delivery_style": delivery,
+            "name": name, "handedness": handedness, "delivery_style": delivery,
             "dob": ISO8601DateFormatter().string(from: dob),
         ]
         if let n = Int(steps) { fields["approach_steps"] = n }
@@ -187,22 +319,15 @@ private struct ProfileSetupStep: View {
         catch { saveError = "Couldn't save profile (you can still continue): \(error.localizedDescription)" }
         saving = false
     }
-
-    private func devUserId(from email: String, name: String) -> String {
-        let base = email.split(separator: "@").first.map(String.init) ?? name
-        let slug = base.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" }
-        return slug.isEmpty ? model.devUser : "dev-\(slug)"
-    }
 }
 
 private struct AddBallStep: View {
     @EnvironmentObject var model: AppModel
-    let email: String
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Step 3 of 3").font(.caption).foregroundStyle(LS.cyan)
+                Text("Step 2 of 2").font(.caption).foregroundStyle(LS.cyan)
                 Text("Add your first ball").font(.title2.bold()).foregroundStyle(LS.textPrimary)
                 Text("Browse the catalog and pick a ball, or skip and add one later from your Profile.")
                     .font(.caption).foregroundStyle(LS.textSecondary)
@@ -220,7 +345,7 @@ private struct AddBallStep: View {
                 .buttonStyle(.plain)
 
                 Button("Finish — go to Home") {
-                    model.completeOnboarding(devUserId: model.devUser)
+                    model.finishProfileSetup()
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }

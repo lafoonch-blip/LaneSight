@@ -7,10 +7,10 @@ struct LaneSightApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if model.onboarded {
-                    RootTabs()
-                } else {
-                    OnboardingFlow()
+                switch model.gate {
+                case .unauthenticated: AuthFlow()
+                case .needsProfile:    ProfileSetupFlow()
+                case .ready:           RootTabs()
                 }
             }
             .environmentObject(model)

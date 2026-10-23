@@ -46,7 +46,7 @@ struct SettingsView: View {
 
             Section {
                 Button(role: .destructive) {
-                    model.onboarded = false
+                    model.signOut()
                 } label: {
                     Text("Sign out")
                 }

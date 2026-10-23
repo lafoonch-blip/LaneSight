@@ -9,13 +9,17 @@ struct DevPanelView: View {
     @State private var latencyMs: Int?
     @State private var errorText: String?
 
+    /// True when the server is live but can't reach Supabase (or is degraded) — the app is NOT working.
+    private var supabaseDown: Bool {
+        guard let health else { return false }
+        return health.status == "degraded" || health.supabase_reachable == false
+    }
+
     var body: some View {
         Form {
             Section {
                 TextField("http://<mac>.<tailnet>.ts.net:8787", text: $model.apiBaseURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                TextField("Dev user id (X-Dev-User)", text: $model.devUser)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
                 Button {
                     Task { await test() }
                 } label: {
@@ -23,7 +27,7 @@ struct DevPanelView: View {
                 }
                 .disabled(checking || model.apiBaseURL.isEmpty)
                 if let latencyMs, errorText == nil {
-                    Label("Healthy · \(latencyMs) ms", systemImage: "checkmark.circle.fill")
+                    Label("Reached /health · \(latencyMs) ms", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green).font(.footnote)
                 }
                 if let errorText {
@@ -32,7 +36,58 @@ struct DevPanelView: View {
             } header: {
                 Text("Analysis host")
             } footer: {
-                Text("GET /health has no auth. Every other request sends the X-Dev-User header (dev mode — no OAuth yet).")
+                Text("GET /health and /auth/* carry no auth. Every other request sends a real Bearer token unless the dev-user toggle below is on.")
+            }
+
+            // Fail visibly: if the service can't reach the database, the app is not actually working.
+            if supabaseDown {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Supabase unreachable", systemImage: "xmark.octagon.fill")
+                            .font(.subheadline.bold()).foregroundStyle(.white)
+                        Text("The Mac service can't reach the database. The app is NOT working — sign-in and your data will fail. This is not a safe session; do not treat memory mode as OK.")
+                            .font(.caption).foregroundStyle(.white.opacity(0.95))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .listRowBackground(Color.red)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Supabase unreachable. The Mac service can't reach the database. The app is not working.")
+                }
+            }
+
+            if let health {
+                Section("Service status") {
+                    HStack {
+                        Text("Status"); Spacer()
+                        Text((health.status ?? "?").uppercased())
+                            .font(.callout.bold())
+                            .foregroundStyle(health.status == "ok" ? .green : .red)
+                    }
+                    HStack {
+                        Text("Supabase reachable"); Spacer()
+                        switch health.supabase_reachable {
+                        case true: Text("Yes").foregroundStyle(.green)
+                        case false: Text("No").foregroundStyle(.red)
+                        default: Text("n/a (memory mode)").foregroundStyle(.red)
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Toggle("Developer: use dev user (simulator)", isOn: $model.useDevUser)
+                if model.useDevUser {
+                    TextField("Dev user id (X-Dev-User)", text: $model.devUser)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Label("Bypasses real sign-in. Never use this for a real session.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Developer auth override")
+            } footer: {
+                Text("OFF by default. When on, requests send X-Dev-User instead of a real Bearer token — simulator/testing only.")
             }
 
             if let versions = health?.versions, !versions.isEmpty {

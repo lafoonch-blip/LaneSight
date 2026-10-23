@@ -25,15 +25,38 @@ struct ShotResult: Equatable {
     }
 }
 
+/// Where the app is in the auth → profile → app gate.
+enum AuthGate: Equatable {
+    case unauthenticated     // no session → Welcome / Sign in / Create account
+    case needsProfile        // signed in but profile incomplete → profile setup → add ball
+    case ready               // signed in with a complete profile → the tab app
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     // Persisted settings
     @Published var apiBaseURL: String { didSet { defaults.set(apiBaseURL, forKey: Keys.baseURL) } }
     @Published var devUser: String { didSet { defaults.set(devUser, forKey: Keys.devUser) } }
+    /// Dev-only escape hatch: send `X-Dev-User` instead of a real Bearer token. OFF by default; the
+    /// normal app path ALWAYS uses real auth. Toggled only from the clearly-labeled Dev panel control.
+    @Published var useDevUser: Bool { didSet { defaults.set(useDevUser, forKey: Keys.useDevUser) } }
     @Published var handed: String { didSet { defaults.set(handed, forKey: Keys.handed) } }
-    @Published var onboarded: Bool { didSet { defaults.set(onboarded, forKey: Keys.onboarded) } }
     @Published var speedUnit: String { didSet { defaults.set(speedUnit, forKey: Keys.speedUnit) } }   // "mph" | "kmh"
     @Published var speakAdjustments: Bool { didSet { defaults.set(speakAdjustments, forKey: Keys.speak) } }
+
+    // Auth session (tokens live in the Keychain, not here/UserDefaults).
+    @Published private(set) var session: AuthSession?
+    @Published private(set) var profileComplete: Bool { didSet { defaults.set(profileComplete, forKey: Keys.profileComplete) } }
+    private var refreshTask: Task<String?, Never>?
+
+    /// The single source of truth the app root switches on.
+    var gate: AuthGate {
+        if useDevUser { return .ready }          // dev path bypasses the auth/profile gate (simulator only)
+        guard session != nil else { return .unauthenticated }
+        return profileComplete ? .ready : .needsProfile
+    }
+
+    var isAuthenticated: Bool { session != nil }
 
     // Capture / session options
     @Published var captureMode: String = "shot"   // "shot" | "form"
@@ -64,8 +87,9 @@ final class AppModel: ObservableObject {
     private enum Keys {
         static let baseURL = "ls.apiBaseURL"
         static let devUser = "ls.devUser"
+        static let useDevUser = "ls.useDevUser"
         static let handed = "ls.handed"
-        static let onboarded = "ls.onboarded"
+        static let profileComplete = "ls.profileComplete"
         static let speedUnit = "ls.speedUnit"
         static let speak = "ls.speakAdjustments"
     }
@@ -74,14 +98,105 @@ final class AppModel: ObservableObject {
         // Default to this Mac's tailnet API (dev build). Edit in Settings; HTTP over the tailnet (see TEST_ON_PHONE.md).
         apiBaseURL = defaults.string(forKey: Keys.baseURL) ?? "http://shaynes-macbook-pro.tail7fa640.ts.net:8787"
         devUser = defaults.string(forKey: Keys.devUser) ?? "dev-shayne"
+        useDevUser = defaults.bool(forKey: Keys.useDevUser)
         handed = defaults.string(forKey: Keys.handed) ?? "R"
-        onboarded = defaults.bool(forKey: Keys.onboarded)
+        profileComplete = defaults.bool(forKey: Keys.profileComplete)
         speedUnit = defaults.string(forKey: Keys.speedUnit) ?? "mph"
         speakAdjustments = defaults.bool(forKey: Keys.speak)
+
+        // Restore a persisted Keychain session (tokens survive relaunch; cleared on sign out).
+        if let access = Keychain.get(Keychain.Account.accessToken) {
+            session = AuthSession(access_token: access,
+                                  refresh_token: Keychain.get(Keychain.Account.refreshToken),
+                                  expires_in: nil,
+                                  user_id: Keychain.get(Keychain.Account.userId))
+        }
     }
 
+    // MARK: client construction
+
+    /// Builds an authed APIClient. Injects the real Bearer token (normal path) or `X-Dev-User` only when
+    /// the Dev-panel toggle is on. Wires the 401 → refresh → retry handler.
     func makeClient() throws -> APIClient {
-        try APIClient(baseURLString: apiBaseURL, devUser: devUser)
+        let refresher: @Sendable () async -> String? = { [weak self] in
+            await self?.refreshAccessToken()
+        }
+        return try APIClient(baseURLString: apiBaseURL,
+                             accessToken: useDevUser ? nil : session?.access_token,
+                             devUser: useDevUser ? devUser : nil,
+                             refresher: refresher)
+    }
+
+    private func authClient() throws -> AuthClient { try AuthClient(baseURLString: apiBaseURL) }
+
+    // MARK: auth
+
+    /// Create a real account (email/password) via the Mac API, store tokens in the Keychain, then fetch
+    /// the profile to decide whether to route to profile setup or straight to Home.
+    func signUp(email: String, password: String) async throws {
+        let s = try await authClient().signup(email: email, password: password)
+        applySession(s)
+        await refreshProfileState()
+    }
+
+    /// Sign in with email/password; store tokens in the Keychain and route by profile completeness.
+    func signIn(email: String, password: String) async throws {
+        let s = try await authClient().signin(email: email, password: password)
+        applySession(s)
+        await refreshProfileState()
+    }
+
+    /// Sign out: clear the Keychain tokens and local session → the app returns to Welcome.
+    func signOut() {
+        session = nil
+        profileComplete = false
+        sessionId = nil
+        shotCount = 0
+        endSummary = nil
+        result = nil
+        Keychain.delete(Keychain.Account.accessToken)
+        Keychain.delete(Keychain.Account.refreshToken)
+        Keychain.delete(Keychain.Account.userId)
+    }
+
+    private func applySession(_ s: AuthSession) {
+        session = s
+        Keychain.set(s.access_token, account: Keychain.Account.accessToken)
+        if let rt = s.refresh_token { Keychain.set(rt, account: Keychain.Account.refreshToken) }
+        if let uid = s.user_id { Keychain.set(uid, account: Keychain.Account.userId) }
+    }
+
+    /// Refreshes the access token once, coalescing concurrent 401s into a single refresh. Returns the new
+    /// token, or nil after signing out (refresh token missing/expired).
+    func refreshAccessToken() async -> String? {
+        if let task = refreshTask { return await task.value }
+        guard let rt = session?.refresh_token else { signOut(); return nil }
+        let task = Task { [weak self] () -> String? in
+            guard let self else { return nil }
+            do {
+                let s = try await self.authClient().refresh(refreshToken: rt)
+                self.applySession(s)
+                return s.access_token
+            } catch {
+                self.signOut()
+                return nil
+            }
+        }
+        refreshTask = task
+        let result = await task.value
+        refreshTask = nil
+        return result
+    }
+
+    /// Fetch the profile and PROMOTE to complete when the required gate (a saved date of birth) is set.
+    /// Promote-only on purpose: a read miss / fetch error must not bounce an already-set-up user back
+    /// through setup. `signOut()` resets the flag, so each fresh sign-in re-derives it honestly.
+    func refreshProfileState() async {
+        guard let client = try? makeClient() else { return }
+        if let p = try? await client.getProfile() {
+            if p.dob?.isEmpty == false { profileComplete = true }
+            if let h = p.handedness { handed = (h == "left") ? "L" : "R" }
+        }
     }
 
     // MARK: connection check
@@ -202,15 +317,11 @@ final class AppModel: ObservableObject {
         try? await client.dismissNotification(id)
     }
 
-    /// Permanently delete the account (DELETE /me), then sign out locally.
+    /// Permanently delete the account (DELETE /me), then sign out locally (clears the Keychain session).
     func deleteAccount() async throws {
         let client = try makeClient()
         try await client.deleteAccount()
-        sessionId = nil
-        shotCount = 0
-        endSummary = nil
-        result = nil
-        onboarded = false
+        signOut()
     }
 
     func submitFeedback(rating: Int, text: String) async throws {
@@ -258,10 +369,8 @@ final class AppModel: ObservableObject {
         sessionId = nil
     }
 
-    /// Dev-stub "create account": set the dev user id, mark onboarded. No real Supabase auth in this slice.
-    func completeOnboarding(devUserId: String) {
-        let trimmed = devUserId.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty { devUser = trimmed }
-        onboarded = true
+    /// Marks the bowler profile complete after the setup + add-ball steps → the app root switches to Home.
+    func finishProfileSetup() {
+        profileComplete = true
     }
 }

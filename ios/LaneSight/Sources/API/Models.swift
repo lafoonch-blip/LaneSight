@@ -8,7 +8,8 @@ import Foundation
 // NOTHING here is a sample or default metric value — all displayed numbers come from the live API.
 
 struct HealthResponse: Codable {
-    let status: String?
+    let status: String?                 // ok | degraded
+    let supabase_reachable: Bool?       // true/false in live mode; null in memory mode
     let versions: [String: String]?
     let config: HealthConfig?
 }

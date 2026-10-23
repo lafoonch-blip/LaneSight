@@ -5,6 +5,7 @@ enum APIError: LocalizedError {
     case http(status: Int, body: String)
     case transport(String)
     case decoding(String)
+    case unauthorized
 
     var errorDescription: String? {
         switch self {
@@ -14,17 +15,26 @@ enum APIError: LocalizedError {
             return "HTTP \(status)\(trimmed.isEmpty ? "" : ": \(trimmed.prefix(300))")"
         case .transport(let s): return "Network error: \(s)"
         case .decoding(let s): return "Could not read server response: \(s)"
+        case .unauthorized: return "Your session expired. Please sign in again."
         }
     }
 }
 
-/// Small async URLSession client. Injects `X-Dev-User` and the base URL from Settings on every
-/// request except `/health`. No bearer token in this slice (API dev mode).
+/// Small async URLSession client. Sends the base URL from Settings on every request. The normal app
+/// path authenticates with `Authorization: Bearer <access_token>` (a Supabase JWT); `/health` and
+/// `/auth/*` carry no auth. `X-Dev-User` is sent ONLY when the Dev-panel "use dev user" toggle is on
+/// (`devUser` non-nil) — never by default. On a 401 the client refreshes the token once and retries.
 struct APIClient {
     let baseURL: URL
-    let devUser: String
+    /// Supabase access token for `Authorization: Bearer`. Nil when using the dev-user path.
+    let accessToken: String?
+    /// Dev-user id for `X-Dev-User`. Non-nil ONLY when the explicit Dev-panel toggle is on.
+    let devUser: String?
+    /// Refreshes the access token on a 401 and returns the new token (or nil → caller should sign out).
+    let refresher: (@Sendable () async -> String?)?
 
-    init(baseURLString: String, devUser: String) throws {
+    init(baseURLString: String, accessToken: String?, devUser: String?,
+         refresher: (@Sendable () async -> String?)? = nil) throws {
         var s = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { throw APIError.badBaseURL(baseURLString) }
         if !s.lowercased().hasPrefix("http://") && !s.lowercased().hasPrefix("https://") {
@@ -33,7 +43,9 @@ struct APIClient {
         while s.hasSuffix("/") { s.removeLast() }
         guard let url = URL(string: s), url.host != nil else { throw APIError.badBaseURL(baseURLString) }
         self.baseURL = url
+        self.accessToken = accessToken
         self.devUser = devUser
+        self.refresher = refresher
     }
 
     // MARK: request plumbing
@@ -41,9 +53,19 @@ struct APIClient {
     private func makeRequest(_ path: String, method: String = "GET", auth: Bool = true) -> URLRequest {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
         req.httpMethod = method
-        if auth { req.setValue(devUser, forHTTPHeaderField: "X-Dev-User") }
+        if auth { applyAuth(&req) }
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         return req
+    }
+
+    /// Attaches the real Bearer token when authenticated; otherwise the dev-user header only when the
+    /// Dev-panel toggle explicitly supplied one. If neither is present the server replies 401 (fail visibly).
+    private func applyAuth(_ req: inout URLRequest) {
+        if let accessToken {
+            req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        } else if let devUser, !devUser.isEmpty {
+            req.setValue(devUser, forHTTPHeaderField: "X-Dev-User")
+        }
     }
 
     private func send<T: Decodable>(_ req: URLRequest, as type: T.Type) async throws -> T {
@@ -57,12 +79,45 @@ struct APIClient {
     }
 
     @discardableResult
-    private func sendRaw(_ req: URLRequest) async throws -> Data {
+    private func sendRaw(_ req: URLRequest, allowRefresh: Bool = true) async throws -> Data {
         let data: Data, response: URLResponse
         do {
             (data, response) = try await URLSession.shared.data(for: req)
         } catch {
             throw APIError.transport(error.localizedDescription)
+        }
+        if let http = response as? HTTPURLResponse, http.statusCode == 401,
+           allowRefresh, accessToken != nil, let refresher {
+            if let newToken = await refresher() {
+                var retry = req
+                retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                return try await sendRaw(retry, allowRefresh: false)
+            }
+            throw APIError.unauthorized
+        }
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+        return data
+    }
+
+    /// Multipart body send with the same 401 → refresh → retry-once behavior as `sendRaw`.
+    private func uploadRaw(_ req: URLRequest, body: Data,
+                           delegate: URLSessionTaskDelegate, allowRefresh: Bool = true) async throws -> Data {
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.upload(for: req, from: body, delegate: delegate)
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+        if let http = response as? HTTPURLResponse, http.statusCode == 401,
+           allowRefresh, accessToken != nil, let refresher {
+            if let newToken = await refresher() {
+                var retry = req
+                retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                return try await uploadRaw(retry, body: body, delegate: delegate, allowRefresh: false)
+            }
+            throw APIError.unauthorized
         }
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
@@ -214,15 +269,7 @@ struct APIClient {
             Task { @MainActor in progress(fraction) }
         }
 
-        let data: Data, response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.upload(for: req, from: body, delegate: progressDelegate)
-        } catch {
-            throw APIError.transport(error.localizedDescription)
-        }
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
-        }
+        let data = try await uploadRaw(req, body: body, delegate: progressDelegate)
         do {
             return try JSONDecoder().decode(CreateShotResponse.self, from: data)
         } catch {
@@ -352,15 +399,7 @@ struct APIClient {
             Task { @MainActor in progress(fraction) }
         }
 
-        let data: Data, response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.upload(for: req, from: body, delegate: progressDelegate)
-        } catch {
-            throw APIError.transport(error.localizedDescription)
-        }
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
-        }
+        let data = try await uploadRaw(req, body: body, delegate: progressDelegate)
         do {
             return try JSONDecoder().decode(CreateShotResponse.self, from: data)
         } catch {
