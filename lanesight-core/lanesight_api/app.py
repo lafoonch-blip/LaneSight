@@ -15,6 +15,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Res
 
 from . import API_VERSION, APP_COMPAT
 from . import engines
+from . import userauth
 from .auth import current_user
 from .config import settings
 from .jobs import SerialJobQueue
@@ -54,9 +55,47 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
 # ----------------------------------------------------------------- health (no auth)
 @app.get('/health')
 def health():
-    return {'status': 'ok', 'versions': {'api': API_VERSION, 'app_compat': APP_COMPAT,
-            'core': ALGO_VERSION, 'rules': BENCHMARK_VERSION, 'formula': SCORE_VERSION},
-            'config': settings().redacted()}
+    s = settings()
+    reachable = s.supabase_reachable()          # None in memory mode, True/False in live mode
+    # Fail visibly: a live build that can't reach Supabase is 'degraded' (the dev panel shows it red);
+    # we never silently fall back to memory. A build running in memory mode is flagged too.
+    if s.mode == 'live':
+        status = 'ok' if reachable else 'degraded'
+    else:
+        status = 'ok'
+    return {'status': status, 'supabase_reachable': reachable,
+            'versions': {'api': API_VERSION, 'app_compat': APP_COMPAT,
+                         'core': ALGO_VERSION, 'rules': BENCHMARK_VERSION, 'formula': SCORE_VERSION},
+            'config': s.redacted()}
+
+
+# ----------------------------------------------------------------- auth (email/password, no bearer)
+@app.post('/auth/signup')
+def auth_signup(body: dict):
+    try:
+        sess = userauth.signup(body['email'], body['password'])
+    except KeyError:
+        raise HTTPException(400, 'email and password required')
+    except userauth.AuthError as e:
+        raise HTTPException(e.status if 400 <= e.status < 600 else 400, str(e.body)[:300])
+    get_store().put_profile(sess['user_id'], {})      # ensure a profiles row so session/shot FKs hold
+    return sess
+
+@app.post('/auth/signin')
+def auth_signin(body: dict):
+    try:
+        return userauth.signin(body['email'], body['password'])
+    except KeyError:
+        raise HTTPException(400, 'email and password required')
+    except userauth.AuthError:
+        raise HTTPException(401, 'invalid email or password')
+
+@app.post('/auth/refresh')
+def auth_refresh(body: dict):
+    try:
+        return userauth.refresh(body['refresh_token'])
+    except (KeyError, userauth.AuthError):
+        raise HTTPException(401, 'could not refresh session')
 
 
 # ----------------------------------------------------------------- sessions

@@ -72,9 +72,34 @@ class Settings:
         return f'{p.scheme}://{p.netloc}/auth/v1/.well-known/jwks.json'
 
     @property
+    def supabase_base(self):
+        """Project base URL (e.g. https://<ref>.supabase.co), derived from the REST db_url. Used for
+        GoTrue auth (/auth/v1/...) and the reachability probe."""
+        if not self.db_url:
+            return None
+        from urllib.parse import urlparse
+        p = urlparse(self.db_url)
+        return f'{p.scheme}://{p.netloc}'
+
+    @property
     def dev_insecure(self):
         """Only true when explicitly opted in (LANESIGHT_API_DEV=1) — local testing only, never in prod."""
         return os.environ.get('LANESIGHT_API_DEV') == '1'
+
+    def supabase_reachable(self) -> bool | None:
+        """Live-mode reachability probe (fail visibly, never silently fall back to memory). None in memory
+        mode; True/False in live mode from a quick PostgREST ping with the service role."""
+        if not self.db_url:
+            return None
+        import urllib.request
+        try:
+            req = urllib.request.Request(self.db_url.rstrip('/') + '/?select=1&limit=0',
+                                         headers={'apikey': self.service_role or '',
+                                                  'Authorization': f'Bearer {self.service_role or ""}'})
+            with urllib.request.urlopen(req, timeout=4) as r:
+                return r.status < 500
+        except Exception:
+            return False
 
     def redacted(self) -> dict:
         """Safe-to-log view: presence booleans only, never the values."""

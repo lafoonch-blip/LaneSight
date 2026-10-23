@@ -12,8 +12,15 @@ cd "$CORE"
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-export LANESIGHT_API_DEV=1
-[ "${1:-}" = "--memory" ] && export LANESIGHT_FORCE_MEMORY=1 && echo "mode: MEMORY (no Supabase writes)"
+# DEFAULT = LIVE Supabase + real email/password sign-in (JWT verified via JWKS). Memory mode is TEST ONLY
+# and must never be what you install against (fail visibly instead — /health reports 'degraded' if live
+# and Supabase is unreachable; the app's Dev panel shows it red).
+if [ "${1:-}" = "--memory" ]; then
+  export LANESIGHT_FORCE_MEMORY=1 LANESIGHT_API_DEV=1
+  echo "mode: MEMORY + dev-auth  (TEST ONLY — do not install against this)"
+else
+  echo "mode: LIVE (Supabase; app signs in with email/password; service_role + JWKS from Keychain)"
+fi
 
 PORT=8787
 TS_IP="$(/opt/homebrew/bin/tailscale ip -4 2>/dev/null | head -1 || true)"
