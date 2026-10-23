@@ -28,13 +28,15 @@ PSQL -f "$HERE/_shim.sql" >/dev/null
 PSQL -f "$MOD/schema.sql" >/dev/null
 for n in 002_ball_catalog 003_ball_configuration_surface 004_rls_hardening 005_ball_catalog_refresh \
          006_rules_benchmarks 007_score_achievements 008_dev_build_fields 009_oil_patterns \
-         010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface; do
+         010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface \
+         013_line_geometry_suggested_intent; do
   PSQL -f "$MOD/migrations/$n.sql" >/dev/null
 done
 
-echo "Idempotency: re-running 006-012..."
+echo "Idempotency: re-running 006-013..."
 for n in 006_rules_benchmarks 007_score_achievements 008_dev_build_fields 009_oil_patterns \
-         010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface; do
+         010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface \
+         013_line_geometry_suggested_intent; do
   PSQL -f "$MOD/migrations/$n.sql" >/dev/null
 done
 

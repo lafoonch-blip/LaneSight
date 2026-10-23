@@ -58,22 +58,37 @@ def test_pocket_light_leave_adds_angle():
     assert r['recommendations'][0]['type'] == 'release'
 
 
-def test_apply_move_and_suggested_target():
-    from lanesight_core.insights.adjust import apply_move, suggested_target
-    # high hit -> move left (toward higher boards): feet 2n, target n
+GEOM = {'approach_offset_ft': 15.0, 'arrows_ft': 15.0}
+
+
+def test_apply_move_separate_deltas_and_derived_breakpoint():
+    from lanesight_core.insights.adjust import apply_move, suggested_target, project_breakpoint
+    # feet and arrows carry SEPARATE whole-board deltas; the breakpoint is PROJECTED, not shifted by target.
+    # 2-and-1 left
+    st = apply_move(dict(feet_board=20.0, arrows_board=15.0, breakpoint_board=10.0),
+                    dict(direction='left', move_feet=2, move_target=1), geometry=GEOM, breakpoint_ft=43.0)
+    assert (st['feet_board'], st['arrows_board']) == (22.0, 16.0)        # +2 feet, +1 arrows (separate)
+    assert st['breakpoint_board'] == 10.0                                # 16 + (-6/30)*28 = 10.4 -> 10
+    # 3-and-2 right
+    st = apply_move(dict(feet_board=22.0, arrows_board=16.0, breakpoint_board=11.0),
+                    dict(direction='right', move_feet=3, move_target=2), geometry=GEOM, breakpoint_ft=43.0)
+    assert (st['feet_board'], st['arrows_board']) == (19.0, 14.0)        # -3 feet, -2 arrows (separate)
+    assert st['breakpoint_board'] == 9.0                                 # 14 + (-5/30)*28 = 9.33 -> 9
+    # parallel move (equal deltas): the whole sight line translates, so the breakpoint translates the same
+    base = dict(feet_board=20.0, arrows_board=15.0, breakpoint_board=10.0)
+    st = apply_move(base, dict(direction='left', move_feet=2, move_target=2), geometry=GEOM, breakpoint_ft=43.0)
+    assert (st['feet_board'], st['arrows_board']) == (22.0, 17.0)
+    assert st['breakpoint_board'] - project_breakpoint(20.0, 15.0, 43.0, GEOM) == 2.0
+    # without geometry/breakpoint distance the breakpoint stays None; feet/arrows still move
+    st = apply_move(base, dict(direction='left', move_feet=2, move_target=1))
+    assert (st['feet_board'], st['arrows_board'], st['breakpoint_board']) == (22.0, 16.0, None)
+    # integration: engine emits separate feet/arrows deltas; suggested_target threads the geometry through
     r = strike_adjustment(dict(entry_board=20.0, entry_angle_deg=5.0, pins_standing={4}))
     m = r['recommendations'][0]
-    assert r['hit']['hit'] == 'high' and m['direction'] == 'left' and m['move_feet'] == 2 * m['move_target']
-    st = suggested_target(r, dict(feet_board=20.0, arrows_board=15.0, breakpoint_board=8.0))
-    assert st['feet_board'] == round(20.0 + m['move_feet'], 1)
-    assert st['arrows_board'] == round(15.0 + m['move_target'], 1)
-    assert st['breakpoint_board'] == round(8.0 + m['move_target'], 1)   # breakpoint pivots with the target
-    # light hit -> move right (subtract boards); intent fields not set stay None
-    rr = strike_adjustment(dict(entry_board=14.5, entry_angle_deg=4.5, pins_standing={3, 6, 10}))
-    mr = rr['recommendations'][0]
-    st2 = suggested_target(rr, dict(arrows_board=15.0))
-    assert mr['direction'] == 'right' and st2['arrows_board'] == round(15.0 - mr['move_target'], 1)
-    assert st2['feet_board'] is None and st2['breakpoint_board'] is None
-    # no intent, or no actionable move -> None
+    assert m['direction'] == 'left' and m['move_feet'] == 2 * m['move_target']
+    sg = suggested_target(r, dict(feet_board=20.0, arrows_board=15.0, breakpoint_board=10.0),
+                          geometry=GEOM, breakpoint_ft=43.0)
+    assert sg['feet_board'] == 20.0 + m['move_feet'] and sg['arrows_board'] == 15.0 + m['move_target']
+    assert sg['breakpoint_board'] is not None
     assert suggested_target(r, None) is None
     assert apply_move(dict(arrows_board=15.0), {'type': 'none'}) is None

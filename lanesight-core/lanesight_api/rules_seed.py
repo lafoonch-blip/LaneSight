@@ -19,6 +19,8 @@ ENGINE_CONFIG = {
         'weight_lb': [14.0, 16.0],      # ball = 15 lb -> normalizes to 0.5 (confirmed 2026-10-22)
     },
     'prioritizer_weights': {'timing': 1.2, 'drift': 1.0, 'finish': 0.8},
+    # geometry for projecting a feet->arrows line to the breakpoint ("Apply this move"); owner-editable
+    'line_geometry': {'approach_offset_ft': 15.0, 'arrows_ft': 15.0},
     'baseline_min_n': 10,
     'confidence_min': 0.5,
     'repetition_rule': 3,

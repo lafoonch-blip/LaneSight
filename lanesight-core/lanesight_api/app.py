@@ -50,7 +50,9 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
         intent = store.get_shot_intent(user_id, shot_id) if hasattr(store, 'get_shot_intent') else None
         if intent:
             from lanesight_core.insights.adjust import suggested_target
-            st = suggested_target(rec.get('insights') or {}, intent)
+            geom = (store.engine_config() or {}).get('line_geometry') if hasattr(store, 'engine_config') else None
+            bp_ft = ((rec.get('key_points') or {}).get('breakpoint') or {}).get('z_ft')  # measured this shot
+            st = suggested_target(rec.get('insights') or {}, intent, geometry=geom, breakpoint_ft=bp_ft)
             if st:
                 rec.setdefault('insights', {})['suggested_target'] = st
         store.save_shot_result(shot_id, rec, {'ok': True})

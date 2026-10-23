@@ -461,10 +461,15 @@ class PgStore(MemoryStore):
                   'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
                   'sensor_id': meta.get('sensor_id'),
                   'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id')})
-        # per-shot intent actually used (feet/laydown/arrows/breakpoint); created_at defaults so the Accuracy
-        # engine can require "intent set before the shot".
+        # per-shot intent actually USED (feet/laydown/arrows/breakpoint) + the SUGGESTED boards it came from
+        # (if "Apply this move" was used, before any edit). created_at defaults so the Accuracy engine can
+        # require "intent set before the shot".
         intent = meta.get('intent') or {}
+        suggested = meta.get('suggested') or {}
         cols = {k: intent.get(k) for k in ('feet_board', 'laydown_board', 'arrows_board', 'breakpoint_board', 'breakpoint_ft')}
+        cols.update(suggested_feet_board=suggested.get('feet_board'),
+                    suggested_arrows_board=suggested.get('arrows_board'),
+                    suggested_breakpoint_board=suggested.get('breakpoint_board'))
         if any(v is not None for v in cols.values()):
             self._req('shot_intents', 'POST', {'shot_id': sh['id'], **cols})
         return sh

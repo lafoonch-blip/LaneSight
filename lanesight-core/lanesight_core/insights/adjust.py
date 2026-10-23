@@ -9,13 +9,26 @@ from .reading import read_hit, read_leave, execution_check, classify_shot
 def _rec(kind, reason, evidence, confidence, **kw):
     return dict(type=kind, reason=reason, evidence=evidence, confidence=confidence, rules_version=RULES_VERSION, **kw)
 
-def apply_move(intent: dict | None, rec: dict | None) -> dict | None:
-    """The target line that results from applying a feet/target move to the intent you threw. Boards count
-    from the right gutter (1) to the left (39) as an absolute lane coordinate, so 'left' adds boards and
-    'right' subtracts — for either hand. Uses ONLY the rec's whole-board move_feet/move_target (no invented
-    magnitudes); the breakpoint pivots with the target, so it shifts by the same board count as the target.
-    Returns None when there's no intent to move from or the rec isn't an actionable board move. Fields the
-    intent didn't set stay None (you can't move a line you didn't aim)."""
+def project_breakpoint(feet_board, arrows_board, breakpoint_ft, geometry) -> float | None:
+    """Board where the straight feet->arrows sight line reaches the breakpoint distance. The line runs from
+    the stance (approach_offset_ft BEHIND the foul line) through the arrows (arrows_ft past the foul line);
+    extend it to breakpoint_ft and round to the nearest whole board. Geometry constants come from
+    engine_config (owner-editable). None when any input is missing."""
+    off = (geometry or {}).get('approach_offset_ft')
+    af = (geometry or {}).get('arrows_ft')
+    if None in (feet_board, arrows_board, breakpoint_ft, off, af) or (af + off) == 0:
+        return None
+    slope = (arrows_board - feet_board) / (af + off)        # boards per ft along the sight line
+    return float(round(arrows_board + slope * (breakpoint_ft - af)))
+
+
+def apply_move(intent: dict | None, rec: dict | None, geometry=None, breakpoint_ft=None) -> dict | None:
+    """The target line that results from applying a feet/target move to the intent you threw. Feet and the
+    target (arrows) carry SEPARATE whole-board deltas from the rec (move_feet, move_target — e.g. 2-and-1,
+    3-and-2). Boards count from the right gutter (1) to the left (39), so 'left' adds boards and 'right'
+    subtracts — for either hand. The breakpoint is DERIVED, not shifted by the target: project the new
+    feet->arrows line to the breakpoint distance (project_breakpoint). Returns None when there's no intent to
+    move from or the rec isn't an actionable board move; fields the intent didn't set stay None."""
     if not intent or not rec:
         return None
     feet, tgt, d = rec.get('move_feet'), rec.get('move_target'), rec.get('direction')
@@ -25,19 +38,21 @@ def apply_move(intent: dict | None, rec: dict | None) -> dict | None:
 
     def mv(cur, delta):
         return round(cur + sign * delta, 1) if (cur is not None and delta) else cur
-    return dict(feet_board=mv(intent.get('feet_board'), feet),
-                arrows_board=mv(intent.get('arrows_board'), tgt),
-                breakpoint_board=mv(intent.get('breakpoint_board'), tgt),
+    new_feet = mv(intent.get('feet_board'), feet)
+    new_arrows = mv(intent.get('arrows_board'), tgt)
+    return dict(feet_board=new_feet, arrows_board=new_arrows,
+                breakpoint_board=project_breakpoint(new_feet, new_arrows, breakpoint_ft, geometry),
                 direction=d, move_feet=feet, move_target=tgt, rules_version=RULES_VERSION)
 
 
-def suggested_target(insights: dict | None, intent: dict | None) -> dict | None:
+def suggested_target(insights: dict | None, intent: dict | None, geometry=None, breakpoint_ft=None) -> dict | None:
     """Pick the first actionable board move in an insights result and return the target it implies for the
-    next shot (for the shot card's 'Apply this move'). None when nothing actionable or no intent set."""
+    next shot (for the shot card's 'Apply this move'). The breakpoint is derived from the lane geometry +
+    the shot's measured breakpoint distance. None when nothing actionable or no intent set."""
     recs = (insights or {}).get('recommendations') or []
     primary = next((r for r in recs if r.get('direction') in ('left', 'right')
                     and (r.get('move_feet') or r.get('move_target'))), None)
-    return apply_move(intent, primary)
+    return apply_move(intent, primary, geometry=geometry, breakpoint_ft=breakpoint_ft)
 
 
 def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, history=None, pattern=None):
