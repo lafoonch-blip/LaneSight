@@ -23,7 +23,15 @@ else
 fi
 
 PORT=8787
-TS_IP="$(/opt/homebrew/bin/tailscale ip -4 2>/dev/null | head -1 || true)"
+# Wait for the tailnet IP. When launchd starts us at login, Tailscale may not be up yet; retry ~60s so
+# we bind to the tailnet interface (phone-reachable) rather than falling back to loopback. Interactive
+# runs (Tailscale already up) break on the first iteration with no delay.
+TS_IP=""
+for _ in $(seq 1 60); do
+  TS_IP="$(/opt/homebrew/bin/tailscale ip -4 2>/dev/null | head -1 || true)"
+  [ -n "$TS_IP" ] && break
+  sleep 1
+done
 DNS="$(/opt/homebrew/bin/tailscale status --json 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
 BIND="${TS_IP:-127.0.0.1}"
 echo
