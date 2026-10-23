@@ -56,3 +56,24 @@ def test_pocket_light_leave_adds_angle():
     assert r['leave']['read'] == 'light' and r['leave']['hidden'] == [9] and rec['type'] == 'move' and rec['direction'] == 'right'
     r = strike_adjustment(dict(entry_board=17.4, entry_angle_deg=3.2, pins_standing={10}))
     assert r['recommendations'][0]['type'] == 'release'
+
+
+def test_apply_move_and_suggested_target():
+    from lanesight_core.insights.adjust import apply_move, suggested_target
+    # high hit -> move left (toward higher boards): feet 2n, target n
+    r = strike_adjustment(dict(entry_board=20.0, entry_angle_deg=5.0, pins_standing={4}))
+    m = r['recommendations'][0]
+    assert r['hit']['hit'] == 'high' and m['direction'] == 'left' and m['move_feet'] == 2 * m['move_target']
+    st = suggested_target(r, dict(feet_board=20.0, arrows_board=15.0, breakpoint_board=8.0))
+    assert st['feet_board'] == round(20.0 + m['move_feet'], 1)
+    assert st['arrows_board'] == round(15.0 + m['move_target'], 1)
+    assert st['breakpoint_board'] == round(8.0 + m['move_target'], 1)   # breakpoint pivots with the target
+    # light hit -> move right (subtract boards); intent fields not set stay None
+    rr = strike_adjustment(dict(entry_board=14.5, entry_angle_deg=4.5, pins_standing={3, 6, 10}))
+    mr = rr['recommendations'][0]
+    st2 = suggested_target(rr, dict(arrows_board=15.0))
+    assert mr['direction'] == 'right' and st2['arrows_board'] == round(15.0 - mr['move_target'], 1)
+    assert st2['feet_board'] is None and st2['breakpoint_board'] is None
+    # no intent, or no actionable move -> None
+    assert suggested_target(r, None) is None
+    assert apply_move(dict(arrows_board=15.0), {'type': 'none'}) is None

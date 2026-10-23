@@ -44,12 +44,31 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             job.timings[k] = v
         job.timings['analyze'] = time.monotonic() - t0
         store = get_store()
+        # The shot card's "Apply this move": turn the (intent-independent) recommended move into the target
+        # line for the next shot, using the intent actually thrown. Computed here from stored data — the CV
+        # path is unchanged. None when nothing actionable or no intent was set.
+        intent = store.get_shot_intent(user_id, shot_id) if hasattr(store, 'get_shot_intent') else None
+        if intent:
+            from lanesight_core.insights.adjust import suggested_target
+            st = suggested_target(rec.get('insights') or {}, intent)
+            if st:
+                rec.setdefault('insights', {})['suggested_target'] = st
         store.save_shot_result(shot_id, rec, {'ok': True})
         # After each analyzed shot: recompute score over the 90-day window, run achievements, findings.
         footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
         return dict(shot_id=shot_id, **footer)
 
     return _queue.submit('analyze', run)
+
+
+def _ball_link(store, user, meta):
+    """The ball configuration + user ball a shot was thrown with: explicit from the app, else the current ball."""
+    cfg, ub = meta.get('ball_configuration_id'), meta.get('user_ball_id')
+    if not (cfg and ub) and hasattr(store, 'current_ball'):
+        cur = store.current_ball(user) or {}
+        cfg = cfg or cur.get('ball_configuration_id')
+        ub = ub or cur.get('id')
+    return cfg, ub
 
 
 # ----------------------------------------------------------------- health (no auth)
@@ -139,9 +158,11 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
         raise HTTPException(404, 'session not found')
     meta = json.loads(metadata or '{}')
     store = get_store()
+    cfg, ub = _ball_link(store, user, meta)
     shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                          'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
-                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed')})
+                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
+                                         'ball_configuration_id': cfg, 'user_ball_id': ub})
     dest = DATA_ROOT / 'sessions' / sid
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"
@@ -243,6 +264,13 @@ def get_arsenal(user=Depends(current_user)):
 def add_ball(body: dict, user=Depends(current_user)):
     return get_store().add_ball(user, body or {})
 
+@app.patch('/me/arsenal/{ball_id}')
+def update_ball(ball_id: str, body: dict, user=Depends(current_user)):
+    row = get_store().update_ball(user, ball_id, body or {})   # set current, layout, surface, weight, nickname, retire
+    if not row:
+        raise HTTPException(404, 'ball not found')
+    return row
+
 @app.post('/me/arsenal/{ball_id}/surface')
 def add_surface(ball_id: str, body: dict | None = None, user=Depends(current_user)):
     row = get_store().add_surface_event(user, ball_id, body or {})
@@ -268,9 +296,11 @@ async def upload_clip(sid: str = Form(...), file: UploadFile = File(...), metada
     if not store.get_session(user, sid):
         raise HTTPException(404, 'session not found')
     meta = json.loads(metadata or '{}')
+    cfg, ub = _ball_link(store, user, meta)
     shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                          'source': 'upload', 'sensor_used': meta.get('sensor_used'),
-                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed')})
+                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
+                                         'ball_configuration_id': cfg, 'user_ball_id': ub})
     dest = DATA_ROOT / 'sessions' / sid
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"

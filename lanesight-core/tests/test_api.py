@@ -90,3 +90,34 @@ def test_upload_enqueues_serial_job():
     assert body['shot_id'] and body['job_id']
     job = client.get(f"/jobs/{body['job_id']}", headers=H)
     assert job.status_code == 200 and job.json()['state'] in ('queued', 'running', 'done', 'failed')
+
+
+def test_arsenal_persistence_current_and_update():
+    hh = {'X-Dev-User': 'ars1'}
+    b1 = client.post('/me/arsenal', json={'name': 'Old Hammer', 'weight_lb': 15, 'layout': '45x4x40',
+                                          'surface': '2000 abralon', 'make_current': True}, headers=hh).json()
+    assert b1['name'] == 'Old Hammer' and b1['is_current'] is True and b1['ball_configuration_id']
+    assert b1['layout'] == '45x4x40' and b1['surface'] == '2000 abralon'
+    client.post('/me/arsenal', json={'name': 'Storm Bionic', 'weight_lb': 15}, headers=hh)
+    lst = client.get('/me/arsenal', headers=hh).json()
+    assert {x['name'] for x in lst} == {'Old Hammer', 'Storm Bionic'}
+    assert sum(1 for x in lst if x['is_current']) == 1
+    b2 = next(x for x in lst if x['name'] == 'Storm Bionic')
+    client.patch(f"/me/arsenal/{b2['id']}", json={'is_current': True, 'surface': '4000 abralon'}, headers=hh)
+    by_id = {x['id']: x for x in client.get('/me/arsenal', headers=hh).json()}
+    assert by_id[b2['id']]['is_current'] and not by_id[b1['id']]['is_current']
+    assert by_id[b2['id']]['surface'] == '4000 abralon'
+    assert client.patch('/me/arsenal/nope', json={'surface': 'x'}, headers=hh).status_code == 404
+
+
+def test_shot_persists_ball_link_and_full_intent():
+    hh = {'X-Dev-User': 'ars2'}
+    sid = client.post('/sessions', json={'mode': 'practice'}, headers=hh).json()['id']
+    b = client.post('/me/arsenal', json={'name': 'Test Ball', 'make_current': True}, headers=hh).json()
+    store = get_store()
+    cur = store.current_ball('ars2')
+    assert cur['id'] == b['id'] and cur['ball_configuration_id'] == b['ball_configuration_id']
+    shot = store.create_shot('ars2', sid, {'intent': {'feet_board': 20, 'arrows_board': 15, 'breakpoint_board': 8},
+                                           'ball_configuration_id': b['ball_configuration_id'], 'user_ball_id': b['id']})
+    intent = store.get_shot_intent('ars2', shot['id'])
+    assert intent['arrows_board'] == 15 and intent['feet_board'] == 20

@@ -9,6 +9,37 @@ from .reading import read_hit, read_leave, execution_check, classify_shot
 def _rec(kind, reason, evidence, confidence, **kw):
     return dict(type=kind, reason=reason, evidence=evidence, confidence=confidence, rules_version=RULES_VERSION, **kw)
 
+def apply_move(intent: dict | None, rec: dict | None) -> dict | None:
+    """The target line that results from applying a feet/target move to the intent you threw. Boards count
+    from the right gutter (1) to the left (39) as an absolute lane coordinate, so 'left' adds boards and
+    'right' subtracts — for either hand. Uses ONLY the rec's whole-board move_feet/move_target (no invented
+    magnitudes); the breakpoint pivots with the target, so it shifts by the same board count as the target.
+    Returns None when there's no intent to move from or the rec isn't an actionable board move. Fields the
+    intent didn't set stay None (you can't move a line you didn't aim)."""
+    if not intent or not rec:
+        return None
+    feet, tgt, d = rec.get('move_feet'), rec.get('move_target'), rec.get('direction')
+    if d not in ('left', 'right') or not (feet or tgt):
+        return None
+    sign = 1 if d == 'left' else -1
+
+    def mv(cur, delta):
+        return round(cur + sign * delta, 1) if (cur is not None and delta) else cur
+    return dict(feet_board=mv(intent.get('feet_board'), feet),
+                arrows_board=mv(intent.get('arrows_board'), tgt),
+                breakpoint_board=mv(intent.get('breakpoint_board'), tgt),
+                direction=d, move_feet=feet, move_target=tgt, rules_version=RULES_VERSION)
+
+
+def suggested_target(insights: dict | None, intent: dict | None) -> dict | None:
+    """Pick the first actionable board move in an insights result and return the target it implies for the
+    next shot (for the shot card's 'Apply this move'). None when nothing actionable or no intent set."""
+    recs = (insights or {}).get('recommendations') or []
+    primary = next((r for r in recs if r.get('direction') in ('left', 'right')
+                    and (r.get('move_feet') or r.get('move_target'))), None)
+    return apply_move(intent, primary)
+
+
 def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, history=None, pattern=None):
     """shot: metrics dict (entry_board, entry_angle_deg, arrows/breakpoint boards, speed_mph, pins_standing).
     history: list of earlier shot dicts in this session (same lane/ball) for transition evidence."""

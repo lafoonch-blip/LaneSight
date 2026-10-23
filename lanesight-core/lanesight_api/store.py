@@ -66,9 +66,48 @@ class MemoryStore:
         return [b for b in self.arsenal.values() if b['user_id'] == user_id]
 
     def add_ball(self, user_id, data):
-        b = dict(id=_new_id(), user_id=user_id, **(data or {}))
+        d = dict(data or {})
+        make_current = bool(d.pop('make_current', False) or d.pop('is_current', False))
+        name = d.get('nickname') or d.get('name')
+        b = dict(id=_new_id(), user_id=user_id, ball_configuration_id=_new_id(), is_current=False, retired=False,
+                 ball_model_id=d.get('ball_model_id'), nickname=name, name=name,
+                 weight_lb=d.get('weight_lb'), color_desc=d.get('color_desc'),
+                 layout_system=d.get('layout_system'), layout=d.get('layout'), surface=d.get('surface'))
         self.arsenal[b['id']] = b
-        return b
+        if make_current:
+            self.set_current_ball(user_id, b['id'])
+        return self.arsenal[b['id']]
+
+    def set_current_ball(self, user_id, ball_id):
+        if not (self.arsenal.get(ball_id) or {}).get('user_id') == user_id:
+            return None
+        for b in self.arsenal.values():
+            if b.get('user_id') == user_id:
+                b['is_current'] = (b['id'] == ball_id)
+        return self.arsenal[ball_id]
+
+    def update_ball(self, user_id, ball_id, patch):
+        b = self.arsenal.get(ball_id)
+        if not b or b.get('user_id') != user_id:
+            return None
+        p = dict(patch or {})
+        if p.pop('is_current', False) or p.pop('make_current', False):
+            self.set_current_ball(user_id, ball_id)
+        if p.get('name') is not None:
+            b['nickname'] = b['name'] = p['name']
+        for k in ('nickname', 'weight_lb', 'color_desc', 'ball_model_id', 'layout_system', 'layout', 'surface', 'retired'):
+            if p.get(k) is not None:
+                b[k] = p[k]
+        b.setdefault('name', b.get('nickname'))
+        return self.arsenal[ball_id]
+
+    def current_ball(self, user_id):
+        return next((b for b in self.arsenal.values()
+                     if b.get('user_id') == user_id and b.get('is_current')), None)
+
+    def get_shot_intent(self, user_id, shot_id):
+        sh = self.get_shot(user_id, shot_id)
+        return (sh or {}).get('intent') or None
 
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
     def get_profile(self, user_id):
@@ -420,11 +459,14 @@ class PgStore(MemoryStore):
         self._req('shots', 'POST', {'id': sh['id'], 'user_id': user_id, 'session_id': session_id,
                   'record': {}, 'handed': meta.get('handed'), 'capture_mode': meta.get('capture_mode'),
                   'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
-                  'sensor_id': meta.get('sensor_id')})
+                  'sensor_id': meta.get('sensor_id'),
+                  'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id')})
+        # per-shot intent actually used (feet/laydown/arrows/breakpoint); created_at defaults so the Accuracy
+        # engine can require "intent set before the shot".
         intent = meta.get('intent') or {}
-        if intent.get('arrows_board') is not None or intent.get('breakpoint_board') is not None:
-            self._req('shot_intents', 'POST', {'shot_id': sh['id'], 'arrows_board': intent.get('arrows_board'),
-                      'breakpoint_board': intent.get('breakpoint_board')})
+        cols = {k: intent.get(k) for k in ('feet_board', 'laydown_board', 'arrows_board', 'breakpoint_board', 'breakpoint_ft')}
+        if any(v is not None for v in cols.values()):
+            self._req('shot_intents', 'POST', {'shot_id': sh['id'], **cols})
         return sh
 
     def save_shot_result(self, shot_id, record, result):
@@ -500,16 +542,78 @@ class PgStore(MemoryStore):
     def oil_patterns(self):
         return self._get('oil_patterns', 'select=*&order=name')
 
+    @staticmethod
+    def _arsenal_row(b):
+        """Flatten a user_balls row (+embedded model + latest configuration) into the app's arsenal shape."""
+        model = b.get('ball_models') or {}
+        cfgs = sorted(b.get('ball_configurations') or [], key=lambda c: c.get('version') or 0)
+        cfg = cfgs[-1] if cfgs else {}
+        name = (f"{model.get('manufacturer', '')} {model.get('name', '')}".strip() or b.get('nickname'))
+        return {'id': b['id'], 'name': name, 'nickname': b.get('nickname'), 'ball_model_id': b.get('ball_model_id'),
+                'manufacturer': model.get('manufacturer'), 'model_name': model.get('name'),
+                'image_url': model.get('image_url'), 'weight_lb': b.get('weight_lb'), 'color_desc': b.get('color_desc'),
+                'is_current': b.get('is_current', False), 'retired': b.get('retired', False),
+                'ball_configuration_id': cfg.get('id'), 'layout_system': cfg.get('layout_system'),
+                'layout': cfg.get('layout'), 'surface': cfg.get('surface')}
+
+    _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,retired,ball_model_id,created_at,'
+                       'ball_models(manufacturer,name,image_url),'
+                       'ball_configurations(id,version,layout_system,layout,surface)')
+
     def list_arsenal(self, user_id):
-        return self._get('user_balls',
-                         f'user_id=eq.{user_id}&select=*,ball_models(manufacturer,name,image_url)&order=created_at')
+        rows = self._get('user_balls', f'user_id=eq.{user_id}&{self._ARSENAL_SELECT}&order=created_at')
+        return [self._arsenal_row(b) for b in rows]
+
+    def _arsenal_one(self, user_id, ball_id):
+        rows = self._get('user_balls', f'id=eq.{ball_id}&user_id=eq.{user_id}&{self._ARSENAL_SELECT}')
+        return self._arsenal_row(rows[0]) if rows else None
 
     def add_ball(self, user_id, data):
-        row = {'id': _new_id(), 'user_id': user_id,
-               **{k: v for k, v in (data or {}).items()
-                  if k in ('ball_model_id', 'nickname', 'serial', 'weight_lb', 'color_desc')}}
-        self._req('user_balls', 'POST', row)
-        return row
+        d = dict(data or {})
+        make_current = bool(d.get('make_current') or d.get('is_current'))
+        ball_id, cfg_id = _new_id(), _new_id()
+        self._req('user_balls', 'POST', {'id': ball_id, 'user_id': user_id, 'ball_model_id': d.get('ball_model_id'),
+                  'nickname': d.get('nickname') or d.get('name'), 'serial': d.get('serial'),
+                  'weight_lb': d.get('weight_lb'), 'color_desc': d.get('color_desc'), 'is_current': False})
+        self._req('ball_configurations', 'POST', {'id': cfg_id, 'user_ball_id': ball_id, 'version': 1,
+                  'layout_system': d.get('layout_system'), 'layout': d.get('layout'), 'surface': d.get('surface')})
+        if make_current:
+            self.set_current_ball(user_id, ball_id)
+        return self._arsenal_one(user_id, ball_id)
+
+    def set_current_ball(self, user_id, ball_id):
+        if not self._get('user_balls', f'id=eq.{ball_id}&user_id=eq.{user_id}&select=id'):
+            return None
+        self._req(f'user_balls?user_id=eq.{user_id}&is_current=is.true', 'PATCH', {'is_current': False})
+        self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', {'is_current': True})
+        return self._arsenal_one(user_id, ball_id)
+
+    def update_ball(self, user_id, ball_id, patch):
+        if not self._get('user_balls', f'id=eq.{ball_id}&user_id=eq.{user_id}&select=id'):
+            return None
+        p = dict(patch or {})
+        if p.pop('is_current', False) or p.pop('make_current', False):
+            self.set_current_ball(user_id, ball_id)
+        ball_cols = {k: p[k] for k in ('nickname', 'serial', 'weight_lb', 'color_desc', 'ball_model_id', 'retired') if k in p}
+        if p.get('name') is not None:
+            ball_cols['nickname'] = p['name']
+        if ball_cols:
+            self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', ball_cols)
+        cfg_cols = {k: p[k] for k in ('layout_system', 'layout', 'surface') if k in p}
+        if cfg_cols:
+            self._req(f'ball_configurations?user_ball_id=eq.{ball_id}', 'PATCH', cfg_cols)
+        return self._arsenal_one(user_id, ball_id)
+
+    def current_ball(self, user_id):
+        rows = self._get('user_balls', f'user_id=eq.{user_id}&is_current=is.true&{self._ARSENAL_SELECT}&limit=1')
+        return self._arsenal_row(rows[0]) if rows else None
+
+    def get_shot_intent(self, user_id, shot_id):
+        if not self._get('shots', f'id=eq.{shot_id}&user_id=eq.{user_id}&select=id'):
+            return None
+        rows = self._get('shot_intents', f'shot_id=eq.{shot_id}'
+                         '&select=feet_board,laydown_board,arrows_board,breakpoint_board,breakpoint_ft')
+        return rows[0] if rows else None
 
     # ----------------------------------------------------------------- rules / engine config (service role)
     def achievement_defs(self, active_only=False):
