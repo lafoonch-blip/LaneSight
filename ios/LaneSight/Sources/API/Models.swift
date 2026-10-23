@@ -493,26 +493,36 @@ struct ShotMetadata {
     var handed: String          // "R" / "L"
     var captureMode: String     // "shot" / "form"
     var source: String          // "live"
+    /// The boards ACTUALLY used for this shot (the current session target at capture, including any
+    /// chip edits made after an "Apply this move").
     var intent: ShotIntent
+    /// The last "Apply this move" proposal snapshot (feet/arrows/breakpoint from the server's
+    /// `suggested_target`), or nil if no move was applied. Stored by the server alongside `intent` so a
+    /// post-apply edit is visible: `intent` reflects the edit while `suggested` keeps what was proposed.
+    var suggested: ShotIntent?
     /// Current ball's `ball_configuration_id` and arsenal row `id` (sent so the analyzer knows the ball).
     var ballConfigurationId: String?
     var userBallId: String?
 
     /// Builds the exact JSON string the API expects for the `metadata` multipart field.
     /// Intent values are emitted explicitly as `null` when absent (matches the contract); the ball ids
-    /// are included only when known (the server falls back to the current ball if omitted).
-    func jsonString() -> String {
-        let intentDict: [String: Any] = [
-            "feet_board": intent.feetBoard as Any? ?? NSNull(),
-            "arrows_board": intent.arrowsBoard as Any? ?? NSNull(),
-            "breakpoint_board": intent.breakpointBoard as Any? ?? NSNull(),
+    /// and the `suggested` object are included only when known.
+    private static func boardDict(_ i: ShotIntent) -> [String: Any] {
+        [
+            "feet_board": i.feetBoard as Any? ?? NSNull(),
+            "arrows_board": i.arrowsBoard as Any? ?? NSNull(),
+            "breakpoint_board": i.breakpointBoard as Any? ?? NSNull(),
         ]
+    }
+
+    func jsonString() -> String {
         var dict: [String: Any] = [
             "handed": handed,
             "capture_mode": captureMode,
             "source": source,
-            "intent": intentDict,
+            "intent": Self.boardDict(intent),
         ]
+        if let suggested { dict["suggested"] = Self.boardDict(suggested) }
         if let ballConfigurationId { dict["ball_configuration_id"] = ballConfigurationId }
         if let userBallId { dict["user_ball_id"] = userBallId }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),

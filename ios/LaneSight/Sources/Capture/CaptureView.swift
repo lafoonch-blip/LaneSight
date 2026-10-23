@@ -33,7 +33,9 @@ struct CaptureView: View {
         .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
         .onDisappear { camera.stopSession() }
         .sheet(isPresented: $showTargetEditor) {
-            TargetEditorSheet(target: $model.sessionTarget).environmentObject(model)
+            TargetEditorSheet(target: $model.sessionTarget,
+                              suggestedBreakpoint: model.sessionSuggested?.breakpointBoard)
+                .environmentObject(model)
         }
         // A shot that's processing takes over the WHOLE screen (camera + tab bar) so the user stays
         // in the capture context — they never see the live preview or a highlighted Home tab mid-shot.
@@ -70,7 +72,7 @@ struct CaptureView: View {
             Button { showTargetEditor = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "scope").font(.caption2)
-                    Text(targetChipText).font(.caption.weight(.semibold))
+                    targetChipContent
                     Image(systemName: "slider.horizontal.3").font(.caption2).foregroundStyle(LS.cyan)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -78,7 +80,7 @@ struct CaptureView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
-            .accessibilityLabel("Edit target. Current target \(targetChipText)")
+            .accessibilityLabel("Edit target. Current target \(targetChipAccessibility)")
 
             if let ball = model.currentBall {
                 HStack(spacing: 6) {
@@ -96,12 +98,42 @@ struct CaptureView: View {
         .animation(.easeInOut(duration: 0.15), value: camera.state)
     }
 
-    private var targetChipText: String {
+    /// Chip contents: feet/arrows boards plain, and the breakpoint tagged "suggested" (cyan + a small
+    /// label) when it came from "Apply this move" and hasn't been edited yet.
+    @ViewBuilder private var targetChipContent: some View {
         let t = model.sessionTarget
-        if t.isEmpty { return "Set target" }
+        if t.isEmpty {
+            Text("Set target").font(.caption.weight(.semibold))
+        } else {
+            let lead = [t.feetBoard.map { "F \(Fmt.number($0))" },
+                        t.arrowsBoard.map { "A \(Fmt.number($0))" }].compactMap { $0 }.joined(separator: " · ")
+            HStack(spacing: 6) {
+                if !lead.isEmpty { Text(lead).font(.caption.weight(.semibold)) }
+                if let b = t.breakpointBoard {
+                    if !lead.isEmpty { Text("·").font(.caption).foregroundStyle(.white.opacity(0.5)) }
+                    HStack(spacing: 3) {
+                        Text("B \(Fmt.number(b))").font(.caption.weight(.semibold))
+                            .foregroundStyle(model.breakpointIsSuggested ? LS.cyan : .white)
+                        if model.breakpointIsSuggested {
+                            Text("suggested").font(.system(size: 8).weight(.bold))
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(LS.cyan.opacity(0.18), in: Capsule())
+                                .foregroundStyle(LS.cyan)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var targetChipAccessibility: String {
+        let t = model.sessionTarget
+        if t.isEmpty { return "not set" }
         func part(_ label: String, _ v: Double?) -> String? { v.map { "\(label) \(Fmt.number($0))" } }
-        return [part("F", t.feetBoard), part("A", t.arrowsBoard), part("B", t.breakpointBoard)]
-            .compactMap { $0 }.joined(separator: " · ")
+        var s = [part("feet", t.feetBoard), part("arrows", t.arrowsBoard),
+                 part("breakpoint", t.breakpointBoard)].compactMap { $0 }.joined(separator: ", ")
+        if model.breakpointIsSuggested { s += " (breakpoint suggested)" }
+        return s
     }
 
     private var controls: some View {
@@ -267,6 +299,10 @@ private struct ProcessingCover: View {
 private struct TargetEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var target: ShotIntent
+    /// The last applied "Apply this move" breakpoint, if any. The Breakpoint row shows a "suggested" tag
+    /// while its value still equals this; the tag clears once the bowler edits it. Editing never changes
+    /// the stored proposal — only `target` (the used value).
+    var suggestedBreakpoint: Double? = nil
 
     // Sensible starting values when a board is toggled on from "off".
     private let defaults: [String: Double] = ["Feet": 15, "Arrows": 10, "Breakpoint": 8]
@@ -279,7 +315,7 @@ private struct TargetEditorSheet: View {
                         .font(.caption).foregroundStyle(LS.textSecondary)
                     boardRow("Feet", value: $target.feetBoard)
                     boardRow("Arrows", value: $target.arrowsBoard)
-                    boardRow("Breakpoint", value: $target.breakpointBoard)
+                    boardRow("Breakpoint", value: $target.breakpointBoard, suggested: suggestedBreakpoint)
                 }
                 .padding(16)
             }
@@ -295,10 +331,16 @@ private struct TargetEditorSheet: View {
         .presentationDetents([.medium])
     }
 
-    private func boardRow(_ title: String, value: Binding<Double?>) -> some View {
-        HStack {
-            Text(title).font(.subheadline).foregroundStyle(LS.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private func boardRow(_ title: String, value: Binding<Double?>, suggested: Double? = nil) -> some View {
+        let isSuggested = suggested != nil && value.wrappedValue == suggested
+        return HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline).foregroundStyle(LS.textPrimary)
+                if isSuggested {
+                    Text("SUGGESTED").font(.system(size: 9).weight(.bold)).foregroundStyle(LS.cyan)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if let current = value.wrappedValue {
                 Stepper(value: Binding(get: { current },
                                        set: { value.wrappedValue = max(0, min(60, $0)) }),

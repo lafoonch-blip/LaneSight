@@ -86,8 +86,14 @@ final class AppModel: ObservableObject {
     var currentBall: ArsenalBall? { arsenal.first { $0.is_current == true } }
 
     /// The session's carry-forward target. Seeded from Setup, held across shots, edited by the capture
-    /// chip, and updated by "Apply this move". Every live shot sends this as its `intent`.
+    /// chip, and updated by "Apply this move". Every live shot sends this as its `intent` (the boards
+    /// ACTUALLY used, including any chip edits made after applying a move).
     @Published var sessionTarget = ShotIntent()
+
+    /// The last "Apply this move" proposal snapshot (feet/arrows/breakpoint from the server's
+    /// `suggested_target`). Sent as `suggested` on each shot so the server records what was proposed even
+    /// if the bowler then edits a board on the chip. Kept until the next Apply; nil when no move applies.
+    @Published var sessionSuggested: ShotIntent?
 
     // End-of-session summary (POST /sessions/{id}/end)
     @Published var endSummary: EndSessionResponse?
@@ -179,6 +185,7 @@ final class AppModel: ObservableObject {
         result = nil
         arsenal = []
         sessionTarget = ShotIntent()
+        sessionSuggested = nil
         Keychain.delete(Keychain.Account.accessToken)
         Keychain.delete(Keychain.Account.refreshToken)
         Keychain.delete(Keychain.Account.userId)
@@ -275,6 +282,17 @@ final class AppModel: ObservableObject {
         if let f = t.feet_board { sessionTarget.feetBoard = f }
         if let a = t.arrows_board { sessionTarget.arrowsBoard = a }
         if let b = t.breakpoint_board { sessionTarget.breakpointBoard = b }
+        // Snapshot the proposal (including the geometrically-derived breakpoint). This is the record of
+        // what was proposed; a later chip edit changes `sessionTarget` (used) but leaves this untouched.
+        sessionSuggested = ShotIntent(feetBoard: t.feet_board, arrowsBoard: t.arrows_board,
+                                      breakpointBoard: t.breakpoint_board)
+    }
+
+    /// True when a board's current (used) value still matches the last applied suggestion — i.e. it came
+    /// from "Apply this move" and the bowler hasn't edited it. Drives the "suggested" tag on the chip.
+    var breakpointIsSuggested: Bool {
+        guard let s = sessionSuggested, let b = s.breakpointBoard else { return false }
+        return sessionTarget.breakpointBoard == b
     }
 
     // MARK: connection check
@@ -339,6 +357,7 @@ final class AppModel: ObservableObject {
                     feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
                     arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
                     breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
+                sessionSuggested = nil      // uploads have no Apply-this-move proposal
             }
             let ball = currentBall
             let metadata = ShotMetadata(
@@ -346,6 +365,7 @@ final class AppModel: ObservableObject {
                 captureMode: captureMode,
                 source: source,
                 intent: sessionTarget,
+                suggested: sessionSuggested,
                 ballConfigurationId: ball?.ball_configuration_id,
                 userBallId: ball?.id
             )
@@ -458,6 +478,7 @@ final class AppModel: ObservableObject {
             feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
             arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
             breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
+        sessionSuggested = nil      // fresh session: no applied move yet
     }
 
     /// Records the sensor answer for the shot shown on the shot card (PATCH /shots/{id}).
