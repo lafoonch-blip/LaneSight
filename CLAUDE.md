@@ -10,6 +10,7 @@ Read `AGENTS.md` first and follow its read order and rules. Short version: `DECI
 - Commit locally. **Push to GitHub only when Shayne says so.**
 
 ## Rules
+- **Work continuously.** Never pause between steps to ask whether to continue or to report progress. Run the whole task to the end, committing locally as you go, and give one report when finished. Stop only if a test fails and you can't fix it, you're truly blocked, or the next action is irreversible outside the repo (applying a migration to live Supabase, pushing to GitHub).
 - No mock, placeholder or fallback numbers. A metric that can't be measured is `unavailable` with a reason. Estimates are labeled (status `best_effort` / low confidence) and say how they were derived.
 - Accuracy beats coverage when the number drives a recommendation (e.g. entry board decides pocket/light/high: a 2-board error flips the advice).
 - If something fails, show the exact error before changing code.
