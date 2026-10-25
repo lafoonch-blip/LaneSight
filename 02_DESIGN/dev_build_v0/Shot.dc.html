@@ -14,7 +14,7 @@ body{margin:0}
 a{color:#00A8F5}a:hover{color:#00A8F5}
 </style>
 </helmet>
-<div style="width: 390px; height: 1880px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="width: 390px; height: 2290px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; gap: 12px">
 <a href="Session.dc.html" aria-label="Back to session" style="width: 44px; height: 44px; border-radius: 8px; background: #031B29; border: 1px solid #0C2B40; color: #BFCBDD; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
 <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><div style="font-size: 19px; font-weight: 600">Shot 4</div><div style="font-size: 13px; color: #BFCBDD">Shot Analysis · House shot · 7:42 pm</div></div>
@@ -84,10 +84,18 @@ a{color:#00A8F5}a:hover{color:#00A8F5}
 <div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Pocket Hunter</span><span style="font-weight: 600">61% of 80%</span></div>
 </div>
 
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<label for="shot-notes" style="font-size: 16px; font-weight: 600">Your notes on this shot</label>
+<span style="font-size: 13px; color: #BFCBDD; margin-top: -4px">What did you see and feel? Saved with this shot and compared with the measured results.</span>
+<div role="group" aria-label="Quick tags (optional)" style="display: flex; flex-wrap: wrap; gap: 8px"><button aria-pressed="true" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #0C2B40; border: 1px solid #00A8F5; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Hit my target</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Missed left</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Missed right</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Pocket</button><button aria-pressed="true" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #0C2B40; border: 1px solid #00A8F5; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Light</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">High</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Felt good</button><button aria-pressed="false" style="min-height: 44px; padding: 0 14px; border-radius: 22px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Pulled it</button></div>
+<textarea id="shot-notes" rows="4" placeholder="e.g. Felt late at the line, ball hooked early, looked light from where I stood" style="box-sizing: border-box; width: 100%; min-height: 104px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; padding: 10px 12px; font-family: inherit; font-size: 16px; line-height: 1.4; resize: vertical">Felt like I pulled it a little, but it held. Looked light from the approach.</textarea>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #BFCBDD"><span>Saved automatically · 7:43 pm</span><span>Voice dictation works here</span></div>
+</div>
+
 <div style="display: flex; justify-content: space-between; font-size: 13px; color: #BFCBDD; margin-top: auto"><span>Analyzed in 1 m 52 s</span><span>core 0.6 · rules 1 · L-dev-0</span></div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1880}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2290}}'>
 class Component extends DCLogic {
 renderVals() { return {}; }
 }

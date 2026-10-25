@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.5
+Version: 3.6
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -21,6 +21,9 @@ Last Updated: 2026-10-25
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
 ## Changelog
+- **3.6 (2026-10-25):** Shot card › **Your notes on this shot** at the bottom (DEC-058).
+  - Optional quick tags (Hit my target, Missed left/right, Pocket, Light, High, Felt good, Pulled it) plus free text; autosaves; dictation works.
+  - Stored with the shot for comparison with the measured results. Frame 2290 px; canvas rows 2 and 3 moved down.
 - **3.5 (2026-10-25):** Shot card › Target vs actual uses the Figma lane recreation (Sessions – MVP › "Shot Summary (after analysis)", component `Sessions / Shot lane recreation`).
   - Perspective lane with boards, arrows, foul line and pins, plus the selected oil pattern as a purple reference.
   - Target line (dashed blue) and your line (green) overlaid, with markers for Laydown, Arrows, Breakpoint and Entry.

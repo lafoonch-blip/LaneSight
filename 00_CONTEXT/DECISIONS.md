@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.22  
+Version: 1.23  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.21
+Supersedes: v1.22
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -593,6 +593,18 @@ Other rules:
 **Date:** 2026-10-25
 **Status:** ACCEPTED (Dev Build v0 designs 3.4). On-time windows and thresholds are provisional owner settings until validated on real clips.
 **Supersedes:** FORM_ANALYSIS_SPEC §2 honesty note ("never as a grade") for these owner-defined checkpoints; DEC-046 in part (a bowler may set a swing-timing baseline in Profile; other self-set targets still wait for the Coaching tab).
+
+### DEC-058 — Bowler notes on every shot, stored for comparison
+**Decision:**
+- Every shot card ends with **Your notes on this shot**: free text plus optional quick tags (Hit my target, Missed left, Missed right, Pocket, Light, High, Felt good, Pulled it). Notes autosave.
+- Notes are stored with the shot (`shot_note`: text, tags, timestamps), visible only to the bowler and the owner, and deleted with the shot or account.
+- Notes and tags are included in the session CSV export and are available for owner analysis: compare what the bowler saw (e.g. "light", "missed right") with the measured metrics to find metric errors and tune rules.
+- Notes never change any measured value, the LaneSight Score or achievements.
+
+**Why:** The bowler's own observation at the lane is the fastest check on whether a measurement or recommendation was right.
+**Date:** 2026-10-25
+**Status:** ACCEPTED (Dev Build v0 designs 3.6)
+**Supersedes:** —
 
 ## Superseded decisions
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).

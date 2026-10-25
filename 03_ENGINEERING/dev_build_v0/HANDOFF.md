@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.6
+Version: 1.7
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -107,6 +107,7 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
     - `capture_mode` (`shot` | `form`), `bowler_in_view`
     - `source` (`live` | `upload`)
   - `session_feedback`: `session_id`, `user_id`, `rating` 1–5, `tags[]`, `text`, `diagnostics` jsonb, versions, `created_at`
+  - `shot_note` (DEC-058): `shot_id`, `user_id`, `text`, `tags[]` (Hit my target · Missed left · Missed right · Pocket · Light · High · Felt good · Pulled it), `created_at`, `updated_at`; owner-only RLS; deleted with the shot/account
   - account deletion cascade check
 - [ ] **008 oil patterns:** a library table for published patterns (`name`, `length`, `volume`, `ratio`, `source_url`, `source`, `fetched_at`). Seed House shot / Unknown, plus an importer stub with a refresh job **design**. Source research and import can follow, but the Setup screen needs the table and seeds.
 - [ ] Seed the `L-dev-0` formula version, the achievement definitions (SCORE_TIERS §4; FORM-001/002 active, per DEC-051) and the starter rules (BENCHMARKS §3.1, §5.2) from YAML in `lanesight-core/rules/`.
@@ -175,7 +176,8 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
 | Activity | `GET /me/activity` |
 | Stats | `GET /me/stats?view=score|throw|form&range=` (includes metric coverage + top failure reasons) |
 | Feedback | `POST /sessions/{id}/feedback` |
-| Export | `GET /sessions/{id}/export.csv` (all metrics, statuses, reasons, timings, sensor flag, feedback) |
+| Export | `GET /sessions/{id}/export.csv` (all metrics, statuses, reasons, timings, sensor flag, feedback, shot notes + tags) |
+| Shot notes | `PUT /shots/{id}/note` (text + tags; autosave, last write wins) · returned in `GET /shots/{id}` |
 | Account | `DELETE /me` (full deletion incl. videos on the Mac) |
 | Admin | `/admin/*` rules, references, achievements, formula params, replay-test, publish, reset: **owner only**, never used by the app |
 
