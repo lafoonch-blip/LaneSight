@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.3
+Version: 1.4
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -143,6 +143,7 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
   - an unanalyzable shot never breaks a streak
 - [ ] **Form P1** (`analyze_form_clip`):
   - swing phase splits, swing time, approach time, step count, ball-start step, rhythm, finish hold, backswing height (relative)
+  - **Key-position thumbnails (designs 3.3):** export frames for `ball_start` (E2), `end_of_pushaway` (E3, the event that ends the pushaway split), `top_of_swing` (E4) and `release` (E7) — drop `finish` from `KEY_FRAME_EVENTS` in `form/pose.py`. Crop each to the bowler's pose bounding box (with margin) for the thumbnail; keep the full frame for tap-to-open. A missing event → no tile image, never a substitute frame. No AI clean-up for now.
   - drift (rear view, best effort)
   - per-metric status + reason; capture view classifier
 - [ ] ~~**Bowler-in-view on shot clips**~~ **Deferred (DEC-056):** Shot Analysis returns shot metrics only and Form Analysis returns form metrics only. Don't run form metrics on Shot clips for now.

@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.2
+Version: 3.3
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -21,6 +21,11 @@ Last Updated: 2026-10-25
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
 ## Changelog
+- **3.3 (2026-10-25):** Form results › Key positions.
+  - Four positions: **Ball start · End of pushaway · Top of swing · Release** (Finish removed).
+  - Each tile is a thumbnail of the bowler, cropped from the clip frame at that event, with the event time under it. Tap opens the full frame.
+  - A position the pose engine didn't locate shows an empty tile with "not found", never a guessed frame.
+  - AI clean-up of thumbnails (e.g. background removal) is out of scope for the dev build.
 - **3.2 (2026-10-25):** shot and form metrics split by mode (DEC-056).
   - **Shot card** (Shot Analysis): the "Form from this clip" section is removed; subtitle says "Shot Analysis". Frame shortened to 1420 px.
   - **Form results** (Form Analysis) already show form metrics only; unchanged.
