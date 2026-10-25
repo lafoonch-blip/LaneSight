@@ -553,13 +553,15 @@ Other rules:
 ### DEC-055 — Uploads are standalone analyses; Home activity scope; disabled tabs
 **Decision:**
 - **Upload Video to Analyze is not a session.** An uploaded clip is analyzed on its own. It is never added to a live or practice session, and it never appears in Recent sessions or Home Recent activity.
+- **Uploads don't count.** Uploaded shots never feed Stats, the LaneSight Score, tiers or achievements.
+- **Where uploads live:** a separate **Uploads** list on the Lab tab, below Sessions. Each opens its shot result.
 - **Home Recent activity** shows only: completed practice sessions, achievement unlocks, and LaneSight tier (rank) changes. No other event types.
 - **Leagues and Tourneys tabs** are shown disabled (dimmed, not tappable) with no "Soon" / "Coming soon" label.
 - **Live session setup:** the bottom button on session setup reads "Start session" and opens the camera.
 
 **Why:** Keeps session history and activity limited to real practice and meaningful milestones.
 **Date:** 2026-10-25
-**Status:** ACCEPTED (Dev Build v0 designs 3.1). Open: whether an uploaded shot counts toward Stats and the LaneSight Score, and where past uploads are listed.
+**Status:** ACCEPTED (Dev Build v0 designs 3.1)
 **Supersedes:** the "Add to session" option on the Upload screen (designs ≤3.0) and the "Soon" / "Coming soon" label on the Leagues and Tournaments tabs.
 
 ## Superseded decisions

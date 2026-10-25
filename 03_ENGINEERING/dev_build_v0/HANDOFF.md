@@ -276,7 +276,7 @@ Open the `.dc.html` files in a browser to view them; `canvas.json` gives titles 
 
 **Navigation:**
 - Bottom tabs: Home · Stats · Lab · Leagues · Tourneys. Leagues and Tourneys are disabled (dimmed, no "Soon" label).
-- Upload Video is a standalone analysis, not a session. Home Recent activity shows only practice sessions, achievements and tier changes (DEC-055).
+- Upload Video is a standalone analysis, not a session, and never counts toward Stats, Score, tiers or achievements. Past uploads are listed in Lab › Uploads. Home Recent activity shows only practice sessions, achievements and tier changes (DEC-055).
 - The avatar on Home opens Profile; the gear opens Settings; Settings → Developer opens the Dev panel.
 - Onboarding: Welcome → Create account → Profile setup → Add ball → Ball setup → Home.
 

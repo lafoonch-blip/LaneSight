@@ -22,7 +22,7 @@ Last Updated: 2026-10-25
 
 ## Changelog
 - **3.1 (2026-10-25):** uploads, recent activity, tabs, setup button (DEC-055).
-  - **Upload is not a session.** Upload video no longer has an "Add to session" row; the screen says uploads aren't saved as a session. An uploaded clip never appears in Recent sessions or Recent activity.
+  - **Upload is not a session.** Upload video no longer has an "Add to session" row; the screen says uploads aren't saved as a session. An uploaded clip never appears in Recent sessions or Recent activity, and never counts toward Stats, the LaneSight Score, tiers or achievements (so its shot card shows no score/achievement nudges). Past uploads are listed under **Lab › Uploads**, below Sessions.
   - **Home Recent activity** shows only practice sessions, achievements and LaneSight tier (rank) changes. The sample "Consistency up 6 this week" row became a tier change.
   - **Leagues and Tourneys tabs** are disabled (dimmed, not tappable) with no "Soon" label (Home, Stats, Lab).
   - **Session setup** (Lab › Start Live Session) bottom button reads **Start session** (was "Set up camera"); it still opens the camera.
