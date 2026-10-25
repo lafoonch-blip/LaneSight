@@ -25,7 +25,7 @@ _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion'
 # speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
 # location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
 _PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style',
-                 'approach_steps', 'form_baseline'}
+                 'approach_steps', 'form_baseline', 'location'}
 
 
 def _profile_in(data: dict) -> dict:
@@ -38,7 +38,7 @@ def _profile_in(data: dict) -> dict:
         out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
     if d.get('dob'):
         out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
-    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline'):
+    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location'):
         if d.get(k) is not None:
             out[k] = d[k]
     return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
@@ -50,6 +50,7 @@ def _profile_out(row: dict | None) -> dict | None:
     r = dict(row)
     r['handedness'] = {'R': 'right', 'L': 'left'}.get(r.get('handed'))   # alias the app reads
     r.setdefault('name', r.get('display_name'))
+    r['has_avatar'] = bool(r.get('avatar_path'))                         # the app shows the photo when set
     return r
 
 
@@ -125,6 +126,20 @@ class MemoryStore:
         p = dict(self.profiles.get(user_id, {}), user_id=user_id, **_profile_in(data))
         self.profiles[user_id] = p
         return _profile_out(p)
+
+    def set_avatar(self, user_id, path, updated_at):
+        self.profiles[user_id] = dict(self.profiles.get(user_id, {}), user_id=user_id,
+                                      avatar_path=path, avatar_updated_at=updated_at)
+
+    def get_avatar(self, user_id):
+        p = self.profiles.get(user_id) or {}
+        return {'avatar_path': p.get('avatar_path'), 'avatar_updated_at': p.get('avatar_updated_at')}
+
+    def clear_avatar(self, user_id):
+        p = self.profiles.get(user_id)
+        if p:
+            p['avatar_path'] = None
+            p['avatar_updated_at'] = None
 
     def list_sensors(self, user_id):
         return [s for s in self.sensors.values() if s['user_id'] == user_id]
@@ -699,6 +714,17 @@ class PgStore(MemoryStore):
         row = {'user_id': user_id, **_profile_in(data)}
         self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
         return self.get_profile(user_id)
+
+    def set_avatar(self, user_id, path, updated_at):
+        self._req('profiles', 'POST', {'user_id': user_id, 'avatar_path': path, 'avatar_updated_at': updated_at},
+                  prefer='resolution=merge-duplicates,return=minimal')
+
+    def get_avatar(self, user_id):
+        rows = self._get('profiles', f'user_id=eq.{user_id}&select=avatar_path,avatar_updated_at')
+        return rows[0] if rows else {'avatar_path': None, 'avatar_updated_at': None}
+
+    def clear_avatar(self, user_id):
+        self._req(f'profiles?user_id=eq.{user_id}', 'PATCH', {'avatar_path': None, 'avatar_updated_at': None})
 
     def list_sensors(self, user_id):
         return self._get('sensor_devices', f'user_id=eq.{user_id}&select=*')

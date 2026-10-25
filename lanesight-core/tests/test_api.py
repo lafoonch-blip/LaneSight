@@ -64,6 +64,36 @@ def test_report_pins_recomputes_state():
     assert client.post(f"/shots/{empty['id']}/pins", json={'strike': True}, headers=H).status_code == 409
 
 
+def test_profile_location_round_trips():
+    # handoff G: PUT /me/profile no longer silently drops `location` (column added in 017).
+    client.put('/me/profile', json={'name': 'Shayne', 'location': 'Sunset Lanes'}, headers={'X-Dev-User': 'uLoc'})
+    p = client.get('/me/profile', headers={'X-Dev-User': 'uLoc'}).json()
+    assert p['location'] == 'Sunset Lanes' and p['has_avatar'] is False
+
+
+def test_avatar_put_get_delete():
+    from io import BytesIO
+    from PIL import Image
+    Hp = {'X-Dev-User': 'uAv'}
+    buf = BytesIO(); Image.new('RGB', (900, 600), (180, 40, 40)).save(buf, format='PNG')
+    r = client.put('/me/avatar', files={'file': ('p.png', buf.getvalue(), 'image/png')}, headers=Hp)
+    assert r.status_code == 200 and r.json()['has_avatar'] is True and r.json()['avatar_updated_at']
+    assert client.get('/me/profile', headers=Hp).json()['has_avatar'] is True
+    g = client.get('/me/avatar', headers=Hp)
+    assert g.status_code == 200 and g.headers['content-type'] == 'image/jpeg'
+    # the processed avatar is a 512x512 JPEG
+    assert Image.open(BytesIO(g.content)).size == (512, 512)
+    assert client.delete('/me/avatar', headers=Hp).json()['has_avatar'] is False
+    assert client.get('/me/avatar', headers=Hp).status_code == 404
+
+
+def test_avatar_rejects_oversize_and_garbage():
+    Hp = {'X-Dev-User': 'uAv2'}
+    big = b'0' * (10 * 1024 * 1024 + 1)
+    assert client.put('/me/avatar', files={'file': ('big.jpg', big, 'image/jpeg')}, headers=Hp).status_code == 413
+    assert client.put('/me/avatar', files={'file': ('x.jpg', b'not-an-image', 'image/jpeg')}, headers=Hp).status_code == 415
+
+
 def test_upload_dedupe_returns_existing_shot():
     import hashlib
     store = get_store()

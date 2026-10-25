@@ -437,6 +437,81 @@ def get_profile(user=Depends(current_user)):
 def put_profile(body: dict, user=Depends(current_user)):
     return get_store().put_profile(user, body or {})
 
+
+# ----------------------------------------------------------------- profile photo (handoff G)
+_AVATAR_MAX_BYTES = 10 * 1024 * 1024
+_AVATAR_DIR = DATA_ROOT / 'avatars'
+
+
+def _iso_now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _process_avatar(data: bytes) -> bytes:
+    """Decode (Pillow; HEIC/HEIF falls back to the Mac host's `sips`), apply EXIF orientation then STRIP all
+    metadata (incl. GPS), centre-crop square, 512 px, re-encode JPEG. Raises ValueError if unreadable."""
+    from io import BytesIO
+    from PIL import Image, ImageOps
+    try:
+        img = Image.open(BytesIO(data)); img.load()
+    except Exception:
+        import subprocess, tempfile, os as _os
+        with tempfile.TemporaryDirectory() as td:          # HEIC (no pillow-heif): transcode with sips
+            src, dst = _os.path.join(td, 'in'), _os.path.join(td, 'out.jpg')
+            with open(src, 'wb') as f:
+                f.write(data)
+            r = subprocess.run(['sips', '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+            if r.returncode != 0 or not _os.path.exists(dst):
+                raise ValueError('unsupported image format')
+            img = Image.open(dst); img.load()
+    img = ImageOps.exif_transpose(img).convert('RGB')       # honor orientation, drop alpha
+    s = min(img.size); left = (img.width - s) // 2; top = (img.height - s) // 2
+    img = img.crop((left, top, left + s, top + s)).resize((512, 512), Image.LANCZOS)
+    out = BytesIO()
+    img.save(out, format='JPEG', quality=85)                # no exif= argument -> metadata/GPS stripped
+    return out.getvalue()
+
+
+@app.put('/me/avatar')
+async def put_avatar(file: UploadFile = File(...), user=Depends(current_user)):
+    data = await file.read()
+    if len(data) > _AVATAR_MAX_BYTES:
+        raise HTTPException(413, 'image too large (max 10 MB)')
+    try:
+        jpeg = _process_avatar(data)
+    except ValueError:
+        raise HTTPException(415, 'unsupported image — send HEIC, JPEG or PNG')
+    _AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+    rel = f'avatars/{user}.jpg'
+    (DATA_ROOT / rel).write_bytes(jpeg)
+    ts = _iso_now()
+    get_store().set_avatar(user, rel, ts)
+    return {'has_avatar': True, 'avatar_updated_at': ts}
+
+
+@app.get('/me/avatar')
+def get_avatar(user=Depends(current_user)):
+    path = (get_store().get_avatar(user) or {}).get('avatar_path')
+    full = (DATA_ROOT / path) if path else None
+    if not full or not full.exists():
+        raise HTTPException(404, 'no avatar set')
+    return FileResponse(str(full), media_type='image/jpeg')
+
+
+@app.delete('/me/avatar')
+def delete_avatar(user=Depends(current_user)):
+    store = get_store()
+    path = (store.get_avatar(user) or {}).get('avatar_path')
+    if path:
+        try:
+            (DATA_ROOT / path).unlink()
+        except OSError:
+            pass
+    store.clear_avatar(user)
+    return {'has_avatar': False}
+
+
 @app.get('/me/sensors')
 def list_sensors(user=Depends(current_user)):
     return get_store().list_sensors(user)
@@ -620,7 +695,13 @@ def delete_me(user=Depends(current_user)):
     store = get_store()
     session_ids = [s['id'] for s in store.list_sessions(user)]
     shot_ids = [sh['id'] for sh in store.user_shots(user)]
+    avatar_path = (store.get_avatar(user) or {}).get('avatar_path') if hasattr(store, 'get_avatar') else None
     store.delete_user(user)                                   # auth user + cascaded rows (live)
+    if avatar_path:                                           # remove the user's photo on this Mac
+        try:
+            (DATA_ROOT / avatar_path).unlink()
+        except OSError:
+            pass
     for sid in session_ids:                                   # remove the user's videos on this Mac
         shutil.rmtree(DATA_ROOT / 'sessions' / sid, ignore_errors=True)
     for shid in shot_ids:
