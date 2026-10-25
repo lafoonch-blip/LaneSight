@@ -64,6 +64,22 @@ def test_report_pins_recomputes_state():
     assert client.post(f"/shots/{empty['id']}/pins", json={'strike': True}, headers=H).status_code == 409
 
 
+def test_upload_dedupe_returns_existing_shot():
+    import hashlib
+    store = get_store()
+    data = b'fake-clip-bytes-for-dedupe'
+    h = hashlib.sha256(data).hexdigest()
+    # seed a prior standalone upload with this content hash
+    prior = store.create_shot('u1', None, {'source': 'upload'})
+    store.set_content_hash(prior['id'], h)
+    # an identical re-upload short-circuits to the existing shot (never runs analysis)
+    r = client.post('/uploads', files={'file': ('clip.mov', data, 'video/quicktime')},
+                    data={'metadata': '{}'}, headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get('duplicate') is True and body['shot_id'] == prior['id'] and 'job_id' not in body
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output

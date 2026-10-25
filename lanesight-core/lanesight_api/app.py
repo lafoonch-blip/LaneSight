@@ -500,15 +500,25 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     store = get_store()
     meta = json.loads(metadata or '{}')
     cfg, ub = _ball_link(store, user, meta)
+    # De-duplicate by content hash (handoff E): an identical re-upload returns the existing shot instead of
+    # running a second analysis. Read the bytes once; reuse them for the write below.
+    import hashlib
+    data = await file.read()
+    content_hash = hashlib.sha256(data).hexdigest()
+    dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+    if dup:
+        return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
     shot = store.create_shot(user, None, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                           'source': 'upload', 'sensor_used': meta.get('sensor_used'),
                                           'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
                                           'ball_configuration_id': cfg, 'user_ball_id': ub})
+    if hasattr(store, 'set_content_hash'):
+        store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / 'uploads'
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"
     with open(path, 'wb') as f:
-        f.write(await file.read())
+        f.write(data)
     job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, None,
                        mode=(meta.get('capture_mode') or 'shot'), is_upload=True)
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}

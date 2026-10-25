@@ -191,6 +191,19 @@ class MemoryStore:
             sh.update(patch)
         return sh
 
+    def set_content_hash(self, shot_id, content_hash):
+        sh = self.shots.get(shot_id)
+        if sh:
+            sh['content_hash'] = content_hash
+
+    def find_upload_by_hash(self, user_id, content_hash):
+        """An earlier standalone upload with the same clip bytes (DEC-055 dedupe), or None."""
+        if not content_hash:
+            return None
+        return next((sh for sh in self.shots.values()
+                     if sh.get('user_id') == user_id and sh.get('source') == 'upload'
+                     and sh.get('content_hash') == content_hash), None)
+
     def shots_for_session(self, session_id):
         return [sh for sh in self.shots.values() if sh['session_id'] == session_id]
 
@@ -619,6 +632,24 @@ class PgStore(MemoryStore):
         if any(v is not None for v in cols.values()):
             self._req('shot_intents', 'POST', {'shot_id': sh['id'], **cols})
         return sh
+
+    def set_content_hash(self, shot_id, content_hash):
+        # Best-effort: the content_hash column lands in migration 016. Until then this no-ops (and dedupe stays
+        # off) rather than failing the upload, so applying 016 is non-breaking.
+        try:
+            self._req(f'shots?id=eq.{shot_id}', 'PATCH', {'content_hash': content_hash})
+        except Exception:
+            pass
+
+    def find_upload_by_hash(self, user_id, content_hash):
+        if not content_hash:
+            return None
+        try:
+            rows = self._get('shots', f"user_id=eq.{user_id}&source=eq.upload&"
+                                       f"content_hash=eq.{content_hash}&select=*&limit=1")
+        except Exception:
+            return None                                    # column absent (pre-016) -> dedupe disabled
+        return rows[0] if rows else None
 
     def save_shot_result(self, shot_id, record, result):
         MemoryStore.save_shot_result(self, shot_id, record, result)
