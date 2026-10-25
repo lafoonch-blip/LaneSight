@@ -24,7 +24,8 @@ _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion'
 # profiles has columns display_name/handed/style/units/usbc_id/dob/delivery_style/approach_steps. The app
 # speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
 # location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
-_PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style', 'approach_steps'}
+_PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style',
+                 'approach_steps', 'form_baseline'}
 
 
 def _profile_in(data: dict) -> dict:
@@ -37,7 +38,7 @@ def _profile_in(data: dict) -> dict:
         out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
     if d.get('dob'):
         out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
-    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps'):
+    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline'):
         if d.get(k) is not None:
             out[k] = d[k]
     return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
@@ -316,6 +317,17 @@ class MemoryStore:
     def drills(self):
         from .rules_seed import DRILLS
         return [dict(d) for d in DRILLS]
+
+    # Form swing-timing baseline (DEC-057 §0.4): stored on the profile as jsonb. Shapes:
+    #   {'mode': 'entered', 'pushaway_time':…, 'backswing_time':…, 'downswing_time':…, 'release_time':…,
+    #    'total':…, 'set_at':…}  — the values the bowler typed in Profile › Form baseline.
+    #   {'mode': 'average'}      — "use my average": the engine fills it from the view='form' baselines.
+    # None  — no baseline set yet (the Form card shows "building" + a prompt).
+    def get_form_baseline(self, user_id):
+        return (self.get_profile(user_id) or {}).get('form_baseline')
+
+    def set_form_baseline(self, user_id, baseline):
+        return self.put_profile(user_id, {'form_baseline': baseline})
 
     def completed_sessions(self, user_id):
         return [s for s in self.list_sessions(user_id) if s.get('ended_at')]

@@ -68,14 +68,20 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
                                                           note='not returned by pose backend'))
                         for k, u in FORM_P1]
         status = 'ok'
+    # Form fundamentals v1 measured positions M1–M7 (DEC-057): surface the pose geometry, then gate each by
+    # the actual capture view (a position its view can't support becomes unavailable with a reason).
+    from .fundamentals import gate_positions
+    measured_positions = gate_positions(extras.get('measured_positions') or {}, view)
     return dict(
         form_version=FORM_VERSION, view=view, status=status,
         measurements=measurements,
         metrics={mm['metric']: mm for mm in measurements},
         handed=handed,
         # diagnostics the Form screen needs beyond the P1 metric tiles: the exported KEY POSITIONS stills,
-        # the located event times, and clip fps. The form engine step adds baselines/watch/focus/footer.
+        # the located event times, the measured positions, and clip fps. The form engine step adds
+        # baselines/watch/focus/timing-checkpoints/swing-timing/footer.
         key_frames=extras.get('key_frames', []),
         events=extras.get('events', {}),
+        measured_positions=measured_positions,
         fps=extras.get('fps'),
     )

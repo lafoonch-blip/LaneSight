@@ -539,16 +539,35 @@ def _backswing_display(rel):
     return 'Shoulder'
 
 
-# --- key-position frame export (design "KEY POSITIONS": ball start, top of swing, release, finish) ---
-# Each maps to a located swing/approach event time; only frames the pose actually found are exported.
-KEY_FRAME_EVENTS = (('ball_start', 'E2'), ('top_of_swing', 'E4'), ('release', 'E7'), ('finish', 'hold_start'))
+# --- key-position frame export (design "KEY POSITIONS": ball start, end of pushaway, top of swing, release) ---
+# Each maps to a located swing event time (DEC-057 / FORM_BENCHMARKS §0.2); only frames the pose actually
+# found are exported, cropped to the bowler (so the thumbnail is the bowler, not the whole lane).
+KEY_FRAME_EVENTS = (('ball_start', 'E2'), ('end_pushaway', 'E3'), ('top_of_swing', 'E4'), ('release', 'E7'))
 
 
-def export_key_frames(video, out_prefix, events, log=print) -> list:
+def _bowler_crop(lms, idx, pad=0.22):
+    """Normalized (x0, y0, x1, y1) bounding box of the visible pose at frame `idx`, padded, clamped 0..1.
+    Returns None if the pose wasn't found on that frame (caller then keeps the full frame)."""
+    if idx is None or idx >= len(lms):
+        return None
+    row = lms[idx]
+    vis = row[:, 3]
+    ok = (vis > MIN_VIS) & ~np.isnan(row[:, 0]) & ~np.isnan(row[:, 1])
+    if ok.sum() < 6:
+        return None
+    xs, ys = row[ok, 0], row[ok, 1]
+    x0, x1 = float(np.min(xs)), float(np.max(xs))
+    y0, y1 = float(np.min(ys)), float(np.max(ys))
+    px, py = pad * max(x1 - x0, 0.04), pad * max(y1 - y0, 0.04)
+    return (max(0.0, x0 - px), max(0.0, y0 - py), min(1.0, x1 + px), min(1.0, y1 + py))
+
+
+def export_key_frames(video, out_prefix, events, crops=None, log=print) -> list:
     """Write a JPEG for each located key position to ``<out_prefix>_form_<key>.jpg`` and return the keys
     actually written (in canonical order). Event times come from the pose ``_extras`` block; a missing event
-    is skipped (no frame, no fabrication). Best-effort: any decode/write failure is logged and omitted, never
-    raised — the visual stills must not break the numeric analysis."""
+    is skipped (no frame, no fabrication). `crops` maps a key -> normalized (x0,y0,x1,y1) bowler box; when
+    present the frame is cropped to the bowler before writing. Best-effort: any decode/write failure is
+    logged and omitted, never raised — the visual stills must not break the numeric analysis."""
     if not out_prefix or not events:
         return []
     try:
@@ -560,6 +579,7 @@ def export_key_frames(video, out_prefix, events, log=print) -> list:
             if events.get(ev) is not None}
     if not want:
         return []
+    crops = crops or {}
     try:
         pts = frame_times(video)
         if not len(pts):
@@ -579,9 +599,17 @@ def export_key_frames(video, out_prefix, events, log=print) -> list:
             if not ok:
                 break
             if i in need:
+                h, w = img.shape[:2]
                 for key in need.pop(i):
+                    frame = img
+                    box = crops.get(key)
+                    if box:
+                        x0 = max(0, int(box[0] * w)); y0 = max(0, int(box[1] * h))
+                        x1 = min(w, int(box[2] * w)); y1 = min(h, int(box[3] * h))
+                        if x1 - x0 >= 8 and y1 - y0 >= 8:
+                            frame = img[y0:y1, x0:x1]
                     path = f'{out_prefix}_form_{key}.jpg'
-                    if cv2.imwrite(path, img):
+                    if cv2.imwrite(path, frame):
                         written.add(key)
             i += 1
         cap.release()
@@ -629,6 +657,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
         out['slide_length'] = _unavail('slide_length', 'inch', _VALIDATING_REASON)
         extras['events'] = {}
         extras['key_frames'] = []
+        extras['measured_positions'] = {}
         out['_extras'] = extras
         return out
 
@@ -662,6 +691,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
         extras.setdefault('events', {k: (None if v is None else round(v, 3)) for k, v in
                                      dict(E2=E2, E3=E3, E4=E4, E6=E6, E7=E7).items()})
         extras['key_frames'] = []
+        extras['measured_positions'] = {}
         out['_extras'] = extras
         return out
 
@@ -800,11 +830,24 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                                           uncertainty=2 * unc)
     extras['tempo_ratio'] = _m('tempo_ratio', tempo, 'ratio', 0.5 if tempo else 0.0,
                                be if tempo else 'unavailable', note='downswing / backswing (ref 0.51)')
+    # E5 slide start = slide-foot plant; E8 slide stop = start of the posted finish hold (FORM_ANALYSIS_SPEC §3).
+    # These feed the T3 (E4−E5) and T4 (E7−E8) timing checkpoints (DEC-057).
     extras['events'] = {k: (None if v is None else round(v, 3)) for k, v in
-                        dict(E2=E2, E3=E3, E4=E4, E6=E6, E7=E7, first_step=first_step,
-                             slide_plant=slide_plant, hold_start=hold_start, hold_end=hold_end).items()}
-    # export the design's four KEY POSITIONS stills at the located event times (only those the pose found)
-    extras['key_frames'] = export_key_frames(video, out_prefix, extras['events'], log=log)
+                        dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=hold_start,
+                             first_step=first_step, slide_plant=slide_plant,
+                             hold_start=hold_start, hold_end=hold_end).items()}
+    # export the design's four KEY POSITIONS stills at the located event times, cropped to the bowler
+    # (only those the pose found)
+    crops = {key: _bowler_crop(lms, int(np.argmin(np.abs(t - float(extras['events'][ev])))))
+             for key, ev in KEY_FRAME_EVENTS if extras['events'].get(ev) is not None}
+    extras['key_frames'] = export_key_frames(video, out_prefix, extras['events'], crops=crops, log=log)
+    # Form fundamentals v1 measured positions M1–M7 (DEC-057). View-agnostic geometry here; analyze_form_clip
+    # applies the capture-view gating. Imported lazily to keep pose import-light and avoid an import cycle.
+    from . import fundamentals as _fund
+    pos_events = dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=hold_start,
+                      first_step=first_step, slide_plant=slide_plant,
+                      hold_start=hold_start, hold_end=hold_end)
+    extras['measured_positions'] = _fund.measured_positions(t, lms, pos_events, torso, handed, out)
     extras['strikes'] = [(round(x, 3), lab) for x, lab in seq]
     extras['slowmo'] = dict(is_slowmo=is_slow, factor=factor, note=slownote,
                             raw_step_intervals=[round(v, 3) for v in raw_intervals],

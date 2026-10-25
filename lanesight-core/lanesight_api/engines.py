@@ -510,6 +510,8 @@ def after_form_analyzed(store, user_id, session_id, record, analyze_seconds=None
     counted once (it is not yet persisted, so read_form_records returns strictly prior deliveries).
     `persist=False` for standalone uploads (DEC-055): the form card still renders focus/footer, but no
     baseline is stored, so the upload never feeds the user's Stats."""
+    from lanesight_core.form import (timing_checkpoints, coaching_cues, swing_timing,
+                                     DEFAULT_TIMING_WINDOWS, FUNDAMENTALS_VERSION)
     cfg = store.engine_config() or {}
     min_n = int(cfg.get('baseline_min_n', 10))
     window_days = store.score_formula_params().get('window_days')
@@ -518,14 +520,51 @@ def after_form_analyzed(store, user_id, session_id, record, analyze_seconds=None
     _attach_baselines_and_watch(record, bases, record)
     focus = _form_focus(store, record, bases, history, record)
     record['focus'] = focus
+
+    # --- Form fundamentals v1 (DEC-057, FORM_BENCHMARKS §0) ---
+    profile = store.get_profile(user_id) or {}
+    windows = cfg.get('form_timing_windows') or DEFAULT_TIMING_WINDOWS
+    # T1–T4 early/on-time/late verdicts against the owner windows (unavailable + reason when unsupported)
+    checkpoints = timing_checkpoints(record, windows=windows, approach_steps=profile.get('approach_steps'))
+    record['timing_checkpoints'] = checkpoints
+    # M1–M7 measured positions already carry the pose geometry + view gating; enrich the M7 pendulum proxy
+    # with the measured downswing-vs-baseline context and the T4 leverage verdict (no fabrication).
+    positions = record.get('measured_positions') or {}
+    _enrich_pendulum(positions, bases, checkpoints.get('T4'))
+    record['measured_positions'] = positions
+    # swing-timing comparison vs the Profile baseline (entered or "use my average"); honest building otherwise
+    form_baseline = store.get_form_baseline(user_id)
+    record['swing_timing'] = swing_timing(record, form_baseline=form_baseline, bases=bases)
+    # §0.3 hand/wrist coaching cues — text only, never a measured result
+    record['coaching_cues'] = coaching_cues()
+
     rules_version = max((int(r.get('version', 1) or 1) for r in store.form_rules()), default=1)
     record['footer'] = {
         'analyzed_s': round(float(analyze_seconds), 1) if analyze_seconds is not None else None,
         'form_version': record.get('form_version'),
         'rules_version': rules_version,
+        'fundamentals_version': FUNDAMENTALS_VERSION,
     }
     return {'focus': focus, 'key_frames': record.get('key_frames', []),
+            'timing_checkpoints': checkpoints, 'measured_positions': positions,
+            'swing_timing': record['swing_timing'], 'coaching_cues': record['coaching_cues'],
             'n_form_deliveries': len(history) + 1, 'footer': record['footer']}
+
+
+def _enrich_pendulum(positions, bases, t4):
+    """Fill in the M7 pendulum proxy context: downswing vs the personal baseline and the T4 leverage verdict.
+    Only ever annotates a measured proxy — never invents a value."""
+    p = (positions or {}).get('pendulum')
+    if not p or p.get('status') == 'unavailable':
+        return
+    base = (bases or {}).get('downswing_time')
+    if base and base.get('established') and base.get('median') is not None and p.get('value') is not None:
+        delta = round(p['value'] - base['median'], 3)
+        p['baseline_downswing'] = base['median']
+        p['vs_baseline'] = delta
+        p['note'] = (p.get('note') or '') + f' Downswing {p["value"]:.2f} s vs baseline {base["median"]:.2f} s.'
+    if t4 and t4.get('verdict'):
+        p['leverage_verdict'] = t4['verdict']
 
 
 def at_session_end(store, user_id, session_id):

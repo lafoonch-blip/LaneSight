@@ -25,6 +25,20 @@ ENGINE_CONFIG = {
     'confidence_min': 0.5,
     'repetition_rule': 3,
     'focus_hold_shots': 10,
+    # Form fundamentals v1 timing-checkpoint on-time windows (DEC-057, FORM_BENCHMARKS §0.1). Owner-editable.
+    # PROVISIONAL start values — must be tuned on real clips before they're presented as validated. Each
+    # verdict is early if offset < low, late if offset > high, on time in between.
+    #   T1 pushaway: ball ±1 in of the ball-side thigh line (needs a side view + scale to measure)
+    #   T2 ball-start step: exact (4-step → step 1, 5-step → step 2)
+    #   T3 backswing apex vs slide start (E4−E5): ±0.05 s
+    #   T4 leverage window, release after slide stop (E7−E8): 0 → +0.10 s
+    'form_timing_windows': {
+        'T1': {'unit': 'in', 'low': -1.0, 'high': 1.0},
+        'T2': {'unit': 'step', 'low': 0.0, 'high': 0.0},
+        'T3': {'unit': 's', 'low': -0.05, 'high': 0.05},
+        'T4': {'unit': 's', 'low': 0.0, 'high': 0.10},
+        'provisional': True,
+    },
 }
 
 # --------------------------------------------------------------------- style templates (L1)
