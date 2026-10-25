@@ -1,5 +1,5 @@
 from lanesight_core.insights.reading import read_hit, read_leave, classify_shot, execution_check
-from lanesight_core.insights.adjust import strike_adjustment
+from lanesight_core.insights.adjust import strike_adjustment, far_lane_unreliable, project_breakpoint
 from lanesight_core.insights.spares import spare_plan, key_pin
 
 def test_read_hit_rh_lh():
@@ -56,6 +56,74 @@ def test_pocket_light_leave_adds_angle():
     assert r['leave']['read'] == 'light' and r['leave']['hidden'] == [9] and rec['type'] == 'move' and rec['direction'] == 'right'
     r = strike_adjustment(dict(entry_board=17.4, entry_angle_deg=3.2, pins_standing={10}))
     assert r['recommendations'][0]['type'] == 'release'
+
+
+def _no_move(rec):
+    """A recommendation that is not an actionable line move: no feet/target shift and no off-lane breakpoint."""
+    bp = rec.get('breakpoint_board')
+    return (not rec.get('move_feet')) and (not rec.get('move_target')) and (bp is None or 1.0 <= bp <= 39.0)
+
+
+def test_far_lane_unreliable_speed_and_lateral():
+    # Primary signal: late speed faster than early speed beyond the noise band (shot 14b234c8).
+    bad, why = far_lane_unreliable(dict(speed_early=15.8, speed_late=19.4))
+    assert bad and why and 'speed' in why.lower()
+    # Within the noise band (max(0.5 mph, 3%)) is tolerated.
+    assert not far_lane_unreliable(dict(speed_early=16.0, speed_late=16.4))[0]
+    # A real ball slows down -> plausible.
+    assert not far_lane_unreliable(dict(speed_early=17.0, speed_late=15.5))[0]
+    # Missing speeds -> no primary signal.
+    assert not far_lane_unreliable(dict(entry_board=17.0))[0]
+    # Secondary signal: a lateral jump >3 boards between neighbouring trajectory samples.
+    traj = {'lane': [{'board': 10.0, 'z_ft': 40.0}, {'board': 14.8, 'z_ft': 42.5}, {'board': 2.0, 'z_ft': 57.0}]}
+    assert far_lane_unreliable(dict(speed_early=15.0, speed_late=14.0, trajectory=traj))[0]
+
+
+def test_corrupt_far_lane_shot_14b234c8_suppresses_move():
+    # Regression for SHOT_REVIEW 2026-10-25 (upload 14b234c8): far-lane metrics are corrupt
+    # (late speed 19.4 > early 15.8) and the deck is unreadable (pins_standing None). The engine must NOT
+    # convert that into a confident move; it returns a single low-confidence "no move" rec with no off-lane
+    # breakpoint. (Corrected entry/speed numbers are the separate calibration fix, not asserted here.)
+    shot = dict(entry_board=10.5, entry_angle_deg=3.5, board_at_15ft=8.3, breakpoint_board=2.0,
+                speed_early=15.8, speed_late=19.4, pins_standing=None)
+    r = strike_adjustment(shot, handed='R')
+    recs = r['recommendations']
+    assert len(recs) == 1
+    rec = recs[0]
+    assert rec['type'] == 'none' and rec['confidence'] == 'low'
+    assert all(_no_move(x) for x in recs)
+    assert r['classification'] == 'LOW_CONFIDENCE'
+
+
+def test_unreadable_pins_no_move_even_with_plausible_speed():
+    # Pins unreadable but speeds plausible: still no line move (can't tell a strike from a miss).
+    r = strike_adjustment(dict(entry_board=10.5, entry_angle_deg=3.5, speed_early=16.0, speed_late=15.0,
+                               pins_standing=None), handed='R')
+    rec = r['recommendations'][0]
+    assert rec['type'] == 'none' and rec['confidence'] == 'low' and _no_move(rec)
+
+
+def test_move_size_capped_at_3_and_2():
+    # A big miss is capped at 3-and-2 for one shot; it must never emit the old feet-8/target-4 move.
+    r = strike_adjustment(dict(entry_board=28.0, entry_angle_deg=5.0, pins_standing={4, 7}))
+    m = r['recommendations'][0]
+    assert m['type'] == 'move' and m['move_feet'] <= 3 and m['move_target'] <= 2
+    assert 'boards' in m['reason'] and 'ft' not in m['reason'].split('(')[0]
+
+
+def test_project_breakpoint_clamped_to_lane():
+    # A straight-line projection that would land off the lane is clamped to 1..39, never 0/-1.
+    bp = project_breakpoint(30.0, 5.0, 43.0, {'approach_offset_ft': 15.0, 'arrows_ft': 15.0})
+    assert bp is not None and 1.0 <= bp <= 39.0
+
+
+def test_normal_plausible_shot_still_moves():
+    # Control: a plausible shot (late speed <= early, readable pins) still gets its normal move.
+    r = strike_adjustment(dict(entry_board=14.5, entry_angle_deg=4.5, speed_early=17.0, speed_late=15.8,
+                               pins_standing={3, 6, 10}))
+    m = r['recommendations'][0]
+    assert r['hit']['hit'] == 'light' and m['type'] == 'move' and m['direction'] == 'right'
+    assert m['move_feet'] and m['move_target']
 
 
 GEOM = {'approach_offset_ft': 15.0, 'arrows_ft': 15.0}

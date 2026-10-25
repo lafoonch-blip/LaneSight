@@ -9,17 +9,52 @@ from .reading import read_hit, read_leave, execution_check, classify_shot
 def _rec(kind, reason, evidence, confidence, **kw):
     return dict(type=kind, reason=reason, evidence=evidence, confidence=confidence, rules_version=RULES_VERSION, **kw)
 
+def _clamp_board(b):
+    """Keep a board on the lane: 1 (right gutter) .. 39 (left gutter). None stays None.
+    Guards against off-lane projections like the breakpoint-board 0/-1 seen in SHOT_REVIEW 2026-10-25."""
+    return None if b is None else float(min(39.0, max(1.0, b)))
+
+def far_lane_unreliable(shot: dict) -> tuple[bool, str | None]:
+    """Plausibility gate on far-lane metrics (SHOT_REVIEW 2026-10-25, fix #2). A real ball LOSES speed down
+    the lane, so a late speed that reads faster than the early speed (beyond measurement noise) means the
+    downlane depth scale is corrupt — entry board, entry angle, breakpoint and the speed split can't be
+    trusted. Noise band = max(0.5 mph, 3% of the early speed). Secondary signal (only checked when a
+    trajectory is attached to the shot dict): a lateral jump of more than 3 boards between neighbouring
+    samples. Returns (unreliable, reason)."""
+    early, late = shot.get('speed_early'), shot.get('speed_late')
+    if early is not None and late is not None:
+        noise = max(0.5, 0.03 * abs(early))
+        if late > early + noise:
+            return True, (f"Late speed ({late:.1f} mph) reads faster than early speed ({early:.1f} mph); "
+                          "a ball can't speed up down the lane, so the far-lane measurements are unreliable.")
+    traj = shot.get('trajectory')
+    samples = traj.get('lane') or traj.get('smoothed') if isinstance(traj, dict) else (traj if isinstance(traj, (list, tuple)) else None)
+    if samples:
+        boards = [p.get('board') for p in samples if isinstance(p, dict) and p.get('board') is not None]
+        for a, b in zip(boards, boards[1:]):
+            if abs(b - a) > 3.0:
+                return True, (f"The tracked path jumps {abs(b - a):.1f} boards between neighbouring samples; "
+                              "the far-lane track is unreliable.")
+    return False, None
+
+def _move_size(d):
+    """Single-shot move cap (SHOT_REVIEW fix #3): 2-and-1 (feet, target) normally, 3-and-2 for a large miss,
+    never more from one shot. Returns (move_feet, move_target, label)."""
+    if abs(d) >= 4.0:
+        return 3, 2, '3-and-2'
+    return 2, 1, '2-and-1'
+
 def project_breakpoint(feet_board, arrows_board, breakpoint_ft, geometry) -> float | None:
     """Board where the straight feet->arrows sight line reaches the breakpoint distance. The line runs from
     the stance (approach_offset_ft BEHIND the foul line) through the arrows (arrows_ft past the foul line);
     extend it to breakpoint_ft and round to the nearest whole board. Geometry constants come from
-    engine_config (owner-editable). None when any input is missing."""
+    engine_config (owner-editable). Clamped to the lane (1..39). None when any input is missing."""
     off = (geometry or {}).get('approach_offset_ft')
     af = (geometry or {}).get('arrows_ft')
     if None in (feet_board, arrows_board, breakpoint_ft, off, af) or (af + off) == 0:
         return None
     slope = (arrows_board - feet_board) / (af + off)        # boards per ft along the sight line
-    return float(round(arrows_board + slope * (breakpoint_ft - af)))
+    return _clamp_board(round(arrows_board + slope * (breakpoint_ft - af)))
 
 
 def apply_move(intent: dict | None, rec: dict | None, geometry=None, breakpoint_ft=None) -> dict | None:
@@ -37,7 +72,7 @@ def apply_move(intent: dict | None, rec: dict | None, geometry=None, breakpoint_
     sign = 1 if d == 'left' else -1
 
     def mv(cur, delta):
-        return round(cur + sign * delta, 1) if (cur is not None and delta) else cur
+        return _clamp_board(round(cur + sign * delta, 1)) if (cur is not None and delta) else cur
     new_feet = mv(intent.get('feet_board'), feet)
     new_arrows = mv(intent.get('arrows_board'), tgt)
     return dict(feet_board=new_feet, arrows_board=new_arrows,
@@ -64,38 +99,51 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
                   laydown_board=shot.get('board_at_0ft'))
     ex = execution_check(intent, actual)
     cls = classify_shot(hit, ex, user_said)
-    recs = []
     left, right = ('left', 'right') if handed == 'R' else ('right', 'left')
+    # Fail-safe plausibility gate (SHOT_REVIEW 2026-10-25, fix #2): if the far-lane metrics are physically
+    # implausible, don't convert corrupt numbers into a confident line move. No feet/target move, no
+    # breakpoint, no transition/pattern note — just a single low-confidence "no move" recommendation.
+    unreliable, why = far_lane_unreliable(shot)
+    if unreliable:
+        rec = _rec('none', 'Not enough reliable measurement to recommend a move.', dict(reason=why), 'low',
+                   low_confidence=True)
+        return dict(hit=hit, leave=leave, execution=ex, classification='LOW_CONFIDENCE', recommendations=[rec])
+    recs = []
     if cls == 'LOW_CONFIDENCE':
-        recs.append(_rec('none', 'Not enough reliable measurement to recommend a move.', {}, 'low'))
+        recs.append(_rec('none', 'Not enough reliable measurement to recommend a move.', {}, 'low', low_confidence=True))
     elif cls == 'EXECUTION_MISS':
         k, v = max(ex['off'].items(), key=lambda kv: abs(kv[1]))
         where = {'laydown_board': 'laydown', 'arrows_board': 'the arrows', 'breakpoint_board': 'the breakpoint'}[k]
         recs.append(_rec('execution', f"Missed your target by {abs(v):.1f} boards at {where}. Repeat the same line and hit your mark before moving.",
                          dict(intent=intent, actual=actual), 'high', move_feet=0, move_target=0))
+    elif leave.get('leave') == 'unknown':
+        # Unreadable deck (SHOT_REVIEW 2026-10-25, fix #3a): can't tell a strike from a miss, so no line move.
+        recs.append(_rec('none', "Can't confirm the result — the pins weren't readable, so I can't tell a strike "
+                         "from a miss. No line move on this shot.", dict(entry_board=shot.get('entry_board')),
+                         'low', low_confidence=True))
     elif leave.get('leave') == 'X' and hit['hit'] != 'brooklyn':
         note = '' if hit['hit'] == 'pocket' else (f" You carried it {abs(hit['boards_from_pocket']):.1f} boards "
                f"{'high' if hit['hit'] == 'high' else 'light'}; if it starts leaving "
-               f"{'4/7 pins or splits' if hit['hit'] == 'high' else '10/6-10 pins'}, move {left if hit['hit'] == 'high' else right} 2 and 1.")
+               f"{'4/7 pins or splits' if hit['hit'] == 'high' else '10/6-10 pins'}, move {left if hit['hit'] == 'high' else right} 2 boards and 1 (2-and-1).")
         recs.append(_rec('none', f"Strike. No adjustment: repeat the shot.{note}", dict(entry_board=shot.get('entry_board')),
                          'high' if hit['hit'] == 'pocket' else 'medium', watch=hit['hit'] if hit['hit'] != 'pocket' else None))
     else:
         d = hit.get('boards_from_pocket', 0.0)
         if hit['hit'] in ('high', 'brooklyn'):
-            n = min(4, max(1, round(abs(d) / 1.5)))
-            recs.append(_rec('move', f"{hit['reason']} Move {left}: feet {2 * n}, target {n} (2-and-1).",
+            feet, tgt, lab = _move_size(d)
+            recs.append(_rec('move', f"{hit['reason']} Move {left}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
-                             'medium' if cls == 'REACTION_CHANGE' else 'low', direction=left, move_feet=2 * n, move_target=n,
+                             'medium' if cls == 'REACTION_CHANGE' else 'low', direction=left, move_feet=feet, move_target=tgt,
                              note=None if cls != 'NO_INTENT' else 'Set your target line to separate a missed shot from a lane change.'))
         elif hit['hit'] == 'light':
-            n = min(4, max(1, round(abs(d) / 1.5)))
-            recs.append(_rec('move', f"{hit['reason']} Move {right}: feet {2 * n}, target {n} (2-and-1).",
+            feet, tgt, lab = _move_size(d)
+            recs.append(_rec('move', f"{hit['reason']} Move {right}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
-                             'medium' if cls == 'REACTION_CHANGE' else 'low', direction=right, move_feet=2 * n, move_target=n,
+                             'medium' if cls == 'REACTION_CHANGE' else 'low', direction=right, move_feet=feet, move_target=tgt,
                              note=None if cls != 'NO_INTENT' else 'Set your target line to separate a missed shot from a lane change.'))
         else:   # pocket
             if leave.get('read') == 'light':
-                recs.append(_rec('move', f"{hit['reason']} {leave.get('reason', '')} Move toward the miss: {right}, feet 2 and target 1.",
+                recs.append(_rec('move', f"{hit['reason']} {leave.get('reason', '')} Move toward the miss: {right}, feet 2 boards and target 1 board (2-and-1).",
                                  dict(entry_board=shot.get('entry_board'), leave=leave.get('leave')), 'low',
                                  direction=right, move_feet=2, move_target=1))
             elif leave.get('read') in ('weak_or_light', 'weak', 'slightly_light') or hit.get('angle') == 'flat':
@@ -126,8 +174,8 @@ def transition(history, shot, handed='R', min_shots=3, drift_boards=1.0):
     left, right = ('left', 'right') if handed == 'R' else ('right', 'left')
     if d_entry > 0:
         return _rec('transition', f"Over the last {len(good) + 1} comparable shots the ball is finishing {d_entry:.1f} boards higher: "
-                    f"the lane is hooking earlier. Move {left} (feet 2, target 1) or switch to a weaker ball.",
+                    f"the lane is hooking earlier. Move {left} (feet 2 boards, target 1 board) or switch to a weaker ball.",
                     dict(n=len(good) + 1, entry_drift=round(d_entry, 1)), 'medium', direction=left, move_feet=2, move_target=1)
     return _rec('transition', f"Over the last {len(good) + 1} comparable shots the ball is finishing {abs(d_entry):.1f} boards lighter: "
-                f"the ball is reading the lane later. Move {right} (feet 2, target 1) or use a stronger ball.",
+                f"the ball is reading the lane later. Move {right} (feet 2 boards, target 1 board) or use a stronger ball.",
                 dict(n=len(good) + 1, entry_drift=round(d_entry, 1)), 'medium', direction=right, move_feet=2, move_target=1)
