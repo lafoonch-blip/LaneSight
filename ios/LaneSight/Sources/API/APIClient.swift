@@ -160,6 +160,17 @@ struct APIClient {
         try await send(makeRequest("sessions"), as: [SessionRow].self)
     }
 
+    /// Standalone upload analyses for Lab › Uploads (GET /me/uploads, DEC-055). Each row opens its result.
+    func listUploads() async throws -> [UploadRow] {
+        try await send(makeRequest("me/uploads"), as: [UploadRow].self)
+    }
+
+    /// Home Recent activity (GET /me/activity). Server-scoped to practice sessions, achievement unlocks
+    /// and tier changes (DEC-055).
+    func activity() async throws -> [ActivityItem] {
+        try await send(makeRequest("me/activity"), as: [ActivityItem].self)
+    }
+
     func createSessionFull(mode: String, lanePair: String?, oilPatternId: String?) async throws -> SessionRow {
         var req = makeRequest("sessions", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -227,10 +238,11 @@ struct APIClient {
         try await sendRaw(makeRequest("me", method: "DELETE"))
     }
 
-    /// Multipart upload of a Photos/Files clip (POST /uploads). Same analyze pipeline as a live shot,
-    /// but the server stamps source=upload. Reports upload progress (0...1) on the main actor.
-    func uploadClip(sessionId: String,
-                    fileURL: URL,
+    /// Multipart upload of a Photos/Files clip (POST /uploads). Standalone analysis (DEC-055): no
+    /// session — the server stamps source=upload and leaves session_id null, so it never appears in
+    /// Recent sessions / activity and never feeds Stats, the Score, tiers or achievements. Reports
+    /// upload progress (0...1) on the main actor.
+    func uploadClip(fileURL: URL,
                     metadata: ShotMetadata,
                     progress: @escaping @MainActor (Double) -> Void) async throws -> CreateShotResponse {
         let boundary = "LaneSight-\(UUID().uuidString)"
@@ -247,11 +259,6 @@ struct APIClient {
         var body = Data()
         func appendString(_ s: String) { body.append(s.data(using: .utf8)!) }
         let filename = fileURL.lastPathComponent
-
-        appendString("--\(boundary)\r\n")
-        appendString("Content-Disposition: form-data; name=\"sid\"\r\n\r\n")
-        appendString(sessionId)
-        appendString("\r\n")
 
         appendString("--\(boundary)\r\n")
         appendString("Content-Disposition: form-data; name=\"metadata\"\r\n\r\n")

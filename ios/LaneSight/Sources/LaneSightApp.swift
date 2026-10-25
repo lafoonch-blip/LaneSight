@@ -28,27 +28,23 @@ struct LaneSightApp: App {
     }
 }
 
-/// Bottom tabs per HANDOFF §4/§5: Home · Stats · Lab · Leagues (Soon) · Tourneys (Soon).
+/// Bottom tabs per HANDOFF §4/§5 + DEC-055: Home · Stats · Lab · Leagues · Tourneys.
 /// Capture is reached via Lab → Start Live Session → Setup.
 ///
-/// Leagues/Tourneys are not built yet. A TabView tab can't be made un-tappable, so tapping either
-/// is intercepted: selection never moves to them (the current working tab stays selected) and a
-/// clearly-labeled "Coming soon" sheet appears — they can never be mistaken for working, empty screens.
+/// Leagues/Tourneys are not built yet. Per DEC-055 they are shown disabled: dimmed, not tappable, with
+/// NO "Soon" / "Coming soon" label and no sheet. A system TabView tab can't be made un-tappable, so
+/// tapping either is intercepted — selection never moves to them (the current working tab stays
+/// selected) — and because they can never become selected they always render in the muted, unselected
+/// (dimmed) state. No navigation happens and nothing is presented.
 struct RootTabs: View {
     @EnvironmentObject var model: AppModel
     @State private var tab = 0
-    @State private var comingSoon: ComingSoonItem?
 
     private var selection: Binding<Int> {
         Binding(
             get: { tab },
-            set: { newValue in
-                switch newValue {
-                case 3: comingSoon = ComingSoonItem(title: "Leagues", symbol: "person.3.fill")
-                case 4: comingSoon = ComingSoonItem(title: "Tourneys", symbol: "trophy.fill")
-                default: tab = newValue
-                }
-            }
+            // Taps on the disabled Leagues (3) / Tourneys (4) tabs are a no-op: selection stays put.
+            set: { newValue in if newValue < 3 { tab = newValue } }
         )
     }
 
@@ -63,44 +59,17 @@ struct RootTabs: View {
             LabView()
                 .tag(2)
                 .tabItem { Label("Lab", systemImage: "flask.fill") }
-            // Placeholder content — never actually shown because selection is intercepted above.
-            ComingSoonView("Leagues", symbol: "person.3.fill")
+            // Disabled tabs (DEC-055): dimmed + not tappable, no label. Content is never shown because
+            // selection can never move here. No "Soon" badge, no coming-soon sheet.
+            Color.clear
                 .tag(3)
-                .tabItem { Label("Leagues · Soon", systemImage: "lock.fill") }
-            ComingSoonView("Tourneys", symbol: "trophy.fill")
+                .tabItem { Label("Leagues", systemImage: "person.3.fill") }
+            Color.clear
                 .tag(4)
-                .tabItem { Label("Tourneys · Soon", systemImage: "lock.fill") }
-        }
-        .sheet(item: $comingSoon) { item in
-            ComingSoonSheet(item: item)
+                .tabItem { Label("Tourneys", systemImage: "trophy.fill") }
         }
         // Make the server the source of truth for the arsenal on authed load (also runs the one-time
         // migration of any locally-stored ball). Harmless in dev-user mode.
         .task { await model.syncArsenal() }
-    }
-}
-
-struct ComingSoonItem: Identifiable {
-    let title: String
-    let symbol: String
-    var id: String { title }
-}
-
-/// The unmistakable "Coming soon" state shown when a locked tab (Leagues / Tourneys) is tapped.
-private struct ComingSoonSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let item: ComingSoonItem
-    var body: some View {
-        NavigationStack {
-            ComingSoonView(item.title,
-                           message: "\(item.title) aren't available in this dev build yet. They'll arrive in a later release.",
-                           symbol: item.symbol)
-                .navigationTitle(item.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
-        .preferredColorScheme(.dark)
-        .presentationDetents([.medium])
     }
 }

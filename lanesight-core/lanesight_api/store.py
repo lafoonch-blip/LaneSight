@@ -15,6 +15,12 @@ def _new_id():
     return uuid.uuid4().hex
 
 
+# Home Recent activity scope (DEC-055): only completed practice sessions, achievement unlocks, and
+# LaneSight tier (rank) changes. Anything else (e.g. personal_best score milestones, and never uploads)
+# is excluded from the feed. Enforced in both stores' list_activity.
+_ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion', 'tier_demotion')
+
+
 # profiles has columns display_name/handed/style/units/usbc_id/dob/delivery_style/approach_steps. The app
 # speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
 # location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
@@ -266,6 +272,8 @@ class MemoryStore:
         now = time.time()
         records, intents, handed = [], {}, 'R'
         for sh in shots:
+            if sh.get('source') == 'upload':            # uploads are standalone; never feed the score (DEC-055)
+                continue
             rec = sh.get('record')
             if not rec or not rec.get('metrics'):
                 continue
@@ -288,6 +296,8 @@ class MemoryStore:
         now = time.time()
         out = []
         for sh in shots:
+            if sh.get('source') == 'upload':            # standalone form uploads never feed Stats (DEC-055)
+                continue
             rec = sh.get('record')
             if not rec or not rec.get('form_version') or not rec.get('metrics'):
                 continue
@@ -397,7 +407,33 @@ class MemoryStore:
         return row
 
     def list_activity(self, user_id):
-        return sorted(self.activity.get(user_id) or [], key=lambda r: r['created_at'], reverse=True)
+        # Scope to the Home Recent activity kinds (DEC-055): completed practice sessions, achievement
+        # unlocks and tier changes only — no uploads, no personal-best or other event types.
+        rows = [r for r in (self.activity.get(user_id) or []) if r.get('kind') in _ACTIVITY_KINDS]
+        return sorted(rows, key=lambda r: r['created_at'], reverse=True)
+
+    def list_uploads(self, user_id):
+        """Standalone upload analyses (DEC-055): shots with source='upload', newest first. Shape mirrors
+        session_shots rows so Lab › Uploads can show speed/entry and a SHOT/FORM badge; each opens its result."""
+        out = []
+        for sh in sorted(self.user_shots(user_id), key=lambda s: s.get('created_at') or 0, reverse=True):
+            if sh.get('source') != 'upload':
+                continue
+            rec = sh.get('record') or {}
+            metrics = rec.get('metrics') or {}
+            key = {k: (metrics.get(k) or {}).get('value')
+                   for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
+            if rec and metrics:
+                state = 'analyzed'
+            elif (sh.get('result') or {}).get('ok') is False:
+                state = 'failed'
+            else:
+                state = 'pending'
+            out.append(dict(id=sh['id'], state=state, created_at=sh.get('created_at'),
+                            capture_mode=sh.get('capture_mode') or 'shot',
+                            classification=(rec.get('insights') or {}).get('classification'),
+                            source='upload', metrics=key))
+        return out
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):
         rows = self.notifications.setdefault(user_id, [])
@@ -739,13 +775,13 @@ class PgStore(MemoryStore):
     def read_shot_records(self, user_id, window_days=None):
         import datetime as _dt
         from urllib.parse import quote
-        q = f'user_id=eq.{user_id}&select=id,handed,created_at&order=created_at'
+        q = f'user_id=eq.{user_id}&select=id,handed,created_at,source&order=created_at'
         if window_days is not None:
             # 'Z' (not +00:00) and URL-encode: an unencoded '+'/':' in the timestamp makes PostgREST 400.
             since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=window_days)) \
                 .strftime('%Y-%m-%dT%H:%M:%SZ')
             q += f'&created_at=gte.{quote(since, safe="")}'
-        shots = self._get('shots', q)
+        shots = [s for s in self._get('shots', q) if s.get('source') != 'upload']  # exclude uploads (DEC-055)
         if not shots:
             return [], {}, 'R'
         ids = ','.join(s['id'] for s in shots)
@@ -775,12 +811,12 @@ class PgStore(MemoryStore):
         so ball-CV measurements never leak into form baselines."""
         import datetime as _dt
         from urllib.parse import quote
-        q = f'user_id=eq.{user_id}&select=id,created_at&order=created_at'
+        q = f'user_id=eq.{user_id}&select=id,created_at,source&order=created_at'
         if window_days is not None:
             since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=window_days)) \
                 .strftime('%Y-%m-%dT%H:%M:%SZ')
             q += f'&created_at=gte.{quote(since, safe="")}'
-        shots = self._get('shots', q)
+        shots = [s for s in self._get('shots', q) if s.get('source') != 'upload']  # exclude uploads (DEC-055)
         if not shots:
             return []
         ids = ','.join(s['id'] for s in shots)
@@ -908,7 +944,26 @@ class PgStore(MemoryStore):
         return row
 
     def list_activity(self, user_id):
-        return self._get('activity_item', f'user_id=eq.{user_id}&select=*&order=created_at.desc')
+        # Scope to the Home Recent activity kinds (DEC-055) — practice sessions, achievement unlocks,
+        # tier changes only; drop personal-best and any other kinds, and never uploads.
+        kinds = ','.join(_ACTIVITY_KINDS)
+        return self._get('activity_item',
+                         f'user_id=eq.{user_id}&kind=in.({kinds})&select=*&order=created_at.desc')
+
+    def list_uploads(self, user_id):
+        rows = self._get('shots', f'user_id=eq.{user_id}&source=eq.upload'
+                                  '&select=id,created_at,capture_mode,classification,source,record'
+                                  '&order=created_at.desc')
+        out = []
+        for sh in rows:
+            rec = sh.get('record') or {}
+            metrics = rec.get('metrics') or {}
+            key = {k: (metrics.get(k) or {}).get('value')
+                   for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
+            out.append(dict(id=sh['id'], state='analyzed' if metrics else 'pending',
+                            created_at=sh.get('created_at'), capture_mode=sh.get('capture_mode') or 'shot',
+                            classification=sh.get('classification'), source='upload', metrics=key))
+        return out
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):
         row = {'id': _new_id(), 'user_id': user_id, 'kind': kind, 'ref_id': ref_id,

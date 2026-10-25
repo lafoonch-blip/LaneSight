@@ -42,7 +42,7 @@ struct UploadView: View {
                 .disabled(pickedURL == nil || busy)
                 .opacity(pickedURL == nil || busy ? 0.5 : 1)
 
-                Text("One shot per clip for now. Analysis runs on your Mac and takes about a minute or two.")
+                Text("One shot per clip. Results in about 2 minutes. Saved under Lab › Uploads; not a session, and not counted in Stats, Score or achievements.")
                     .font(.lsCaption).foregroundStyle(LS.textFaint).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }

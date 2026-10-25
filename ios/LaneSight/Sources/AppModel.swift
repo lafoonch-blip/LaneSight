@@ -340,14 +340,21 @@ final class AppModel: ObservableObject {
             // mode change while the clip is analyzing. This is also exactly what's sent as `capture_mode`.
             let capturedMode = captureMode
 
-            // 1. Ensure a session exists for this app run.
-            let sid: String
-            if let existing = sessionId {
-                sid = existing
+            // 1. Ensure a session exists for this app run — LIVE captures only. An upload (DEC-055) is a
+            // STANDALONE analysis: it never creates or joins a session (so it stays out of Recent
+            // sessions / activity and never feeds Stats, the Score, tiers or achievements).
+            let sid: String?
+            if source == "live" {
+                if let existing = sessionId {
+                    sid = existing
+                } else {
+                    pipeline = .creatingSession
+                    let created = try await client.createSession(mode: "practice").id
+                    sessionId = created
+                    sid = created
+                }
             } else {
-                pipeline = .creatingSession
-                sid = try await client.createSession(mode: "practice").id
-                sessionId = sid
+                sid = nil
             }
 
             // 2. For a live capture, trim the clip to the shot window ON-DEVICE before uploading.
@@ -384,11 +391,11 @@ final class AppModel: ObservableObject {
             )
             let created: CreateShotResponse
             if source == "upload" {
-                created = try await client.uploadClip(sessionId: sid, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
+                created = try await client.uploadClip(fileURL: uploadURL, metadata: metadata) { [weak self] frac in
                     self?.pipeline = .uploading(frac)
                 }
             } else {
-                created = try await client.uploadShot(sessionId: sid, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
+                created = try await client.uploadShot(sessionId: sid!, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
                     self?.pipeline = .uploading(frac)
                 }
             }
@@ -446,6 +453,39 @@ final class AppModel: ObservableObject {
             if uploadURL != fileURL { try? FileManager.default.removeItem(at: uploadURL) }
         } catch {
             pipeline = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Builds a `ShotResult` for a previously analyzed shot (Lab › Uploads row → shot card). Fetches the
+    /// stored record + the current score. There is no analyze-job footer for a past result, so score
+    /// deltas / nudges are absent by design. Sets `result` and returns true on success; the caller drives
+    /// its own presentation (kept off `showResult` so it never collides with the live pipeline's sheet).
+    @discardableResult
+    func loadShotResult(shotId: String, captureModeHint: String?) async -> Bool {
+        do {
+            let client = try makeClient()
+            let shot = try await client.shot(shotId)
+            let score = try await client.score()
+            let record = shot.record
+            let isForm = captureModeHint == "form"
+                || record?.form_version != nil
+                || FormMetricDisplay.looksLikeForm(record?.metrics)
+            let rawMetrics = record?.metrics ?? [:]
+            let metrics = isForm ? FormMetricDisplay.ordered(rawMetrics) : MetricDisplay.ordered(rawMetrics)
+            let insights = record?.insights
+            let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
+                ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
+            result = ShotResult(shotId: shotId, metrics: metrics, score: score,
+                                footer: nil,
+                                suggestedTarget: isForm ? nil : insights?.suggested_target,
+                                recommendation: isForm ? nil : moveRec,
+                                isForm: isForm,
+                                formView: record?.view,
+                                formStatus: record?.status,
+                                formVersion: record?.form_version)
+            return true
+        } catch {
+            return false
         }
     }
 

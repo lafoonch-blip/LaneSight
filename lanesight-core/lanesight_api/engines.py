@@ -397,9 +397,11 @@ def _fmt(v, unit):
     return f'{v:.1f} {unit}' if unit == 's' else f'{v:.2f}'
 
 
-def compute_form_baselines(store, user_id, history, current, min_n):
+def compute_form_baselines(store, user_id, history, current, min_n, persist=True):
     """Per-metric personal baseline over the user's FORM deliveries (history + this one), stored in
-    personal_baseline under view='form' so it never mixes with ball baselines. Returns {metric: base}."""
+    personal_baseline under view='form' so it never mixes with ball baselines. Returns {metric: base}.
+    `persist=False` (standalone uploads, DEC-055) computes the comparison bases for the form card but
+    never writes them, so an uploaded clip never feeds the user's Stats baselines."""
     all_recs = list(history) + [current]
     bases = {}
     for metric in _FORM_BASELINE_METRICS:
@@ -407,7 +409,8 @@ def compute_form_baselines(store, user_id, history, current, min_n):
         if not vals:
             continue
         base = personal_baseline(vals, min_n=min_n)
-        store.upsert_baseline(user_id, metric, base, view='form')
+        if persist:
+            store.upsert_baseline(user_id, metric, base, view='form')
         bases[metric] = base
     return bases
 
@@ -500,16 +503,18 @@ def _form_focus(store, record, bases, history, current):
             'drill': {'id': primary.get('drill_ref'), 'name': d.get('name'), 'how': d.get('description')}}
 
 
-def after_form_analyzed(store, user_id, session_id, record, analyze_seconds=None):
+def after_form_analyzed(store, user_id, session_id, record, analyze_seconds=None, persist=True):
     """Form-only post-analysis (mirrors after_shot_analyzed but touches NOTHING on the ball L-dev-0 score):
     per-metric form baselines, WATCH flags, the FOCUS insight, and the footer. Mutates `record` in place and
     returns a small footer dict for the job result. Call BEFORE save_shot_result so the current delivery is
-    counted once (it is not yet persisted, so read_form_records returns strictly prior deliveries)."""
+    counted once (it is not yet persisted, so read_form_records returns strictly prior deliveries).
+    `persist=False` for standalone uploads (DEC-055): the form card still renders focus/footer, but no
+    baseline is stored, so the upload never feeds the user's Stats."""
     cfg = store.engine_config() or {}
     min_n = int(cfg.get('baseline_min_n', 10))
     window_days = store.score_formula_params().get('window_days')
     history = store.read_form_records(user_id, window_days=window_days)
-    bases = compute_form_baselines(store, user_id, history, record, min_n)
+    bases = compute_form_baselines(store, user_id, history, record, min_n, persist=persist)
     _attach_baselines_and_watch(record, bases, record)
     focus = _form_focus(store, record, bases, history, record)
     record['focus'] = focus

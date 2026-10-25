@@ -25,7 +25,7 @@ struct SetupView: View {
                 Button {
                     Task { await startSession() }
                 } label: {
-                    HStack { Text("Set up camera"); if starting { ProgressView().tint(.white) } }
+                    HStack { Text("Start session"); if starting { ProgressView().tint(.white) } }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(starting)

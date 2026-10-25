@@ -5,6 +5,7 @@ struct HomeView: View {
     @State private var score: Loadable<ScoreResponse> = .idle
     @State private var history: [ScoreResponse] = []
     @State private var sessions: Loadable<[SessionRow]> = .idle
+    @State private var activity: Loadable<[ActivityItem]> = .idle
 
     var body: some View {
         NavigationStack {
@@ -20,6 +21,7 @@ struct HomeView: View {
                             .buttonStyle(PrimaryButtonStyle())
 
                         recentSessions
+                        recentActivity
                         Spacer(minLength: 8)
                     }
                     .padding(16)
@@ -62,9 +64,44 @@ struct HomeView: View {
         }
     }
 
+    /// Recent activity (Main.dc.html + DEC-055): completed practice sessions, achievement unlocks and
+    /// LaneSight tier (rank) changes only. The server (GET /me/activity) enforces this scope — uploads
+    /// and other event types never appear.
+    private var recentActivity: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("RECENT ACTIVITY").lsEyebrow()
+            LoadableView(state: activity, retry: { Task { await loadActivity() } }) { rows in
+                if rows.isEmpty {
+                    Text("No activity yet. Finish a session or earn an achievement to see it here.")
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading).lsCard()
+                } else {
+                    VStack(spacing: 0) {
+                        let items = Array(rows.prefix(6))
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            ActivityRow(item: item)
+                            if idx < items.count - 1 {
+                                Divider().overlay(LS.cardStroke)
+                            }
+                        }
+                    }
+                    .lsCard(padding: 0)
+                }
+            }
+        }
+    }
+
     private func loadAll() async {
         await loadScore()
         await loadSessions()
+        await loadActivity()
+    }
+
+    private func loadActivity() async {
+        activity = .loading
+        do {
+            activity = .loaded(try await model.makeClient().activity())
+        } catch { activity = .failed(error.localizedDescription) }
     }
 
     private func loadScore() async {
@@ -119,5 +156,63 @@ struct SessionRowCard: View {
             if mins > 0 { parts.append("\(mins) min") }
         }
         return parts.isEmpty ? "Session" : parts.joined(separator: " · ")
+    }
+}
+
+/// One Home Recent activity row (Main.dc.html): a colored kind icon, a title and a subtitle.
+struct ActivityRow: View {
+    let item: ActivityItem
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(.lsFootnote).foregroundStyle(tint)
+                .frame(width: 32, height: 32)
+                .background(LS.raised, in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                if let sub = subtitle {
+                    Text(sub).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var isTier: Bool { item.kind == "tier_promotion" || item.kind == "tier_demotion" }
+
+    private var symbol: String {
+        switch item.kind {
+        case "achievement_unlocked": return "trophy.fill"
+        case "tier_promotion", "tier_demotion": return "shield.fill"
+        case "session_completed": return "figure.bowling"
+        default: return "circle.fill"
+        }
+    }
+
+    private var tint: Color { isTier ? LS.blue : (item.kind == "achievement_unlocked" ? LS.bestEffort : LS.cyan) }
+
+    private var title: String {
+        switch item.kind {
+        case "achievement_unlocked":
+            return "Achievement: \(item.payload?.name ?? item.ref_id ?? "unlocked")"
+        case "tier_promotion":
+            return "Reached \((item.payload?.to_tier ?? "a new").capitalized) tier"
+        case "tier_demotion":
+            return "Moved to \((item.payload?.to_tier ?? "a lower").capitalized) tier"
+        case "session_completed":
+            return "Completed a practice session"
+        default:
+            return item.ref_id ?? "Activity"
+        }
+    }
+
+    private var subtitle: String? {
+        if isTier, let s = item.payload?.score { return "LaneSight Score \(Int(s.rounded()))" }
+        if let t = item.created_at {
+            return Date(timeIntervalSince1970: t).formatted(.dateTime.month().day())
+        }
+        return nil
     }
 }

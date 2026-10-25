@@ -213,11 +213,35 @@ def test_surface_event():
 
 def test_upload_uses_serial_path_with_source_upload():
     u = 'sess3'
-    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    # Standalone upload (DEC-055): no session needed; the endpoint no longer takes a sid.
     r = client.post('/uploads', headers=H(u),
                     files={'file': ('clip.mov', b'not-a-video', 'video/quicktime')},
-                    data={'sid': sid, 'metadata': json.dumps({'handed': 'R'})})
+                    data={'metadata': json.dumps({'handed': 'R'})})
     assert r.status_code == 200 and r.json()['source'] == 'upload' and r.json()['job_id']
+    # The upload shot is standalone (no session) and listed under Lab › Uploads.
+    store = get_store()
+    sh = store.get_shot(u, r.json()['shot_id'])
+    assert sh['session_id'] is None and sh['source'] == 'upload'
+    assert client.get('/sessions', headers=H(u)).json() == []            # never a session
+    ups = client.get('/me/uploads', headers=H(u)).json()
+    assert len(ups) == 1 and ups[0]['id'] == r.json()['shot_id'] and ups[0]['source'] == 'upload'
+
+
+def test_uploads_excluded_from_score_stats_and_activity():
+    u = 'sess3b'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    _seed_shots(u, 3, sid)                                               # 3 real practice shots
+    store = get_store()
+    # inject a standalone analyzed upload (source='upload', no session) as the CV job would
+    up = store.create_shot(u, None, {'source': 'upload', 'handed': 'R'})
+    store.save_shot_result(up['id'], _rec(up['id'], speed=25.0), {'ok': True})
+    # score/stats read-back excludes the upload: still exactly the 3 practice shots
+    recs, _i, _h = store.read_shot_records(u)
+    assert len(recs) == 3 and all(r['shot_id'] != up['id'] for r in recs)
+    assert client.get('/me/stats?view=throw', headers=H(u)).json()['n_shots'] == 3
+    # the upload is listed under Lab › Uploads but never in Recent activity
+    assert any(x['id'] == up['id'] for x in client.get('/me/uploads', headers=H(u)).json())
+    assert all(x.get('ref_id') != up['id'] for x in client.get('/me/activity', headers=H(u)).json())
 
 
 def test_delete_me_clears_user_data():

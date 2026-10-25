@@ -32,7 +32,8 @@ app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
 # ----------------------------------------------------------------- analysis job
-def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str, mode: str = 'shot'):
+def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
+                 mode: str = 'shot', is_upload: bool = False):
     def run(job):
         t0 = time.monotonic()
         out_prefix = str(DATA_ROOT / 'out' / shot_id)
@@ -49,8 +50,11 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             job.timings['analyze'] = time.monotonic() - t0
             # Form-only engine step (baselines -> watch -> focus -> footer). Runs BEFORE save so the current
             # delivery is counted once; never touches the ball L-dev-0 score / Accuracy.
+            # Standalone uploads (DEC-055) still render the form card (focus/footer), but persist=False
+            # keeps them out of the user's Stats baselines.
             form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
-                                                      analyze_seconds=job.timings['analyze'])
+                                                      analyze_seconds=job.timings['analyze'],
+                                                      persist=not is_upload)
             store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'})
             return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
                         focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
@@ -76,6 +80,10 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             if st:
                 rec.setdefault('insights', {})['suggested_target'] = st
         store.save_shot_result(shot_id, rec, {'ok': True})
+        # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
+        # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
+        if is_upload:
+            return dict(shot_id=shot_id)
         # After each analyzed shot: recompute score over the 90-day window, run achievements, findings.
         footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
         return dict(shot_id=shot_id, **footer)
@@ -382,27 +390,36 @@ def session_shots(sid: str, user=Depends(current_user)):
     return store.session_shots(user, sid)
 
 
-# ----------------------------------------------------------------- Photos upload (same serial analyze path)
+# ----------------------------------------------------------------- Photos upload (standalone, DEC-055)
 @app.post('/uploads')
-async def upload_clip(sid: str = Form(...), file: UploadFile = File(...), metadata: str = Form('{}'),
+async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
                       user=Depends(current_user)):
+    """Analyze a clip from Photos as a STANDALONE upload (DEC-055). It is never attached to a session
+    (session_id stays null), so it never shows in Recent sessions / activity and never feeds Stats, the
+    LaneSight Score, tiers or achievements. Same serial analyze path; the shot result is viewable and is
+    listed under Lab › Uploads (GET /me/uploads)."""
     store = get_store()
-    if not store.get_session(user, sid):
-        raise HTTPException(404, 'session not found')
     meta = json.loads(metadata or '{}')
     cfg, ub = _ball_link(store, user, meta)
-    shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
-                                         'source': 'upload', 'sensor_used': meta.get('sensor_used'),
-                                         'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
-                                         'ball_configuration_id': cfg, 'user_ball_id': ub})
-    dest = DATA_ROOT / 'sessions' / sid
+    shot = store.create_shot(user, None, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
+                                          'source': 'upload', 'sensor_used': meta.get('sensor_used'),
+                                          'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
+                                          'ball_configuration_id': cfg, 'user_ball_id': ub})
+    dest = DATA_ROOT / 'uploads'
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"
     with open(path, 'wb') as f:
         f.write(await file.read())
-    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid,
-                       mode=(meta.get('capture_mode') or 'shot'))
+    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, None,
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=True)
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
+
+
+@app.get('/me/uploads')
+def me_uploads(user=Depends(current_user)):
+    """Standalone upload analyses for the Lab › Uploads list (DEC-055). Newest first; each row opens its
+    shot result. Never includes live/session shots."""
+    return get_store().list_uploads(user)
 
 
 # ----------------------------------------------------------------- stats
@@ -503,4 +520,9 @@ def delete_me(user=Depends(current_user)):
                 f.unlink()
             except OSError:
                 pass
+        # standalone upload clips live under uploads/<shot_id>.mov (DEC-055), not under a session dir
+        try:
+            (DATA_ROOT / 'uploads' / f'{shid}.mov').unlink()
+        except OSError:
+            pass
     return {'deleted': True}

@@ -772,6 +772,84 @@
         }
       }
     },
+    "/shots/{shot_id}/frame/{key}": {
+      "get": {
+        "summary": "Get Shot Frame",
+        "operationId": "get_shot_frame_shots__shot_id__frame__key__get",
+        "parameters": [
+          {
+            "name": "shot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Shot Id"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-dev-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/spot-check": {
       "post": {
         "summary": "Do Spot Check",
@@ -984,6 +1062,79 @@
               "title": "Sid"
             }
           },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-dev-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback": {
+      "post": {
+        "summary": "Submit Feedback",
+        "description": "Submit a feedback row for any source (shot_note, advice_rating, form_note, general). Shot notes\nautosave: resend with the same `id` to update the row. Links to shot/session are optional and are\nkept only while the source exists; the row itself is retained if they're deleted.",
+        "operationId": "submit_feedback_feedback_post",
+        "parameters": [
           {
             "name": "authorization",
             "in": "header",
@@ -1715,6 +1866,87 @@
         }
       }
     },
+    "/me/arsenal/{ball_id}": {
+      "patch": {
+        "summary": "Update Ball",
+        "operationId": "update_ball_me_arsenal__ball_id__patch",
+        "parameters": [
+          {
+            "name": "ball_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ball Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-dev-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/arsenal/{ball_id}/surface": {
       "post": {
         "summary": "Add Surface",
@@ -1805,6 +2037,7 @@
     "/uploads": {
       "post": {
         "summary": "Upload Clip",
+        "description": "Analyze a clip from Photos as a STANDALONE upload (DEC-055). It is never attached to a session\n(session_id stays null), so it never shows in Recent sessions / activity and never feeds Stats, the\nLaneSight Score, tiers or achievements. Same serial analyze path; the shot result is viewable and is\nlisted under Lab \u203a Uploads (GET /me/uploads).",
         "operationId": "upload_clip_uploads_post",
         "parameters": [
           {
@@ -1850,6 +2083,67 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/uploads": {
+      "get": {
+        "summary": "Me Uploads",
+        "description": "Standalone upload analyses for the Lab \u203a Uploads list (DEC-055). Newest first; each row opens its\nshot result. Never includes live/session shots.",
+        "operationId": "me_uploads_me_uploads_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "x-dev-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2511,10 +2805,6 @@
       },
       "Body_upload_clip_uploads_post": {
         "properties": {
-          "sid": {
-            "type": "string",
-            "title": "Sid"
-          },
           "file": {
             "type": "string",
             "contentMediaType": "application/octet-stream",
@@ -2528,7 +2818,6 @@
         },
         "type": "object",
         "required": [
-          "sid",
           "file"
         ],
         "title": "Body_upload_clip_uploads_post"

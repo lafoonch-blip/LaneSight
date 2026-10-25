@@ -214,6 +214,38 @@ struct ShotRowMetrics: Codable, Equatable {
     let arrows_board: Double?
 }
 
+// MARK: - Standalone upload analyses (GET /me/uploads, DEC-055)
+
+struct UploadRow: Codable, Identifiable, Equatable {
+    let id: String
+    let state: String?            // pending | analyzed | failed
+    let created_at: Double?
+    let capture_mode: String?     // shot | form (drives the SHOT/FORM badge + result routing)
+    let classification: String?
+    let source: String?           // always "upload"
+    let metrics: ShotRowMetrics?
+}
+
+// MARK: - Home Recent activity (GET /me/activity, DEC-055)
+//
+// Server-scoped to completed practice sessions, achievement unlocks and tier (rank) changes.
+
+struct ActivityItem: Codable, Identifiable, Equatable {
+    let id: String
+    let kind: String?             // achievement_unlocked | tier_promotion | tier_demotion | session_completed
+    let ref_id: String?
+    let created_at: Double?
+    let payload: ActivityPayload?
+}
+
+struct ActivityPayload: Codable, Equatable {
+    let name: String?             // achievement name
+    let description: String?
+    let to_tier: String?          // tier change target
+    let from_tier: String?
+    let score: Double?
+}
+
 // MARK: - Stats (GET /me/stats?view=throw|form)
 
 struct StatsResponse: Codable, Equatable {
