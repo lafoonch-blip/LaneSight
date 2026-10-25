@@ -14,7 +14,7 @@
 | Logo and app/web icons | Figma Design Components › "Brand standards" → exported to `02_DESIGN/brand/` (DEC-054) | **The LS monogram concept: never use it** |
 | Later-version (target-state) screens | Figma "Lanesight - Product UX - Design" | — |
 | Code | `lanesight-core/` (Python CV/API), `ios/LaneSight/` (SwiftUI) | — |
-| Mirrors (read-only, may lag) | Google Drive LaneSight folder, claude.ai LaneSight Project docs | Never edit these as the source |
+| Mirror (read-only, may lag) | claude.ai LaneSight Project docs | Never edit it as the source. The Google Drive copies are retired (frozen 2026-10-14, labeled STALE) |
 
 ### Freshness check (do this first, every session)
 1. If you can reach the repo: `git fetch && git status && git branch --show-current && git log --oneline -5`. Work from the newest local branch, not an old clone or a pasted file.
@@ -26,7 +26,7 @@
 ### When you change something
 - Write it to this repo in the same session (doc, DEC entry, design sync or code). A change that lives only in a chat, canvas, Figma or a mirror is not done.
 - Decisions: add a new DEC; mark the old one superseded. Docs: bump `Version` / `Last Updated`.
-- Commit locally; push to GitHub only when Shayne says so. Then re-sync the Drive and claude.ai Project mirrors.
+- Commit locally; push to GitHub only when Shayne says so. Then re-sync the claude.ai Project docs (don't update the retired Drive copies).
 - Report what you changed and anything you could not update.
 
 This repo is the **source of truth** for LaneSight product and engineering context. Read these files first, in this order:
@@ -44,4 +44,4 @@ This repo is the **source of truth** for LaneSight product and engineering conte
 - If documents conflict, `DECISIONS.md` and `CURRENT_STATE.md` win over older docs. Anything in `99_ARCHIVE/` is historical only.
 - To change a decision, add a new DEC entry and mark the old one superseded. Never edit history.
 - When you update a doc, bump its `Version` and `Last Updated` header.
-- The Google Drive folder and the claude.ai LaneSight Project hold read-only mirrors of these files (DEC-025). Make edits here, then re-sync both mirrors.
+- The claude.ai LaneSight Project holds a read-only mirror of these files (DEC-025). Make edits here, then re-sync it. The Google Drive copies were retired on 2026-10-25.
