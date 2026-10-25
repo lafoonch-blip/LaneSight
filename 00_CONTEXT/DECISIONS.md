@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.23  
+Version: 1.24  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.22
+Supersedes: v1.23
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -597,16 +597,31 @@ Other rules:
 ### DEC-058 — Bowler notes on every shot, stored for comparison
 **Decision:**
 - Every shot card ends with **Your notes on this shot**: free text plus optional quick tags (Hit my target, Missed left, Missed right, Pocket, Light, High, Felt good, Pulled it). Notes autosave.
-- Notes are stored with the shot (`shot_note`: text, tags, timestamps), visible only to the bowler and the owner, and deleted with the shot or account.
+- Notes are stored with the shot (`shot_note`: text, tags, timestamps), visible only to the bowler and the owner, and deleted with the shot or account. *(Storage superseded by DEC-059.)*
 - Notes and tags are included in the session CSV export and are available for owner analysis: compare what the bowler saw (e.g. "light", "missed right") with the measured metrics to find metric errors and tune rules.
 - Notes never change any measured value, the LaneSight Score or achievements.
 
 **Why:** The bowler's own observation at the lane is the fastest check on whether a measurement or recommendation was right.
 **Date:** 2026-10-25
-**Status:** ACCEPTED (Dev Build v0 designs 3.6)
+**Status:** ACCEPTED (Dev Build v0 designs 3.6); storage/retention SUPERSEDED by DEC-059
 **Supersedes:** —
 
+### DEC-059 — One retained feedback store for dev, beta and live
+**Decision:**
+- All bowler feedback goes into one `feedback` table, tagged with app phase (`dev` / `beta` / `live`) and versions. That covers shot notes and tags, session-end feedback, advice 👍/👎, and future form notes and general feedback.
+- Spec: `03_ENGINEERING/FEEDBACK_STORE_SPEC.md`.
+- **Retention:** feedback is kept when its shot or session is deleted (links set to null; a snapshot of the measured results is stored with each row).
+- **Account deletion:** the account is deleted and its feedback is **anonymized**, not deleted. De-identified retention is disclosed in the privacy policy, as App Store rules require.
+- **Access:** bowlers add and edit their own feedback; only the owner reads everything and triages it (new / reviewed / actioned / dismissed). No client delete.
+- **No live effect:** feedback is for offline analysis and owner-driven changes only. Nothing in the app reads it to change measurements, rules, scores or advice.
+
+**Why:** Collect, analyze and act on feedback across every phase, whenever Shayne chooses, without losing it to shot or account cleanup.
+**Date:** 2026-10-25
+**Status:** ACCEPTED; implementation not started
+**Supersedes:** storage parts of DEC-053 (`session_feedback` table) and DEC-058 (`shot_note`, delete with shot/account)
+
 ## Superseded decisions
+- DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).
 - DEC-011 — withdrawn; replaced by DEC-054 (official Figma logo).
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
