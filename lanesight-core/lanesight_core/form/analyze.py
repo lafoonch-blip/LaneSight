@@ -14,11 +14,14 @@ FORM_VERSION = 'form-0.0.0'          # contract only; pose backend not yet imple
 _SRC = 'lanesight_form'
 
 # (metric key, unit). Backswing height is RELATIVE (ratio), not an absolute height; drift is rear-view best effort.
+# release_time (E6->E7) is the swing-timing bar's 4th segment; timing_at_slide / slide_length are surfaced as
+# honest 'unavailable' tiles (still being validated — see pose._VALIDATING_REASON), never guessed.
 FORM_P1 = [
-    ('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'),
+    ('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'), ('release_time', 's'),
     ('swing_time', 's'), ('approach_time', 's'), ('step_count', 'count'),
     ('ball_start_step', 'index'), ('rhythm_ratio', 'ratio'), ('finish_hold', 's'),
     ('backswing_height_rel', 'ratio'), ('drift_boards', 'board'),
+    ('timing_at_slide', 's'), ('slide_length', 'inch'),
 ]
 
 VIEWS = ('down_lane', 'bowler_facing', 'rear', 'unknown')
@@ -52,6 +55,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
     full P1 set as `unavailable` with a reason (never guessed). `view` may be passed from the capture-view
     classifier; otherwise 'unknown'."""
     view = view if view in VIEWS else 'unknown'
+    extras = {}
     if pose_backend is None:
         reason = ('Form pose backend not configured — P1 metrics need pose estimation '
                   '(pending a pose dependency + validation on the training clips).')
@@ -59,6 +63,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
         status = 'unavailable'
     else:
         got = pose_backend(video, out_prefix, handed) or {}
+        extras = got.get('_extras') or {}
         measurements = [got.get(k) or asdict(Measurement(k, None, u, 0.0, 'unavailable', source=_SRC,
                                                           note='not returned by pose backend'))
                         for k, u in FORM_P1]
@@ -68,4 +73,9 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
         measurements=measurements,
         metrics={mm['metric']: mm for mm in measurements},
         handed=handed,
+        # diagnostics the Form screen needs beyond the P1 metric tiles: the exported KEY POSITIONS stills,
+        # the located event times, and clip fps. The form engine step adds baselines/watch/focus/footer.
+        key_frames=extras.get('key_frames', []),
+        events=extras.get('events', {}),
+        fps=extras.get('fps'),
     )

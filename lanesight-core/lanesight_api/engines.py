@@ -11,7 +11,7 @@ import datetime as _dt
 
 from lanesight_core.score import compute as score_compute, tier_for, evaluate_tier
 from lanesight_core.achievements import evaluate, update_streak
-from lanesight_core.benchmarks import personal_baseline, classify_consistency
+from lanesight_core.benchmarks import personal_baseline, classify_consistency, prioritize
 from lanesight_core.insights.routing import route_recommendation
 
 _TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum', 'onyx']
@@ -369,6 +369,158 @@ def after_shot_analyzed(store, user_id, session_id, record):
         delta = snap['score'] - prev['score']
     return {'eligible': snap['eligible'], 'score': snap['score'], 'score_delta': delta,
             'achievement_nudges': ach['nudges'], 'unlocked': ach['unlocked'], 'recommendation': route}
+
+
+# --------------------------------------------------------------------------- form engine (form-only)
+# Form measurements are best_effort by construction (the rear-view pose method), so a value counts for a
+# baseline/finding when it is 'ok' OR 'best_effort' — never when unavailable/low_confidence (slo-mo etc.).
+_FORM_MEASURED = ('ok', 'best_effort')
+# Numeric form metrics worth a personal baseline (the design's swing-timing + approach/balance tiles).
+_FORM_BASELINE_METRICS = ['pushaway_time', 'backswing_time', 'downswing_time', 'release_time', 'swing_time',
+                          'approach_time', 'finish_hold', 'rhythm_ratio', 'backswing_height_rel', 'step_count']
+# form_rule.trigger.metric -> our measured metric key. Only rules whose metric we can faithfully evaluate are
+# mapped; the rest (timing_at_slide / drift_boards / swing_line_offset / phase_splits consistency / cadence
+# step-inversion) stay unmapped so FOCUS never fires on a metric we don't actually measure (no fabrication).
+_RULE_METRIC_MAP = {'finish_hold': 'finish_hold', 'backswing_height_rel': 'backswing_height_rel'}
+# Direction phrasing for a level finding (value below/above the personal band).
+_FORM_DIRECTION = {'finish_hold': ('shorter', 'longer'), 'swing_time': ('shorter', 'longer')}
+
+
+def _form_val(rec, metric):
+    m = (rec.get('metrics') or {}).get(metric)
+    if not m or m.get('value') is None or m.get('status') not in _FORM_MEASURED:
+        return None
+    return m['value']
+
+
+def _fmt(v, unit):
+    return f'{v:.1f} {unit}' if unit == 's' else f'{v:.2f}'
+
+
+def compute_form_baselines(store, user_id, history, current, min_n):
+    """Per-metric personal baseline over the user's FORM deliveries (history + this one), stored in
+    personal_baseline under view='form' so it never mixes with ball baselines. Returns {metric: base}."""
+    all_recs = list(history) + [current]
+    bases = {}
+    for metric in _FORM_BASELINE_METRICS:
+        vals = [v for v in (_form_val(r, metric) for r in all_recs) if v is not None]
+        if not vals:
+            continue
+        base = personal_baseline(vals, min_n=min_n)
+        store.upsert_baseline(user_id, metric, base, view='form')
+        bases[metric] = base
+    return bases
+
+
+def _attach_baselines_and_watch(record, bases, current):
+    """Attach baseline:{median,sd,band,n} + watch:bool to each metric when an established baseline exists;
+    baseline=None (honest 'building') otherwise. WATCH = measured value outside the personal band."""
+    metrics = record.get('metrics') or {}
+    for metric, base in bases.items():
+        mm = metrics.get(metric)
+        if not mm:
+            continue
+        if base.get('established'):
+            mm['baseline'] = {'median': base['median'], 'sd': base['sd'], 'n': base['n'],
+                              'band_low': base['band_low'], 'band_high': base['band_high']}
+            val = _form_val(current, metric)
+            if val is not None and base['band_low'] is not None and base['band_high'] is not None:
+                mm['watch'] = bool(val < base['band_low'] or val > base['band_high'])
+        else:
+            mm['baseline'] = None       # building — not enough deliveries yet
+
+
+def _form_focus(store, record, bases, history, current):
+    """Evaluate the seeded form_rule rows against the measured metrics + established baselines, prioritize, and
+    return focus:{cue, drill, metric, comparison_text, rule_id} for the top trigger (None if nothing fires)."""
+    import numpy as np
+    metrics = record.get('metrics') or {}
+    weights = (store.engine_config() or {}).get('prioritizer_weights') or {}
+    # map our metric -> prioritizer weight group
+    wmap = {'finish_hold': weights.get('finish', 1.0), 'backswing_height_rel': weights.get('timing', 1.0)}
+    all_recs = list(history) + [current]
+    findings = []
+    for rule in store.form_rules():
+        trig = rule.get('trigger') or {}
+        key = _RULE_METRIC_MAP.get(trig.get('metric'))
+        if key is None:
+            continue
+        base = bases.get(key)
+        if not base or not base.get('established'):
+            continue
+        mm = metrics.get(key)
+        val = _form_val(current, key)
+        if mm is None or val is None:
+            continue
+        unit = mm.get('unit', '')
+        comparison = trig.get('comparison')
+        rule_txt = str(trig.get('rule', ''))
+        text = None
+        if comparison == 'level' or '< baseline' in rule_txt or '> baseline' in rule_txt:
+            low, high = base['band_low'], base['band_high']
+            if low is None or high is None:
+                continue
+            side = 'low' if val < low else ('high' if val > high else None)
+            if side is None:
+                continue
+            # count the last 5 measured deliveries on the same side (the design's "3 of your last 5")
+            recent = [v for v in (_form_val(r, key) for r in all_recs) if v is not None][-5:]
+            edge = low if side == 'low' else high
+            k = sum(1 for v in recent if (v < low if side == 'low' else v > high))
+            lo_word, hi_word = _FORM_DIRECTION.get(key, ('lower', 'higher'))
+            word = lo_word if side == 'low' else hi_word
+            text = (f'{word} than your baseline on {k} of your last {len(recent)} '
+                    f'deliveries ({_fmt(val, unit)} vs {_fmt(base["median"], unit)}).')
+            sev = abs(val - edge) / max(high - low, 1e-6)
+            findings.append({'metric': key, 'severity': sev, 'confidence': mm.get('confidence', 0.5),
+                             'rule_id': rule['id'], 'cue': rule.get('cue'), 'drill_ref': rule.get('drill_ref'),
+                             'comparison_text': text})
+        elif comparison == 'consistency':
+            if not base.get('sd'):
+                continue
+            recent = [v for v in (_form_val(r, key) for r in all_recs) if v is not None][-min(len(all_recs), 10):]
+            if len(recent) < 3:
+                continue
+            spread = float(np.std(recent))
+            cc = classify_consistency(spread, base['sd'])
+            if cc['status'] not in ('watch', 'outside'):
+                continue
+            text = (f'more variable than your baseline on your last {len(recent)} deliveries '
+                    f'(spread {_fmt(spread, unit)} vs {_fmt(base["sd"], unit)}).')
+            findings.append({'metric': key, 'severity': cc['ratio'], 'confidence': mm.get('confidence', 0.5),
+                             'rule_id': rule['id'], 'cue': rule.get('cue'), 'drill_ref': rule.get('drill_ref'),
+                             'comparison_text': text})
+    if not findings:
+        return None
+    primary = prioritize(findings, wmap)['primary']
+    drills = {d['id']: d for d in store.drills()}
+    d = drills.get(primary.get('drill_ref')) or {}
+    return {'cue': primary.get('cue'), 'metric': primary['metric'], 'rule_id': primary['rule_id'],
+            'comparison_text': primary['comparison_text'],
+            'drill': {'id': primary.get('drill_ref'), 'name': d.get('name'), 'how': d.get('description')}}
+
+
+def after_form_analyzed(store, user_id, session_id, record, analyze_seconds=None):
+    """Form-only post-analysis (mirrors after_shot_analyzed but touches NOTHING on the ball L-dev-0 score):
+    per-metric form baselines, WATCH flags, the FOCUS insight, and the footer. Mutates `record` in place and
+    returns a small footer dict for the job result. Call BEFORE save_shot_result so the current delivery is
+    counted once (it is not yet persisted, so read_form_records returns strictly prior deliveries)."""
+    cfg = store.engine_config() or {}
+    min_n = int(cfg.get('baseline_min_n', 10))
+    window_days = store.score_formula_params().get('window_days')
+    history = store.read_form_records(user_id, window_days=window_days)
+    bases = compute_form_baselines(store, user_id, history, record, min_n)
+    _attach_baselines_and_watch(record, bases, record)
+    focus = _form_focus(store, record, bases, history, record)
+    record['focus'] = focus
+    rules_version = max((int(r.get('version', 1) or 1) for r in store.form_rules()), default=1)
+    record['footer'] = {
+        'analyzed_s': round(float(analyze_seconds), 1) if analyze_seconds is not None else None,
+        'form_version': record.get('form_version'),
+        'rules_version': rules_version,
+    }
+    return {'focus': focus, 'key_frames': record.get('key_frames', []),
+            'n_form_deliveries': len(history) + 1, 'footer': record['footer']}
 
 
 def at_session_end(store, user_id, session_id):

@@ -499,6 +499,97 @@ def _unavail(metric, unit, reason):
 _CALIB_REASON = ('needs floor-plane calibration — unresolved, see '
                  'TRAINING_VIDEOS_CALIBRATED_METRICS addenda')
 
+# Metrics the design surfaces but the current rear-view method does not yet trust: ball-vs-slide timing and
+# slide length both need 120 fps release/slide-foot tracking that is still being validated (DEC-026 — report
+# 'unavailable' with the reason, never a guessed number). These flow through as honest unavailable tiles.
+_VALIDATING_REASON = ('still being validated — ball-vs-slide timing / slide length need 120 fps '
+                      'slide-and-release tracking that is not yet verified on this view (FORM_ANALYSIS_SPEC §9)')
+
+# --- qualitative read-out thresholds (auditable; provisional, pending per-metric form-baseline validation) ---
+# Rhythm is reported from the swing-tempo ratio rhythm_ratio = downswing_time / backswing_time (already
+# computed): a downswing clearly quicker than the backswing (ratio well below 1) reads as the swing "speeding
+# up" into release; near-equal is "even"; a slower downswing "slows down". The reference session mean is 0.51,
+# so a well-timed swing typically reads "Speeds up". Bands chosen symmetrically around 1.0 with a dead-zone so
+# frame-timing jitter near parity does not flip the label.
+RHYTHM_SPEEDS_UP_MAX = 0.85      # ratio <= this -> "Speeds up"  (downswing clearly quicker than the backswing)
+RHYTHM_SLOWS_DOWN_MIN = 1.15     # ratio >= this -> "Slows down" (downswing slower than the backswing)
+# Backswing apex height vs the shoulder line, in torso lengths (+ above shoulder, - below). A +/-0.15-torso
+# dead-zone around the shoulder line reads as "Shoulder"; clearly above/below crosses to the outer labels.
+BACKSWING_ABOVE_MIN = 0.15       # backswing_height_rel >= this -> "Above shoulder"
+BACKSWING_BELOW_MAX = -0.15      # backswing_height_rel <= this -> "Below shoulder"
+
+
+def _rhythm_display(ratio):
+    if ratio is None:
+        return None
+    if ratio <= RHYTHM_SPEEDS_UP_MAX:
+        return 'Speeds up'
+    if ratio >= RHYTHM_SLOWS_DOWN_MIN:
+        return 'Slows down'
+    return 'Even'
+
+
+def _backswing_display(rel):
+    if rel is None:
+        return None
+    if rel >= BACKSWING_ABOVE_MIN:
+        return 'Above shoulder'
+    if rel <= BACKSWING_BELOW_MAX:
+        return 'Below shoulder'
+    return 'Shoulder'
+
+
+# --- key-position frame export (design "KEY POSITIONS": ball start, top of swing, release, finish) ---
+# Each maps to a located swing/approach event time; only frames the pose actually found are exported.
+KEY_FRAME_EVENTS = (('ball_start', 'E2'), ('top_of_swing', 'E4'), ('release', 'E7'), ('finish', 'hold_start'))
+
+
+def export_key_frames(video, out_prefix, events, log=print) -> list:
+    """Write a JPEG for each located key position to ``<out_prefix>_form_<key>.jpg`` and return the keys
+    actually written (in canonical order). Event times come from the pose ``_extras`` block; a missing event
+    is skipped (no frame, no fabrication). Best-effort: any decode/write failure is logged and omitted, never
+    raised — the visual stills must not break the numeric analysis."""
+    if not out_prefix or not events:
+        return []
+    try:
+        import cv2
+    except ImportError:   # pragma: no cover - env-dependent
+        log('key-frames: OpenCV not available; skipping frame export')
+        return []
+    want = {key: float(events[ev]) for key, ev in KEY_FRAME_EVENTS
+            if events.get(ev) is not None}
+    if not want:
+        return []
+    try:
+        pts = frame_times(video)
+        if not len(pts):
+            return []
+        targets = {key: int(np.argmin(np.abs(pts - tval))) for key, tval in want.items()}
+        need = {}
+        for key, idx in targets.items():
+            need.setdefault(idx, []).append(key)
+        cap = cv2.VideoCapture(video)
+        if not cap.isOpened():
+            log(f'key-frames: OpenCV cannot decode {video!r}; skipping')
+            return []
+        written = set()
+        i, maxidx = 0, max(need)
+        while need and i <= maxidx:
+            ok, img = cap.read()
+            if not ok:
+                break
+            if i in need:
+                for key in need.pop(i):
+                    path = f'{out_prefix}_form_{key}.jpg'
+                    if cv2.imwrite(path, img):
+                        written.add(key)
+            i += 1
+        cap.release()
+    except Exception as e:   # pragma: no cover - env-dependent (decode/codec issues)
+        log(f'key-frames: export failed ({e}); continuing without stills')
+        return []
+    return [key for key, _ in KEY_FRAME_EVENTS if key in written]
+
 
 def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log=print) -> dict:
     """Full per-clip analysis. Returns a dict {metric_key: Measurement-dict} covering the FORM_P1 keys plus
@@ -528,13 +619,16 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
         reason = ('could not isolate the delivery (no clear finish hold — pose likely failed on this clip, '
                   'e.g. bowler too small or occluded; see FORM_ANALYSIS_SPEC §9).')
         for k, u in (('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'),
-                     ('swing_time', 's'), ('approach_time', 's'), ('rhythm_ratio', 'ratio'),
-                     ('finish_hold', 's'), ('backswing_height_rel', 'ratio')):
+                     ('release_time', 's'), ('swing_time', 's'), ('approach_time', 's'),
+                     ('rhythm_ratio', 'ratio'), ('finish_hold', 's'), ('backswing_height_rel', 'ratio')):
             out[k] = _unavail(k, u, reason)
         out['step_count'] = _unavail('step_count', 'count', reason)
         out['ball_start_step'] = _unavail('ball_start_step', 'index', reason)
         out['drift_boards'] = _unavail('drift_boards', 'board', _CALIB_REASON)
+        out['timing_at_slide'] = _unavail('timing_at_slide', 's', _VALIDATING_REASON)
+        out['slide_length'] = _unavail('slide_length', 'inch', _VALIDATING_REASON)
         extras['events'] = {}
+        extras['key_frames'] = []
         out['_extras'] = extras
         return out
 
@@ -557,12 +651,17 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     if not plants:
         reason = 'delivery found but no foot plants detected in the approach window.'
         for k, u in (('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'),
-                     ('swing_time', 's'), ('approach_time', 's'), ('rhythm_ratio', 'ratio'),
-                     ('finish_hold', 's'), ('backswing_height_rel', 'ratio')):
+                     ('release_time', 's'), ('swing_time', 's'), ('approach_time', 's'),
+                     ('rhythm_ratio', 'ratio'), ('finish_hold', 's'), ('backswing_height_rel', 'ratio')):
             out[k] = _unavail(k, u, reason)
         out['step_count'] = _unavail('step_count', 'count', reason)
         out['ball_start_step'] = _unavail('ball_start_step', 'index', reason)
         out['drift_boards'] = _unavail('drift_boards', 'board', _CALIB_REASON)
+        out['timing_at_slide'] = _unavail('timing_at_slide', 's', _VALIDATING_REASON)
+        out['slide_length'] = _unavail('slide_length', 'inch', _VALIDATING_REASON)
+        extras.setdefault('events', {k: (None if v is None else round(v, 3)) for k, v in
+                                     dict(E2=E2, E3=E3, E4=E4, E6=E6, E7=E7).items()})
+        extras['key_frames'] = []
         out['_extras'] = extras
         return out
 
@@ -604,6 +703,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     pushaway = dur(E2, E3)
     backswing = dur(E3, E4)
     downswing = dur(E4, E6)
+    release_time = dur(E6, E7)                   # bottom of arc -> release (the swing-bar 4th segment)
     swing_time = dur(E2, E7)
     approach_time = dur(first_step, E7)          # E1 (true approach start) not reliable here; use first step
     finish_hold = (hold_end - hold_start) * scale
@@ -647,15 +747,22 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     out['downswing_time'] = _m('downswing_time', downswing, 's', 0.65 if downswing else 0.0,
                                be if downswing else 'unavailable',
                                note=f'E4 apex -> E6 bottom of arc ({sw_src} arc){slow_tag}', uncertainty=unc)
+    out['release_time'] = _m('release_time', release_time, 's', 0.4 if release_time else 0.0,
+                             be if release_time else 'unavailable',
+                             note=f'E6 bottom of arc -> E7 release; the ball leaves at the bottom so this is '
+                                  f'~1 frame unless the on-lane ball refines it ({sw_src} arc){slow_tag}',
+                             uncertainty=unc)
     out['rhythm_ratio'] = _m('rhythm_ratio', tempo, 'ratio', 0.5 if tempo else 0.0,
                              be if tempo else 'unavailable',
                              note='swing tempo = downswing / backswing (ref session mean 0.51)')
+    out['rhythm_ratio']['display'] = _rhythm_display(tempo)   # "Speeds up" / "Even" / "Slows down"
     out['finish_hold'] = _m('finish_hold', finish_hold, 's', 0.6, be,
                             note=f'both feet stationary after the slide (E8->E9){slow_tag}', uncertainty=unc)
     out['backswing_height_rel'] = _m('backswing_height_rel', bh_rel, 'ratio', 0.5 if bh_rel is not None else 0.0,
                                      be if bh_rel is not None else 'unavailable',
                                      note='bowling-wrist apex vs shoulder line, torso lengths (+above/-below; '
                                           'ref "about shoulder height")')
+    out['backswing_height_rel']['display'] = _backswing_display(bh_rel)   # "Above shoulder"/"Shoulder"/"Below shoulder"
     # ball-start step index (which step contains E2)
     bss = None
     if E2 is not None:
@@ -671,6 +778,8 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                                 'low_confidence' if bss is not None else 'unavailable',
                                 note='step index containing E2 ball-start (0 = before the first tracked plant)')
     out['drift_boards'] = _unavail('drift_boards', 'board', _CALIB_REASON)
+    out['timing_at_slide'] = _unavail('timing_at_slide', 's', _VALIDATING_REASON)
+    out['slide_length'] = _unavail('slide_length', 'inch', _VALIDATING_REASON)
 
     # diagnostic extras (surfaced to the validation harness; analyze_form_clip only uses the FORM_P1 keys)
     extras['step_intervals'] = _m('step_intervals', None, 's', 0.6, be,
@@ -694,6 +803,8 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     extras['events'] = {k: (None if v is None else round(v, 3)) for k, v in
                         dict(E2=E2, E3=E3, E4=E4, E6=E6, E7=E7, first_step=first_step,
                              slide_plant=slide_plant, hold_start=hold_start, hold_end=hold_end).items()}
+    # export the design's four KEY POSITIONS stills at the located event times (only those the pose found)
+    extras['key_frames'] = export_key_frames(video, out_prefix, extras['events'], log=log)
     extras['strikes'] = [(round(x, 3), lab) for x, lab in seq]
     extras['slowmo'] = dict(is_slowmo=is_slow, factor=factor, note=slownote,
                             raw_step_intervals=[round(v, 3) for v in raw_intervals],

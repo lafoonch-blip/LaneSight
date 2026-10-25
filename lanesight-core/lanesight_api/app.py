@@ -12,6 +12,7 @@ from pathlib import Path
 import shutil
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response
+from fastapi.responses import FileResponse
 
 from . import API_VERSION, APP_COMPAT
 from . import engines
@@ -46,8 +47,14 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
             rec['shot_id'] = shot_id
             job.timings['analyze'] = time.monotonic() - t0
+            # Form-only engine step (baselines -> watch -> focus -> footer). Runs BEFORE save so the current
+            # delivery is counted once; never touches the ball L-dev-0 score / Accuracy.
+            form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
+                                                      analyze_seconds=job.timings['analyze'])
             store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'})
-            return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'))
+            return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
+                        focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
+                        footer=form_footer.get('footer'))
         from lanesight_runner.core import analyze_clip
         rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
         rec['shot_id'] = shot_id
@@ -207,6 +214,23 @@ def patch_shot(shot_id: str, body: dict, user=Depends(current_user)):
     if not sh:
         raise HTTPException(404, 'shot not found')
     return sh
+
+
+# Key-position stills for the Form screen's KEY POSITIONS row. Owner-scoped; only frames the pose exported
+# exist on disk (recorded in the form record's key_frames), so a missing frame is an honest 404.
+_FORM_FRAME_KEYS = {'ball_start', 'top_of_swing', 'release', 'finish'}
+
+
+@app.get('/shots/{shot_id}/frame/{key}')
+def get_shot_frame(shot_id: str, key: str, user=Depends(current_user)):
+    if key not in _FORM_FRAME_KEYS:
+        raise HTTPException(404, 'unknown frame key')
+    if not get_store().get_shot(user, shot_id):        # owner-scoped
+        raise HTTPException(404, 'shot not found')
+    path = DATA_ROOT / 'out' / f'{shot_id}_form_{key}.jpg'
+    if not path.exists():
+        raise HTTPException(404, 'frame not available')
+    return FileResponse(str(path), media_type='image/jpeg')
 
 
 # ----------------------------------------------------------------- spot check (advisory, never blocks)

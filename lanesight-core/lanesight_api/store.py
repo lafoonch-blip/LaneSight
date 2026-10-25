@@ -246,6 +246,32 @@ class MemoryStore:
                 handed = sh['handed']
         return records, intents, handed
 
+    def read_form_records(self, user_id, window_days=None):
+        """Prior FORM shot records for the user (source 'lanesight_form'), ordered oldest->newest. A form
+        record is discriminated by its 'form_version' key, so it never mixes with ball shots. Offline: memory."""
+        shots = sorted(self.user_shots(user_id), key=lambda s: s.get('created_at') or 0)
+        now = time.time()
+        out = []
+        for sh in shots:
+            rec = sh.get('record')
+            if not rec or not rec.get('form_version') or not rec.get('metrics'):
+                continue
+            if (window_days is not None and sh.get('created_at')
+                    and (now - sh['created_at']) > window_days * 86400):
+                continue
+            rec = dict(rec)
+            rec.setdefault('shot_id', sh['id'])
+            out.append(rec)
+        return out
+
+    def form_rules(self):
+        from .rules_seed import FORM_RULES
+        return [dict(r) for r in FORM_RULES]
+
+    def drills(self):
+        from .rules_seed import DRILLS
+        return [dict(d) for d in DRILLS]
+
     def completed_sessions(self, user_id):
         return [s for s in self.list_sessions(user_id) if s.get('ended_at')]
 
@@ -671,6 +697,48 @@ class PgStore(MemoryStore):
             if s.get('handed'):
                 handed = s['handed']
         return records, intents, handed
+
+    def read_form_records(self, user_id, window_days=None):
+        """Prior FORM shot records from Supabase: measurements with source 'lanesight_form' (the pose pipeline),
+        so ball-CV measurements never leak into form baselines."""
+        import datetime as _dt
+        from urllib.parse import quote
+        q = f'user_id=eq.{user_id}&select=id,created_at&order=created_at'
+        if window_days is not None:
+            since = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=window_days)) \
+                .strftime('%Y-%m-%dT%H:%M:%SZ')
+            q += f'&created_at=gte.{quote(since, safe="")}'
+        shots = self._get('shots', q)
+        if not shots:
+            return []
+        ids = ','.join(s['id'] for s in shots)
+        meas = self._get('measurements', f'shot_id=in.({ids})&source=eq.lanesight_form'
+                                          '&select=shot_id,metric,value,status,confidence,note')
+        by_shot = {}
+        for m in meas:
+            by_shot.setdefault(m['shot_id'], {})[m['metric']] = {
+                'value': m.get('value'), 'status': m.get('status'),
+                'confidence': m.get('confidence'), 'note': m.get('note')}
+        out = []
+        for s in shots:
+            metrics = by_shot.get(s['id'])
+            if not metrics:
+                continue
+            out.append({'shot_id': s['id'], 'form_version': 'form', 'metrics': metrics})
+        return out
+
+    def form_rules(self):
+        # owner-only table; the service role reads it. Keep only the highest version per rule id.
+        rows = self._get('form_rule', 'select=*&order=id,version')
+        latest = {}
+        for r in rows:
+            cur = latest.get(r['id'])
+            if cur is None or (r.get('version') or 0) >= (cur.get('version') or 0):
+                latest[r['id']] = r
+        return list(latest.values())
+
+    def drills(self):
+        return self._get('drill', 'select=*')
 
     def completed_sessions(self, user_id):
         return self._get('sessions', f'user_id=eq.{user_id}&ended_at=not.is.null&select=id,ended_at,mode')
