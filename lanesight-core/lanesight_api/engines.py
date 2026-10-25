@@ -421,7 +421,7 @@ def _attach_baselines_and_watch(record, bases, current):
         if not mm:
             continue
         if base.get('established'):
-            mm['baseline'] = {'median': base['median'], 'sd': base['sd'], 'n': base['n'],
+            mm['baseline'] = {'established': True, 'median': base['median'], 'sd': base['sd'], 'n': base['n'],
                               'band_low': base['band_low'], 'band_high': base['band_high']}
             val = _form_val(current, metric)
             if val is not None and base['band_low'] is not None and base['band_high'] is not None:
