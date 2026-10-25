@@ -16,6 +16,7 @@ struct ShotCardView: View {
     @State private var helpful: Bool?
     @State private var pendingNotification: AppNotification?
     @State private var moveApplied = false
+    @State private var pinsError: String?
     @State private var coreVersion: String?
     @State private var rulesVersion: String?
 
@@ -43,14 +44,19 @@ struct ShotCardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if let suggested = result.suggestedTarget, suggested.hasBoard { applyMoveSection(suggested) }
+                    nextShotCard
+                    if result.captureFarLaneLimited { captureBanner }
                     laneAndTarget
                     ballSection
                     if !formMetrics.isEmpty { formSection }
                     sensorSection
-                    ScoreCard(score: result.score, showBreakdown: false)
-                    if result.footer != nil { scoreNudges }
-                    ShotNotesView(shotId: result.shotId, isUpload: isUpload).environmentObject(model)
+                    if result.isUpload {
+                        uploadFooter
+                    } else {
+                        ScoreCard(score: result.score, showBreakdown: false)
+                        if result.footer != nil { scoreNudges }
+                    }
+                    ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
                     analyzedFooter
                 }
                 .padding(16)
@@ -76,53 +82,225 @@ struct ShotCardView: View {
         }
     }
 
-    private var isUpload: Bool { false }     // this card is shown for live shots; uploads seed the same flow
+    // MARK: next shot — state machine (design 3.7 NextShotStates.dc.html)
 
-    // MARK: next shot ("Apply this move")
+    /// The Next Shot card, rendered from the server's insights `state`. Six states (GUARDRAILS 3.7 C.7):
+    /// strike_repeat · execution_miss · pins_unknown · no_reliable_data · low_confidence_move · move.
+    /// Falls back to the plain "Apply this move" card for an older record that carries a suggested target
+    /// but no `state`. Shows nothing when there's neither a state nor an actionable target.
+    @ViewBuilder private var nextShotCard: some View {
+        switch result.insightsState {
+        case "strike_repeat": strikeRepeatCard
+        case "execution_miss": executionMissCard
+        case "pins_unknown": pinsUnknownCard
+        case "no_reliable_data": noReliableDataCard
+        case "low_confidence_move": moveCard(lowConfidence: true)
+        case "move": moveCard(lowConfidence: false)
+        default:
+            if let suggested = result.suggestedTarget, suggested.hasBoard { moveCard(lowConfidence: false) }
+        }
+    }
 
-    /// The server's actionable move inside the cyan-accent card (design 3.5). The button applies the
-    /// server-computed `suggested_target` (non-null boards only) to the carry-forward target. No board
-    /// math is done here. The advice 👍/👎 lives inside this card, as in the design.
-    private func applyMoveSection(_ suggested: SuggestedTarget) -> some View {
-        let rec = result.recommendation
-        let direction = (rec?.direction ?? suggested.direction)?.capitalized
-        let moveFeet = rec?.move_feet ?? suggested.move_feet
-        let headline: String = {
-            if let direction, let moveFeet { return "Move \(direction) \(Fmt.number(moveFeet)) ft" }
-            if let direction { return "Move \(direction)" }
-            return "Adjust your target"
-        }()
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.right").font(.lsCaption.weight(.bold))
-                Text("NEXT SHOT").font(.lsCaption.weight(.semibold)).tracking(1.1)
+    /// Shared eyebrow ("NEXT SHOT") in the given accent, optional leading checkmark + trailing chip.
+    private func nextShotEyebrow(_ color: Color, check: Bool = false, chip: (String, Color)? = nil) -> some View {
+        HStack(spacing: 8) {
+            if check { Image(systemName: "checkmark").font(.lsCaption.weight(.bold)) }
+            Text("NEXT SHOT").font(.lsCaption.weight(.semibold)).tracking(1.1)
+            if let chip {
+                Spacer()
+                Text(chip.0).font(.lsCaption2.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .foregroundStyle(chip.1)
             }
-            .foregroundStyle(LS.action)
-            Text(headline).font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
-            if let reason = rec?.reason, !reason.isEmpty {
+        }
+        .foregroundStyle(color)
+    }
+
+    private func stateCard<Content: View>(fill: Color, stroke: Color, dashed: Bool = false,
+                                          @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10, content: content)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(stroke, style: StrokeStyle(lineWidth: 1, dash: dashed ? [5, 4] : [])))
+    }
+
+    // STATE · STRIKE (no move)
+    private var strikeRepeatCard: some View {
+        stateCard(fill: LS.successBg, stroke: LS.success) {
+            nextShotEyebrow(LS.success, check: true)
+            Text("Strike. Repeat the shot.").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            if let note = result.insightsNote ?? result.recommendation?.reason, !note.isEmpty {
+                Text(note).font(.lsCallout).foregroundStyle(LS.textPrimary)
+            }
+        }
+    }
+
+    // STATE · MISSED YOUR TARGET (repeat, don't move)
+    private var executionMissCard: some View {
+        stateCard(fill: LS.selected, stroke: LS.borderStrong) {
+            nextShotEyebrow(LS.action)
+            Text("Same line. Hit your mark.").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            if let note = result.insightsNote ?? result.recommendation?.reason, !note.isEmpty {
+                Text(note).font(.lsCallout).foregroundStyle(LS.textSecondary)
+            }
+            targetStaysBox
+        }
+    }
+
+    private var targetStaysBox: some View {
+        let t = model.sessionTarget
+        var parts: [String] = []
+        if let f = t.feetBoard { parts.append("F \(Fmt.number(f))") }
+        if let a = t.arrowsBoard { parts.append("A \(Fmt.number(a))") }
+        if let b = t.breakpointBoard { parts.append("B \(Fmt.number(b))") }
+        return Text(parts.isEmpty ? "Target stays the same" : "Target stays · " + parts.joined(separator: " · "))
+            .font(.lsCaption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
+    // STATE · PINS NOT READ (ask the bowler)
+    private var pinsUnknownCard: some View {
+        stateCard(fill: LS.selected, stroke: LS.borderStrong) {
+            nextShotEyebrow(LS.action)
+            Text("What did it leave?").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            Text(result.insightsNote ?? "We couldn't see the pins settle. Tap the result and we'll give your next move.")
+                .font(.lsCallout).foregroundStyle(LS.textSecondary)
+            if let pinsError { Text(pinsError).font(.lsCaption).foregroundStyle(LS.bestEffort) }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                pinButton("Strike", strike: true)
+                pinButton("10 pin", pins: [10])
+                pinButton("4 / 7 pin", pins: [4, 7])
+                pinButton("Split", leave: "split")
+                pinButton("Other leave", leave: "other")
+                pinButton("Pick pins", leave: "other")   // explicit picker is a later screen; sends "other" for now
+            }
+        }
+    }
+
+    private func pinButton(_ label: String, leave: String? = nil, pins: [Int]? = nil, strike: Bool = false) -> some View {
+        Button {
+            Task {
+                pinsError = nil
+                do { try await model.reportPins(shotId: result.shotId, leave: leave, pins: pins, strike: strike) }
+                catch { pinsError = error.localizedDescription }
+            }
+        } label: {
+            Text(label).font(.lsSubheadline.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+    }
+
+    // STATE · NOT ENOUGH RELIABLE DATA (no move)
+    private var noReliableDataCard: some View {
+        stateCard(fill: LS.card, stroke: LS.borderStrong, dashed: true) {
+            nextShotEyebrow(LS.textSecondary)
+            Text("No move this shot").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            Text(result.insightsNote ?? "The far end of the lane wasn't tracked reliably from this camera spot, so we won't guess at entry board or angle.")
+                .font(.lsCallout).foregroundStyle(LS.textSecondary)
+            Text("Tip: put the camera behind the approach, centered on your lane, about 5 ft up.")
+                .font(.lsCallout).foregroundStyle(LS.textPrimary)
+        }
+    }
+
+    // STATE · MOVE / LOW-CONFIDENCE MOVE — the actionable "Apply this move" card.
+
+    /// The actionable move card (states `move` and `low_confidence_move`). The headline is built in
+    /// BOARDS (never "ft" — SHOT_REVIEW 2026-10-25 #7). For a low-confidence move it carries a
+    /// "LOW CONFIDENCE" chip, an "Apply anyway" button, and the cap note. The button applies the
+    /// server-computed `suggested_target` (non-null boards only) to the carry-forward target — no board
+    /// math is done here. The advice 👍/👎 lives inside this card, as in the design.
+    private func moveCard(lowConfidence: Bool) -> some View {
+        let rec = result.recommendation
+        let suggested = result.suggestedTarget
+        return stateCard(fill: LS.selected, stroke: lowConfidence ? LS.borderStrong : LS.action) {
+            nextShotEyebrow(LS.action, chip: lowConfidence ? ("◐ LOW CONFIDENCE", LS.bestEffort) : nil)
+            Text(moveHeadline(rec, lowConfidence: lowConfidence))
+                .font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            if let reason = result.insightsNote ?? rec?.reason, !reason.isEmpty {
                 Text(reason).font(.lsCallout).foregroundStyle(LS.textSecondary)
             }
-            newTargetSummary(suggested)
-            if moveApplied {
-                Label("Applied — it's now your target for the next shot", systemImage: "checkmark.circle.fill")
-                    .font(.lsCaption).foregroundStyle(LS.measured)
-            } else {
-                Button {
-                    model.applySuggestedTarget(suggested)
-                    moveApplied = true
-                } label: {
-                    Text("Apply this move")
+            if let suggested, suggested.hasBoard {
+                newTargetSummary(suggested)
+                if moveApplied {
+                    Label("Applied — it's now your target for the next shot", systemImage: "checkmark.circle.fill")
+                        .font(.lsCaption).foregroundStyle(LS.measured)
+                } else if lowConfidence {
+                    Button { applyMove(suggested) } label: { Text("Apply anyway") }
+                        .buttonStyle(SecondaryButtonStyle())
+                } else {
+                    Button { applyMove(suggested) } label: { Text("Apply this move") }
+                        .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
+                Text("Feet and arrows move by the recommended boards; breakpoint is projected from your new line. Edit it on the target chip before your next shot.")
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
-            Text("Feet and arrows move by the recommended boards; breakpoint is projected from your new line. Edit it on the target chip before your next shot.")
-                .font(.lsCaption).foregroundStyle(LS.textSecondary)
+            if lowConfidence {
+                Text("Moves are at most 2 and 1 boards per shot. Bigger changes need 2 or more shots that agree.")
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
             helpfulRow
         }
-        .padding(16)
+    }
+
+    private func applyMove(_ suggested: SuggestedTarget) {
+        model.applySuggestedTarget(suggested)
+        moveApplied = true
+    }
+
+    /// Builds the move headline in boards from the recommendation. Confident: "Move Right: feet 2 boards,
+    /// eyes 1 board". Low-confidence: "Maybe: feet 2 boards right, eyes 1 board right". Falls back to the
+    /// rec reason / a neutral prompt when the rec carries no board deltas (an advisory speed/release note).
+    private func moveHeadline(_ rec: Recommendation?, lowConfidence: Bool) -> String {
+        let dir = rec?.direction?.lowercased()
+        func boards(_ v: Double?) -> String? { v.map { "\(Fmt.number($0)) board\($0 == 1 ? "" : "s")" } }
+        let feet = boards(rec?.move_feet), eyes = boards(rec?.move_target)
+        guard let dir, feet != nil || eyes != nil else {
+            if let r = rec?.reason, !r.isEmpty { return r }
+            return "Adjust your target"
+        }
+        var segs: [String] = []
+        if let feet { segs.append(lowConfidence ? "feet \(feet) \(dir)" : "feet \(feet)") }
+        if let eyes { segs.append(lowConfidence ? "eyes \(eyes) \(dir)" : "eyes \(eyes)") }
+        let body = segs.joined(separator: ", ")
+        return lowConfidence ? "Maybe: \(body)" : "Move \(dir.capitalized): \(body)"
+    }
+
+    // MARK: capture-spot banner + upload footer (design 3.7)
+
+    /// Shown above "Target vs actual" when the far lane was limited by the camera spot (capture_quality).
+    private var captureBanner: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "camera.fill").font(.lsCallout).foregroundStyle(LS.bestEffort).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This camera spot limits far-lane numbers").font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text(result.captureReason ?? "Breakpoint, entry and late speed are marked best effort or unavailable.")
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LS.selected, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.action, lineWidth: 1))
+        .background(LS.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
+    /// Replaces the Score/achievement block on an uploaded clip (DEC-055): uploads are analyzed on their
+    /// own and never feed Stats, the LaneSight Score or achievements.
+    private var uploadFooter: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.up.to.line").font(.lsCallout).foregroundStyle(LS.textSecondary)
+            Text("Uploaded clip · analyzed on its own. Doesn't count toward Stats, your LaneSight Score or achievements.")
+                .font(.lsCaption).foregroundStyle(LS.textSecondary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.border, lineWidth: 1))
     }
 
     private func newTargetSummary(_ s: SuggestedTarget) -> some View {
@@ -470,6 +648,9 @@ private struct BallMetricTile: View {
                 Text(isUnavailable ? "—" : Fmt.value(metric))
                     .font(.lsTitle3.weight(.semibold).monospacedDigit())
                     .foregroundStyle(isUnavailable ? LS.textSecondary : LS.textPrimary)
+                if !isUnavailable, let band = Fmt.band(metric) {
+                    Text(band).font(.lsCaption.weight(.semibold)).foregroundStyle(LS.textSecondary)
+                }
                 if !isUnavailable, let unit = metric.unit, !unit.isEmpty {
                     Text(unit).font(.lsCaption.weight(.semibold)).foregroundStyle(LS.textSecondary)
                 }

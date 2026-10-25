@@ -126,7 +126,7 @@ struct FormCardView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LS.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.dataPurple, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.action, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 

@@ -308,6 +308,20 @@ struct APIClient {
         try await sendRaw(req)
     }
 
+    /// Reports the user's leave for a shot whose pins the CV couldn't read (GUARDRAILS 3.7 C.2,
+    /// NextShotStates "PINS NOT READ"). The server stores it as source=user, recomputes insights and
+    /// returns the updated shot record so the card can re-render from the new `state`. `leave` is one of
+    /// strike | 10 | 4-7 | split | other; `pins` is an explicit standing-pin list when the user picked pins.
+    func reportPins(shotId: String, leave: String?, pins: [Int]?, strike: Bool) async throws -> ShotResponse {
+        var req = makeRequest("shots/\(shotId)/pins", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["strike": strike]
+        if let leave { body["leave"] = leave }
+        if let pins { body["pins"] = pins }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await send(req, as: ShotResponse.self)
+    }
+
     // MARK: spot check (advisory)
 
     func spotCheck(framing: [String: Any]) async throws -> SpotCheckResponse {

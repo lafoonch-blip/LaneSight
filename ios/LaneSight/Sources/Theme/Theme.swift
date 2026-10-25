@@ -60,14 +60,20 @@ enum LS {
 
 // MARK: - Metric status
 
-/// Normalizes the server's free-form status strings into the three displayed states.
+/// Normalizes the server's free-form status strings into the three displayed states. This is the ONE
+/// status mapping used everywhere (ball + form); it matches the design's three-chip rule exactly
+/// (NextShotStates.dc.html "METRIC STATUS"): MEASURED = ok/measured; BEST EFFORT = best_effort /
+/// low_confidence / calibrated_estimate (value shown rounded, with ± band when known); UNAVAILABLE =
+/// unavailable or anything else (never shows a number — shows the reason). The previous mapping let
+/// low_confidence / calibrated_estimate fall through to UNAVAILABLE while still showing a value
+/// (SHOT_REVIEW 2026-10-25); they are estimates and belong in BEST EFFORT.
 enum MetricStatus {
     case measured, bestEffort, unavailable
 
     init(_ raw: String?) {
         switch raw?.lowercased() {
         case "ok", "measured", "good": self = .measured
-        case "best_effort", "watch", "degraded": self = .bestEffort
+        case "best_effort", "low_confidence", "calibrated_estimate", "estimate", "watch", "degraded": self = .bestEffort
         default: self = .unavailable
         }
     }

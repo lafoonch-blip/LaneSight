@@ -23,6 +23,17 @@ struct ShotResult: Equatable {
     var suggestedTarget: SuggestedTarget?  // server-computed next-shot target (drives "Apply this move")
     var recommendation: Recommendation?    // the actionable move rec (reason/direction label)
 
+    // 3.7 Next-shot state machine (GUARDRAILS 3.7 C.7/F). The shot card renders from `insightsState`:
+    // move | low_confidence_move | strike_repeat | execution_miss | pins_unknown | no_reliable_data.
+    var insightsState: String?
+    var insightsConfidence: String?
+    var insightsNote: String?
+    // Capture-quality banner (B): shown above "Target vs actual" when the far lane was limited.
+    var captureFarLaneLimited: Bool = false
+    var captureReason: String?
+    // Uploaded clip (DEC-055): no Score / achievement block, show the upload footer instead.
+    var isUpload: Bool = false
+
     // Form-analysis routing. When `isForm` is true the result is rendered by FormCardView (no entry
     // board / score / "Apply this move"). `formView` is the detected camera angle; `formStatus` is the
     // record's top-level status ("ok" | "unavailable" — the latter means the pose backend couldn't run).
@@ -310,6 +321,25 @@ final class AppModel: ObservableObject {
                                       breakpointBoard: t.breakpoint_board)
     }
 
+    /// Reports the user's leave for a shot whose pins weren't read (NextShotStates "PINS NOT READ"),
+    /// then merges the server's recomputed insights back onto the current result so the Next Shot card
+    /// re-renders from the new `state`. Keeps the existing metrics/score/isUpload flags.
+    func reportPins(shotId: String, leave: String?, pins: [Int]?, strike: Bool) async throws {
+        let client = try makeClient()
+        let resp = try await client.reportPins(shotId: shotId, leave: leave, pins: pins, strike: strike)
+        guard let record = resp.record, var r = result, r.shotId == shotId else { return }
+        let insights = record.insights
+        let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
+            ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
+        r.metrics = MetricDisplay.ordered(record.metrics ?? [:])
+        r.suggestedTarget = insights?.suggested_target
+        r.recommendation = moveRec
+        r.insightsState = insights?.state
+        r.insightsConfidence = insights?.confidence
+        r.insightsNote = insights?.note
+        result = r
+    }
+
     /// True when a board's current (used) value still matches the last applied suggestion — i.e. it came
     /// from "Apply this move" and the bowler hasn't edited it. Drives the "suggested" tag on the chip.
     var breakpointIsSuggested: Bool {
@@ -452,6 +482,12 @@ final class AppModel: ObservableObject {
                                    footer: isForm ? nil : last.result,
                                    suggestedTarget: isForm ? nil : insights?.suggested_target,
                                    recommendation: isForm ? nil : moveRec,
+                                   insightsState: isForm ? nil : insights?.state,
+                                   insightsConfidence: isForm ? nil : insights?.confidence,
+                                   insightsNote: isForm ? nil : insights?.note,
+                                   captureFarLaneLimited: record?.capture_quality?.far_lane == "limited",
+                                   captureReason: record?.capture_quality?.reason,
+                                   isUpload: false,
                                    isForm: isForm,
                                    formView: record?.view,
                                    formStatus: record?.status,
@@ -493,6 +529,14 @@ final class AppModel: ObservableObject {
                                    footer: nil,
                                    suggestedTarget: isForm ? nil : insights?.suggested_target,
                                    recommendation: isForm ? nil : moveRec,
+                                   insightsState: isForm ? nil : insights?.state,
+                                   insightsConfidence: isForm ? nil : insights?.confidence,
+                                   insightsNote: isForm ? nil : insights?.note,
+                                   captureFarLaneLimited: record?.capture_quality?.far_lane == "limited",
+                                   captureReason: record?.capture_quality?.reason,
+                                   // This loader backs the Lab › Uploads row → an upload unless the record
+                                   // explicitly says it was a live shot.
+                                   isUpload: record?.source != "live",
                                    isForm: isForm,
                                    formView: record?.view,
                                    formStatus: record?.status,

@@ -356,6 +356,7 @@ private struct ProfileSetupStep: View {
     @State private var delivery = "one_handed_thumb"
     @State private var saving = false
     @State private var saveError: String?
+    @State private var showUnder13 = false
 
     private var age: Int {
         Calendar.current.dateComponents([.year], from: dob, to: Date()).year ?? 0
@@ -423,21 +424,32 @@ private struct ProfileSetupStep: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                NavigationLink {
-                    AddBallStep()
-                } label: {
-                    LoadingLabel("Next: add your ball", busy: saving)
+                // Under-13 gate (design 18a): a DOB under 13 blocks onboarding and saves NOTHING — the
+                // save only runs on the age-OK path, and the under-13 path routes to the Under13 screen.
+                if ageOK {
+                    NavigationLink {
+                        AddBallStep()
+                    } label: {
+                        LoadingLabel("Next: add your ball", busy: saving)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(saving)
+                    .simultaneousGesture(TapGesture().onEnded { Task { await saveProfile() } })
+                } else {
+                    Button { showUnder13 = true } label: {
+                        Text("Next: add your ball").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!ageOK || saving)
-                .opacity(ageOK ? 1 : 0.5)
-                .simultaneousGesture(TapGesture().onEnded { Task { await saveProfile() } })
             }
             .padding(20)
         }
         .background(LSBackground(auth: true))
         .navigationTitle("Bowler profile")
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $showUnder13) {
+            Under13View().environmentObject(model)
+        }
     }
 
     private func saveProfile() async {
@@ -493,5 +505,37 @@ private struct AddBallStep: View {
         .background(LSBackground(auth: true))
         .navigationTitle("Add ball")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Under-13 block (design Under13.dc.html / 18a). Reached only when the entered DOB is under 13. Nothing
+/// has been saved to the profile at this point (the save runs only on the age-OK path). "Back" dismisses
+/// to correct the date; "Sign out" abandons onboarding entirely.
+struct Under13View: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 6) {
+                Capsule().fill(LS.action).frame(height: 4)
+                Capsule().fill(LS.borderStrong).frame(height: 4)
+            }
+            Text("LaneSight is for bowlers 13 and older")
+                .font(.lsTitle2.weight(.semibold)).foregroundStyle(LS.textPrimary).padding(.top, 24)
+            Text("Based on the date of birth you entered, you can't use LaneSight yet. We haven't saved your profile.")
+                .font(.lsBody).foregroundStyle(LS.textSecondary)
+            Text("If the date was entered by mistake, go back and correct it.")
+                .font(.lsCallout).foregroundStyle(LS.textSecondary)
+            Spacer()
+            Button { dismiss() } label: { Text("Back").frame(maxWidth: .infinity) }
+                .buttonStyle(SecondaryButtonStyle())
+            Button { model.signOut() } label: { Text("Sign out").frame(maxWidth: .infinity) }
+                .buttonStyle(.plain)
+                .font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.action).frame(minHeight: 44)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LSBackground(auth: true))
     }
 }

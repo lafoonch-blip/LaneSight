@@ -10,6 +10,14 @@ struct SessionView: View {
     @State private var showFeedback = false
     @State private var showSummary = false
 
+    /// When set, the screen reviews a specific (usually ended) session read-only instead of the live one.
+    var reviewSessionId: String? = nil
+    /// Read-only review (design SessionReview / 6a): no Record / End, no live polling. Notes stay editable
+    /// (they live on each shot card). Defaults to false → the normal live-session behavior.
+    var readOnly: Bool = false
+
+    private var effectiveSessionId: String? { reviewSessionId ?? model.activeSessionId }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -17,16 +25,18 @@ struct SessionView: View {
                 kpis
                 shotsSection
                 Spacer(minLength: 8)
-                Button("Record next shot") { dismiss() }
-                    .buttonStyle(PrimaryButtonStyle())
-                Button("End session") { showFeedback = true }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.activeSessionId == nil)
+                if !readOnly {
+                    Button("Record next shot") { dismiss() }
+                        .buttonStyle(PrimaryButtonStyle())
+                    Button("End session") { showFeedback = true }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(model.activeSessionId == nil)
+                }
             }
             .padding(16)
         }
         .background(LSBackground())
-        .navigationTitle("Live session")
+        .navigationTitle(readOnly ? "Session review" : "Live session")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await pollLoop() }
@@ -48,14 +58,14 @@ struct SessionView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Practice" + (model.laneText.isEmpty ? "" : " · Lane \(model.laneText)"))
+                Text("Practice")
                     .font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                 Text((model.captureMode == "form" ? "Form Analysis" : "Shot Analysis")
                      + (model.selectedOilPatternName.map { " · \($0)" } ?? ""))
                     .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             Spacer()
-            if model.activeSessionId != nil {
+            if !readOnly, model.activeSessionId != nil {
                 HStack(spacing: 6) {
                     Circle().fill(Color(hex: 0xFF4D5E)).frame(width: 8, height: 8)
                     Text("LIVE").font(.lsCaption2.bold()).foregroundStyle(LS.textPrimary)
@@ -113,6 +123,7 @@ struct SessionView: View {
 
     private func pollLoop() async {
         await load()
+        if readOnly { return }                  // ended session → one load, no live polling
         while !Task.isCancelled {
             let pending = currentRows.contains { $0.state == "pending" }
             if !pending && !currentRows.isEmpty { break }
@@ -123,7 +134,7 @@ struct SessionView: View {
     }
 
     private func load() async {
-        guard let sid = model.activeSessionId else { rows = .loaded([]); return }
+        guard let sid = effectiveSessionId else { rows = .loaded([]); return }
         if case .loaded = rows {} else { rows = .loading }
         do { rows = .loaded(try await model.makeClient().sessionShots(sid)) }
         catch { rows = .failed(error.localizedDescription) }

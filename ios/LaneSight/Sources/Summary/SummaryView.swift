@@ -49,7 +49,7 @@ struct SummaryView: View {
     private var headerBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("SESSION COMPLETE").lsEyebrow()
-            Text("Practice" + (model.laneText.isEmpty ? "" : " · Lane \(model.laneText)"))
+            Text("Practice")
                 .font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
             if let n = summary?.shots {
                 Text("\(n) shot\(n == 1 ? "" : "s")").font(.lsCallout).foregroundStyle(LS.textSecondary)

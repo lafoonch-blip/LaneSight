@@ -76,6 +76,10 @@ struct ShotRecord: Codable {
     let view: String?
     let status: String?
     let fps: Double?
+    // Capture quality (GUARDRAILS 3.7 B): far_lane == "limited" drives the camera-spot banner; `reason`
+    // is the honest one-line explanation. `source` distinguishes an uploaded clip from a live shot.
+    let capture_quality: CaptureQuality?
+    let source: String?
 
     // Form fundamentals v1 (DEC-057) — the after_form_analyzed footer fields written onto the record.
     // key_frames: the KEY POSITIONS stills actually exported (fetched via GET /shots/{id}/frame/{key}).
@@ -93,6 +97,7 @@ struct ShotRecord: Codable {
         case shot_id, metrics, insights, form_version, view, status, fps
         case key_frames, events, timing_checkpoints, measured_positions
         case swing_timing, coaching_cues, focus, footer
+        case capture_quality, source
     }
 
     // Lenient decode: decode each field independently with `try?` so one malformed/unexpected form field
@@ -115,7 +120,16 @@ struct ShotRecord: Codable {
         coaching_cues = (try? c?.decodeIfPresent(CoachingCues.self, forKey: .coaching_cues)) ?? nil
         focus = (try? c?.decodeIfPresent(FormFocus.self, forKey: .focus)) ?? nil
         footer = (try? c?.decodeIfPresent(FormFooter.self, forKey: .footer)) ?? nil
+        capture_quality = (try? c?.decodeIfPresent(CaptureQuality.self, forKey: .capture_quality)) ?? nil
+        source = (try? c?.decodeIfPresent(String.self, forKey: .source)) ?? nil
     }
+}
+
+/// Capture-quality assessment written onto the shot record (GUARDRAILS 3.7 B). `far_lane` is "limited"
+/// when the downlane depth couldn't be tracked reliably from this camera spot; `reason` is honest text.
+struct CaptureQuality: Codable, Equatable {
+    let far_lane: String?
+    let reason: String?
 }
 
 // MARK: - Form fundamentals v1 contract (DEC-057, after_form_analyzed footer / shot record)
@@ -228,6 +242,12 @@ struct FormBaseline: Codable, Equatable {
 struct ShotInsights: Codable, Equatable {
     let recommendations: [Recommendation]?
     let suggested_target: SuggestedTarget?
+    // 3.7 next-shot state machine (GUARDRAILS 3.7 C.7): the app renders the Next Shot card from `state`.
+    // One of: move | low_confidence_move | strike_repeat | execution_miss | pins_unknown | no_reliable_data.
+    // `confidence` is the qualitative level ("low"|"medium"|"high"); `note` is the honest one-line reason.
+    let state: String?
+    let confidence: String?
+    let note: String?
 }
 
 struct Recommendation: Codable, Equatable {
@@ -260,6 +280,7 @@ struct Metric: Codable {
     let status: String?
     let note: String?
     let confidence: Double?
+    let uncertainty: Double?    // ± band for a best-effort/estimate value (e.g. rev rate ±16); nil when unknown
 }
 
 struct ScoreResponse: Codable {
@@ -833,11 +854,14 @@ enum FormMetricDisplay {
 enum FormMetricState {
     case ok, estimate, unavailable
 
+    /// Delegates to the single `MetricStatus` mapping (Theme.swift) so ball and form can never disagree
+    /// on what a status string means (GUARDRAILS 3.7 F — one mapping everywhere): measured→ok,
+    /// bestEffort→estimate (best_effort / low_confidence / calibrated_estimate), unavailable→unavailable.
     init(_ raw: String?) {
-        switch raw?.lowercased() {
-        case "ok": self = .ok
-        case "best_effort", "low_confidence": self = .estimate
-        default: self = .unavailable     // "unavailable" or anything unexpected
+        switch MetricStatus(raw) {
+        case .measured: self = .ok
+        case .bestEffort: self = .estimate
+        case .unavailable: self = .unavailable
         }
     }
 

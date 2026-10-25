@@ -56,7 +56,17 @@ struct HomeView: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(rows.sorted(by: { ($0.started_at ?? 0) > ($1.started_at ?? 0) }).prefix(6)) { s in
-                            SessionRowCard(session: s)
+                            if s.ended_at == nil {
+                                SessionRowCard(session: s)      // a live session isn't opened for review here
+                            } else {
+                                // Ended session → open the read-only review (design SessionReview / 6a).
+                                NavigationLink {
+                                    SessionView(reviewSessionId: s.id, readOnly: true).environmentObject(model)
+                                } label: {
+                                    SessionRowCard(session: s)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }

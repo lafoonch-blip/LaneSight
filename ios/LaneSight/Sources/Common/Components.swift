@@ -166,6 +166,13 @@ enum Fmt {
         return String(format: "%.1f", v)
     }
 
+    /// The "± band" shown beside a best-effort value when the server provides an uncertainty
+    /// (e.g. rev rate "359 ±16"). Nil when there's no value or no uncertainty — never fabricated.
+    static func band(_ m: Metric?) -> String? {
+        guard let m, m.value != nil, let u = m.uncertainty, u > 0 else { return nil }
+        return "±\(number(u))"
+    }
+
     /// Score sub-parts arrive as 0…10 components; present them on the familiar 0…100 scale.
     static func part(_ v: Double?) -> String {
         guard let v else { return "—" }
@@ -194,10 +201,14 @@ struct MetricRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(metric.map(Fmt.value) ?? "—")
+                    // UNAVAILABLE never shows a number (design 3.7 metric-status rule) — only "—".
+                    Text(hideValue ? "—" : (metric.map(Fmt.value) ?? "—"))
                         .font(.lsBody.monospacedDigit().weight(.semibold))
                         .foregroundStyle(LS.textPrimary)
-                    if let unit = metric?.unit, !unit.isEmpty, metric?.value != nil {
+                    if !hideValue, let band = Fmt.band(metric) {
+                        Text(band).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                    }
+                    if !hideValue, let unit = metric?.unit, !unit.isEmpty, metric?.value != nil {
                         Text(unit).font(.lsCaption).foregroundStyle(LS.textSecondary)
                     }
                 }
@@ -208,8 +219,11 @@ struct MetricRow: View {
         .accessibilityLabel(voiceLabel)
     }
 
+    /// Hide the number when the metric is unavailable or carries no value.
+    private var hideValue: Bool { status == .unavailable || metric?.value == nil }
+
     private var voiceLabel: String {
-        let val = metric?.value != nil ? "\(Fmt.value(metric!)) \(metric?.unit ?? "")" : "no value"
+        let val = !hideValue ? "\(Fmt.value(metric!)) \(metric?.unit ?? "")" : "no value"
         return "\(name), \(val), \(status.label)"
     }
 }

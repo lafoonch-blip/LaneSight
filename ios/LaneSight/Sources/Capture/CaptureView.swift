@@ -269,7 +269,7 @@ private struct ProcessingCover: View {
                 VStack(spacing: 14) {
                     ProgressView().tint(LS.cyan).scaleEffect(1.3)
                     Text("Analyzing…").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
-                    Text("Usually about 20–30s · job \(state)")
+                    Text("Usually 1–3 min today")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
                     if !timings.isEmpty {
                         Text(timings.sorted(by: { $0.key < $1.key })
