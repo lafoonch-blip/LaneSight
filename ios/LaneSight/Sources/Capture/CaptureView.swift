@@ -205,7 +205,11 @@ private struct ProcessingCover: View {
             switch model.pipeline {
             case .done:
                 if let result = model.result {
-                    ShotCardView(result: result).environmentObject(model)
+                    if result.isForm {
+                        FormCardView(result: result).environmentObject(model)
+                    } else {
+                        ShotCardView(result: result).environmentObject(model)
+                    }
                 } else {
                     stage(title: "Finishing up…")
                 }

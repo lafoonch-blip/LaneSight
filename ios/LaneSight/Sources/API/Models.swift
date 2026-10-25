@@ -68,6 +68,13 @@ struct ShotRecord: Codable {
     let shot_id: String?
     let metrics: [String: Metric]?
     let insights: ShotInsights?
+    // Form-analysis fields (present only when the shot was captured in FORM mode). All optional so a
+    // ball shot — which never carries them — decodes unchanged. `form_version` being non-nil is the
+    // fallback signal that this record is a form result; `status` is the top-level form status
+    // ("ok" | "unavailable") and `view` is the detected camera angle.
+    let form_version: String?
+    let view: String?
+    let status: String?
 }
 
 /// Analyzed-shot insights (record.insights). `suggested_target` is the server-computed target line for
@@ -559,5 +566,109 @@ enum MetricDisplay {
         name.split(separator: "_")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
+    }
+}
+
+// MARK: - Form (FORM_P1) display
+
+/// Ordering, labels, and honest value formatting for the provisional FORM_P1 metrics (form_version
+/// 0.0.0). These are deliberately separate from the ball `MetricDisplay`: form metrics have their own
+/// grouping (swing phases first) and their own formatting rules (seconds/ratios to 2 dp, counts as
+/// integers). Nothing here fabricates a value — a null value stays "not measured".
+enum FormMetricDisplay {
+    /// The canonical FORM_P1 keys the backend emits.
+    static let p1Keys: Set<String> = [
+        "pushaway_time", "backswing_time", "downswing_time", "swing_time",
+        "approach_time", "step_count", "ball_start_step", "rhythm_ratio",
+        "finish_hold", "backswing_height_rel", "drift_boards",
+    ]
+
+    /// Preferred display order: swing phases grouped first, then the rest.
+    static let preferredOrder: [String] = [
+        "pushaway_time", "backswing_time", "downswing_time", "swing_time",
+        "approach_time", "step_count", "ball_start_step", "rhythm_ratio",
+        "finish_hold", "backswing_height_rel", "drift_boards",
+    ]
+
+    /// True if any FORM_P1 key is present — the fallback form-result signal when the capture mode and
+    /// `form_version` are both unknown.
+    static func looksLikeForm(_ metrics: [String: Metric]?) -> Bool {
+        guard let metrics else { return false }
+        return metrics.keys.contains { p1Keys.contains($0) }
+    }
+
+    /// (name, metric) pairs in the grouped order above; any unlisted key is appended alphabetically.
+    static func ordered(_ metrics: [String: Metric]) -> [(String, Metric)] {
+        let known = preferredOrder.compactMap { name in metrics[name].map { (name, $0) } }
+        let rest = metrics.keys
+            .filter { !preferredOrder.contains($0) }
+            .sorted()
+            .compactMap { name in metrics[name].map { (name, $0) } }
+        return known + rest
+    }
+
+    /// Human labels tuned for the swing timeline (fallback: generic humanize).
+    static func label(_ name: String) -> String {
+        switch name {
+        case "pushaway_time": return "Pushaway"
+        case "backswing_time": return "Backswing"
+        case "downswing_time": return "Downswing"
+        case "swing_time": return "Total swing"
+        case "approach_time": return "Approach"
+        case "step_count": return "Steps"
+        case "ball_start_step": return "Ball-start step"
+        case "rhythm_ratio": return "Rhythm ratio"
+        case "finish_hold": return "Finish hold"
+        case "backswing_height_rel": return "Backswing height"
+        case "drift_boards": return "Drift"
+        default: return MetricDisplay.humanize(name)
+        }
+    }
+
+    /// Honest formatting of a form value. Returns nil when there is no value (shown as "—").
+    /// Seconds & ratios → 2 dp; counts/indices → integer; boards → 1 dp.
+    static func formattedValue(key: String, _ m: Metric) -> String? {
+        guard let v = m.value else { return nil }
+        switch key {
+        case "step_count", "ball_start_step":
+            return String(Int(v.rounded()))
+        case "drift_boards":
+            return String(format: "%.1f", v)
+        default:   // *_time (s) and *_ratio / *_rel (ratio)
+            return String(format: "%.2f", v)
+        }
+    }
+
+    /// Unit text to show after the value. Counts/indices/ratios read fine without a unit word, so those
+    /// are suppressed; seconds and boards keep their unit.
+    static func unitText(key: String, _ m: Metric) -> String? {
+        guard let unit = m.unit, !unit.isEmpty else { return nil }
+        switch unit.lowercased() {
+        case "count", "index", "ratio": return nil
+        default: return unit
+        }
+    }
+}
+
+/// The three honest states a provisional form metric can be in. Unlike the ball `MetricStatus`, a
+/// "low_confidence" metric is an *estimate* (we still show the number with a tag), not hidden.
+enum FormMetricState {
+    case ok, estimate, unavailable
+
+    init(_ raw: String?) {
+        switch raw?.lowercased() {
+        case "ok": self = .ok
+        case "best_effort", "low_confidence": self = .estimate
+        default: self = .unavailable     // "unavailable" or anything unexpected
+        }
+    }
+
+    /// Small tag shown beside estimates; nil for ok/unavailable (unavailable is handled separately).
+    var tag: String? {
+        switch self {
+        case .ok: return nil
+        case .estimate: return "ESTIMATE"
+        case .unavailable: return nil
+        }
     }
 }

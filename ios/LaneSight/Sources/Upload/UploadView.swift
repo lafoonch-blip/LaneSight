@@ -56,7 +56,11 @@ struct UploadView: View {
         .onChange(of: pickerItem) { _, item in Task { await loadPicked(item) } }
         .sheet(isPresented: $model.showResult) {
             if let result = model.result {
-                ShotCardView(result: result).environmentObject(model)
+                if result.isForm {
+                    FormCardView(result: result).environmentObject(model)
+                } else {
+                    ShotCardView(result: result).environmentObject(model)
+                }
             }
         }
     }

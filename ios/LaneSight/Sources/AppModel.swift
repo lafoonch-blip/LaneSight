@@ -23,9 +23,19 @@ struct ShotResult: Equatable {
     var suggestedTarget: SuggestedTarget?  // server-computed next-shot target (drives "Apply this move")
     var recommendation: Recommendation?    // the actionable move rec (reason/direction label)
 
+    // Form-analysis routing. When `isForm` is true the result is rendered by FormCardView (no entry
+    // board / score / "Apply this move"). `formView` is the detected camera angle; `formStatus` is the
+    // record's top-level status ("ok" | "unavailable" — the latter means the pose backend couldn't run).
+    var isForm: Bool = false
+    var formView: String?
+    var formStatus: String?
+    var formVersion: String?
+
     static func == (lhs: ShotResult, rhs: ShotResult) -> Bool {
         lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0)
             && lhs.footer == rhs.footer && lhs.suggestedTarget == rhs.suggestedTarget
+            && lhs.isForm == rhs.isForm && lhs.formStatus == rhs.formStatus
+            && lhs.formView == rhs.formView
     }
 }
 
@@ -326,6 +336,9 @@ final class AppModel: ObservableObject {
     private func runPipeline(fileURL: URL, source: String) async {
         do {
             let client = try makeClient()
+            // Snapshot the capture mode for THIS shot up front so detection later can't be confused by a
+            // mode change while the clip is analyzing. This is also exactly what's sent as `capture_mode`.
+            let capturedMode = captureMode
 
             // 1. Ensure a session exists for this app run.
             let sid: String
@@ -362,7 +375,7 @@ final class AppModel: ObservableObject {
             let ball = currentBall
             let metadata = ShotMetadata(
                 handed: handed,
-                captureMode: captureMode,
+                captureMode: capturedMode,
                 source: source,
                 intent: sessionTarget,
                 suggested: sessionSuggested,
@@ -398,16 +411,32 @@ final class AppModel: ObservableObject {
             pipeline = .fetching
             let shot = try await client.shot(created.shot_id)
             let score = try await client.score()
-            let metrics = MetricDisplay.ordered(shot.record?.metrics ?? [:])
-            let insights = shot.record?.insights
+            let record = shot.record
+
+            // Detect a form result: the mode this shot was captured in wins; otherwise fall back to the
+            // record carrying `form_version` or FORM_P1 keys. This never misroutes a ball shot — a ball
+            // record has neither form_version nor the FORM_P1 keys.
+            let isForm = capturedMode == "form"
+                || record?.form_version != nil
+                || FormMetricDisplay.looksLikeForm(record?.metrics)
+
+            // Order metrics with the right grouping for the kind of result.
+            let rawMetrics = record?.metrics ?? [:]
+            let metrics = isForm ? FormMetricDisplay.ordered(rawMetrics) : MetricDisplay.ordered(rawMetrics)
+
+            let insights = record?.insights
             // The actionable move rec (reason/direction for the "Apply this move" label): first rec that
-            // names a direction + move distance; otherwise the first rec with a reason.
+            // names a direction + move distance; otherwise the first rec with a reason. Ball-only.
             let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
                 ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
             result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
-                                footer: last.result,
-                                suggestedTarget: insights?.suggested_target,
-                                recommendation: moveRec)
+                                footer: isForm ? nil : last.result,
+                                suggestedTarget: isForm ? nil : insights?.suggested_target,
+                                recommendation: isForm ? nil : moveRec,
+                                isForm: isForm,
+                                formView: record?.view,
+                                formStatus: record?.status,
+                                formVersion: record?.form_version)
             shotCount += 1
             pipeline = .done
             showResult = true
