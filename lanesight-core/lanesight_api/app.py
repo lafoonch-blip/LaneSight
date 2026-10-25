@@ -31,19 +31,29 @@ app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
 # ----------------------------------------------------------------- analysis job
-def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str):
-    from lanesight_runner.core import analyze_clip
-
+def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str, mode: str = 'shot'):
     def run(job):
         t0 = time.monotonic()
         out_prefix = str(DATA_ROOT / 'out' / shot_id)
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
+        store = get_store()
+        if mode == 'form':
+            # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
+            # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball
+            # L-dev-0 score / Accuracy — hence we skip after_shot_analyzed and return a minimal footer.
+            from lanesight_core.form import analyze_form_clip
+            from lanesight_core.form.pose import pose_backend
+            rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
+            rec['shot_id'] = shot_id
+            job.timings['analyze'] = time.monotonic() - t0
+            store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'})
+            return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'))
+        from lanesight_runner.core import analyze_clip
         rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
         rec['shot_id'] = shot_id
         for k, v in (timings or {}).items():
             job.timings[k] = v
         job.timings['analyze'] = time.monotonic() - t0
-        store = get_store()
         # The shot card's "Apply this move": turn the (intent-independent) recommended move into the target
         # line for the next shot, using the intent actually thrown. Computed here from stored data — the CV
         # path is unchanged. None when nothing actionable or no intent was set.
@@ -173,7 +183,8 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
     path = dest / f"{shot['id']}.mov"
     with open(path, 'wb') as f:
         f.write(await file.read())
-    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid)
+    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid,
+                       mode=(meta.get('capture_mode') or 'shot'))
     return {'shot_id': shot['id'], 'job_id': job.id}
 
 @app.get('/jobs/{job_id}')
@@ -311,7 +322,8 @@ async def upload_clip(sid: str = Form(...), file: UploadFile = File(...), metada
     path = dest / f"{shot['id']}.mov"
     with open(path, 'wb') as f:
         f.write(await file.read())
-    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid)
+    job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, sid,
+                       mode=(meta.get('capture_mode') or 'shot'))
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
 
 
