@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.0
+Version: 3.1
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -21,12 +21,17 @@ Last Updated: 2026-10-25
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
 ## Changelog
+- **3.1 (2026-10-25):** uploads, recent activity, tabs, setup button (DEC-055).
+  - **Upload is not a session.** Upload video no longer has an "Add to session" row; the screen says uploads aren't saved as a session. An uploaded clip never appears in Recent sessions or Recent activity.
+  - **Home Recent activity** shows only practice sessions, achievements and LaneSight tier (rank) changes. The sample "Consistency up 6 this week" row became a tier change.
+  - **Leagues and Tourneys tabs** are disabled (dimmed, not tappable) with no "Soon" label (Home, Stats, Lab).
+  - **Session setup** (Lab › Start Live Session) bottom button reads **Start session** (was "Set up camera"); it still opens the camera.
 - **3.0 (2026-10-25):** every screen restyled to the Figma 01 - Design Standards.
   - Colors: canvas #001018, card #031B29, raised #062132, selected/border #0C2B40, strong border #153B51, text #F5F6FA/#BFCBDD, action #00A8F5 with #001018 text, success #00EB92 on #003D28.
   - Data colors (orange/yellow/purple) are used for data only. There is no error color in v1, so failures use neutral surfaces and plain text. The record button keeps iOS red.
   - Type is Roboto Condensed, 13 px minimum, 400/600 weights. Corners are 8 px on controls, 12 px on cards, pill on chips.
   - Official stacked logo on Welcome, Sign in and the Home header.
-  - **Tab headers:** every main tab (Home, Stats, Lab) has Settings (left) and Profile (right) at 44 pt. Home shows the logo in the center; other tabs show the tab name (Stats, Lab). Leagues/Tourneys stay non-tappable "Soon"; when built, they use the same header with their tab name.
+  - **Tab headers:** every main tab (Home, Stats, Lab) has Settings (left) and Profile (right) at 44 pt. Home shows the logo in the center; other tabs show the tab name (Stats, Lab). Leagues/Tourneys stay disabled (dimmed, no label; 3.1); when built, they use the same header with their tab name.
   - The cropped concept-logo images from 2.1 are superseded; delete `assets/`.
 - **2.1 (2026-10-25):** logo. Welcome uses the primary stacked logo (mark + LANESIGHT + "See More. Bowl Smarter.") on Midnight Navy #0B1320. The Home header uses the LS mark + LANESIGHT wordmark (LANE white, SIGHT Lane Blue). Images are in `assets/`, cropped from `02_DESIGN/logo/LaneSight_Brand_System_Concept.png`. For the shipping app, use a clean vector or 3× export of the same lockups.
 - **2.0 (2026-10-25):** synced to build `dev-build-v0@2490b09` and Shayne's device feedback.

@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.1
+Version: 1.2
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -48,7 +48,7 @@ A **developer build of the LaneSight iOS app** on Shayne's iPhone, used live whi
 
 **Out of scope:**
 - pinfall / game scoring / strikes / spares
-- league and tournament features (tabs show "Soon")
+- league and tournament features (tabs disabled, no label)
 - PBA comparison (disabled tile)
 - cloud workers and R2 storage
 - smart glasses
@@ -275,7 +275,8 @@ Open the `.dc.html` files in a browser to view them; `canvas.json` gives titles 
 | 23 | `DeleteAccount.dc.html` | Delete account | `DELETE /me` |
 
 **Navigation:**
-- Bottom tabs: Home · Stats · Lab · Leagues (Soon) · Tourneys (Soon).
+- Bottom tabs: Home · Stats · Lab · Leagues · Tourneys. Leagues and Tourneys are disabled (dimmed, no "Soon" label).
+- Upload Video is a standalone analysis, not a session. Home Recent activity shows only practice sessions, achievements and tier changes (DEC-055).
 - The avatar on Home opens Profile; the gear opens Settings; Settings → Developer opens the Dev panel.
 - Onboarding: Welcome → Create account → Profile setup → Add ball → Ball setup → Home.
 
