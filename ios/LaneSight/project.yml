@@ -32,4 +32,5 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: GK3N928748   # personal team (lafoonch@gmail.com); pinned so xcodegen regen keeps signing
         ENABLE_PREVIEWS: "YES"
