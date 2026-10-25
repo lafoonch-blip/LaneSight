@@ -25,7 +25,7 @@ private struct WelcomeStep: View {
                 .accessibilityLabel("LaneSight")
 
             Text("SEE MORE. BOWL SMARTER.")
-                .font(.subheadline).tracking(3)
+                .font(.lsSubheadline).tracking(3)
                 .foregroundStyle(LS.textSecondary)
 
             // Hero photo placeholder — the real image comes from Figma and isn't bundled in this build.
@@ -35,7 +35,7 @@ private struct WelcomeStep: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(LS.border, lineWidth: 1)
                 )
-                .overlay(Text("Hero photo").font(.footnote).foregroundStyle(LS.textSecondary))
+                .overlay(Text("Hero photo").font(.lsFootnote).foregroundStyle(LS.textSecondary))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 8)
                 .accessibilityElement()
@@ -53,7 +53,7 @@ private struct WelcomeStep: View {
                 .buttonStyle(SecondaryButtonStyle())
 
             Text("Track your stats · Improve your game · Coaching insights")
-                .font(.footnote).foregroundStyle(LS.textSecondary)
+                .font(.lsFootnote).foregroundStyle(LS.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(.top, 64).padding(.horizontal, 24).padding(.bottom, 40)
@@ -89,9 +89,9 @@ private struct SignInStep: View {
                     .padding(.bottom, 4)
                     .accessibilityLabel("LaneSight")
 
-                Text("Welcome back").font(.title.bold()).foregroundStyle(LS.textPrimary)
+                Text("Welcome back").font(.lsTitle.bold()).foregroundStyle(LS.textPrimary)
                 Text("Sign in to your account to continue")
-                    .font(.subheadline).foregroundStyle(LS.textSecondary)
+                    .font(.lsSubheadline).foregroundStyle(LS.textSecondary)
 
                 // Apple / Google are disabled until the paid team is active (changelog 2.0). Shown
                 // honestly disabled, not fake-working.
@@ -108,7 +108,7 @@ private struct SignInStep: View {
                 if let errorText {
                     // No error color in v1 — neutral surface + plain text (3.0).
                     Label(errorText, systemImage: "exclamationmark.circle")
-                        .font(.footnote).foregroundStyle(LS.textPrimary)
+                        .font(.lsFootnote).foregroundStyle(LS.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -130,7 +130,7 @@ private struct SignInStep: View {
                     NavigationLink("Create one") { CreateAccountStep() }
                         .foregroundStyle(LS.action)
                 }
-                .font(.subheadline)
+                .font(.lsSubheadline)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 4)
             }
@@ -180,9 +180,9 @@ private struct CreateAccountStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Create your account").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                Text("Create your account").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
                 Text("Use a real email and a password of at least 6 characters.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
 
                 AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
                     .focused($focus, equals: .email)
@@ -192,16 +192,16 @@ private struct CreateAccountStep: View {
                 Toggle(isOn: $agree) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("I agree to the Terms of Service and Privacy Policy")
-                            .font(.caption).foregroundStyle(LS.textPrimary)
+                            .font(.lsCaption).foregroundStyle(LS.textPrimary)
                         Button("Read the Terms of Service & Privacy Policy") { showLegal = true }
-                            .font(.caption2).tint(LS.cyan)
+                            .font(.lsCaption2).tint(LS.cyan)
                     }
                 }.tint(LS.blue)
                 .accessibilityHint("Required before you can create an account")
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .font(.lsCaption).foregroundStyle(LS.bestEffort)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel("Create account error: \(errorText)")
                 }
@@ -217,7 +217,7 @@ private struct CreateAccountStep: View {
 
                 if !canSubmit && !busy {
                     Text(hintText)
-                        .font(.caption2).foregroundStyle(LS.textFaint)
+                        .font(.lsCaption2).foregroundStyle(LS.textFaint)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
@@ -251,7 +251,7 @@ private struct AuthField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(LS.textSecondary)
+            Text(label).font(.lsCaption).foregroundStyle(LS.textSecondary)
             Group {
                 if secure {
                     SecureField("", text: $text).textContentType(.password)
@@ -285,7 +285,7 @@ private struct DisabledSocialButton: View {
             if let glyph { Text(glyph).fontWeight(.bold) }
             Text(title).fontWeight(.semibold)
         }
-        .font(.body)
+        .font(.lsBody)
         .foregroundStyle(LS.onAction)
         .frame(maxWidth: .infinity, minHeight: 48)
         .background(LS.textPrimary, in: RoundedRectangle(cornerRadius: 8))
@@ -300,7 +300,7 @@ private struct OrDivider: View {
     var body: some View {
         HStack(spacing: 10) {
             Rectangle().fill(LS.border).frame(height: 1)
-            Text("or").font(.footnote).foregroundStyle(LS.textSecondary)
+            Text("or").font(.lsFootnote).foregroundStyle(LS.textSecondary)
             Rectangle().fill(LS.border).frame(height: 1)
         }
         .accessibilityHidden(true)
@@ -316,11 +316,11 @@ private struct LegalNoticeSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Terms of Service & Privacy Policy")
-                        .font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                        .font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text("LaneSight is a development build. The full Terms of Service and Privacy Policy will be published before public release. By creating an account now you agree to take part in testing and to the handling of your account data, shot videos and stats for the purpose of running and improving the app.")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                     Text("You can delete your account and all associated data at any time from Settings → Delete account.")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -371,47 +371,47 @@ private struct ProfileSetupStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Step 1 of 2").font(.caption).foregroundStyle(LS.cyan)
-                Text("Set up your bowler profile").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                Text("Step 1 of 2").font(.lsCaption).foregroundStyle(LS.cyan)
+                Text("Set up your bowler profile").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
 
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("First name").font(.subheadline).foregroundStyle(LS.textPrimary)
+                        Text("First name").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                         TextField("First", text: $firstName)
                             .textContentType(.givenName)
                             .foregroundStyle(LS.textPrimary)
                             .padding(12).frame(minHeight: 44)
-                            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Last name").font(.subheadline).foregroundStyle(LS.textPrimary)
+                        Text("Last name").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                         TextField("Last", text: $lastName)
                             .textContentType(.familyName)
                             .foregroundStyle(LS.textPrimary)
                             .padding(12).frame(minHeight: 44)
-                            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Date of birth").font(.subheadline).foregroundStyle(LS.textPrimary)
+                    Text("Date of birth").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                     DatePicker("", selection: $dob, in: ...Date(), displayedComponents: .date)
                         .datePickerStyle(.compact).labelsHidden().tint(LS.cyan)
                     if !ageOK {
                         Label("You must be 13 or older to use LaneSight.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption).foregroundStyle(LS.bestEffort)
+                            .font(.lsCaption).foregroundStyle(LS.bestEffort)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Which hand do you bowl with?").font(.subheadline).foregroundStyle(LS.textPrimary)
+                    Text("Which hand do you bowl with?").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                     Picker("Handedness", selection: $handedness) {
                         Text("Right").tag("right"); Text("Left").tag("left")
                     }.pickerStyle(.segmented)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Delivery style").font(.subheadline).foregroundStyle(LS.textPrimary)
+                    Text("Delivery style").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                     Picker("Delivery", selection: $delivery) {
                         ForEach(deliveryOptions, id: \.0) { Text($0.1).tag($0.0) }
                     }.pickerStyle(.menu).tint(LS.cyan)
@@ -419,7 +419,7 @@ private struct ProfileSetupStep: View {
 
                 if let saveError {
                     Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .font(.lsCaption).foregroundStyle(LS.bestEffort)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -464,17 +464,17 @@ private struct AddBallStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Step 2 of 2 · Optional").font(.caption).foregroundStyle(LS.cyan)
-                Text("Add your first ball").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                Text("Step 2 of 2 · Optional").font(.lsCaption).foregroundStyle(LS.cyan)
+                Text("Add your first ball").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
                 Text("Optional — you can skip this and add a ball later from your Profile at any time.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
 
                 NavigationLink { AddBallView() } label: {
                     HStack {
                         Image(systemName: "magnifyingglass")
                         Text(model.currentBallName ?? "Browse the ball catalog")
                         Spacer()
-                        Image(systemName: "chevron.right").font(.footnote)
+                        Image(systemName: "chevron.right").font(.lsFootnote)
                     }
                     .foregroundStyle(model.currentBallName == nil ? LS.textSecondary : LS.cyan)
                     .lsCard()

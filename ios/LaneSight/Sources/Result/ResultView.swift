@@ -69,9 +69,9 @@ struct ShotCardView: View {
             if let delta = footer?.score_delta {
                 HStack(spacing: 6) {
                     Image(systemName: delta >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-                        .font(.caption)
+                        .font(.lsCaption)
                     Text("\(delta >= 0 ? "+" : "")\(Fmt.number(delta)) to your score this shot")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.lsSubheadline.weight(.semibold))
                 }
                 .foregroundStyle(delta >= 0 ? LS.measured : LS.bestEffort)
             }
@@ -79,10 +79,10 @@ struct ShotCardView: View {
                 Text("CLOSE TO UNLOCKING").lsEyebrow()
                 ForEach(nudges.prefix(3)) { nudge in
                     HStack {
-                        Text(nudge.name ?? "").font(.caption).foregroundStyle(LS.textPrimary)
+                        Text(nudge.name ?? "").font(.lsCaption).foregroundStyle(LS.textPrimary)
                         Spacer()
                         if let c = nudge.current?.display, let t = nudge.target?.display {
-                            Text("\(c) / \(t)").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                            Text("\(c) / \(t)").font(.lsCaption.monospacedDigit()).foregroundStyle(LS.textSecondary)
                         }
                     }
                 }
@@ -106,14 +106,14 @@ struct ShotCardView: View {
         }()
         return VStack(alignment: .leading, spacing: 10) {
             Text("NEXT SHOT").lsEyebrow()
-            Text(headline).font(.headline).foregroundStyle(LS.textPrimary)
+            Text(headline).font(.lsHeadline).foregroundStyle(LS.textPrimary)
             if let reason = rec?.reason, !reason.isEmpty {
-                Text(reason).font(.caption).foregroundStyle(LS.textSecondary)
+                Text(reason).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             newTargetSummary(suggested)
             if moveApplied {
                 Label("Applied — it's now your target for the next shot", systemImage: "checkmark.circle.fill")
-                    .font(.caption).foregroundStyle(LS.measured)
+                    .font(.lsCaption).foregroundStyle(LS.measured)
             } else {
                 Button {
                     model.applySuggestedTarget(suggested)
@@ -132,7 +132,7 @@ struct ShotCardView: View {
         let parts = [part("Feet", s.feet_board), part("Arrows", s.arrows_board),
                      part("Breakpoint", s.breakpoint_board)].compactMap { $0 }
         return Text("New target · \(parts.joined(separator: " · "))")
-            .font(.caption.monospacedDigit()).foregroundStyle(LS.cyan)
+            .font(.lsCaption.monospacedDigit()).foregroundStyle(LS.cyan)
     }
 
     // MARK: target vs actual
@@ -151,23 +151,23 @@ struct ShotCardView: View {
             Text("TARGET VS ACTUAL").lsEyebrow()
             HStack {
                 Text("").frame(maxWidth: .infinity, alignment: .leading)
-                Text("TARGET").font(.caption2).foregroundStyle(LS.textSecondary).frame(width: 70, alignment: .trailing)
-                Text("ACTUAL").font(.caption2).foregroundStyle(LS.textSecondary).frame(width: 70, alignment: .trailing)
+                Text("TARGET").font(.lsCaption2).foregroundStyle(LS.textSecondary).frame(width: 70, alignment: .trailing)
+                Text("ACTUAL").font(.lsCaption2).foregroundStyle(LS.textSecondary).frame(width: 70, alignment: .trailing)
             }
             ForEach(rows, id: \.0) { name, target, actual in
                 HStack {
-                    Text(name).font(.subheadline).foregroundStyle(LS.textPrimary)
+                    Text(name).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(target.isEmpty ? "—" : target)
-                        .font(.subheadline.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                        .font(.lsSubheadline.monospacedDigit()).foregroundStyle(LS.textSecondary)
                         .frame(width: 70, alignment: .trailing)
                     Text(actual?.value.map(Fmt.number) ?? "—")
-                        .font(.subheadline.monospacedDigit().bold()).foregroundStyle(LS.textPrimary)
+                        .font(.lsSubheadline.monospacedDigit().bold()).foregroundStyle(LS.textPrimary)
                         .frame(width: 70, alignment: .trailing)
                 }
             }
             Text("Target boards are what you set before the shot; actual boards are measured from the clip.")
-                .font(.caption2).foregroundStyle(LS.textFaint)
+                .font(.lsCaption2).foregroundStyle(LS.textFaint)
         }
         .lsCard()
     }
@@ -178,7 +178,7 @@ struct ShotCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("BALL").lsEyebrow()
             if ballMetrics.isEmpty {
-                Text("No ball metrics returned for this shot.").font(.callout).foregroundStyle(LS.textSecondary)
+                Text("No ball metrics returned for this shot.").font(.lsCallout).foregroundStyle(LS.textSecondary)
             } else {
                 ForEach(ballMetrics, id: \.0) { name, metric in
                     MetricRow(name: MetricDisplay.humanize(name), metric: metric)
@@ -204,7 +204,7 @@ struct ShotCardView: View {
 
     private var sensorSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Was a sensor in the ball?").font(.headline).foregroundStyle(LS.textPrimary)
+            Text("Was a sensor in the ball?").font(.lsHeadline).foregroundStyle(LS.textPrimary)
             HStack {
                 Button("No") { Task { await answer(used: false, sensorId: nil, tag: "none") } }
                     .buttonStyle(SecondaryButtonStyle())
@@ -227,21 +227,21 @@ struct ShotCardView: View {
                     .overlay(selectionRing(sensors.contains { $0.id == sensorAnswer }))
                 }
             }
-            if let sensorError { Text(sensorError).font(.caption).foregroundStyle(LS.bestEffort) }
+            if let sensorError { Text(sensorError).font(.lsCaption).foregroundStyle(LS.bestEffort) }
             if sensorAnswer != nil && sensorError == nil {
-                Label("Saved", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(LS.measured)
+                Label("Saved", systemImage: "checkmark.circle.fill").font(.lsCaption).foregroundStyle(LS.measured)
             }
         }
         .lsCard()
     }
 
     private func selectionRing(_ on: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 14).strokeBorder(on ? LS.blue : .clear, lineWidth: 2)
+        RoundedRectangle(cornerRadius: 12).strokeBorder(on ? LS.blue : .clear, lineWidth: 2)
     }
 
     private var helpfulSection: some View {
         HStack {
-            Text("Helpful advice?").font(.subheadline).foregroundStyle(LS.textPrimary)
+            Text("Helpful advice?").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
             Spacer()
             Button { helpful = true } label: {
                 Image(systemName: helpful == true ? "hand.thumbsup.fill" : "hand.thumbsup")

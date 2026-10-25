@@ -29,7 +29,7 @@ struct AddBallView: View {
                         Text(trimmedQuery.isEmpty
                              ? "Type to search the ball catalog. Photos and specs come from the manufacturer's published data."
                              : "No catalog balls matched “\(trimmedQuery)”.")
-                            .font(.callout).foregroundStyle(LS.textSecondary)
+                            .font(.lsCallout).foregroundStyle(LS.textSecondary)
                     } else {
                         Text("RESULTS · \(balls.count)").lsEyebrow()
                         ForEach(balls) { ball in
@@ -57,16 +57,16 @@ struct AddBallView: View {
     private var customBallButton: some View {
         NavigationLink { BallSetupView(customName: trimmedQuery) } label: {
             HStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(LS.cyan)
+                Image(systemName: "plus.circle.fill").font(.lsTitle2).foregroundStyle(LS.cyan)
                     .frame(width: 40, height: 40).background(LS.cyan.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add “\(trimmedQuery)” as a custom ball")
-                        .font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                        .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                     Text("Not in the catalog? Use your own name.")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote).foregroundStyle(LS.textFaint)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
             }
             .lsCard(padding: 12)
         }
@@ -75,15 +75,15 @@ struct AddBallView: View {
 
     private func ballRow(_ ball: CatalogBall) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "circle.circle").font(.title2).foregroundStyle(LS.blue)
+            Image(systemName: "circle.circle").font(.lsTitle2).foregroundStyle(LS.blue)
                 .frame(width: 40, height: 40).background(LS.blue.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
-                Text(ball.name ?? "Ball").font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text(ball.name ?? "Ball").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 Text([ball.manufacturer, ball.core_type, ball.coverstock].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.footnote).foregroundStyle(LS.textFaint)
+            Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
         }
         .lsCard(padding: 12)
     }
@@ -132,11 +132,11 @@ struct BallSetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text(title).font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     if let mfr = ball?.manufacturer {
-                        Text("\(mfr) · from catalog").font(.caption).foregroundStyle(LS.textSecondary)
+                        Text("\(mfr) · from catalog").font(.lsCaption).foregroundStyle(LS.textSecondary)
                     } else {
-                        Text("Custom ball").font(.caption).foregroundStyle(LS.textSecondary)
+                        Text("Custom ball").font(.lsCaption).foregroundStyle(LS.textSecondary)
                     }
                 }
 
@@ -159,13 +159,13 @@ struct BallSetupView: View {
                     field("Layout", text: $layout, placeholder: "4.5 x 45 x 35")
                     field("Surface", text: $surface, placeholder: "2000 abralon")
                     Toggle(isOn: $makeCurrent) {
-                        Text("Make this my current ball").font(.subheadline).foregroundStyle(LS.textPrimary)
+                        Text("Make this my current ball").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                     }.tint(LS.blue)
                 }
                 .lsCard()
 
                 if let saveError {
-                    Text(saveError).font(.caption).foregroundStyle(LS.bestEffort)
+                    Text(saveError).font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
                 Button {
@@ -187,7 +187,7 @@ struct BallSetupView: View {
     private func field(_ label: String, text: Binding<String>,
                        keyboard: UIKeyboardType = .default, placeholder: String) -> some View {
         HStack {
-            Text(label).font(.subheadline).foregroundStyle(LS.textSecondary)
+            Text(label).font(.lsSubheadline).foregroundStyle(LS.textSecondary)
             Spacer()
             TextField(placeholder, text: text)
                 .keyboardType(keyboard)
@@ -200,9 +200,9 @@ struct BallSetupView: View {
 
     private func specRow(_ label: String, _ value: String?) -> some View {
         HStack {
-            Text(label).font(.subheadline).foregroundStyle(LS.textSecondary)
+            Text(label).font(.lsSubheadline).foregroundStyle(LS.textSecondary)
             Spacer()
-            Text(value ?? "—").font(.subheadline).foregroundStyle(value == nil ? LS.textFaint : LS.textPrimary)
+            Text(value ?? "—").font(.lsSubheadline).foregroundStyle(value == nil ? LS.textFaint : LS.textPrimary)
         }
     }
 

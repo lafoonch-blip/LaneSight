@@ -21,6 +21,11 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      # Bundled Roboto Condensed static instances (400/600), generated from the OFL variable
+      # font and registered in Info.plist UIAppFonts (DEC-054 type standard, design README 3.0).
+      - path: Resources/Fonts/RobotoCondensed-Regular.ttf
+      - path: Resources/Fonts/RobotoCondensed-SemiBold.ttf
+      - path: Resources/Fonts/OFL.txt
     settings:
       base:
         PRODUCT_NAME: LaneSight

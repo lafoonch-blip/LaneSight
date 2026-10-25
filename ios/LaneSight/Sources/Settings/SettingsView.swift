@@ -35,8 +35,8 @@ struct SettingsView: View {
             }
 
             Section("Account") {
-                HStack { Text("Terms of Service"); Spacer(); Text("Coming soon").font(.caption).foregroundStyle(.secondary) }
-                HStack { Text("Privacy Policy"); Spacer(); Text("Coming soon").font(.caption).foregroundStyle(.secondary) }
+                HStack { Text("Terms of Service"); Spacer(); Text("Coming soon").font(.lsCaption).foregroundStyle(.secondary) }
+                HStack { Text("Privacy Policy"); Spacer(); Text("Coming soon").font(.lsCaption).foregroundStyle(.secondary) }
                 NavigationLink { DeleteAccountView() } label: {
                     Text("Delete account").foregroundStyle(.red)
                 }

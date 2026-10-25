@@ -10,30 +10,32 @@ struct StatsView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Picker("View", selection: $tab) {
-                        Text("Score").tag(0)
-                        Text("Throw").tag(1)
-                        Text("Form").tag(2)
-                    }
-                    .pickerStyle(.segmented)
+            VStack(spacing: 0) {
+                LSTabHeader(title: "Stats")
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Picker("View", selection: $tab) {
+                            Text("Score").tag(0)
+                            Text("Throw").tag(1)
+                            Text("Form").tag(2)
+                        }
+                        .pickerStyle(.segmented)
 
-                    switch tab {
-                    case 0: scoreTab
-                    case 1: throwTab
-                    default: formTab
+                        switch tab {
+                        case 0: scoreTab
+                        case 1: throwTab
+                        default: formTab
+                        }
+                        Spacer(minLength: 8)
                     }
-                    Spacer(minLength: 8)
+                    .padding(16)
                 }
-                .padding(16)
+                .task { await loadScore() }
+                .task(id: tab) { await loadForTab() }
+                .refreshable { await loadScore(); await loadForTab() }
             }
             .background(LSBackground())
-            .navigationTitle("Stats")
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .task { await loadScore() }
-            .task(id: tab) { await loadForTab() }
-            .refreshable { await loadScore(); await loadForTab() }
+            .navigationBarHidden(true)
         }
     }
 
@@ -54,7 +56,7 @@ struct StatsView: View {
             Text("SCORE HISTORY").lsEyebrow()
             if scored.isEmpty {
                 Text("No eligible score snapshots yet. Your history fills in as you log shots.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             } else {
                 HStack {
                     KPITile(label: "Snapshots", value: "\(history.count)")
@@ -100,7 +102,7 @@ struct StatsView: View {
                     failureReasonsCard(s)
                     sampleNote(s)
                     Text("Form stats are diagnostic and are not part of your LaneSight Score.")
-                        .font(.caption).foregroundStyle(LS.textFaint)
+                        .font(.lsCaption).foregroundStyle(LS.textFaint)
                 }
             }
         }
@@ -115,15 +117,15 @@ struct StatsView: View {
                 let avg = s.averages?[key]
                 let cov = s.metric_coverage?[key]
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(MetricDisplay.humanize(key)).font(.caption2).foregroundStyle(LS.textSecondary).lineLimit(1)
+                    Text(MetricDisplay.humanize(key)).font(.lsCaption2).foregroundStyle(LS.textSecondary).lineLimit(1)
                     if let mean = avg?.mean {
-                        Text(Fmt.number(mean)).font(.title3.weight(.heavy).monospacedDigit()).foregroundStyle(LS.textPrimary)
-                        Text(units[key] ?? "avg").font(.caption2).foregroundStyle(LS.textSecondary)
+                        Text(Fmt.number(mean)).font(.lsTitle3.weight(.heavy).monospacedDigit()).foregroundStyle(LS.textPrimary)
+                        Text(units[key] ?? "avg").font(.lsCaption2).foregroundStyle(LS.textSecondary)
                     } else {
-                        Text("—").font(.title3.weight(.heavy)).foregroundStyle(LS.textFaint)
-                        Text("no measured shots").font(.caption2).foregroundStyle(LS.textFaint)
+                        Text("—").font(.lsTitle3.weight(.heavy)).foregroundStyle(LS.textFaint)
+                        Text("no measured shots").font(.lsCaption2).foregroundStyle(LS.textFaint)
                     }
-                    if let pct = cov?.pct { Text("\(Int(pct))% measured").font(.caption2).foregroundStyle(coverageColor(pct)) }
+                    if let pct = cov?.pct { Text("\(Int(pct))% measured").font(.lsCaption2).foregroundStyle(coverageColor(pct)) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lsCard(padding: 12)
@@ -137,11 +139,11 @@ struct StatsView: View {
             HStack {
                 Text("METRIC COVERAGE").lsEyebrow()
                 Spacer()
-                Text("% of shots measured").font(.caption2).foregroundStyle(LS.textSecondary)
+                Text("% of shots measured").font(.lsCaption2).foregroundStyle(LS.textSecondary)
             }
             ForEach(rows, id: \.key) { key, cov in
                 HStack(spacing: 10) {
-                    Text(MetricDisplay.humanize(key)).font(.caption).foregroundStyle(LS.textPrimary)
+                    Text(MetricDisplay.humanize(key)).font(.lsCaption).foregroundStyle(LS.textPrimary)
                         .frame(width: 104, alignment: .leading)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -152,7 +154,7 @@ struct StatsView: View {
                     }
                     .frame(height: 8)
                     Text(cov.pct.map { "\(Int($0))%" } ?? "—")
-                        .font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption.monospacedDigit()).foregroundStyle(LS.textSecondary)
                         .frame(width: 38, alignment: .trailing)
                 }
                 .accessibilityElement(children: .combine)
@@ -171,11 +173,11 @@ struct StatsView: View {
                         Image(systemName: "circle.lefthalf.filled").font(.system(size: 7)).foregroundStyle(LS.bestEffort)
                             .padding(.top, 5)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(MetricDisplay.humanize(r.metric ?? "")).font(.subheadline).foregroundStyle(LS.textPrimary)
-                            Text(r.reason ?? "").font(.caption2).foregroundStyle(LS.textSecondary)
+                            Text(MetricDisplay.humanize(r.metric ?? "")).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
+                            Text(r.reason ?? "").font(.lsCaption2).foregroundStyle(LS.textSecondary)
                         }
                         Spacer()
-                        Text("\(r.count ?? 0)×").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                        Text("\(r.count ?? 0)×").font(.lsCaption.monospacedDigit()).foregroundStyle(LS.textSecondary)
                     }
                 }
             }
@@ -185,13 +187,13 @@ struct StatsView: View {
 
     private func sampleNote(_ s: StatsResponse) -> some View {
         Text("Based on \(s.n_shots ?? 0) shot\((s.n_shots ?? 0) == 1 ? "" : "s") in range.")
-            .font(.caption2).foregroundStyle(LS.textFaint)
+            .font(.lsCaption2).foregroundStyle(LS.textFaint)
     }
 
     private func emptyCard(_ title: String, _ message: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: "hourglass").font(.headline).foregroundStyle(LS.textPrimary)
-            Text(message).font(.callout).foregroundStyle(LS.textSecondary)
+            Label(title, systemImage: "hourglass").font(.lsHeadline).foregroundStyle(LS.textPrimary)
+            Text(message).font(.lsCallout).foregroundStyle(LS.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .lsCard()

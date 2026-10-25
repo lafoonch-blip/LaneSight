@@ -39,6 +39,11 @@
 	<string>LaneSight records your delivery to analyze your shot.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>RobotoCondensed-Regular.ttf</string>
+		<string>RobotoCondensed-SemiBold.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

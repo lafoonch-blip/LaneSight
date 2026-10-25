@@ -52,9 +52,9 @@ struct FormCardView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "flask.fill").foregroundStyle(LS.bestEffort)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Provisional form metrics").font(.subheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text("Provisional form metrics").font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
                 Text("Early form analysis (\(result.formVersion ?? "form-0.0.0")). Treat these as directional, not exact.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
         }
         .lsCard()
@@ -69,7 +69,7 @@ struct FormCardView: View {
             Image(systemName: "video.fill").foregroundStyle(LS.cyan)
             VStack(alignment: .leading, spacing: 2) {
                 Text("CAMERA VIEW").lsEyebrow()
-                Text(viewLabel).font(.subheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text(viewLabel).font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
             }
             Spacer()
         }
@@ -93,9 +93,9 @@ struct FormCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LS.bestEffort)
-                Text("Form analysis unavailable").font(.headline).foregroundStyle(LS.textPrimary)
+                Text("Form analysis unavailable").font(.lsHeadline).foregroundStyle(LS.textPrimary)
             }
-            Text(unavailableReason).font(.callout).foregroundStyle(LS.textSecondary)
+            Text(unavailableReason).font(.lsCallout).foregroundStyle(LS.textSecondary)
         }
         .lsCard()
         .accessibilityElement(children: .combine)
@@ -115,7 +115,7 @@ struct FormCardView: View {
     @ViewBuilder private var metricsSection: some View {
         if result.metrics.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("No form metrics returned for this clip.").font(.callout).foregroundStyle(LS.textSecondary)
+                Text("No form metrics returned for this clip.").font(.lsCallout).foregroundStyle(LS.textSecondary)
             }
             .lsCard()
         } else {
@@ -149,7 +149,7 @@ private struct FormMetricRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(FormMetricDisplay.label(key)).font(.subheadline).foregroundStyle(LS.textPrimary)
+                Text(FormMetricDisplay.label(key)).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                 subtitle
             }
             Spacer()
@@ -161,26 +161,26 @@ private struct FormMetricRow: View {
 
     @ViewBuilder private var subtitle: some View {
         if let note = metric.note, !note.isEmpty {
-            Text(note).font(.caption2).foregroundStyle(LS.textSecondary)
+            Text(note).font(.lsCaption2).foregroundStyle(LS.textSecondary)
         } else if state == .unavailable {
-            Text("Not measured").font(.caption2).foregroundStyle(LS.textSecondary)
+            Text("Not measured").font(.lsCaption2).foregroundStyle(LS.textSecondary)
         }
     }
 
     @ViewBuilder private var trailingValue: some View {
         if state == .unavailable {
-            Text("—").font(.body.monospacedDigit().weight(.semibold)).foregroundStyle(LS.unavailable)
+            Text("—").font(.lsBody.monospacedDigit().weight(.semibold)).foregroundStyle(LS.unavailable)
         } else {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(FormMetricDisplay.formattedValue(key: key, metric) ?? "—")
-                        .font(.body.monospacedDigit().weight(.semibold)).foregroundStyle(LS.textPrimary)
+                        .font(.lsBody.monospacedDigit().weight(.semibold)).foregroundStyle(LS.textPrimary)
                     if let unit = FormMetricDisplay.unitText(key: key, metric) {
-                        Text(unit).font(.caption).foregroundStyle(LS.textSecondary)
+                        Text(unit).font(.lsCaption).foregroundStyle(LS.textSecondary)
                     }
                 }
                 if let tag = state.tag {
-                    Text(tag).font(.system(size: 9).weight(.bold))
+                    Text(tag).font(.lsRoboto(9, weight: .bold))
                         .padding(.horizontal, 5).padding(.vertical, 2)
                         .background(LS.bestEffort.opacity(0.18), in: Capsule())
                         .foregroundStyle(LS.bestEffort)

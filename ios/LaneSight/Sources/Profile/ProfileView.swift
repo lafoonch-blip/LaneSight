@@ -32,7 +32,7 @@ struct ProfileView: View {
                     bowlerCard
                     sensorsCard
                     arsenalCard
-                    if let saveNote { Text(saveNote).font(.caption).foregroundStyle(LS.measured) }
+                    if let saveNote { Text(saveNote).font(.lsCaption).foregroundStyle(LS.measured) }
                 }
             }
             .padding(16)
@@ -55,12 +55,12 @@ struct ProfileView: View {
         HStack(spacing: 14) {
             Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundStyle(LS.cyan)
             VStack(alignment: .leading, spacing: 3) {
-                Text(name.isEmpty ? "Your profile" : name).font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                Text(name.isEmpty ? "Your profile" : name).font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                 if let s = score, s.eligible == true, let v = s.score {
                     Text("\((s.tier ?? "").capitalized) · \(Int(v.rounded()))")
-                        .font(.caption).foregroundStyle(LS.cyan)
+                        .font(.lsCaption).foregroundStyle(LS.cyan)
                 } else {
-                    Text("Score building").font(.caption).foregroundStyle(LS.textSecondary)
+                    Text("Score building").font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
             }
             Spacer()
@@ -82,7 +82,7 @@ struct ProfileView: View {
                 Text("Right").tag("right"); Text("Left").tag("left")
             }.pickerStyle(.segmented)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Delivery style").font(.subheadline).foregroundStyle(LS.textPrimary)
+                Text("Delivery style").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                 Picker("Delivery style", selection: $delivery) {
                     ForEach(deliveryOptions, id: \.0) { Text($0.1).tag($0.0) }
                 }.pickerStyle(.menu).tint(LS.cyan)
@@ -110,19 +110,19 @@ struct ProfileView: View {
                 Text("SENSORS").lsEyebrow()
                 Spacer()
                 Button { newSensorName = ""; showAddSensor = true } label: {
-                    Label("Add", systemImage: "plus").font(.caption)
+                    Label("Add", systemImage: "plus").font(.lsCaption)
                 }.tint(LS.blue)
             }
             if sensors.isEmpty {
                 Text("No sensors added. Add one to compare shots with a sensor in the ball.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             } else {
                 ForEach(sensors) { s in
                     HStack {
                         Image(systemName: "sensor.tag.radiowaves.forward").foregroundStyle(LS.cyan)
                         Text(s.name ?? "Sensor").foregroundStyle(LS.textPrimary)
                         if s.`default` == true {
-                            Text("DEFAULT").font(.caption2.bold()).foregroundStyle(LS.measured)
+                            Text("DEFAULT").font(.lsCaption2.bold()).foregroundStyle(LS.measured)
                         }
                         Spacer()
                         Button(role: .destructive) { Task { await deleteSensor(s) } } label: {
@@ -141,15 +141,15 @@ struct ProfileView: View {
             HStack {
                 Text("ARSENAL").lsEyebrow()
                 Spacer()
-                NavigationLink { AddBallView() } label: { Label("Add ball", systemImage: "plus").font(.caption) }
+                NavigationLink { AddBallView() } label: { Label("Add ball", systemImage: "plus").font(.lsCaption) }
                     .tint(LS.blue)
             }
             if balls.isEmpty {
                 Text("No balls yet. Browse the catalog to add one — tap a ball to make it current.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             } else {
                 Text("Tap a ball to make it your current ball.")
-                    .font(.caption2).foregroundStyle(LS.textFaint)
+                    .font(.lsCaption2).foregroundStyle(LS.textFaint)
                 ForEach(balls) { ball in
                     Button { Task { await setCurrent(ball) } } label: { arsenalRow(ball) }
                         .buttonStyle(.plain)
@@ -165,16 +165,16 @@ struct ProfileView: View {
             Image(systemName: isCurrent ? "circle.circle.fill" : "circle.circle")
                 .foregroundStyle(isCurrent ? LS.blue : LS.textSecondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(ball.displayName).font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text(ball.displayName).font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 let specs = [ball.layout.map { "Layout \($0)" }, ball.surface,
                              ball.weight_lb.map { "\(Fmt.number($0)) lb" }].compactMap { $0 }
                 if !specs.isEmpty {
-                    Text(specs.joined(separator: " · ")).font(.caption2).foregroundStyle(LS.textSecondary)
+                    Text(specs.joined(separator: " · ")).font(.lsCaption2).foregroundStyle(LS.textSecondary)
                 }
             }
             Spacer()
             if isCurrent {
-                Text("CURRENT").font(.caption2.bold()).foregroundStyle(LS.cyan)
+                Text("CURRENT").font(.lsCaption2.bold()).foregroundStyle(LS.cyan)
             }
         }
         .contentShape(Rectangle())
@@ -188,7 +188,7 @@ struct ProfileView: View {
 
     private func labeledField<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack {
-            Text(label).font(.subheadline).foregroundStyle(LS.textPrimary)
+            Text(label).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
             Spacer()
             content()
         }

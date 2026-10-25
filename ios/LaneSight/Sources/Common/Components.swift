@@ -24,9 +24,9 @@ struct LoadableView<T, Content: View>: View {
             content(value)
         case .failed(let message):
             VStack(spacing: 10) {
-                Image(systemName: "wifi.exclamationmark").font(.title2).foregroundStyle(LS.bestEffort)
-                Text("Couldn't reach the analysis host").font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
-                Text(message).font(.caption).foregroundStyle(LS.textSecondary)
+                Image(systemName: "wifi.exclamationmark").font(.lsTitle2).foregroundStyle(LS.bestEffort)
+                Text("Couldn't reach the analysis host").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text(message).font(.lsCaption).foregroundStyle(LS.textSecondary)
                     .multilineTextAlignment(.center).lineLimit(4)
                 Button("Retry", action: retry)
                     .buttonStyle(.bordered).tint(LS.blue)
@@ -37,12 +37,69 @@ struct LoadableView<T, Content: View>: View {
     }
 }
 
+// MARK: - 3.0 tab header (Main.dc.html)
+
+/// Shared main-tab header: Settings (left, 44 pt) · center · Profile (right, 44 pt), on the canvas.
+/// Home passes the stacked logo as its center; Stats and Lab pass their tab name. Matches the
+/// Home header pattern in Main.dc.html (design README 3.0). Must live inside a NavigationStack.
+struct LSTabHeader<Center: View>: View {
+    @ViewBuilder var center: () -> Center
+
+    var body: some View {
+        HStack(spacing: 12) {
+            NavigationLink { SettingsView() } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18))
+                    .foregroundStyle(LS.textSecondary)
+                    .frame(width: 44, height: 44)
+                    .background(LS.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(LS.border, lineWidth: 1))
+            }
+            .accessibilityLabel("Settings")
+
+            Spacer(minLength: 0)
+            center()
+            Spacer(minLength: 0)
+
+            NavigationLink { ProfileView() } label: {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(LS.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(LS.selected, in: Circle())
+                    .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
+            }
+            .accessibilityLabel("Profile")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
+}
+
+extension LSTabHeader where Center == LSTabTitle {
+    /// Tab-name header (Stats, Lab).
+    init(title: String) { self.init { LSTabTitle(title: title) } }
+}
+
+/// Centered tab-name title used by Stats/Lab headers.
+struct LSTabTitle: View {
+    let title: String
+    var body: some View {
+        Text(title)
+            .font(.lsRoboto(20, weight: .semibold))
+            .foregroundStyle(LS.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 // MARK: - Buttons
 
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(.lsHeadline)
             .foregroundStyle(LS.onAction)                       // dark text on cyan (3.0)
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(LS.action.opacity(configuration.isPressed ? 0.8 : 1),
@@ -71,7 +128,7 @@ struct LoadingLabel: View {
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(.lsHeadline)
             .foregroundStyle(LS.textPrimary)
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(LS.textSecondary.opacity(configuration.isPressed ? 0.08 : 0),
@@ -90,7 +147,7 @@ struct StatusChip: View {
             Image(systemName: status.symbol).font(.system(size: 7))
             Text(status.label.uppercased())
         }
-        .font(.caption2.weight(.semibold))
+        .font(.lsCaption2.weight(.semibold))
         .foregroundStyle(status.color)
         .accessibilityHidden(true)      // the parent row voices status in its label
     }
@@ -129,19 +186,19 @@ struct MetricRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(.subheadline).foregroundStyle(LS.textPrimary)
+                Text(name).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                 if let note = metric?.note, !note.isEmpty {
-                    Text(note).font(.caption2).foregroundStyle(LS.textSecondary)
+                    Text(note).font(.lsCaption2).foregroundStyle(LS.textSecondary)
                 }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(metric.map(Fmt.value) ?? "—")
-                        .font(.body.monospacedDigit().weight(.semibold))
+                        .font(.lsBody.monospacedDigit().weight(.semibold))
                         .foregroundStyle(LS.textPrimary)
                     if let unit = metric?.unit, !unit.isEmpty, metric?.value != nil {
-                        Text(unit).font(.caption).foregroundStyle(LS.textSecondary)
+                        Text(unit).font(.lsCaption).foregroundStyle(LS.textSecondary)
                     }
                 }
                 StatusChip(status: status)
@@ -167,10 +224,10 @@ struct KPITile: View {
     var body: some View {
         VStack(spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.title2.weight(.bold).monospacedDigit()).foregroundStyle(LS.textPrimary)
-                if let unit { Text(unit).font(.caption).foregroundStyle(LS.textSecondary) }
+                Text(value).font(.lsTitle2.weight(.bold).monospacedDigit()).foregroundStyle(LS.textPrimary)
+                if let unit { Text(unit).font(.lsCaption).foregroundStyle(LS.textSecondary) }
             }
-            Text(label.uppercased()).font(.caption2.weight(.medium)).foregroundStyle(LS.textSecondary)
+            Text(label.uppercased()).font(.lsCaption2.weight(.medium)).foregroundStyle(LS.textSecondary)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)

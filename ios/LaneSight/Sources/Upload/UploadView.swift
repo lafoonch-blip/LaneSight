@@ -28,7 +28,7 @@ struct UploadView: View {
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
                 if busy { pipelineCard }
@@ -43,7 +43,7 @@ struct UploadView: View {
                 .opacity(pickedURL == nil || busy ? 0.5 : 1)
 
                 Text("One shot per clip for now. Analysis runs on your Mac and takes about a minute or two.")
-                    .font(.caption).foregroundStyle(LS.textFaint).multilineTextAlignment(.center)
+                    .font(.lsCaption).foregroundStyle(LS.textFaint).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
             .padding(16)
@@ -71,19 +71,19 @@ struct UploadView: View {
         Button { showPicker = true } label: {
             HStack(spacing: 12) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10).fill(Color(hex: 0x1A2440))
+                    RoundedRectangle(cornerRadius: 8).fill(LS.raised)
                     Image(systemName: loadingClip ? "arrow.triangle.2.circlepath" : "film")
                         .foregroundStyle(LS.textSecondary)
                 }
                 .frame(width: 66, height: 90)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(pickedName ?? "Choose a clip").font(.headline).foregroundStyle(LS.textPrimary)
+                    Text(pickedName ?? "Choose a clip").font(.lsHeadline).foregroundStyle(LS.textPrimary)
                     Text(pickedURL == nil ? "From Photos — 1080p · up to 120 fps · SDR"
                                           : "Tap to choose another")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote).foregroundStyle(LS.textFaint)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
             }
             .lsCard(padding: 12)
         }
@@ -104,13 +104,13 @@ struct UploadView: View {
         let on = model.captureMode == value
         return Button { model.captureMode = value } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
-                Text(sub).font(.caption2).foregroundStyle(LS.textSecondary)
+                Text(title).font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text(sub).font(.lsCaption2).foregroundStyle(LS.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(on ? LS.blue.opacity(0.18) : LS.card, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(on ? LS.blue : LS.cardStroke, lineWidth: on ? 2 : 1))
+            .background(on ? LS.blue.opacity(0.18) : LS.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(on ? LS.blue : LS.cardStroke, lineWidth: on ? 2 : 1))
         }
         .buttonStyle(.plain)
     }
@@ -124,13 +124,13 @@ struct UploadView: View {
                 intentField("Breakpoint", text: $model.breakpointBoardText)
             }
             Text("Without a target, Accuracy is skipped for this shot.")
-                .font(.caption2).foregroundStyle(LS.textFaint)
+                .font(.lsCaption2).foregroundStyle(LS.textFaint)
         }
     }
 
     private func intentField(_ title: String, text: Binding<String>) -> some View {
         VStack(spacing: 4) {
-            Text(title).font(.caption2).foregroundStyle(LS.textSecondary)
+            Text(title).font(.lsCaption2).foregroundStyle(LS.textSecondary)
             TextField("—", text: text)
                 .keyboardType(.decimalPad).multilineTextAlignment(.center)
                 .foregroundStyle(LS.textPrimary)
@@ -145,13 +145,13 @@ struct UploadView: View {
             switch model.pipeline {
             case .creatingSession: progressRow("Starting session…")
             case .uploading(let frac):
-                Text("Uploading clip").font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text("Uploading clip").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 ProgressView(value: frac).tint(LS.blue)
-                Text("\(Int(frac * 100))%").font(.caption).foregroundStyle(LS.textSecondary)
+                Text("\(Int(frac * 100))%").font(.lsCaption).foregroundStyle(LS.textSecondary)
             case .analyzing(let state, _): progressRow("Analyzing on Mac — \(state)")
             case .fetching: progressRow("Fetching results…")
             case .failed(let msg):
-                Label(msg, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(LS.bestEffort)
+                Label(msg, systemImage: "exclamationmark.triangle.fill").font(.lsFootnote).foregroundStyle(LS.bestEffort)
             default: EmptyView()
             }
         }
@@ -159,7 +159,7 @@ struct UploadView: View {
     }
 
     private func progressRow(_ text: String) -> some View {
-        HStack(spacing: 10) { ProgressView().tint(LS.cyan); Text(text).font(.subheadline).foregroundStyle(LS.textPrimary) }
+        HStack(spacing: 10) { ProgressView().tint(LS.cyan); Text(text).font(.lsSubheadline).foregroundStyle(LS.textPrimary) }
     }
 
     // MARK: actions

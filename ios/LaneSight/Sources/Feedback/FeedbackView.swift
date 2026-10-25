@@ -21,22 +21,22 @@ struct FeedbackView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("How was this session in the app?").font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("How was this session in the app?").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
 
                     HStack {
-                        Text("Rough").font(.caption).foregroundStyle(LS.textSecondary)
+                        Text("Rough").font(.lsCaption).foregroundStyle(LS.textSecondary)
                         Spacer()
                         ForEach(1...5, id: \.self) { i in
                             Image(systemName: i <= rating ? "star.fill" : "star")
-                                .font(.title2).foregroundStyle(LS.bestEffort)
+                                .font(.lsTitle2).foregroundStyle(LS.bestEffort)
                                 .onTapGesture { rating = i }
                                 .accessibilityLabel("\(i) star")
                         }
                         Spacer()
-                        Text("Great").font(.caption).foregroundStyle(LS.textSecondary)
+                        Text("Great").font(.lsCaption).foregroundStyle(LS.textSecondary)
                     }
                     if rating > 0 {
-                        Text(ratingWords[rating]).font(.caption).foregroundStyle(LS.cyan)
+                        Text(ratingWords[rating]).font(.lsCaption).foregroundStyle(LS.cyan)
                             .frame(maxWidth: .infinity)
                     }
 
@@ -50,14 +50,14 @@ struct FeedbackView: View {
                         TextField("Optional", text: $text, axis: .vertical)
                             .lineLimit(2...5)
                             .padding(10)
-                            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
                             .foregroundStyle(LS.textPrimary)
                     }
 
                     Toggle("Attach session diagnostics (timings, errors, versions)", isOn: $diagnostics)
-                        .font(.callout).foregroundStyle(LS.textPrimary).tint(LS.blue)
+                        .font(.lsCallout).foregroundStyle(LS.textPrimary).tint(LS.blue)
 
-                    if let error { Text(error).font(.caption).foregroundStyle(LS.bestEffort) }
+                    if let error { Text(error).font(.lsCaption).foregroundStyle(LS.bestEffort) }
 
                     Button {
                         Task { await submit(skip: false) }
@@ -110,7 +110,7 @@ struct FlowTags: View {
                 Button {
                     if on { selected.remove(tag) } else { selected.insert(tag) }
                 } label: {
-                    Text(tag).font(.caption).foregroundStyle(on ? .white : LS.textSecondary)
+                    Text(tag).font(.lsCaption).foregroundStyle(on ? .white : LS.textSecondary)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(on ? LS.blue : Color.white.opacity(0.06), in: Capsule())

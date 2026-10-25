@@ -30,7 +30,7 @@ struct ScoreCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("LANESIGHT SCORE").lsEyebrow()
-                Text("BETA").font(.caption2.bold()).foregroundStyle(LS.cyan)
+                Text("BETA").font(.lsCaption2.bold()).foregroundStyle(LS.cyan)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(LS.cyan.opacity(0.15), in: Capsule())
                 Spacer()
@@ -39,20 +39,20 @@ struct ScoreCard: View {
             if score.eligible == true, let value = score.score {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(String(Int(value.rounded())))
-                        .font(.system(size: 52, weight: .heavy, design: .rounded))
+                        .font(.lsRoboto(52, weight: .bold))
                         .foregroundStyle(LS.textPrimary)
                         .accessibilityLabel("LaneSight score \(Int(value.rounded()))")
                     VStack(alignment: .leading, spacing: 2) {
                         if let tier = score.tier {
-                            Text(tier.uppercased()).font(.subheadline.bold()).foregroundStyle(LS.cyan)
+                            Text(tier.uppercased()).font(.lsSubheadline.bold()).foregroundStyle(LS.cyan)
                         }
                         if let d = delta {
                             Label("\(d >= 0 ? "+" : "")\(Int(d.rounded())) over range",
                                   systemImage: d >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-                                .font(.caption).foregroundStyle(d >= 0 ? LS.measured : LS.bestEffort)
+                                .font(.lsCaption).foregroundStyle(d >= 0 ? LS.measured : LS.bestEffort)
                         }
                         if let b = best {
-                            Text("Best \(Int(b.rounded()))").font(.caption2).foregroundStyle(LS.textSecondary)
+                            Text("Best \(Int(b.rounded()))").font(.lsCaption2).foregroundStyle(LS.textSecondary)
                         }
                     }
                     Spacer()
@@ -60,9 +60,9 @@ struct ScoreCard: View {
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Building your score", systemImage: "hourglass")
-                        .font(.headline).foregroundStyle(LS.textPrimary)
+                        .font(.lsHeadline).foregroundStyle(LS.textPrimary)
                     Text("Each part needs enough measured shots before a score appears.")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                     eligibilityRows
                 }
             }
@@ -73,23 +73,23 @@ struct ScoreCard: View {
                 ForEach(parts, id: \.name) { part in
                     HStack {
                         Text(Fmt.part(part.value))
-                            .font(.title3.bold().monospacedDigit())
+                            .font(.lsTitle3.bold().monospacedDigit())
                             .foregroundStyle(part.value == nil ? LS.textFaint : LS.textPrimary)
                             .frame(width: 44, alignment: .leading)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(part.name).font(.subheadline).foregroundStyle(LS.textPrimary)
-                            Text(part.desc).font(.caption2).foregroundStyle(LS.textSecondary)
+                            Text(part.name).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
+                            Text(part.desc).font(.lsCaption2).foregroundStyle(LS.textSecondary)
                         }
                         Spacer()
                         if part.value == nil {
-                            Text("building").font(.caption2).foregroundStyle(LS.textFaint)
+                            Text("building").font(.lsCaption2).foregroundStyle(LS.textFaint)
                         }
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(part.name) \(part.value == nil ? "building" : Fmt.part(part.value))")
                 }
                 if let fv = score.formula_version {
-                    Text(fv).font(.caption2).foregroundStyle(LS.textFaint)
+                    Text(fv).font(.lsCaption2).foregroundStyle(LS.textFaint)
                 }
             }
         }
@@ -104,11 +104,11 @@ struct ScoreCard: View {
                         HStack {
                             Image(systemName: e.met == true ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(e.met == true ? LS.measured : LS.textFaint)
-                                .font(.caption)
-                            Text(MetricDisplay.humanize(key)).font(.caption).foregroundStyle(LS.textSecondary)
+                                .font(.lsCaption)
+                            Text(MetricDisplay.humanize(key)).font(.lsCaption).foregroundStyle(LS.textSecondary)
                             Spacer()
                             Text("\(e.have ?? 0)/\(e.need ?? 0)")
-                                .font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                                .font(.lsCaption.monospacedDigit()).foregroundStyle(LS.textSecondary)
                         }
                     }
                 }

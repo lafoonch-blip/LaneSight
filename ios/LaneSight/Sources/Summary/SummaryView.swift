@@ -50,9 +50,9 @@ struct SummaryView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("SESSION COMPLETE").lsEyebrow()
             Text("Practice" + (model.laneText.isEmpty ? "" : " · Lane \(model.laneText)"))
-                .font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                .font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
             if let n = summary?.shots {
-                Text("\(n) shot\(n == 1 ? "" : "s")").font(.callout).foregroundStyle(LS.textSecondary)
+                Text("\(n) shot\(n == 1 ? "" : "s")").font(.lsCallout).foregroundStyle(LS.textSecondary)
             }
         }
     }
@@ -65,21 +65,21 @@ struct SummaryView: View {
                     Spacer()
                     if summary?.personal_best == true {
                         Label("Personal best", systemImage: "star.fill")
-                            .font(.caption2.bold()).foregroundStyle(LS.bestEffort)
+                            .font(.lsCaption2.bold()).foregroundStyle(LS.bestEffort)
                     }
                 }
                 if score.eligible == true, let v = score.score {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(String(Int(v.rounded())))
-                            .font(.system(size: 44, weight: .heavy, design: .rounded))
+                            .font(.lsRoboto(44, weight: .bold))
                             .foregroundStyle(LS.textPrimary)
                         if let tier = score.tier {
-                            Text(tier.uppercased()).font(.subheadline.bold()).foregroundStyle(LS.cyan)
+                            Text(tier.uppercased()).font(.lsSubheadline.bold()).foregroundStyle(LS.cyan)
                         }
                     }
                 } else {
                     Label("Still building your score", systemImage: "hourglass")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                 }
             }
             .lsCard()
@@ -92,10 +92,10 @@ struct SummaryView: View {
             TierBadge(tier: te.to_tier, size: 48)
             VStack(alignment: .leading, spacing: 2) {
                 Text(promo ? "Reached \((te.to_tier ?? "").capitalized)" : "Moved to \((te.to_tier ?? "").capitalized)")
-                    .font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                    .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 if let from = te.from_tier {
                     Text(promo ? "Up from \(from.capitalized)" : "From \(from.capitalized)")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
             }
             Spacer()
@@ -109,20 +109,20 @@ struct SummaryView: View {
         let extra = (summary?.unlocked?.count ?? 0) - unlockNotifs.count
         if !unlockNotifs.isEmpty || extra > 0 {
             VStack(alignment: .leading, spacing: 8) {
-                Text("UNLOCKED THIS SESSION").font(.caption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
+                Text("UNLOCKED THIS SESSION").font(.lsCaption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
                 VStack(spacing: 0) {
                     ForEach(Array(unlockNotifs.enumerated()), id: \.element.id) { idx, n in
                         HStack(spacing: 12) {
                             AchievementBadge(category: n.payload?.category, unlocked: true, size: 40)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(n.payload?.name ?? "Achievement")
-                                    .font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                                    .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                                 if let d = n.payload?.description {
-                                    Text(d).font(.caption2).foregroundStyle(LS.textSecondary)
+                                    Text(d).font(.lsCaption2).foregroundStyle(LS.textSecondary)
                                 }
                             }
                             Spacer()
-                            Text("NEW").font(.caption2.bold()).foregroundStyle(LS.cyan)
+                            Text("NEW").font(.lsCaption2.bold()).foregroundStyle(LS.cyan)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 12)
                         if idx != unlockNotifs.count - 1 { Divider().overlay(LS.cardStroke).padding(.leading, 14) }
@@ -131,7 +131,7 @@ struct SummaryView: View {
                 .lsCard(padding: 0)
                 if extra > 0 {
                     Text("+\(extra) more unlocked — see Achievements.")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
             }
         }

@@ -4,6 +4,13 @@ import SwiftUI
 struct LaneSightApp: App {
     @StateObject private var model = AppModel()
 
+    init() {
+        LSAppearance.apply()
+        #if DEBUG
+        LSFontCheck.log()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -14,7 +21,8 @@ struct LaneSightApp: App {
                 }
             }
             .environmentObject(model)
-            .tint(LS.blue)
+            .tint(LS.action)
+            .lsAppFont()
             .preferredColorScheme(.dark)
         }
     }

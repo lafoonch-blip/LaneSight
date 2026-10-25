@@ -118,7 +118,7 @@ extension View {
 
     /// Section eyebrow label used throughout the designs (e.g. "SCORE BREAKDOWN").
     func lsEyebrow() -> some View {
-        self.font(.caption.weight(.semibold))
+        self.font(.lsCaption.weight(.semibold))
             .tracking(1.1)
             .foregroundStyle(LS.textSecondary)
     }
@@ -149,9 +149,9 @@ struct ComingSoonView: View {
             Image(systemName: symbol)
                 .font(.system(size: 40, weight: .regular))
                 .foregroundStyle(LS.cyan)
-            Text(title).font(.title3.bold()).foregroundStyle(LS.textPrimary)
+            Text(title).font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
             Text(message)
-                .font(.callout)
+                .font(.lsCallout)
                 .foregroundStyle(LS.textSecondary)
                 .multilineTextAlignment(.center)
         }

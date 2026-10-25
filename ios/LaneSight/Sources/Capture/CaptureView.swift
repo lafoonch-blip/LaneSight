@@ -52,13 +52,13 @@ struct CaptureView: View {
         HStack {
             if camera.activeFPS > 0 {
                 Label("\(Int(camera.activeFPS)) fps · \(camera.resolution)", systemImage: "video.fill")
-                    .font(.caption).padding(6)
+                    .font(.lsCaption).padding(6)
                     .background(.ultraThinMaterial, in: Capsule())
                     .accessibilityLabel("Recording at \(Int(camera.activeFPS)) frames per second, \(camera.resolution)")
             }
             Spacer()
             Text(model.captureMode == "form" ? "FORM" : "SHOT")
-                .font(.caption2.bold()).tracking(1).padding(.horizontal, 10).padding(.vertical, 6)
+                .font(.lsCaption2.bold()).tracking(1).padding(.horizontal, 10).padding(.vertical, 6)
                 .background(.ultraThinMaterial, in: Capsule())
                 .accessibilityLabel("Mode: \(model.captureMode == "form" ? "Form" : "Shot")")
         }
@@ -71,9 +71,9 @@ struct CaptureView: View {
         HStack(spacing: 8) {
             Button { showTargetEditor = true } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "scope").font(.caption2)
+                    Image(systemName: "scope").font(.lsCaption2)
                     targetChipContent
-                    Image(systemName: "slider.horizontal.3").font(.caption2).foregroundStyle(LS.cyan)
+                    Image(systemName: "slider.horizontal.3").font(.lsCaption2).foregroundStyle(LS.cyan)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -84,8 +84,8 @@ struct CaptureView: View {
 
             if let ball = model.currentBall {
                 HStack(spacing: 6) {
-                    Image(systemName: "circle.circle.fill").font(.caption2).foregroundStyle(LS.blue)
-                    Text(ball.displayName).font(.caption.weight(.semibold)).lineLimit(1)
+                    Image(systemName: "circle.circle.fill").font(.lsCaption2).foregroundStyle(LS.blue)
+                    Text(ball.displayName).font(.lsCaption.weight(.semibold)).lineLimit(1)
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
@@ -103,19 +103,19 @@ struct CaptureView: View {
     @ViewBuilder private var targetChipContent: some View {
         let t = model.sessionTarget
         if t.isEmpty {
-            Text("Set target").font(.caption.weight(.semibold))
+            Text("Set target").font(.lsCaption.weight(.semibold))
         } else {
             let lead = [t.feetBoard.map { "F \(Fmt.number($0))" },
                         t.arrowsBoard.map { "A \(Fmt.number($0))" }].compactMap { $0 }.joined(separator: " · ")
             HStack(spacing: 6) {
-                if !lead.isEmpty { Text(lead).font(.caption.weight(.semibold)) }
+                if !lead.isEmpty { Text(lead).font(.lsCaption.weight(.semibold)) }
                 if let b = t.breakpointBoard {
-                    if !lead.isEmpty { Text("·").font(.caption).foregroundStyle(.white.opacity(0.5)) }
+                    if !lead.isEmpty { Text("·").font(.lsCaption).foregroundStyle(.white.opacity(0.5)) }
                     HStack(spacing: 3) {
-                        Text("B \(Fmt.number(b))").font(.caption.weight(.semibold))
+                        Text("B \(Fmt.number(b))").font(.lsCaption.weight(.semibold))
                             .foregroundStyle(model.breakpointIsSuggested ? LS.cyan : .white)
                         if model.breakpointIsSuggested {
-                            Text("suggested").font(.system(size: 8).weight(.bold))
+                            Text("suggested").font(.lsRoboto(8, weight: .bold))
                                 .padding(.horizontal, 5).padding(.vertical, 2)
                                 .background(LS.cyan.opacity(0.18), in: Capsule())
                                 .foregroundStyle(LS.cyan)
@@ -143,7 +143,7 @@ struct CaptureView: View {
                 .opacity(camera.isRunnable ? 1 : 0.4)
         }
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var recordButton: some View {
@@ -168,10 +168,10 @@ struct CaptureView: View {
 
     private func unavailableView(_ reason: String) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: "camera.metering.unknown").font(.largeTitle)
-            Text(reason).multilineTextAlignment(.center).font(.footnote)
+            Image(systemName: "camera.metering.unknown").font(.lsLargeTitle)
+            Text(reason).multilineTextAlignment(.center).font(.lsFootnote)
             Text("You can still set the API URL and Check connection in Settings.")
-                .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .font(.lsCaption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
         .foregroundStyle(.white)
         .padding()
@@ -218,8 +218,8 @@ private struct ProcessingCover: View {
                 VStack(spacing: 18) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 44)).foregroundStyle(LS.bestEffort)
-                    Text("Shot couldn't be processed").font(.title3.bold()).foregroundStyle(LS.textPrimary)
-                    Text(msg).font(.callout).foregroundStyle(LS.textSecondary)
+                    Text("Shot couldn't be processed").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                    Text(msg).font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
                     Button("Back to camera") { model.resetPipeline(); busy = false }
                         .buttonStyle(PrimaryButtonStyle())
@@ -243,9 +243,9 @@ private struct ProcessingCover: View {
                 VStack(spacing: 14) {
                     Image(systemName: "scissors")
                         .font(.system(size: 40)).foregroundStyle(LS.cyan)
-                    Text("Trimming…").font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Trimming…").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text("Cutting to the shot — full 120 fps and resolution are kept.")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
                 }
 
@@ -253,22 +253,22 @@ private struct ProcessingCover: View {
                 VStack(spacing: 14) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 44)).foregroundStyle(LS.blue)
-                    Text("Uploading clip").font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Uploading clip").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     ProgressView(value: frac).tint(LS.blue).frame(maxWidth: 260)
-                    Text("\(Int(frac * 100))%").font(.headline.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                    Text("\(Int(frac * 100))%").font(.lsHeadline.monospacedDigit()).foregroundStyle(LS.textSecondary)
                 }
 
             case .analyzing(let state, let timings):
                 VStack(spacing: 14) {
                     ProgressView().tint(LS.cyan).scaleEffect(1.3)
-                    Text("Analyzing…").font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Analyzing…").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text("Usually about 20–30s · job \(state)")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                     if !timings.isEmpty {
                         Text(timings.sorted(by: { $0.key < $1.key })
                             .map { "\($0.key) \(String(format: "%.2fs", $0.value))" }
                             .joined(separator: " · "))
-                            .font(.caption2.monospacedDigit()).foregroundStyle(LS.textFaint)
+                            .font(.lsCaption2.monospacedDigit()).foregroundStyle(LS.textFaint)
                             .multilineTextAlignment(.center)
                     }
                 }
@@ -281,7 +281,7 @@ private struct ProcessingCover: View {
             }
             Spacer()
             Text("Keep the app open — this finishes on your Mac.")
-                .font(.caption2).foregroundStyle(LS.textFaint)
+                .font(.lsCaption2).foregroundStyle(LS.textFaint)
                 .padding(.bottom, 12)
         }
         .padding(32)
@@ -291,8 +291,8 @@ private struct ProcessingCover: View {
     private func stage(title: String, detail: String? = nil) -> some View {
         VStack(spacing: 12) {
             ProgressView().tint(LS.cyan)
-            Text(title).font(.title3.bold()).foregroundStyle(LS.textPrimary)
-            if let detail { Text(detail).font(.callout).foregroundStyle(LS.textSecondary) }
+            Text(title).font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+            if let detail { Text(detail).font(.lsCallout).foregroundStyle(LS.textSecondary) }
         }
     }
 }
@@ -316,7 +316,7 @@ private struct TargetEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Change your target between shots. It carries forward until you change it again or apply a move from a shot card.")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                     boardRow("Feet", value: $target.feetBoard)
                     boardRow("Arrows", value: $target.arrowsBoard)
                     boardRow("Breakpoint", value: $target.breakpointBoard, suggested: suggestedBreakpoint)
@@ -339,9 +339,9 @@ private struct TargetEditorSheet: View {
         let isSuggested = suggested != nil && value.wrappedValue == suggested
         return HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline).foregroundStyle(LS.textPrimary)
+                Text(title).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
                 if isSuggested {
-                    Text("SUGGESTED").font(.system(size: 9).weight(.bold)).foregroundStyle(LS.cyan)
+                    Text("SUGGESTED").font(.lsRoboto(9, weight: .bold)).foregroundStyle(LS.cyan)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,16 +349,16 @@ private struct TargetEditorSheet: View {
                 Stepper(value: Binding(get: { current },
                                        set: { value.wrappedValue = max(0, min(60, $0)) }),
                         in: 0...60, step: 1) {
-                    Text(Fmt.number(current)).font(.body.monospacedDigit().bold())
+                    Text(Fmt.number(current)).font(.lsBody.monospacedDigit().bold())
                         .foregroundStyle(LS.textPrimary).frame(width: 40, alignment: .trailing)
                 }
                 .labelsHidden()
                 Button("Clear") { value.wrappedValue = nil }
-                    .font(.caption).tint(LS.bestEffort)
+                    .font(.lsCaption).tint(LS.bestEffort)
             } else {
-                Text("Off").font(.subheadline).foregroundStyle(LS.textFaint)
+                Text("Off").font(.lsSubheadline).foregroundStyle(LS.textFaint)
                 Button("Set") { value.wrappedValue = defaults[title] ?? 0 }
-                    .font(.caption).tint(LS.blue)
+                    .font(.lsCaption).tint(LS.blue)
             }
         }
         .lsCard()

@@ -19,7 +19,7 @@ struct AchievementsView: View {
                     showcaseSection(data)
                     closeToUnlocking(data)
                     if let pinError {
-                        Text(pinError).font(.caption).foregroundStyle(LS.bestEffort)
+                        Text(pinError).font(.lsCaption).foregroundStyle(LS.bestEffort)
                     }
                     categoryChips(data)
                     activeList(data)
@@ -46,12 +46,12 @@ struct AchievementsView: View {
             Image(systemName: "rosette").font(.system(size: 40)).foregroundStyle(LS.bestEffort)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(unlocked)").font(.system(size: 32, weight: .heavy)).foregroundStyle(LS.textPrimary)
-                    Text("/ \(total) unlocked").font(.subheadline).foregroundStyle(LS.textSecondary)
+                    Text("\(unlocked)").font(.lsRoboto(32, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    Text("/ \(total) unlocked").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
                 }
                 ProgressView(value: frac).tint(LS.cyan)
                 Text("Active achievements you can earn in this build")
-                    .font(.caption2).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption2).foregroundStyle(LS.textSecondary)
             }
         }
         .lsCard()
@@ -63,13 +63,13 @@ struct AchievementsView: View {
         let showcase = pins.filter { ($0.kind ?? "showcase") == "showcase" }
             .sorted { ($0.position ?? 0) < ($1.position ?? 0) }
         if !showcase.isEmpty {
-            Text("SHOWCASE").font(.caption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
+            Text("SHOWCASE").font(.lsCaption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
             HStack(spacing: 10) {
                 ForEach(showcase) { pin in
                     if let ach = find(pin.achievement_id, in: data) {
                         VStack(spacing: 10) {
                             AchievementBadge(category: ach.category, unlocked: true, size: 52)
-                            Text(ach.name ?? "").font(.caption.bold()).foregroundStyle(LS.textPrimary)
+                            Text(ach.name ?? "").font(.lsCaption.bold()).foregroundStyle(LS.textPrimary)
                                 .multilineTextAlignment(.center).lineLimit(2)
                         }
                         .frame(maxWidth: .infinity)
@@ -91,19 +91,19 @@ struct AchievementsView: View {
             .sorted { (ratio($0) ?? 0) > (ratio($1) ?? 0) }
             .prefix(3)
         if !close.isEmpty {
-            Text("CLOSE TO UNLOCKING").font(.caption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
+            Text("CLOSE TO UNLOCKING").font(.lsCaption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.cyan)
             ForEach(Array(close)) { ach in
                 NavigationLink { AchievementDetailView(achievementId: ach.id) } label: {
                     HStack(spacing: 12) {
                         AchievementBadge(category: ach.category, unlocked: false, size: 44)
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text(ach.name ?? "").font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                                Text(ach.name ?? "").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                                 if isPinned(ach.id) {
-                                    Text("pinned").font(.caption2).foregroundStyle(LS.textSecondary)
+                                    Text("pinned").font(.lsCaption2).foregroundStyle(LS.textSecondary)
                                 }
                             }
-                            Text(progressText(ach)).font(.caption).foregroundStyle(LS.textSecondary)
+                            Text(progressText(ach)).font(.lsCaption).foregroundStyle(LS.textSecondary)
                             if let r = ratio(ach) {
                                 ProgressView(value: r).tint(LS.cyan)
                             }
@@ -133,7 +133,7 @@ struct AchievementsView: View {
         let on = selectedCategory == category
         return Button { selectedCategory = category } label: {
             Text(label)
-                .font(.caption.weight(on ? .bold : .semibold))
+                .font(.lsCaption.weight(on ? .bold : .semibold))
                 .foregroundStyle(on ? .white : LS.textSecondary)
                 .padding(.horizontal, 12).frame(height: 36)
                 .background(on ? LS.blue : LS.card, in: Capsule())
@@ -171,12 +171,12 @@ struct AchievementsView: View {
         HStack(spacing: 12) {
             statusDot(ach)
             VStack(alignment: .leading, spacing: 2) {
-                Text(ach.name ?? "").font(.subheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
-                Text(ach.description ?? "").font(.caption2).foregroundStyle(LS.textFaint).lineLimit(1)
+                Text(ach.name ?? "").font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text(ach.description ?? "").font(.lsCaption2).foregroundStyle(LS.textFaint).lineLimit(1)
             }
             Spacer()
             Text(progressText(ach))
-                .font(.caption).foregroundStyle(statusColor(ach))
+                .font(.lsCaption).foregroundStyle(statusColor(ach))
                 .multilineTextAlignment(.trailing)
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -189,14 +189,14 @@ struct AchievementsView: View {
         if !later.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Coming later · \(later.count)")
-                    .font(.subheadline.bold()).foregroundStyle(LS.textSecondary)
+                    .font(.lsSubheadline.bold()).foregroundStyle(LS.textSecondary)
                 Text("Game, series, strike and league achievements unlock once that data is available.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(Color(hex: 0x0A1226), in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4]))
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4]))
                 .foregroundStyle(LS.cardStroke))
         }
     }
@@ -346,19 +346,19 @@ struct AchievementDetailView: View {
                     HStack(spacing: 14) {
                         AchievementBadge(category: d.category, unlocked: d.unlocked == true, size: 64)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(d.name ?? "").font(.title3.bold()).foregroundStyle(LS.textPrimary)
-                            Text((d.category ?? "").capitalized).font(.caption).foregroundStyle(LS.cyan)
+                            Text(d.name ?? "").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                            Text((d.category ?? "").capitalized).font(.lsCaption).foregroundStyle(LS.cyan)
                         }
                     }
                     if let desc = d.description {
-                        Text(desc).font(.callout).foregroundStyle(LS.textSecondary)
+                        Text(desc).font(.lsCallout).foregroundStyle(LS.textSecondary)
                     }
                     progressCard(d)
                     if let ids = d.evidence_shot_ids, !ids.isEmpty {
                         evidenceCard(ids)
                     }
                     if d.status == "coming_later", let reason = d.inactive_reason {
-                        Label(reason, systemImage: "hourglass").font(.caption).foregroundStyle(LS.bestEffort)
+                        Label(reason, systemImage: "hourglass").font(.lsCaption).foregroundStyle(LS.bestEffort)
                     }
                 }
                 .padding(16)
@@ -376,30 +376,30 @@ struct AchievementDetailView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text("PROGRESS").lsEyebrow()
             if d.unlocked == true {
-                Label("Unlocked", systemImage: "checkmark.seal.fill").font(.headline).foregroundStyle(LS.measured)
+                Label("Unlocked", systemImage: "checkmark.seal.fill").font(.lsHeadline).foregroundStyle(LS.measured)
                 if let at = d.unlocked_at {
                     Text(Date(timeIntervalSince1970: at).formatted(.dateTime.month().day().year()))
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
             } else if p?.status == "not_trackable" {
-                Label("Not trackable yet", systemImage: "circle.dashed").font(.subheadline.bold())
+                Label("Not trackable yet", systemImage: "circle.dashed").font(.lsSubheadline.bold())
                     .foregroundStyle(LS.unavailable)
                 Text(p?.unavailable_reason ?? "This achievement can't be measured from the current data.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             } else if let c = p?.current_value?.double, let t = p?.target_value?.double, t > 0 {
                 let isRatio = t <= 1
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(isRatio ? "\(Int((c * 100).rounded()))%" : (p?.current_value?.display ?? "0"))
-                        .font(.title.bold().monospacedDigit()).foregroundStyle(LS.textPrimary)
+                        .font(.lsTitle.bold().monospacedDigit()).foregroundStyle(LS.textPrimary)
                     Text("/ \(isRatio ? "\(Int((t * 100).rounded()))%" : (p?.target_value?.display ?? "—"))")
-                        .font(.subheadline).foregroundStyle(LS.textSecondary)
+                        .font(.lsSubheadline).foregroundStyle(LS.textSecondary)
                 }
                 ProgressView(value: min(max(c / t, 0), 1)).tint(LS.cyan)
-                if let n = p?.sample_count { Text("\(n) comparable shots").font(.caption).foregroundStyle(LS.textSecondary) }
+                if let n = p?.sample_count { Text("\(n) comparable shots").font(.lsCaption).foregroundStyle(LS.textSecondary) }
             } else if let tgt = p?.target_value?.display {
-                Text("Target: \(tgt.capitalized)").font(.subheadline).foregroundStyle(LS.textSecondary)
+                Text("Target: \(tgt.capitalized)").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
             } else {
-                Text("Locked — no progress yet.").font(.subheadline).foregroundStyle(LS.textSecondary)
+                Text("Locked — no progress yet.").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
             }
         }
         .lsCard()
@@ -409,7 +409,7 @@ struct AchievementDetailView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("EVIDENCE").lsEyebrow()
             Text("\(ids.count) qualifying shot\(ids.count == 1 ? "" : "s") count toward this achievement.")
-                .font(.caption).foregroundStyle(LS.textSecondary)
+                .font(.lsCaption).foregroundStyle(LS.textSecondary)
         }
         .lsCard()
     }

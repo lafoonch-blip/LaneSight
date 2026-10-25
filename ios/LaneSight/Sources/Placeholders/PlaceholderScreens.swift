@@ -14,9 +14,9 @@ struct DeleteAccountView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Delete your account?").font(.title2.bold()).foregroundStyle(LS.textPrimary)
+                Text("Delete your account?").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
                 Text("This permanently deletes your account and everything in it. It can't be undone.")
-                    .font(.callout).foregroundStyle(LS.textSecondary)
+                    .font(.lsCallout).foregroundStyle(LS.textSecondary)
                 VStack(alignment: .leading, spacing: 6) {
                     bullet("Profile, arsenal and sensors")
                     bullet("All sessions, shots, videos and stats")
@@ -24,20 +24,20 @@ struct DeleteAccountView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+                .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TYPE DELETE TO CONFIRM").lsEyebrow()
                     TextField("DELETE", text: $confirmText)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .padding(12).background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+                        .padding(12).background(LS.card, in: RoundedRectangle(cornerRadius: 8))
                         .foregroundStyle(LS.textPrimary)
                 }
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(LS.bestEffort)
+                        .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
                 Button {
@@ -67,7 +67,7 @@ struct DeleteAccountView: View {
     private func bullet(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text("•").foregroundStyle(LS.textSecondary)
-            Text(text).font(.callout).foregroundStyle(LS.textSecondary)
+            Text(text).font(.lsCallout).foregroundStyle(LS.textSecondary)
         }
     }
 

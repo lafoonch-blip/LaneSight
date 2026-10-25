@@ -20,7 +20,7 @@ struct SetupView: View {
                 preflightSection
 
                 if let startError {
-                    Text(startError).font(.caption).foregroundStyle(LS.bestEffort)
+                    Text(startError).font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
                 Button {
                     Task { await startSession() }
@@ -55,18 +55,18 @@ struct SetupView: View {
         let selected = model.captureMode == value
         return Button { model.captureMode = value } label: {
             HStack(spacing: 12) {
-                Image(systemName: symbol).font(.title3).foregroundStyle(selected ? LS.blue : LS.textSecondary)
+                Image(systemName: symbol).font(.lsTitle3).foregroundStyle(selected ? LS.blue : LS.textSecondary)
                     .frame(width: 34)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline).foregroundStyle(LS.textPrimary)
-                    Text(desc).font(.caption).foregroundStyle(LS.textSecondary).multilineTextAlignment(.leading)
+                    Text(title).font(.lsHeadline).foregroundStyle(LS.textPrimary)
+                    Text(desc).font(.lsCaption).foregroundStyle(LS.textSecondary).multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selected ? LS.blue : LS.textFaint)
             }
             .lsCard()
-            .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(selected ? LS.blue : .clear, lineWidth: 1.5))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? LS.blue : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }
@@ -82,14 +82,14 @@ struct SetupView: View {
                 intentField("Breakpoint", text: $model.breakpointBoardText)
             }
             Text("Set where you're aiming. Leave blank to skip Accuracy on this shot.")
-                .font(.caption2).foregroundStyle(LS.textFaint)
+                .font(.lsCaption2).foregroundStyle(LS.textFaint)
         }
         .lsCard()
     }
 
     private func intentField(_ title: String, text: Binding<String>) -> some View {
         VStack(spacing: 4) {
-            Text(title).font(.caption2).foregroundStyle(LS.textSecondary)
+            Text(title).font(.lsCaption2).foregroundStyle(LS.textSecondary)
             TextField("—", text: text)
                 .keyboardType(.decimalPad).multilineTextAlignment(.center)
                 .foregroundStyle(LS.textPrimary)
@@ -103,12 +103,12 @@ struct SetupView: View {
         NavigationLink { AddBallView() } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Current ball").font(.headline).foregroundStyle(LS.textPrimary)
-                    Text(model.currentBallName ?? "Choose from catalog").font(.caption)
+                    Text("Current ball").font(.lsHeadline).foregroundStyle(LS.textPrimary)
+                    Text(model.currentBallName ?? "Choose from catalog").font(.lsCaption)
                         .foregroundStyle(model.currentBallName == nil ? LS.textSecondary : LS.cyan)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote).foregroundStyle(LS.textFaint)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
             }
             .lsCard()
         }
@@ -117,10 +117,10 @@ struct SetupView: View {
 
     private var oilSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Oil pattern").font(.headline).foregroundStyle(LS.textPrimary)
+            Text("Oil pattern").font(.lsHeadline).foregroundStyle(LS.textPrimary)
             if oilPatterns.isEmpty {
                 Text(oilLoadError ?? "No oil patterns in the library yet.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             } else {
                 Menu {
                     ForEach(oilPatterns, id: \.identity) { p in
@@ -134,7 +134,7 @@ struct SetupView: View {
                         Text(model.selectedOilPatternName ?? "Select a pattern")
                             .foregroundStyle(model.selectedOilPatternName == nil ? LS.textSecondary : LS.textPrimary)
                         Spacer()
-                        Image(systemName: "chevron.up.chevron.down").font(.caption).foregroundStyle(LS.textFaint)
+                        Image(systemName: "chevron.up.chevron.down").font(.lsCaption).foregroundStyle(LS.textFaint)
                     }
                 }
             }
@@ -148,11 +148,11 @@ struct SetupView: View {
             HStack(spacing: 8) {
                 Image(systemName: healthOK ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(healthOK ? LS.measured : LS.bestEffort)
-                Text(healthText ?? "Checking analysis host…").font(.caption).foregroundStyle(LS.textSecondary)
+                Text(healthText ?? "Checking analysis host…").font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             HStack(spacing: 8) {
                 Image(systemName: "camera.fill").foregroundStyle(LS.cyan)
-                Text("Camera 1080p · \(model.preferredFPS) fps · SDR").font(.caption).foregroundStyle(LS.textSecondary)
+                Text("Camera 1080p · \(model.preferredFPS) fps · SDR").font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
         }
         .lsCard()

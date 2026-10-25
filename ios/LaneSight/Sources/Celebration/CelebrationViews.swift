@@ -42,20 +42,20 @@ struct UnlockView: View {
             VStack(spacing: 14) {
                 Spacer()
                 Text("ACHIEVEMENT UNLOCKED")
-                    .font(.caption.weight(.heavy)).tracking(1.5).foregroundStyle(LS.cyan)
+                    .font(.lsCaption.weight(.heavy)).tracking(1.5).foregroundStyle(LS.cyan)
                 AchievementBadge(category: p?.category, unlocked: true, size: 112)
                 Text(p?.name ?? "Achievement")
-                    .font(.system(size: 26, weight: .heavy)).foregroundStyle(LS.textPrimary)
+                    .font(.lsRoboto(26, weight: .bold)).foregroundStyle(LS.textPrimary)
                     .multilineTextAlignment(.center)
                 if let d = p?.description {
-                    Text(d).font(.callout).foregroundStyle(LS.textSecondary)
+                    Text(d).font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 if let valueLine {
                     Text(valueLine)
-                        .font(.title3.bold().monospacedDigit()).foregroundStyle(LS.cyan)
+                        .font(.lsTitle3.bold().monospacedDigit()).foregroundStyle(LS.cyan)
                         .padding(.horizontal, 18).padding(.vertical, 12)
-                        .background(LS.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                        .background(LS.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
                 }
                 Spacer()
                 VStack(spacing: 8) {
@@ -95,20 +95,20 @@ struct TierUpView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: 0x071330).ignoresSafeArea()
+            LS.bg.ignoresSafeArea()
             VStack(spacing: 18) {
                 Spacer().frame(height: 20)
                 Text(isBanner ? "TIER REGAINED" : "NEW TIER REACHED")
-                    .font(.caption.weight(.heavy)).tracking(2).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption.weight(.heavy)).tracking(2).foregroundStyle(LS.textSecondary)
                 TierBadge(tier: p?.to_tier, size: 180)
                 Text(tier.isEmpty ? "NEW TIER" : tier)
-                    .font(.system(size: 34, weight: .heavy)).tracking(1)
-                    .foregroundStyle(Color(hex: 0xB9D2F5))
+                    .font(.lsRoboto(34, weight: .bold)).tracking(1)
+                    .foregroundStyle(LS.textPrimary)
                 if let score = p?.score {
                     (Text("Your LaneSight Score reached ")
                         .foregroundStyle(LS.textSecondary)
                      + Text("\(Int(score.rounded()))").bold().foregroundStyle(LS.textPrimary))
-                        .font(.callout).multilineTextAlignment(.center)
+                        .font(.lsCallout).multilineTextAlignment(.center)
                 }
                 nextTierCard
                 Spacer()
@@ -125,15 +125,15 @@ struct TierUpView: View {
         if let next = p?.next_tier, let points = p?.points, points > 0 {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Next: \(next.capitalized)").font(.subheadline).foregroundStyle(LS.textSecondary)
+                    Text("Next: \(next.capitalized)").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
                     Spacer()
                     Text("\(Int(points.rounded())) points to go")
-                        .font(.subheadline.bold()).foregroundStyle(LS.textPrimary)
+                        .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 }
             }
             .lsCard()
         } else if p?.next_tier == nil {
-            Text("Top tier reached.").font(.subheadline).foregroundStyle(LS.textSecondary)
+            Text("Top tier reached.").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
         }
     }
 
@@ -191,8 +191,8 @@ struct AchievementBadge: View {
         case "accuracy": return LS.cyan
         case "power": return LS.bestEffort
         case "consistency": return LS.measured
-        case "tier": return Color(hex: 0xB9D2F5)
-        case "form": return Color(hex: 0xB3A0FF)
+        case "tier": return LS.action
+        case "form": return LS.dataPurple
         case "progress": return LS.blue
         default: return LS.cyan
         }

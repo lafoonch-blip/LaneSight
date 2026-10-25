@@ -49,19 +49,19 @@ struct SessionView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Practice" + (model.laneText.isEmpty ? "" : " · Lane \(model.laneText)"))
-                    .font(.title3.bold()).foregroundStyle(LS.textPrimary)
+                    .font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                 Text((model.captureMode == "form" ? "Form Analysis" : "Shot Analysis")
                      + (model.selectedOilPatternName.map { " · \($0)" } ?? ""))
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             Spacer()
             if model.activeSessionId != nil {
                 HStack(spacing: 6) {
                     Circle().fill(Color(hex: 0xFF4D5E)).frame(width: 8, height: 8)
-                    Text("LIVE").font(.caption2.bold()).foregroundStyle(Color(hex: 0xFF9AA5))
+                    Text("LIVE").font(.lsCaption2.bold()).foregroundStyle(LS.textPrimary)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(Color(hex: 0x3A1218), in: Capsule())
+                .background(LS.raised, in: Capsule())
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,7 +88,7 @@ struct SessionView: View {
             LoadableView(state: rows, retry: { Task { await load() } }) { list in
                 if list.isEmpty {
                     Text("No shots yet. Record a delivery and it shows up here as it uploads and analyzes.")
-                        .font(.caption).foregroundStyle(LS.textSecondary)
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading).lsCard()
                 } else {
                     VStack(spacing: 8) {
@@ -138,7 +138,7 @@ private struct ShotRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text("\(number)").font(.headline.monospacedDigit()).foregroundStyle(LS.textPrimary).frame(width: 24)
+            Text("\(number)").font(.lsHeadline.monospacedDigit()).foregroundStyle(LS.textPrimary).frame(width: 24)
             switch row.state {
             case "analyzed": analyzed
             case "failed": failed
@@ -146,27 +146,27 @@ private struct ShotRow: View {
             }
         }
         .lsCard(padding: 12)
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(
-            row.state == "failed" ? Color(hex: 0x4A2430) : .clear, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(
+            row.state == "failed" ? LS.borderStrong : .clear, lineWidth: 1))
     }
 
     private var analyzed: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text((row.classification ?? "Analyzed").capitalized)
-                    .font(.subheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
-                Text(metricLine).font(.caption2).foregroundStyle(LS.textSecondary).lineLimit(1)
+                    .font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text(metricLine).font(.lsCaption2).foregroundStyle(LS.textSecondary).lineLimit(1)
             }
             Spacer()
             if let src = row.source, src == "upload" {
-                Text("UPLOAD").font(.caption2.bold()).foregroundStyle(LS.cyan)
+                Text("UPLOAD").font(.lsCaption2.bold()).foregroundStyle(LS.cyan)
             }
         }
     }
 
     private var pending: some View {
         HStack(spacing: 10) {
-            Text("Analyzing…").font(.subheadline).foregroundStyle(LS.textPrimary)
+            Text("Analyzing…").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
             Spacer()
             ProgressView().tint(LS.cyan)
         }
@@ -175,8 +175,8 @@ private struct ShotRow: View {
     private var failed: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Couldn't analyze").font(.subheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
-                Text("This shot didn't produce metrics.").font(.caption2).foregroundStyle(Color(hex: 0xFF9AA5))
+                Text("Couldn't analyze").font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text("This shot didn't produce metrics.").font(.lsCaption2).foregroundStyle(LS.textPrimary)
             }
             Spacer()
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LS.bestEffort)

@@ -28,10 +28,10 @@ struct DevPanelView: View {
                 .disabled(checking || model.apiBaseURL.isEmpty)
                 if let latencyMs, errorText == nil {
                     Label("Reached /health · \(latencyMs) ms", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green).font(.footnote)
+                        .foregroundStyle(.green).font(.lsFootnote)
                 }
                 if let errorText {
-                    Text(errorText).font(.footnote).foregroundStyle(.red).textSelection(.enabled)
+                    Text(errorText).font(.lsFootnote).foregroundStyle(.red).textSelection(.enabled)
                 }
             } header: {
                 Text("Analysis host")
@@ -44,9 +44,9 @@ struct DevPanelView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Label("Supabase unreachable", systemImage: "xmark.octagon.fill")
-                            .font(.subheadline.bold()).foregroundStyle(.white)
+                            .font(.lsSubheadline.bold()).foregroundStyle(.white)
                         Text("The Mac service can't reach the database. The app is NOT working — sign-in and your data will fail. This is not a safe session; do not treat memory mode as OK.")
-                            .font(.caption).foregroundStyle(.white.opacity(0.95))
+                            .font(.lsCaption).foregroundStyle(.white.opacity(0.95))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -61,7 +61,7 @@ struct DevPanelView: View {
                     HStack {
                         Text("Status"); Spacer()
                         Text((health.status ?? "?").uppercased())
-                            .font(.callout.bold())
+                            .font(.lsCallout.bold())
                             .foregroundStyle(health.status == "ok" ? .green : .red)
                     }
                     HStack {
@@ -82,7 +82,7 @@ struct DevPanelView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     Label("Bypasses real sign-in. Never use this for a real session.",
                           systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.lsCaption).foregroundStyle(.orange)
                 }
             } header: {
                 Text("Developer auth override")
@@ -93,7 +93,7 @@ struct DevPanelView: View {
             if let versions = health?.versions, !versions.isEmpty {
                 Section("Versions") {
                     ForEach(versions.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
-                        HStack { Text(k); Spacer(); Text(v).foregroundStyle(.secondary).font(.callout.monospaced()) }
+                        HStack { Text(k); Spacer(); Text(v).foregroundStyle(.secondary).font(.lsCallout.monospaced()) }
                     }
                 }
             }

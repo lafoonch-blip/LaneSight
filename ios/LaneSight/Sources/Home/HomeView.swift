@@ -33,42 +33,14 @@ struct HomeView: View {
     }
 
     /// Home tab header (Main.dc.html): Settings (left) and Profile (right) at 44 pt, the official
-    /// stacked logo centered. Other tabs' headers are a later step.
+    /// stacked logo centered. Shares the 3.0 header pattern with Stats and Lab via LSTabHeader.
     private var homeHeader: some View {
-        HStack(spacing: 12) {
-            NavigationLink { SettingsView() } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 18))
-                    .foregroundStyle(LS.textSecondary)
-                    .frame(width: 44, height: 44)
-                    .background(LS.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(LS.border, lineWidth: 1))
-            }
-            .accessibilityLabel("Settings")
-
-            Spacer(minLength: 0)
-
+        LSTabHeader {
             Image("LaneSightLogo")
                 .resizable().scaledToFit()
                 .frame(maxWidth: 146, maxHeight: 48)
                 .accessibilityLabel("LaneSight")
-
-            Spacer(minLength: 0)
-
-            NavigationLink { ProfileView() } label: {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LS.textPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(LS.selected, in: Circle())
-                    .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
-            }
-            .accessibilityLabel("Profile")
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
     }
 
     private var recentSessions: some View {
@@ -77,7 +49,7 @@ struct HomeView: View {
             LoadableView(state: sessions, retry: { Task { await loadSessions() } }) { rows in
                 if rows.isEmpty {
                     Text("No sessions yet. Start a practice session to see it here.")
-                        .font(.callout).foregroundStyle(LS.textSecondary)
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading).lsCard()
                 } else {
                     VStack(spacing: 10) {
@@ -122,15 +94,15 @@ struct SessionRowCard: View {
         HStack {
             Image(systemName: "figure.bowling").foregroundStyle(LS.blue)
                 .frame(width: 34, height: 34)
-                .background(LS.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                .background(LS.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 2) {
-                Text((session.mode ?? "Practice").capitalized).font(.subheadline.bold())
+                Text((session.mode ?? "Practice").capitalized).font(.lsSubheadline.bold())
                     .foregroundStyle(LS.textPrimary)
-                Text(subtitle).font(.caption).foregroundStyle(LS.textSecondary)
+                Text(subtitle).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             Spacer()
             if session.ended_at == nil {
-                Text("LIVE").font(.caption2.bold()).foregroundStyle(LS.measured)
+                Text("LIVE").font(.lsCaption2.bold()).foregroundStyle(LS.measured)
             }
         }
         .lsCard(padding: 12)
