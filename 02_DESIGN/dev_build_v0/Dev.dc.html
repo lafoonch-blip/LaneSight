@@ -8,48 +8,48 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 body{margin:0}
-a{color:#7FB2FF}a:hover{color:#B3D1FF}
+a{color:#00A8F5}a:hover{color:#00A8F5}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #060C1C; color: #F2F5FA; font-family: Inter, system-ui, sans-serif; padding: 56px 16px 34px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 56px 16px 34px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
 <div style="display: flex; align-items: center; gap: 12px">
-<a href="Main.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 12px; background: #0D1830; border: 1px solid #1C2A4A; color: #C9D4EA; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
-<div style="font-size: 22px; font-weight: 700; flex-grow: 1">Developer</div>
-<span style="padding: 6px 10px; border-radius: 8px; background: #2A1F4F; color: #C3A6FF; font-size: 12px; font-weight: 700">DEV BUILD</span>
+<a href="Main.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 8px; background: #031B29; border: 1px solid #0C2B40; color: #BFCBDD; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<div style="font-size: 24px; font-weight: 600; flex-grow: 1">Developer</div>
+<span style="padding: 6px 10px; border-radius: 8px; background: #0C2B40; color: #00A8F5; font-size: 13px; font-weight: 600">DEV BUILD</span>
 </div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
-<div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #9AA8C3">ANALYSIS HOST</div>
-<label for="host" style="font-size: 12px; color: #9AA8C3">Server URL</label>
-<input id="host" value="https://[your-mac].ts.net:8443" style="height: 44px; box-sizing: border-box; border-radius: 10px; background: #060C1C; border: 1px solid #24324F; color: #F2F5FA; padding: 0 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px">
-<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #3DDC97"></span><span style="flex-grow: 1">Healthy · 84 ms · queue 1</span><button style="height: 36px; padding: 0 12px; border-radius: 10px; background: #13213F; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 12px; font-weight: 600">Test</button></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">ANALYSIS HOST</div>
+<label for="host" style="font-size: 13px; color: #BFCBDD">Server URL</label>
+<input id="host" value="https://[your-mac].ts.net:8443" style="height: 44px; box-sizing: border-box; border-radius: 8px; background: #001018; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: 'JetBrains Mono', monospace; font-size: 14px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 14px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #00EB92"></span><span style="flex-grow: 1">Healthy · 84 ms · queue 1</span><button style="height: 36px; padding: 0 12px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600">Test</button></div>
 </div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
-<div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #9AA8C3">LAST SHOT TIMINGS</div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">Upload</span><span style="font-family: 'JetBrains Mono', monospace">14.2 s</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">Shot window</span><span style="font-family: 'JetBrains Mono', monospace">9.8 s</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">Analyze</span><span style="font-family: 'JetBrains Mono', monospace">86.4 s</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">Rules + adjustment</span><span style="font-family: 'JetBrains Mono', monospace">0.3 s</span></div>
-<div style="height: 1px; background: #1C2A4A"></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700"><span>Capture → result</span><span style="font-family: 'JetBrains Mono', monospace">1 m 52 s</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">LAST SHOT TIMINGS</div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Upload</span><span style="font-family: 'JetBrains Mono', monospace">14.2 s</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Shot window</span><span style="font-family: 'JetBrains Mono', monospace">9.8 s</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Analyze</span><span style="font-family: 'JetBrains Mono', monospace">86.4 s</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Rules + adjustment</span><span style="font-family: 'JetBrains Mono', monospace">0.3 s</span></div>
+<div style="height: 1px; background: #0C2B40"></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 600"><span>Capture → result</span><span style="font-family: 'JetBrains Mono', monospace">1 m 52 s</span></div>
 </div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
-<div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #9AA8C3">VERSIONS</div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">App</span><span style="font-family: 'JetBrains Mono', monospace">0.1.0 (7)</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">lanesight-core</span><span style="font-family: 'JetBrains Mono', monospace">0.6.0</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #C9D4EA">Rules</span><span style="font-family: 'JetBrains Mono', monospace">v1 · published</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">VERSIONS</div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">App</span><span style="font-family: 'JetBrains Mono', monospace">0.1.0 (7)</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">lanesight-core</span><span style="font-family: 'JetBrains Mono', monospace">0.6.0</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Rules</span><span style="font-family: 'JetBrains Mono', monospace">v1 · published</span></div>
 </div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; padding: 4px 16px; display: flex; flex-direction: column">
-<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-bottom: 1px solid #1C2A4A"><span style="font-size: 14px">Mode</span><span style="display: flex; border-radius: 10px; background: #060C1C; border: 1px solid #24324F; padding: 3px"><button aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 8px; background: #2F7DFF; border: 0; color: #FFFFFF; font-family: inherit; font-size: 12px; font-weight: 700">Beta</button><button aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 8px; background: transparent; border: 0; color: #9AA8C3; font-family: inherit; font-size: 12px; font-weight: 600">Production</button></span></div>
-<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-bottom: 1px solid #1C2A4A"><span style="font-size: 14px">Speak adjustments</span><span role="switch" aria-checked="true" aria-label="Speak adjustments" style="width: 48px; height: 28px; border-radius: 14px; background: #2F7DFF; display: flex; align-items: center; justify-content: flex-end; padding: 2px; box-sizing: border-box"><span style="width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></span></div>
-<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px"><span style="font-size: 14px">Keep raw clips on Mac</span><span role="switch" aria-checked="true" aria-label="Keep raw clips on Mac" style="width: 48px; height: 28px; border-radius: 14px; background: #2F7DFF; display: flex; align-items: center; justify-content: flex-end; padding: 2px; box-sizing: border-box"><span style="width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF"></span></span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 4px 16px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-bottom: 1px solid #0C2B40"><span style="font-size: 14px">Mode</span><span style="display: flex; border-radius: 8px; background: #001018; border: 1px solid #153B51; padding: 3px"><button aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 8px; background: #00A8F5; border: 0; color: #001018; font-family: inherit; font-size: 13px; font-weight: 600">Beta</button><button aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 8px; background: transparent; border: 0; color: #BFCBDD; font-family: inherit; font-size: 13px; font-weight: 600">Production</button></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; border-bottom: 1px solid #0C2B40"><span style="font-size: 14px">Speak adjustments</span><span role="switch" aria-checked="true" aria-label="Speak adjustments" style="width: 48px; height: 28px; border-radius: 12px; background: #00A8F5; display: flex; align-items: center; justify-content: flex-end; padding: 2px; box-sizing: border-box"><span style="width: 24px; height: 24px; border-radius: 50%; background: #F5F6FA"></span></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 48px"><span style="font-size: 14px">Keep raw clips on Mac</span><span role="switch" aria-checked="true" aria-label="Keep raw clips on Mac" style="width: 48px; height: 28px; border-radius: 12px; background: #00A8F5; display: flex; align-items: center; justify-content: flex-end; padding: 2px; box-sizing: border-box"><span style="width: 24px; height: 24px; border-radius: 50%; background: #F5F6FA"></span></span></div>
 </div>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: auto">
-<button style="grid-column: span 2; height: 48px; border-radius: 12px; background: #2F7DFF; border: 0; color: #FFFFFF; font-family: inherit; font-size: 14px; font-weight: 700">Export session data (CSV + clips list)</button>
-<button style="height: 48px; border-radius: 12px; background: #0D1830; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 14px; font-weight: 600">Upload queue (0)</button>
-<button style="height: 48px; border-radius: 12px; background: #0D1830; border: 1px solid #24324F; color: #F2F5FA; font-family: inherit; font-size: 14px; font-weight: 600">Error log (1)</button>
+<button style="grid-column: span 2; height: 48px; border-radius: 8px; background: #00A8F5; border: 0; color: #001018; font-family: inherit; font-size: 14px; font-weight: 600">Export session data (CSV + clips list)</button>
+<button style="height: 48px; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Upload queue (0)</button>
+<button style="height: 48px; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Error log (1)</button>
 </div>
 </div>
 </x-dc>

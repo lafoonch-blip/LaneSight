@@ -8,64 +8,65 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 body{margin:0}
-a{color:#7FB2FF}a:hover{color:#B3D1FF}
+a{color:#00A8F5}a:hover{color:#00A8F5}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; background: #060C1C; color: #F2F5FA; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+<div style="width: 390px; height: 980px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
 <div style="padding: 56px 20px 12px; display: flex; align-items: center; gap: 12px">
-<a href="Lab.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 12px; background: #0D1830; border: 1px solid #1C2A4A; color: #C9D4EA; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
-<div style="font-size: 22px; font-weight: 700">New practice session</div>
+<a href="Lab.dc.html" aria-label="Back" style="width: 44px; height: 44px; border-radius: 8px; background: #031B29; border: 1px solid #0C2B40; color: #BFCBDD; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<div style="font-size: 24px; font-weight: 600">New practice session</div>
 </div>
-<div style="flex-grow: 1; padding: 8px 20px 16px; display: flex; flex-direction: column; gap: 18px; overflow: hidden">
+<div style="flex-grow: 1; padding: 8px 20px 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
 <div style="display: flex; flex-direction: column; gap: 8px">
-<div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #9AA8C3">WHAT ARE YOU ANALYZING?</div>
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">WHAT ARE YOU ANALYZING?</div>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-<button aria-pressed="true" style="text-align: left; border-radius: 14px; padding: 14px; background: #13284F; border: 2px solid #2F7DFF; color: #F2F5FA; font-family: inherit; display: flex; flex-direction: column; gap: 6px">
-<span style="font-size: 15px; font-weight: 700">Shot Analysis</span>
-<span style="font-size: 12px; color: #B9C6E0">Ball, lane &amp; pins. Film from any spot that sees the lane</span>
+<button aria-pressed="true" style="text-align: left; border-radius: 8px; padding: 14px; background: #0C2B40; border: 2px solid #00A8F5; color: #F5F6FA; font-family: inherit; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 16px; font-weight: 600">Shot Analysis</span>
+<span style="font-size: 13px; color: #BFCBDD">Ball, lane &amp; pins. Film from any spot that sees the lane</span>
 </button>
-<button aria-pressed="false" style="text-align: left; border-radius: 14px; padding: 14px; background: #0D1830; border: 1px solid #1C2A4A; color: #F2F5FA; font-family: inherit; display: flex; flex-direction: column; gap: 6px">
-<span style="font-size: 15px; font-weight: 700">Form Analysis</span>
-<span style="font-size: 12px; color: #9AA8C3">Approach &amp; swing. Film you from any angle</span>
-</button>
-</div>
-</div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; display: flex; flex-direction: column">
-<div style="padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1C2A4A; min-height: 44px; box-sizing: border-box">
-<span style="font-size: 15px; font-weight: 600">Lane</span>
-<span style="display: flex; align-items: center; gap: 12px">
-<button aria-label="Previous lane" style="width: 36px; height: 36px; border-radius: 10px; background: #13213F; border: 1px solid #24324F; color: #F2F5FA; font-size: 18px; font-family: inherit">−</button>
-<span style="font-size: 18px; font-weight: 700; min-width: 24px; text-align: center">14</span>
-<button aria-label="Next lane" style="width: 36px; height: 36px; border-radius: 10px; background: #13213F; border: 1px solid #24324F; color: #F2F5FA; font-size: 18px; font-family: inherit">+</button>
-</span>
-</div>
-<button style="padding: 14px 16px; display: flex; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid #1C2A4A; background: transparent; color: #F2F5FA; font-family: inherit; text-align: left">
-<span style="width: 44px; height: 44px; border-radius: 50%; background: #1E3A8A; border: 2px solid #3B5BB5; flex-shrink: 0"></span>
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 12px; color: #9AA8C3">Current ball</span><span style="font-size: 15px; font-weight: 600">[Your ball from arsenal]</span><span style="font-size: 12px; color: #9AA8C3">Pin up · 2000 Abralon</span></span>
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A97B2" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
-</button>
-<button style="padding: 14px 16px; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; color: #F2F5FA; font-family: inherit; text-align: left">
-<span style="width: 44px; height: 44px; border-radius: 12px; background: #13213F; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38C6F4" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span>
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 12px; color: #9AA8C3">Oil pattern</span><span style="font-size: 15px; font-weight: 600">House shot</span><span style="font-size: 12px; color: #9AA8C3">~40 ft · from pattern library</span></span>
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A97B2" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+<button aria-pressed="false" style="text-align: left; border-radius: 8px; padding: 14px; background: #031B29; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 16px; font-weight: 600">Form Analysis</span>
+<span style="font-size: 13px; color: #BFCBDD">Approach &amp; swing. Film you from any angle</span>
 </button>
 </div>
-<div style="border-radius: 16px; background: #0D1830; border: 1px solid #1C2A4A; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
-<div style="font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #9AA8C3">PRE-FLIGHT CHECK</div>
-<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3DDC97" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Analysis host reachable · Mac · 84 ms</div>
-<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3DDC97" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Camera 1080p · 120 fps · SDR</div>
-<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFB547" stroke-width="2.5" aria-hidden="true"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span>Cellular only — uploads may queue</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; display: flex; flex-direction: column">
+<button style="padding: 14px 16px; display: flex; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid #0C2B40; background: transparent; color: #F5F6FA; font-family: inherit; text-align: left">
+<span style="width: 44px; height: 44px; border-radius: 50%; background: #0C2B40; border: 2px solid #153B51; flex-shrink: 0"></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 13px; color: #BFCBDD">Current ball</span><span style="font-size: 16px; font-weight: 600">[Your ball from arsenal]</span><span style="font-size: 13px; color: #BFCBDD">Pin up · 2000 Abralon</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</button>
+<button style="padding: 14px 16px; display: flex; align-items: center; gap: 12px; border: 0; background: transparent; color: #F5F6FA; font-family: inherit; text-align: left">
+<span style="width: 44px; height: 44px; border-radius: 12px; background: #062132; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 13px; color: #BFCBDD">Oil pattern</span><span style="font-size: 16px; font-weight: 600">House shot</span><span style="font-size: 13px; color: #BFCBDD">~40 ft · from pattern library</span></span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">YOUR TARGET (OPTIONAL)</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 4px"><label for="su-feet" style="font-size: 13px; color: #BFCBDD">Feet board</label><input id="su-feet" value="25" inputmode="numeric" style="height: 44px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 16px; font-weight: 600; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><label for="su-arrows" style="font-size: 13px; color: #BFCBDD">Arrows board</label><input id="su-arrows" value="12" inputmode="numeric" style="height: 44px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 16px; font-weight: 600; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><label for="su-bp" style="font-size: 13px; color: #BFCBDD">Breakpoint board</label><input id="su-bp" value="7" inputmode="numeric" style="height: 44px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 16px; font-weight: 600; min-width: 0"></div>
+</div>
+<span style="font-size: 13px; color: #BFCBDD">Carries forward shot to shot. Change it any time from the target chip on the camera. Leave blank to skip Accuracy.</span>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">PRE-FLIGHT CHECK</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00EB92" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Analysis host reachable · Mac · 84 ms</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00EB92" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>Camera 1080p · 120 fps · SDR (60/30 in Settings)</div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FA923C" stroke-width="2.5" aria-hidden="true"><path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg><span>Cellular only — uploads may queue</span></div>
 </div>
 </div>
 <div style="padding: 12px 20px 34px">
-<a href="Capture.dc.html" style="text-decoration: none; display: flex; align-items: center; justify-content: center; height: 56px; border-radius: 16px; background: #2F7DFF; color: #FFFFFF; font-size: 17px; font-weight: 700">Set up camera</a>
+<a href="Capture.dc.html" style="text-decoration: none; display: flex; align-items: center; justify-content: center; height: 56px; border-radius: 8px; background: #00A8F5; color: #001018; font-size: 17px; font-weight: 600">Set up camera</a>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":980}}'>
 class Component extends DCLogic {
 renderVals() { return {}; }
 }
