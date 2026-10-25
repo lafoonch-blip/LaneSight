@@ -84,7 +84,7 @@ struct Recommendation: Codable, Equatable {
     let move_feet: Double?
     let move_target: Double?      // whole boards (backend sends a number, not a string)
     let reason: String?
-    let confidence: Double?
+    let confidence: String?       // qualitative level: "low" | "medium" | "high" (NOT numeric)
 }
 
 /// The next-shot target line computed server-side from the thrown intent. Null board fields mean the
