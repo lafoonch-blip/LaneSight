@@ -22,7 +22,8 @@ class Job:
 
     def public(self) -> dict:
         return dict(id=self.id, kind=self.kind, state=self.state, reason=self.reason,
-                    timings={k: round(v, 3) for k, v in self.timings.items()},
+                    timings={k: (round(v, 3) if isinstance(v, (int, float)) else v)
+                             for k, v in self.timings.items()},   # cv is a nested dict, windowed_error a str
                     result=self.result)
 
 
