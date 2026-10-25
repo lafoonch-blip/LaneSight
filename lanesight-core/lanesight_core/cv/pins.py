@@ -55,7 +55,24 @@ def read_pins(path, S, H_img2lane, t_impact, log=print):
     win = [g for t, g in post if t_impact + 0.8 <= t <= t_impact + 1.6]
     if len(win) < 5: win = [g for _, g in post[:30]]
     t_set = t_impact + 1.2
-    settled = np.median(np.stack(win), 0).astype(np.uint8)
+    # Deck-visibility recovery (handoff D): the masking unit just above the pins is static background. Read the
+    # pins from the settle-window frames that still SEE the deck and drop any frame where it's blocked, instead
+    # of letting one occluded frame poison the median. A clip where the bowler walks through but the deck is
+    # clear a moment later now reads, rather than being called unreadable.
+    vmin0 = min(p['v'] for p in PP.values()); ppi0 = max(p['ppi'] for p in PP.values()); us0 = [p['u'] for p in PP.values()]
+    mby0, mby1 = max(int(vmin0 - 24 * ppi0), 0), max(int(vmin0 - 15 * ppi0), 1)
+    mbx0, mbx1 = max(int(min(us0) - 8 * ppi0), 0), min(int(max(us0) + 8 * ppi0), w)
+    def _mask_band(g):
+        if mby1 <= mby0 + 2 or mbx1 <= mbx0 + 2: return None
+        return cv2.cvtColor(g[mby0:mby1, mbx0:mbx1], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
+    _rb = _mask_band(ref)
+    def _deck_visible(g):
+        b = _mask_band(g)
+        if _rb is None or b is None or _rb.std() <= 1 or b.std() <= 1: return True
+        return float(np.corrcoef(_rb, b)[0, 1]) >= 0.35
+    clear = [g for g in win if _deck_visible(g)]
+    recovered = len(clear) >= 5                                     # enough frames actually showed the deck
+    settled = np.median(np.stack(clear if recovered else win), 0).astype(np.uint8)
     crop = lambda g: cv2.cvtColor(g[box[0]:box[1], box[2]:box[3]], cv2.COLOR_BGR2GRAY).astype(np.float32)
     (dx, dy), _ = cv2.phaseCorrelate(crop(ref), crop(settled))
     settled = cv2.warpAffine(settled, np.float32([[1, 0, -dx], [0, 1, -dy]]), (w, h))
@@ -93,23 +110,17 @@ def read_pins(path, S, H_img2lane, t_impact, log=print):
     # video, so when the video doesn't show them it must say so rather than guess. (A visible leave is still
     # reported; occlusion most dangerously HIDES standing pins and makes a leave look like a strike.)
     clip_end = float(S['ts'][min(len(S['ts']), len(S['Hs'])) - 1])
-    vmin = min(pp['v'] for pp in PP.values()); ppi = max(pp['ppi'] for pp in PP.values())
-    us = [pp['u'] for pp in PP.values()]
-    by0, by1 = max(int(vmin - 24 * ppi), 0), max(int(vmin - 15 * ppi), 1)
-    bx0, bx1 = max(int(min(us) - 8 * ppi), 0), min(int(max(us) + 8 * ppi), w)
-    occluded = False
-    if by1 > by0 + 2 and bx1 > bx0 + 2:
-        rb = cv2.cvtColor(ref[by0:by1, bx0:bx1], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
-        sb = cv2.cvtColor(settled[by0:by1, bx0:bx1], cv2.COLOR_BGR2GRAY).astype(np.float32).ravel()
-        # real strike/leave leaves the masking unit intact (corr ~0.7-0.95); a bowler blocking it drops corr far
-        # lower (shot 5: ~0.07). 0.35 sits in the wide gap, biased to avoid ever false-flagging a real result.
-        if rb.std() > 1 and sb.std() > 1: occluded = float(np.corrcoef(rb, sb)[0, 1]) < 0.35
+    # A "no pins standing" result is only a real strike if we could actually SEE the settled deck. If no
+    # settle-window frame showed the deck (recovery found none) or the clip ends too soon, a would-be strike is
+    # reported as unreadable rather than a false strike. The reason states what was OBSERVED — we don't assert a
+    # cause we didn't detect (the old text always blamed the bowler, which the SHOT_REVIEW clip showed was wrong).
     settled_enough = clip_end >= t_impact + 0.6                     # a floor: pins need a moment to fall on screen
     readable, reason = True, None
-    if not standing and not uncertain and (occluded or not settled_enough):
+    if not standing and not uncertain and (not recovered or not settled_enough):
         readable = False
-        reason = ("the pin deck was blocked (the bowler stepped into view) as the pins settled" if occluded
-                  else f"the clip ends {clip_end - t_impact:.1f}s after the ball reached the pins — too soon to read the pins")
+        reason = (f"the clip ends {clip_end - t_impact:.1f}s after the ball reached the pins — too soon to read the pins"
+                  if not settled_enough else
+                  "the view just above the pin deck was blocked as the pins settled, so the deck couldn't be read")
     out = dict(t_settled=float(t_set), standing=(standing if readable else None),
                uncertain=(uncertain if readable else None), strike=((not standing and not uncertain) if readable else None),
                readable=readable, unread_reason=reason,
