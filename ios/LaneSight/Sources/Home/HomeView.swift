@@ -105,6 +105,7 @@ struct HomeView: View {
         await loadScore()
         await loadSessions()
         await loadActivity()
+        if model.avatarImage == nil { await model.refreshAvatar() }   // show the photo in the header
     }
 
     private func loadActivity() async {

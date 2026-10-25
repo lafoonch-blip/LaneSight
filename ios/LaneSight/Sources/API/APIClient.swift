@@ -344,6 +344,40 @@ struct APIClient {
         return try await send(req, as: Profile.self)
     }
 
+    // MARK: profile photo (handoff G)
+
+    /// The processed 512px JPEG avatar, or nil when none is set (404). Needs auth, so it can't be an
+    /// AsyncImage(url:) — fetch the bytes and build a UIImage caller-side.
+    func avatarData() async throws -> Data? {
+        do {
+            return try await sendRaw(makeRequest("me/avatar"))
+        } catch APIError.http(let status, _) where status == 404 {
+            return nil
+        }
+    }
+
+    @discardableResult
+    func uploadAvatar(_ data: Data, mime: String = "image/jpeg") async throws -> AvatarStatus {
+        let boundary = "LaneSight-\(UUID().uuidString)"
+        var req = makeRequest("me/avatar", method: "PUT")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        func s(_ x: String) { body.append(x.data(using: .utf8)!) }
+        s("--\(boundary)\r\n")
+        s("Content-Disposition: form-data; name=\"file\"; filename=\"avatar\"\r\n")
+        s("Content-Type: \(mime)\r\n\r\n")
+        body.append(data)
+        s("\r\n--\(boundary)--\r\n")
+        let resp = try await uploadRaw(req, body: body, delegate: UploadProgressDelegate { _ in })
+        return try JSONDecoder().decode(AvatarStatus.self, from: resp)
+    }
+
+    @discardableResult
+    func deleteAvatar() async throws -> AvatarStatus {
+        let data = try await sendRaw(makeRequest("me/avatar", method: "DELETE"))
+        return try JSONDecoder().decode(AvatarStatus.self, from: data)
+    }
+
     func listSensors() async throws -> [Sensor] {
         try await send(makeRequest("me/sensors"), as: [Sensor].self)
     }

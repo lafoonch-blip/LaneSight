@@ -577,6 +577,14 @@ struct Profile: Codable, Equatable {
     var approach_steps: FlexString?
     var location: String?
     var form_baseline: FormBaseline?
+    var has_avatar: Bool?             // profile photo set (served by GET /me/avatar)
+    var avatar_updated_at: String?    // cache-buster for the avatar image
+}
+
+/// Result of PUT/DELETE /me/avatar (handoff G).
+struct AvatarStatus: Codable, Equatable {
+    let has_avatar: Bool
+    let avatar_updated_at: String?
 }
 
 struct Sensor: Codable, Identifiable, Equatable {

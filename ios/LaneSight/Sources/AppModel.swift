@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import UIKit
 
 /// Progress of the capture -> upload -> analyze -> result pipeline.
 enum PipelineState: Equatable {
@@ -85,6 +86,10 @@ final class AppModel: ObservableObject {
     /// this to the highest supported rate ≤ the chosen value. Uploads are kept small by trimming the
     /// clip on-device (VideoTrimmer), NOT by lowering fps.
     @Published var preferredFPS: Int { didSet { defaults.set(preferredFPS, forKey: Keys.preferredFPS) } }
+
+    /// The bowler's profile photo (served by GET /me/avatar; nil when none set). Shown in the tab header
+    /// and on Profile. Refreshed on load and after an upload/remove.
+    @Published var avatarImage: UIImage?
 
     // Auth session (tokens live in the Keychain, not here/UserDefaults).
     @Published private(set) var session: AuthSession?
@@ -190,6 +195,21 @@ final class AppModel: ObservableObject {
     }
 
     private func authClient() throws -> AuthClient { try AuthClient(baseURLString: apiBaseURL) }
+
+    /// Reload the profile photo (GET /me/avatar) into `avatarImage`. No-ops quietly if the client can't be
+    /// built or the request fails; clears the image on a 404 / empty response.
+    func refreshAvatar() async {
+        guard let client = try? makeClient() else { avatarImage = nil; return }
+        do {
+            if let data = try await client.avatarData(), let img = UIImage(data: data) {
+                avatarImage = img
+            } else {
+                avatarImage = nil
+            }
+        } catch {
+            // leave the current image in place on a transient error
+        }
+    }
 
     // MARK: auth
 

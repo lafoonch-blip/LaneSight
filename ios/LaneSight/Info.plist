@@ -37,6 +37,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>LaneSight records your delivery to analyze your shot.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>LaneSight uses a photo you choose as your profile picture.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIAppFonts</key>

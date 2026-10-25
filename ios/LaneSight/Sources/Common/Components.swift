@@ -43,6 +43,7 @@ struct LoadableView<T, Content: View>: View {
 /// Home passes the stacked logo as its center; Stats and Lab pass their tab name. Matches the
 /// Home header pattern in Main.dc.html (design README 3.0). Must live inside a NavigationStack.
 struct LSTabHeader<Center: View>: View {
+    @EnvironmentObject var model: AppModel
     @ViewBuilder var center: () -> Center
 
     var body: some View {
@@ -63,12 +64,20 @@ struct LSTabHeader<Center: View>: View {
             Spacer(minLength: 0)
 
             NavigationLink { ProfileView() } label: {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(LS.textPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(LS.selected, in: Circle())
-                    .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
+                Group {
+                    if let avatar = model.avatarImage {
+                        Image(uiImage: avatar).resizable().scaledToFill()
+                    } else {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(LS.textPrimary)
+                            .frame(width: 44, height: 44)
+                            .background(LS.selected)
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
             }
             .accessibilityLabel("Profile")
         }

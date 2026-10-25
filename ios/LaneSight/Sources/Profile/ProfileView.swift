@@ -1,10 +1,19 @@
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     @EnvironmentObject var model: AppModel
     @State private var profile: Loadable<Profile> = .idle
     @State private var sensors: [Sensor] = []
     @State private var score: ScoreResponse?
+
+    // profile photo (handoff G)
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showPhotoMenu = false
+    @State private var showPhotoPicker = false
+    @State private var showCamera = false
+    @State private var avatarBusy = false
+    @State private var avatarError: String?
 
     // editable fields
     @State private var name = ""
@@ -36,6 +45,7 @@ struct ProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 LoadableView(state: profile, retry: { Task { await load() } }) { _ in
+                    photoSection
                     headerCard
                     bowlerCard
                     baselineCard
@@ -58,6 +68,105 @@ struct ProfileView: View {
         } message: {
             Text("Enter a name for your sensor (your own label — no brand names needed).")
         }
+    }
+
+    // MARK: profile photo (Profile.dc.html "Add photo (optional)")
+
+    private var photoSection: some View {
+        VStack(spacing: 8) {
+            avatarCircle
+            Text(model.avatarImage == nil ? "Add photo (optional)" : "Change photo")
+                .font(.lsCaption).foregroundStyle(LS.cyan)
+            if let avatarError {
+                Text(avatarError).font(.lsCaption2).foregroundStyle(LS.bestEffort).multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .confirmationDialog("Profile photo", isPresented: $showPhotoMenu, titleVisibility: .visible) {
+            Button("Choose from Library") { showPhotoPicker = true }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Take Photo") { showCamera = true }
+            }
+            if model.avatarImage != nil {
+                Button("Remove Photo", role: .destructive) { Task { await removeAvatar() } }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in Task { await handlePicked(item) } }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in Task { await uploadUIImage(image) } }.ignoresSafeArea()
+        }
+    }
+
+    private var avatarCircle: some View {
+        Button { showPhotoMenu = true } label: {
+            ZStack {
+                if let img = model.avatarImage {
+                    Image(uiImage: img).resizable().scaledToFill()
+                } else {
+                    Circle().fill(LS.selected)
+                    Image(systemName: "plus").font(.system(size: 30, weight: .regular)).foregroundStyle(LS.cyan)
+                }
+            }
+            .frame(width: 84, height: 84)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
+            .overlay {
+                if avatarBusy {
+                    ZStack { Circle().fill(.black.opacity(0.45)); ProgressView().tint(.white) }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(model.avatarImage == nil ? "Add profile photo" : "Change profile photo")
+        .disabled(avatarBusy)
+    }
+
+    private func handlePicked(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        avatarError = nil
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                await uploadData(data, mime: "image/jpeg")
+            }
+        } catch {
+            avatarError = "Couldn't read that photo."
+        }
+        photoItem = nil
+    }
+
+    private func uploadUIImage(_ image: UIImage) async {
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            avatarError = "Couldn't process the photo."; return
+        }
+        await uploadData(data, mime: "image/jpeg")
+    }
+
+    private func uploadData(_ data: Data, mime: String) async {
+        avatarBusy = true; avatarError = nil
+        do {
+            _ = try await model.makeClient().uploadAvatar(data, mime: mime)
+            await model.refreshAvatar()
+        } catch APIError.http(let status, _) where status == 413 {
+            avatarError = "Image too large (max 10 MB)."
+        } catch APIError.http(let status, _) where status == 415 {
+            avatarError = "Use a HEIC, JPEG or PNG photo."
+        } catch {
+            avatarError = "Couldn't upload: \(error.localizedDescription)"
+        }
+        avatarBusy = false
+    }
+
+    private func removeAvatar() async {
+        avatarBusy = true; avatarError = nil
+        do {
+            _ = try await model.makeClient().deleteAvatar()
+            await model.refreshAvatar()
+        } catch {
+            avatarError = "Couldn't remove: \(error.localizedDescription)"
+        }
+        avatarBusy = false
     }
 
     private var headerCard: some View {
@@ -286,6 +395,7 @@ struct ProfileView: View {
             sensors = (try? await client.listSensors()) ?? []
             score = try? await client.score()
             await model.syncArsenal()
+            await model.refreshAvatar()
             profile = .loaded(p)
         } catch { profile = .failed(error.localizedDescription) }
     }
@@ -369,5 +479,35 @@ struct ProfileView: View {
             try await client.deleteSensor(s.id)
             sensors = try await client.listSensors()
         } catch { saveNote = "Couldn't delete sensor: \(error.localizedDescription)" }
+    }
+}
+
+/// Camera capture for the profile photo. PhotosPicker covers the library; this covers "Take Photo".
+struct CameraPicker: UIViewControllerRepresentable {
+    var onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPicker
+        init(_ parent: CameraPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage { parent.onImage(image) }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
     }
 }
