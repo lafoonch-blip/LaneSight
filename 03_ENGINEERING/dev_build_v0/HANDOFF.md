@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.5
+Version: 1.6
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -255,7 +255,7 @@ Open the `.dc.html` files in a browser to view them; `canvas.json` gives titles 
 | 2 | `Lab.dc.html` | Performance Lab tab (Start Live Session, Upload, PBA disabled, sessions) | `/sessions` |
 | 3 | `Setup.dc.html` | Session setup: mode, lane, ball, oil pattern, pre-flight | `/health`, `/me/arsenal`, `/oil-patterns`, `POST /sessions` |
 | 4 | `Capture.dc.html` | Capture: free framing, advisory spot check, intent, record, queue status | `/spot-check`, `POST …/shots` |
-| 5 | `Shot.dc.html` | Shot card (Shot Analysis only): next-shot advice, target vs actual, ball metrics, sensor question, score/achievement nudges. No form metrics (DEC-056) | `/shots/{id}`, `PATCH /shots/{id}` |
+| 5 | `Shot.dc.html` | Shot card (Shot Analysis only): next-shot advice, target vs actual on the simulated lane (draw the target and actual paths from the trajectory in lane coordinates; markers at laydown, arrows, breakpoint, entry; oil pattern shading from the session's pattern), ball metrics, sensor question, score/achievement nudges. No form metrics (DEC-056) | `/shots/{id}`, `PATCH /shots/{id}` |
 | 6 | `Session.dc.html` | Live session: KPIs, current ball, shot rows with upload/analyze/fail states | `/sessions/{id}` |
 | 7 | `Form.dc.html` | Form results: focus + drill, key positions, swing timing, approach/balance | `/shots/{id}` (form) |
 | 8 | `Stats.dc.html` | Stats tabs Score / Throw / Form + metric coverage | `/me/stats`, `/me/score/history` |

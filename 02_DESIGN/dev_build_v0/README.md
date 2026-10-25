@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.4
+Version: 3.5
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -21,6 +21,11 @@ Last Updated: 2026-10-25
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
 ## Changelog
+- **3.5 (2026-10-25):** Shot card › Target vs actual uses the Figma lane recreation (Sessions – MVP › "Shot Summary (after analysis)", component `Sessions / Shot lane recreation`).
+  - Perspective lane with boards, arrows, foul line and pins, plus the selected oil pattern as a purple reference.
+  - Target line (dashed blue) and your line (green) overlaid, with markers for Laydown, Arrows, Breakpoint and Entry.
+  - Legend: Target line · Your line · [oil pattern] (reference). The target vs actual table sits below the lane.
+  - Pins are decoration only; no pinfall (DEC-050). Frame 1880 px; rows 2 and 3 of the canvas moved down 200 px.
 - **3.4 (2026-10-25):** form fundamentals (DEC-057).
   - **Form results:** new **Timing checkpoints** card (Pushaway, Top of swing, Release), each Early / On time / Late with the measured offset and a small scale. The focus card example uses the leverage window.
   - **Swing timing** now compares **this delivery vs your baseline** per phase. The baseline comes from Profile; with none set, only this delivery shows, plus a prompt.
