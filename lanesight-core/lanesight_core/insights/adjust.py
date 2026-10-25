@@ -37,12 +37,56 @@ def far_lane_unreliable(shot: dict) -> tuple[bool, str | None]:
                               "the far-lane track is unreliable.")
     return False, None
 
-def _move_size(d):
-    """Single-shot move cap (SHOT_REVIEW fix #3): 2-and-1 (feet, target) normally, 3-and-2 for a large miss,
-    never more from one shot. Returns (move_feet, move_target, label)."""
-    if abs(d) >= 4.0:
+def _move_size(d, confirmed=False):
+    """Move cap (SHOT_REVIEW fix #3, handoff C.5): a single shot never moves more than 2-and-1 (feet, target).
+    A larger 3-and-2 is only allowed when the session already shows the ball missing the SAME side on 2+ earlier
+    shots (confirmed=True) — one shot is never enough to justify a big move. Returns (move_feet, move_target, label)."""
+    if confirmed and abs(d) >= 4.0:
         return 3, 2, '3-and-2'
     return 2, 1, '2-and-1'
+
+
+def _confirmed_direction(history, hit, handed) -> bool:
+    """True when 2+ earlier comparable shots this session missed the same side as this one (handoff C.5). Used to
+    allow a larger 3-and-2 move; a single shot stays capped at 2-and-1."""
+    side = (hit or {}).get('hit')
+    if side not in ('high', 'light', 'brooklyn') or not history:
+        return False
+    n = 0
+    for h in history:
+        hb = h.get('entry_board')
+        if hb is None:
+            continue
+        hs = read_hit(hb, None, handed).get('hit')
+        if hs == side or (side == 'brooklyn' and hs == 'high') or (side == 'high' and hs == 'brooklyn'):
+            n += 1
+    return n >= 2
+
+
+# Explicit card states the app renders from (handoff C.7). One primary state per shot.
+STATES = ('move', 'low_confidence_move', 'strike_repeat', 'execution_miss', 'pins_unknown', 'no_reliable_data')
+
+
+def _derive_state(cls, recs, leave) -> str:
+    """Collapse the classification + primary recommendation into one card state (handoff C.7). Priority:
+    no reliable data > pins unreadable > execution miss > strike/repeat > line move."""
+    lv = (leave or {}).get('leave')
+    p = recs[0] if recs else None
+    if p is None:
+        return 'no_reliable_data'
+    if cls == 'LOW_CONFIDENCE':
+        return 'no_reliable_data'               # gate failed / key metric unavailable (entry board, etc.)
+    if cls == 'EXECUTION_MISS':
+        return 'execution_miss'                 # missed the line — advice holds even if the deck wasn't read
+    if lv == 'unknown':
+        return 'pins_unknown'                   # deck unreadable: the user can report the leave to recompute
+    t = p.get('type')
+    if t in ('move', 'release', 'speed'):
+        return 'low_confidence_move' if (p.get('low_confidence') or p.get('confidence') == 'low') else 'move'
+    # t == 'none': a strike, or a pocket hit with no line change — both render as "repeat, no move".
+    if p.get('low_confidence') or p.get('confidence') == 'low':
+        return 'no_reliable_data'
+    return 'strike_repeat'
 
 def project_breakpoint(feet_board, arrows_board, breakpoint_ft, geometry) -> float | None:
     """Board where the straight feet->arrows sight line reaches the breakpoint distance. The line runs from
@@ -107,8 +151,10 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
     if unreliable:
         rec = _rec('none', 'Not enough reliable measurement to recommend a move.', dict(reason=why), 'low',
                    low_confidence=True)
-        return dict(hit=hit, leave=leave, execution=ex, classification='LOW_CONFIDENCE', recommendations=[rec])
+        return dict(hit=hit, leave=leave, execution=ex, classification='LOW_CONFIDENCE',
+                    state='no_reliable_data', confidence='low', note=why, recommendations=[rec])
     recs = []
+    confirmed = _confirmed_direction(history or [], hit, handed)
     if cls == 'LOW_CONFIDENCE':
         recs.append(_rec('none', 'Not enough reliable measurement to recommend a move.', {}, 'low', low_confidence=True))
     elif cls == 'EXECUTION_MISS':
@@ -130,13 +176,13 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
     else:
         d = hit.get('boards_from_pocket', 0.0)
         if hit['hit'] in ('high', 'brooklyn'):
-            feet, tgt, lab = _move_size(d)
+            feet, tgt, lab = _move_size(d, confirmed)
             recs.append(_rec('move', f"{hit['reason']} Move {left}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
                              'medium' if cls == 'REACTION_CHANGE' else 'low', direction=left, move_feet=feet, move_target=tgt,
                              note=None if cls != 'NO_INTENT' else 'Set your target line to separate a missed shot from a lane change.'))
         elif hit['hit'] == 'light':
-            feet, tgt, lab = _move_size(d)
+            feet, tgt, lab = _move_size(d, confirmed)
             recs.append(_rec('move', f"{hit['reason']} Move {right}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
                              'medium' if cls == 'REACTION_CHANGE' else 'low', direction=right, move_feet=feet, move_target=tgt,
@@ -161,7 +207,11 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
         exp = pattern['length_ft'] - 31
         recs.append(_rec('pattern_note', f"On a {pattern['length_ft']} ft pattern the usual exit point is around board {exp:.0f}; "
                          f"your breakpoint was board {shot['breakpoint_board']:.1f}.", dict(rule='length − 31'), 'low'))
-    return dict(hit=hit, leave=leave, execution=ex, classification=cls, recommendations=recs)
+    state = _derive_state(cls, recs, leave)
+    primary = recs[0] if recs else None
+    return dict(hit=hit, leave=leave, execution=ex, classification=cls, state=state,
+                confidence=(primary or {}).get('confidence'), note=(primary or {}).get('note'),
+                recommendations=recs)
 
 def transition(history, shot, handed='R', min_shots=3, drift_boards=1.0):
     """lane transition from comparable well-executed shots: breakpoint/entry drifting over time with the same line"""

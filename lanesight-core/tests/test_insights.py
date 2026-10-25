@@ -129,6 +129,40 @@ def test_normal_plausible_shot_still_moves():
 GEOM = {'approach_offset_ft': 15.0, 'arrows_ft': 15.0}
 
 
+def test_state_machine_covers_every_card_state():
+    # handoff C.7: insights carry an explicit `state` the app renders from.
+    from lanesight_core.insights.adjust import STATES
+    # no_reliable_data: far-lane gate fires (late > early)
+    r = strike_adjustment(dict(entry_board=10.5, speed_early=15.8, speed_late=19.4, pins_standing=None))
+    assert r['state'] == 'no_reliable_data' and r['confidence'] == 'low' and r['note']
+    # pins_unknown: readable metrics but the deck couldn't be read (pins_standing None, speeds plausible)
+    r = strike_adjustment(dict(entry_board=17.5, entry_angle_deg=4.5, speed_early=16.5, speed_late=15.2, pins_standing=None))
+    assert r['state'] == 'pins_unknown'
+    # strike_repeat: pocket strike
+    r = strike_adjustment(dict(entry_board=17.6, entry_angle_deg=5.0, speed_early=17.0, speed_late=15.8, pins_standing=set()))
+    assert r['state'] == 'strike_repeat'
+    # execution_miss: missed the arrows by >1 board vs a set intent
+    r = strike_adjustment(dict(entry_board=21, board_at_15ft=13.0, entry_angle_deg=5), intent=dict(arrows_board=10))
+    assert r['state'] == 'execution_miss'
+    # move: a light pocket miss with a readable leave gets a confident-enough line move
+    r = strike_adjustment(dict(entry_board=14.5, entry_angle_deg=4.5, speed_early=17.0, speed_late=15.8, pins_standing={3, 6, 10}))
+    assert r['state'] in ('move', 'low_confidence_move') and r['recommendations'][0]['type'] == 'move'
+    assert all(s in STATES for s in [r['state']])
+
+
+def test_big_move_needs_two_agreeing_shots():
+    # A single big miss stays capped at 2-and-1 (handoff C.5)...
+    r = strike_adjustment(dict(entry_board=28.0, entry_angle_deg=5.0, speed_early=17.0, speed_late=15.5, pins_standing={4, 7}))
+    m = r['recommendations'][0]
+    assert (m['move_feet'], m['move_target']) == (2, 1)
+    # ...but with 2+ earlier shots missing the same (high) side, a 3-and-2 is allowed.
+    hist = [dict(entry_board=24.0, classification='NO_INTENT'), dict(entry_board=25.0, classification='NO_INTENT')]
+    r = strike_adjustment(dict(entry_board=28.0, entry_angle_deg=5.0, speed_early=17.0, speed_late=15.5, pins_standing={4, 7}),
+                          history=hist)
+    m = r['recommendations'][0]
+    assert (m['move_feet'], m['move_target']) == (3, 2)
+
+
 def test_apply_move_separate_deltas_and_derived_breakpoint():
     from lanesight_core.insights.adjust import apply_move, suggested_target, project_breakpoint
     # feet and arrows carry SEPARATE whole-board deltas; the breakpoint is PROJECTED, not shifted by target.
