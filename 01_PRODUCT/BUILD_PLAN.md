@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.9  
-Last Updated: 2026-10-22  
+Version: 3.10  
+Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -162,7 +162,43 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 ---
 
 ## Post-MVP
-- **Session/League Mode:** continuous capture, user recognition, rolling buffer (was Phase 3)
+- **Session/League Mode:** continuous capture, user recognition, rolling buffer (was Phase 3). First step: Multi-Bowler Session Tracking (below)
+- **Multi-Bowler Session Tracking (MVP+, DEC-060):** see the section below
+
+## MVP+ — Multi-Bowler Session Tracking (DEC-060; planned, not started)
+**What it does:** at session start the user picks who to track (themselves and, optionally, friends). The phone records the whole session from a tripod. LaneSight works out who is about to throw, analyzes only the tracked bowlers' deliveries, ignores everyone else, and after the session compares the tracked bowlers side by side.
+
+**Flow**
+1. **Session setup › Who are we tracking?** "Me" plus up to N friends. A friend is a LaneSight user who accepts an invite, or a guest profile under the user's account.
+2. **Enroll each tracked bowler (~30 s each):** a front photo and a back photo, handedness, and the ball(s) they'll throw (ball color and pattern is a strong signal). Optional short walk-past clip.
+3. **Record the full session** on a tripod. Rolling buffer; deliveries are segmented automatically (DEC-014).
+4. **Attribute each delivery:** at approach start, match the bowler on the approach to an enrolled bowler using clothing and body appearance, handedness, ball appearance and approach position (DEC-015 multi-signal; face may support but never drives the match).
+   - High confidence → analyzed for that bowler.
+   - Not enrolled → discarded quickly, never stored.
+   - Uncertain → held for a quick "Who threw this?" review at session end; never guessed.
+5. **Session end:** per-bowler summaries plus **Compare** (bowler 1 vs bowler 2): speed, rev, accuracy, consistency, entry, form checkpoints where measured.
+
+**Rules and privacy**
+- Friends and guests must consent before being tracked. A guest's data belongs to the inviting account unless they claim it.
+- Enrollment photos and appearance models are **session-scoped** and deleted after the session unless the bowler opts in to "remember me" (DEC-015).
+- No permanent face ID. No tracking of minors without a guardian's consent (13+ gate, DEC-047).
+- Biometric-privacy laws (e.g. Illinois BIPA) need legal review before launch.
+- Non-enrolled people's footage is discarded and never analyzed.
+
+**Tasks (draft)**
+| ID | Task | Notes |
+|---|---|---|
+| MB-01 | Enrollment capture + appearance signature | Front/back photos, handedness, ball appearance; session-scoped storage |
+| MB-02 | Continuous capture + delivery segmentation | DEC-014 rolling buffer; on-device segmentation to limit upload cost |
+| MB-03 | Bowler attribution | Person detection/tracking at approach start + re-identification; confidence + "uncertain" queue |
+| MB-04 | Per-bowler routing of Shot/Form analysis | Reuses the existing pipelines; one analysis at a time (DEC-043) |
+| MB-05 | Session-end review + per-bowler summaries | "Who threw this?" for uncertain deliveries |
+| MB-06 | Compare view (bowler 1 vs 2) | Same metric definitions; unavailable stays unavailable |
+| MB-07 | Friend invites, guest profiles, consent | Data ownership; claim a guest profile later |
+| MB-08 | Attribution validation | Target: ≥98% correct on accepted deliveries, 0 non-enrolled deliveries stored; measured on real multi-bowler sessions |
+
+**Depends on:** Dev Build v0 results, moving to cloud analysis (Stage 8), and cost review (continuous video is far heavier than tap-to-record).
+
 - **Team Lane Management** (was Phase 5)
 - **League integration:** bowler registers with leagues; league stats merged into the profile with provenance (was Phase 6)
 - **USBC membership connection:** one profile across practice, leagues and tournaments (was P6-04)

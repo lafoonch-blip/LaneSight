@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.24  
+Version: 1.25  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.23
+Supersedes: v1.24
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -619,6 +619,24 @@ Other rules:
 **Date:** 2026-10-25
 **Status:** ACCEPTED; implementation not started
 **Supersedes:** storage parts of DEC-053 (`session_feedback` table) and DEC-058 (`shot_note`, delete with shot/account)
+
+### DEC-060 — MVP+: Multi-Bowler Session Tracking on the roadmap
+**Decision:**
+- Add an MVP+ feature in which:
+  - at session start the user selects who to track (self plus optional friends or guests)
+  - each tracked bowler is enrolled with front and back photos, handedness and ball
+  - the phone records the full session
+  - LaneSight attributes each delivery to an enrolled bowler, analyzes only those, ignores everyone else
+  - after the session, LaneSight offers a bowler-vs-bowler comparison
+- It builds on DEC-014 (continuous capture, rolling buffer, discard non-user footage) and DEC-015 (session-scoped multi-signal recognition; face supports but never drives).
+- Uncertain deliveries are confirmed by the user at session end, never guessed.
+- Friends and guests consent before tracking. Enrollment data is session-scoped unless the bowler opts in.
+- Plan and tasks: BUILD_PLAN "MVP+ — Multi-Bowler Session Tracking" (MB-01…MB-08).
+
+**Why:** Hands-free tracking for a whole session, and friend comparisons, are strong reasons to come back and to invite others (growth loop, Master Context §16).
+**Date:** 2026-10-25
+**Status:** ACCEPTED FOR ROADMAP (MVP+); not in MVP or the dev build; biometric-privacy legal review required before launch
+**Supersedes:** —
 
 ## Superseded decisions
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
