@@ -31,6 +31,39 @@ def test_spot_check_never_blocks():
     r = client.post('/spot-check', json={'framing': {'lane_visible_fraction': 0.2, 'foul_line_visible': True}}, headers=H)
     assert r.status_code == 200 and r.json()['blocks'] is False
 
+def test_report_pins_recomputes_state():
+    from lanesight_core.insights.adjust import STATES
+    sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
+    store = get_store()
+    rec = json.loads(_VAL.read_text())
+    shot = store.create_shot('u1', sid, {'handed': 'R'})
+    rec['shot_id'] = shot['id']
+    rec['pins'] = dict(rec.get('pins') or {}, readable=False, standing=None, strike=None,
+                       unread_reason='the view just above the pin deck was blocked')
+    store.save_shot_result(shot['id'], rec, {'ok': True})
+    sid_shot = shot['id']
+
+    # user reports a strike -> no longer pins_unknown, pins stored as source user
+    r = client.post(f'/shots/{sid_shot}/pins', json={'strike': True}, headers=H)
+    assert r.status_code == 200
+    body = r.json()['record']
+    assert body['pins']['strike'] is True and body['pins']['source'] == 'user'
+    assert body['insights']['state'] in STATES and body['insights']['state'] != 'pins_unknown'
+
+    # user reports a 10-pin leave -> stored standing, state recomputed
+    r = client.post(f'/shots/{sid_shot}/pins', json={'pins': [10]}, headers=H)
+    assert r.status_code == 200
+    body = r.json()['record']
+    assert body['pins']['standing'] == [10] and body['pins']['strike'] is False
+    assert body['insights']['state'] in STATES
+
+    # invalid pins rejected
+    assert client.post(f'/shots/{sid_shot}/pins', json={'pins': [11]}, headers=H).status_code == 422
+    # not-analyzed shot -> 409
+    empty = store.create_shot('u1', sid, {})
+    assert client.post(f"/shots/{empty['id']}/pins", json={'strike': True}, headers=H).status_code == 409
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output

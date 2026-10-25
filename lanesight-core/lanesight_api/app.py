@@ -65,20 +65,18 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
         for k, v in (timings or {}).items():
             job.timings[k] = v
         job.timings['analyze'] = time.monotonic() - t0
-        # The shot card's "Apply this move": turn the (intent-independent) recommended move into the target
-        # line for the next shot, using the intent actually thrown. Computed here from stored data — the CV
-        # path is unchanged. None when nothing actionable or no intent was set.
-        intent = store.get_shot_intent(user_id, shot_id) if hasattr(store, 'get_shot_intent') else None
-        if intent:
-            from lanesight_core.insights.adjust import suggested_target
-            geom = (store.engine_config() or {}).get('line_geometry') if hasattr(store, 'engine_config') else None
-            # TODO(form): when rear-view form analysis measures the bowler's actual stance distance, override
-            # geom['approach_offset_ft'] with that per-shot measured value and fall back to this config only
-            # when it's unavailable. (Owner's current config value is their measured ~12 ft.)
-            bp_ft = ((rec.get('key_points') or {}).get('breakpoint') or {}).get('z_ft')  # measured this shot
-            st = suggested_target(rec.get('insights') or {}, intent, geometry=geom, breakpoint_ft=bp_ft)
-            if st:
-                rec.setdefault('insights', {})['suggested_target'] = st
+        # Recompute insights with the thrown intent + session history (SHOT_REVIEW #5 / handoff C.4): the CV
+        # pipeline computes insights with neither, so without this an upload/session target never produces an
+        # EXECUTION_MISS and the transition read never fires. Pins come from the measured read; the user can
+        # override via POST /shots/{id}/pins. suggested_target ("Apply this move") is derived inside the recompute.
+        sh = store.get_shot(user_id, shot_id)
+        if sh and (sh.get('intent') or sh.get('session_id')):
+            pr = rec.get('pins') or {}
+            if pr.get('readable'):
+                standing, unc = set(pr.get('standing') or []), set(pr.get('uncertain') or [])
+            else:
+                standing, unc = None, set()
+            _recompute_insights(store, user_id, sh, rec, standing, unc)
         store.save_shot_result(shot_id, rec, {'ok': True})
         # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
         # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
@@ -113,6 +111,70 @@ def _ball_link(store, user, meta):
         cfg = cfg or cur.get('ball_configuration_id')
         ub = ub or cur.get('id')
     return cfg, ub
+
+
+def _intent_view(intent):
+    """Normalize a stored intent into the keys the execution check reads (handoff C.4). execution_check compares
+    intent[laydown_board/arrows_board/breakpoint_board] against the shot's actuals; accept either naming
+    (arrows_board or board_at_15ft) so the check actually runs instead of being silently skipped."""
+    if not intent:
+        return None
+    iv = {k: v for k, v in dict(intent).items() if v is not None}
+    if 'arrows_board' not in iv and iv.get('board_at_15ft') is not None:
+        iv['arrows_board'] = iv['board_at_15ft']
+    if 'laydown_board' not in iv and iv.get('board_at_0ft') is not None:
+        iv['laydown_board'] = iv['board_at_0ft']
+    return iv or None
+
+
+def _shot_view_from_record(rec, standing, uncertain=None):
+    """Rebuild the insight input from a stored record's measured values, with the given standing pins. Used to
+    recompute insights when the user reports their leave (POST /shots/{id}/pins). standing None = unreadable."""
+    M = rec.get('metrics') or {}
+    val = lambda k: (M.get(k) or {}).get('value')
+    return dict(entry_board=val('entry_board'), entry_angle_deg=val('entry_angle'),
+                board_at_15ft=val('arrows_board'), board_at_0ft=val('laydown_board'),
+                breakpoint_board=val('breakpoint_board'),
+                speed_early=val('speed_early'), speed_late=val('speed_late'),
+                trajectory=rec.get('trajectory'),
+                pins_standing=standing, pins_uncertain=(set(uncertain) if uncertain else set()))
+
+
+def _session_history(store, user_id, sh):
+    """Earlier analyzed shots in the same session as light dicts, for the transition read + big-move confirmation."""
+    sid = sh.get('session_id')
+    if not sid:
+        return []
+    try:
+        rows = store.session_shots(user_id, sid)
+    except Exception:
+        return []
+    hist = []
+    for r in rows:
+        if r.get('id') == sh.get('id'):
+            continue
+        eb = (r.get('metrics') or {}).get('entry_board')
+        if eb is not None:
+            hist.append(dict(entry_board=eb, classification=r.get('classification')))
+    return hist
+
+
+def _recompute_insights(store, user_id, sh, rec, standing, uncertain=None):
+    """Recompute strike insights for a stored record with the thrown intent + session history (so the execution
+    check and transition read run — the CV pipeline computes neither). Mutates rec['insights'] and returns it."""
+    from lanesight_core.insights.adjust import strike_adjustment, suggested_target
+    handed = rec.get('handed') or sh.get('handed') or 'R'
+    intent = _intent_view(sh.get('intent'))
+    sv = _shot_view_from_record(rec, standing, uncertain)
+    ins = strike_adjustment(sv, handed, intent=intent, history=_session_history(store, user_id, sh))
+    rec['insights'] = ins
+    if intent:
+        geom = (store.engine_config() or {}).get('line_geometry') if hasattr(store, 'engine_config') else None
+        bp_ft = ((rec.get('key_points') or {}).get('breakpoint') or {}).get('z_ft')
+        st = suggested_target(ins, intent, geometry=geom, breakpoint_ft=bp_ft)
+        if st:
+            ins['suggested_target'] = st
+    return ins
 
 
 # ----------------------------------------------------------------- health (no auth)
@@ -272,6 +334,43 @@ def get_shot_frame(shot_id: str, key: str, user=Depends(current_user)):
     if not path.exists():
         raise HTTPException(404, 'frame not available')
     return FileResponse(str(path), media_type='image/jpeg')
+
+
+@app.post('/shots/{shot_id}/pins')
+def report_pins(shot_id: str, body: dict, user=Depends(current_user)):
+    """The user reports their actual leave when the deck couldn't be read (handoff C.2). Body:
+    {strike: bool} | {pins: [int 1..10]} | {leave: "split"|"other"}. Stores the leave as source 'user',
+    recomputes insights, and returns the updated shot so the card re-renders from the new state."""
+    store = get_store()
+    sh = store.get_shot(user, shot_id)
+    if not sh:
+        raise HTTPException(404, 'shot not found')
+    rec = sh.get('record')
+    if not rec:
+        raise HTTPException(409, 'shot not analyzed yet')
+    b = body or {}
+    leave = b.get('leave')
+    if b.get('strike'):
+        standing = set()                                   # strike: nothing standing
+    elif b.get('pins'):
+        try:
+            standing = {int(p) for p in b['pins']}
+        except (TypeError, ValueError):
+            raise HTTPException(422, 'pins must be integers 1..10')
+        if not standing <= set(range(1, 11)):
+            raise HTTPException(422, 'pins must be 1..10')
+    else:
+        standing = None                                    # a reported leave (split/other) without specific pins
+    ins = _recompute_insights(store, user, sh, rec, standing)
+    if standing is None and leave in ('split', 'other'):
+        ins['note'] = f"You reported a {leave}. Pick the standing pins to get a line move."
+    rec['pins'] = dict(rec.get('pins') or {}, readable=True, source='user', unread_reason=None,
+                       strike=(standing == set()), leave_type=leave, uncertain=[],
+                       standing=(sorted(standing) if standing is not None else None),
+                       pins_down_min=(10 - len(standing)) if standing is not None else None,
+                       pins_down_max=(10 - len(standing)) if standing is not None else None)
+    store.save_shot_result(shot_id, rec, sh.get('result') or {'ok': True})
+    return store.get_shot(user, shot_id)
 
 
 # ----------------------------------------------------------------- spot check (advisory, never blocks)
