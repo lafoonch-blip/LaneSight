@@ -14,26 +14,48 @@ extension Color {
     }
 }
 
+// MARK: - 3.0 color palette (Figma "01 - Design Standards", design README 3.0)
+//
+// Token NAMES are kept stable so every screen keeps compiling; the hex VALUES are the 3.0 palette.
+// Legacy accent names (`blue`, `cyan`) now resolve to the single action color; `measured` resolves to
+// `success`; `cardStroke` resolves to the standard border. A full per-screen restyle lands in a later
+// step — here we establish the tokens and apply them on the brand screens.
 enum LS {
     // Surfaces
-    static let bg = Color(hex: 0x060C1C)        // app background
-    static let bgAuth = Color(hex: 0x020A14)    // auth / onboarding background
-    static let card = Color(hex: 0x0D1830)      // card fill
-    static let cardStroke = Color.white.opacity(0.06)
+    static let bg = Color(hex: 0x001018)            // canvas / app background
+    static let bgAuth = Color(hex: 0x001018)        // auth uses the same canvas in 3.0
+    static let card = Color(hex: 0x031B29)          // card fill
+    static let raised = Color(hex: 0x062132)        // raised surface (e.g. score card)
+    static let selected = Color(hex: 0x0C2B40)      // selected / standard border fill
+    static let border = Color(hex: 0x0C2B40)        // standard 1px border
+    static let borderStrong = Color(hex: 0x153B51)  // strong border (inputs, raised cards)
+    static let cardStroke = Color(hex: 0x0C2B40)    // legacy name → standard border
 
-    // Accents
-    static let blue = Color(hex: 0x2F7DFF)
-    static let cyan = Color(hex: 0x38C6F4)
+    // Accent / action
+    static let action = Color(hex: 0x00A8F5)        // primary action (cyan)
+    static let onAction = Color(hex: 0x001018)      // text / icon on an action surface
+    static let blue = Color(hex: 0x00A8F5)          // legacy name → action
+    static let cyan = Color(hex: 0x00A8F5)          // legacy name → action
 
     // Text
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.62)
-    static let textFaint = Color.white.opacity(0.38)
+    static let textPrimary = Color(hex: 0xF5F6FA)
+    static let textSecondary = Color(hex: 0xBFCBDD)
+    static let textFaint = Color(hex: 0xBFCBDD).opacity(0.6)
 
-    // Metric-status colors (status never shown by color alone — always paired with a label)
-    static let measured = Color(hex: 0x3DDC97)
-    static let bestEffort = Color(hex: 0xFFB547)
-    static let unavailable = Color.white.opacity(0.35)
+    // Success (positive deltas / "Measured" status)
+    static let success = Color(hex: 0x00EB92)
+    static let successBg = Color(hex: 0x003D28)
+    static let measured = Color(hex: 0x00EB92)      // legacy metric-status name → success
+
+    // Data-only colors (charts / score breakdown). Never used for status or chrome.
+    static let dataPurple = Color(hex: 0xA55ED0)
+    static let dataYellow = Color(hex: 0xF5CD31)
+    static let dataOrange = Color(hex: 0xFA923C)
+
+    // Metric-status helpers kept so existing screens compile (full restyle later). There is no error
+    // color in v1 — failures use neutral surfaces + plain text.
+    static let bestEffort = Color(hex: 0xF5CD31)    // amber attention (data-yellow hue)
+    static let unavailable = Color(hex: 0xBFCBDD).opacity(0.5)
 }
 
 // MARK: - Metric status
@@ -83,10 +105,10 @@ struct CardModifier: ViewModifier {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LS.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(LS.cardStroke, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(LS.border, lineWidth: 1)
             )
     }
 }

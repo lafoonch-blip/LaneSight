@@ -43,10 +43,10 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(LS.blue.opacity(configuration.isPressed ? 0.7 : 1),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(LS.onAction)                       // dark text on cyan (3.0)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(LS.action.opacity(configuration.isPressed ? 0.8 : 1),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -73,10 +73,11 @@ struct SecondaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.headline)
             .foregroundStyle(LS.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(Color.white.opacity(configuration.isPressed ? 0.04 : 0.08),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(LS.cardStroke))
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(LS.textSecondary.opacity(configuration.isPressed ? 0.08 : 0),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(LS.textSecondary, lineWidth: 1.5))   // #BFCBDD outline (3.0 Welcome)
     }
 }
 

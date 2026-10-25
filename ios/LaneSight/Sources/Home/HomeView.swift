@@ -8,48 +8,67 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-                        ScoreCard(score: s, history: history)
+            VStack(spacing: 0) {
+                homeHeader
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
+                            ScoreCard(score: s, history: history)
+                        }
+
+                        NavigationLink { SetupView() } label: { Text("Start practice") }
+                            .buttonStyle(PrimaryButtonStyle())
+
+                        recentSessions
+                        Spacer(minLength: 8)
                     }
-
-                    NavigationLink { SetupView() } label: { Text("Start practice") }
-                        .buttonStyle(PrimaryButtonStyle())
-
-                    recentSessions
-                    Spacer(minLength: 8)
+                    .padding(16)
                 }
-                .padding(16)
+                .refreshable { await loadAll() }
             }
             .background(LSBackground())
-            .navigationTitle("Home")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Image("LaneSightLogo")
-                        .resizable().scaledToFit()
-                        .frame(height: 30)
-                        .accessibilityLabel("LaneSight")
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink { ProfileView() } label: {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.title2).foregroundStyle(LS.cyan)
-                    }
-                    .accessibilityLabel("Profile")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink { SettingsView() } label: {
-                        Image(systemName: "gearshape.fill").foregroundStyle(LS.textSecondary)
-                    }
-                    .accessibilityLabel("Settings")
-                }
-            }
+            .navigationBarHidden(true)
             .task { await loadAll() }
-            .refreshable { await loadAll() }
         }
+    }
+
+    /// Home tab header (Main.dc.html): Settings (left) and Profile (right) at 44 pt, the official
+    /// stacked logo centered. Other tabs' headers are a later step.
+    private var homeHeader: some View {
+        HStack(spacing: 12) {
+            NavigationLink { SettingsView() } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18))
+                    .foregroundStyle(LS.textSecondary)
+                    .frame(width: 44, height: 44)
+                    .background(LS.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(LS.border, lineWidth: 1))
+            }
+            .accessibilityLabel("Settings")
+
+            Spacer(minLength: 0)
+
+            Image("LaneSightLogo")
+                .resizable().scaledToFit()
+                .frame(maxWidth: 146, maxHeight: 48)
+                .accessibilityLabel("LaneSight")
+
+            Spacer(minLength: 0)
+
+            NavigationLink { ProfileView() } label: {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(LS.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(LS.selected, in: Circle())
+                    .overlay(Circle().strokeBorder(LS.action, lineWidth: 2))
+            }
+            .accessibilityLabel("Profile")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     private var recentSessions: some View {

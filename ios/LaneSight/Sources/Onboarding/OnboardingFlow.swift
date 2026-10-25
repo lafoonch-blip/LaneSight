@@ -17,25 +17,46 @@ struct AuthFlow: View {
 
 private struct WelcomeStep: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
+        VStack(spacing: 16) {
+            // Official stacked logo (DEC-054). No LS monogram.
             Image("LaneSightLogo")
                 .resizable().scaledToFit()
-                .frame(maxWidth: 260)
+                .frame(maxWidth: 240)
                 .accessibilityLabel("LaneSight")
-            Text("UNDERSTAND EVERY SHOT. IMPROVE EVERY GAME.")
-                .font(.caption.weight(.semibold)).tracking(1).foregroundStyle(LS.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 8)
-            Spacer()
-            NavigationLink { CreateAccountStep() } label: { Text("Create Account") }
-                .buttonStyle(PrimaryButtonStyle())
+
+            Text("SEE MORE. BOWL SMARTER.")
+                .font(.subheadline).tracking(3)
+                .foregroundStyle(LS.textSecondary)
+
+            // Hero photo placeholder — the real image comes from Figma and isn't bundled in this build.
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(LS.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(LS.border, lineWidth: 1)
+                )
+                .overlay(Text("Hero photo").font(.footnote).foregroundStyle(LS.textSecondary))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 8)
+                .accessibilityElement()
+                .accessibilityLabel("Photo of a bowler releasing the ball (placeholder)")
+
+            NavigationLink { CreateAccountStep() } label: {
+                HStack(spacing: 8) {
+                    Text("Get Started")
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+
             NavigationLink { SignInStep() } label: { Text("Sign In") }
                 .buttonStyle(SecondaryButtonStyle())
+
             Text("Track your stats · Improve your game · Coaching insights")
-                .font(.caption2).foregroundStyle(LS.textFaint)
+                .font(.footnote).foregroundStyle(LS.textSecondary)
+                .multilineTextAlignment(.center)
         }
-        .padding(24)
+        .padding(.top, 64).padding(.horizontal, 24).padding(.bottom, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LSBackground(auth: true))
         .navigationBarHidden(true)
@@ -59,10 +80,25 @@ private struct SignInStep: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Welcome back").font(.title2.bold()).foregroundStyle(LS.textPrimary)
-                Text("Sign in with your email and password.")
-                    .font(.caption).foregroundStyle(LS.textSecondary)
+            VStack(alignment: .leading, spacing: 14) {
+                // Official stacked logo (DEC-054), centered.
+                Image("LaneSightLogo")
+                    .resizable().scaledToFit()
+                    .frame(maxWidth: 180)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 4)
+                    .accessibilityLabel("LaneSight")
+
+                Text("Welcome back").font(.title.bold()).foregroundStyle(LS.textPrimary)
+                Text("Sign in to your account to continue")
+                    .font(.subheadline).foregroundStyle(LS.textSecondary)
+
+                // Apple / Google are disabled until the paid team is active (changelog 2.0). Shown
+                // honestly disabled, not fake-working.
+                DisabledSocialButton(title: "Continue with Apple", systemImage: "apple.logo")
+                DisabledSocialButton(title: "Continue with Google", glyph: "G")
+
+                OrDivider()
 
                 AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
                     .focused($focus, equals: .email)
@@ -70,9 +106,13 @@ private struct SignInStep: View {
                     .focused($focus, equals: .password)
 
                 if let errorText {
-                    Label(errorText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(LS.bestEffort)
+                    // No error color in v1 — neutral surface + plain text (3.0).
+                    Label(errorText, systemImage: "exclamationmark.circle")
+                        .font(.footnote).foregroundStyle(LS.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
                         .accessibilityLabel("Sign in error: \(errorText)")
                 }
 
@@ -84,12 +124,22 @@ private struct SignInStep: View {
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!canSubmit)
                 .opacity(canSubmit ? 1 : 0.5)
+
+                HStack(spacing: 4) {
+                    Text("Don't have an account?").foregroundStyle(LS.textSecondary)
+                    NavigationLink("Create one") { CreateAccountStep() }
+                        .foregroundStyle(LS.action)
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 4)
             }
-            .padding(20)
+            .padding(.top, 24).padding(.horizontal, 24).padding(.bottom, 40)
         }
         .background(LSBackground(auth: true))
-        .navigationTitle("Sign in")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear { focus = .email }
     }
 
@@ -213,11 +263,47 @@ private struct AuthField: View {
                 }
             }
             .foregroundStyle(LS.textPrimary)
-            .padding(12)
-            .frame(minHeight: 44)
-            .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(LS.borderStrong, lineWidth: 1))
             .autocorrectionDisabled()
         }
+    }
+}
+
+/// A disabled social sign-in button (Apple / Google). Honestly non-interactive until the paid team
+/// is active — matches SignIn.dc.html's dimmed buttons.
+private struct DisabledSocialButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var glyph: String? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let systemImage { Image(systemName: systemImage) }
+            if let glyph { Text(glyph).fontWeight(.bold) }
+            Text(title).fontWeight(.semibold)
+        }
+        .font(.body)
+        .foregroundStyle(LS.onAction)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .background(LS.textPrimary, in: RoundedRectangle(cornerRadius: 8))
+        .opacity(0.45)
+        .accessibilityLabel("\(title) (not available in this build)")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// The "or" divider between social and email sign-in (SignIn.dc.html).
+private struct OrDivider: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(LS.border).frame(height: 1)
+            Text("or").font(.footnote).foregroundStyle(LS.textSecondary)
+            Rectangle().fill(LS.border).frame(height: 1)
+        }
+        .accessibilityHidden(true)
     }
 }
 
