@@ -13,7 +13,7 @@ class Measurement:
     value: float | None
     unit: str
     confidence: float = 0.0              # 0..1
-    status: str = 'ok'                   # ok | low_confidence | unavailable | calibrated_estimate
+    status: str = 'ok'                   # ok | low_confidence | best_effort | unavailable | calibrated_estimate
     source: str = 'lanesight_video'      # lanesight_video | sensor:<vendor> | scoring:<system> | manual
     algorithm_version: str = ALGO_VERSION
     note: str | None = None
@@ -38,6 +38,7 @@ class ShotRecord:
     insights: dict | None = None
     spare_plan: dict | None = None
     sensor: dict | None = None
+    capture_quality: dict | None = None              # {far_lane: ok|limited, reason} — DEC-061 plausibility gate
     context: dict = field(default_factory=dict)      # session_id, ball_id, pattern_id, lane, intent, frame/roll
     schema_version: str = SCHEMA_VERSION
     def to_dict(self):

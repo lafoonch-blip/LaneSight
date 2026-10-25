@@ -16,6 +16,32 @@ from ..insights.spares import spare_plan
 
 REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot calibration; pending blind validation)
 
+# Far-lane metrics whose value depends on the downlane depth scale. When the plausibility gate flags the far
+# lane, these are the measurements that can't be trusted (handoff B / DEC-061).
+_FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
+                     'entry_board', 'entry_angle', 'entry_angle_52_55'}
+
+
+def far_lane_quality(M, zboard):
+    """Plausibility gate on the downlane depth scale (handoff B / DEC-061). A real ball LOSES speed down the
+    lane and curves smoothly; a late-speed that reads faster than early, or a lateral jump of more than 3 boards
+    between neighbouring samples, means the depth scale is corrupt (the close/off-axis camera the SHOT_REVIEW
+    clip exposed). Returns (limited, reason). reason is a short, user-facing camera-spot nudge."""
+    spot = " Set the camera behind the lane, square to it, with the whole lane from the foul line to the pins in frame."
+    e, l = M.get('speed_early_mph'), M.get('speed_late_mph')
+    if e and l and l > e + max(0.5, 0.03 * abs(e)):
+        return True, (f"Late speed ({l:.1f} mph) reads faster than early speed ({e:.1f} mph); a ball can't speed "
+                      f"up down the lane, so the far-lane read (entry board/angle, breakpoint, late speed) is "
+                      f"unreliable.{spot}")
+    jump = 0.0
+    for (za, ba), (zb, bb) in zip(zboard, zboard[1:]):
+        if ba is not None and bb is not None:
+            jump = max(jump, abs(bb - ba))
+    if jump > 3.0:
+        return True, (f"The tracked path jumps {jump:.1f} boards between neighbouring points downlane, so the "
+                      f"far-lane read is unreliable.{spot}")
+    return False, None
+
 def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
             timing_video=None, core_end_s=None, timings=None):
     # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
@@ -101,7 +127,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     speed_c = 0.9 if M['release_source'] == 'first_free_ball_detection' else 0.6
     meas = [
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, '60 ft foul→pins average (Ruby-comparable); ball tracked to the pins via far-lane recovery'),
-        m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)'),
+        m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),
@@ -120,6 +146,15 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('axis_rotation', None, 'deg', 0, 'not yet measured from video'), m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
         m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)'),
     ]
+    # Plausibility gate (DEC-061): if the downlane depth scale is corrupt, keep the far-lane measurements but
+    # mark them low_confidence with the reason, and flag capture_quality.far_lane = "limited" for the camera-spot
+    # banner. Accuracy over coverage: a mis-calibrated entry board drives a wrong move, so it must not read 'ok'.
+    cq_limited, cq_reason = far_lane_quality(M, list(zip(ser['Z'], ser['board'])))
+    if cq_limited:
+        for x in meas:
+            if x.metric in _FAR_LANE_METRICS and x.value is not None and x.status not in ('unavailable',):
+                x.status = 'low_confidence'
+                x.note = (x.note + ' ' if x.note else '') + 'Far-lane read limited by camera position.'
     traj = dict(lane=[dict(t=round(a, 4), z_ft=round(z, 2), board=round(b, 2)) for a, z, b in zip(ser['t'], ser['Z'], ser['board'])],
                 smoothed=[dict(z_ft=round(z, 2), board=round(b, 2)) for z, b in zip(ser['curve']['Z'], ser['curve']['board'])],
                 pixel=[dict(t=round(a, 4), x=round(p[0], 1), y=round(p[1], 1)) for a, p in zip(ser['t'], ser['px'])])
@@ -136,8 +171,11 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                 camera_motion_px=round(float(S['shift'].max()), 1), reference_frame=int(S['ref'])),
                      events=dict(t_release=M['t_release'], t_touchdown=M.get('t_touchdown'), t_impact=t_imp,
                                  release_source=M['release_source']),
-                     measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {})
+                     measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {},
+                     capture_quality={'far_lane': 'limited' if cq_limited else 'ok',
+                                      **({'reason': cq_reason} if cq_reason else {})})
     shot_view = {x.metric: x.value for x in meas}
+    shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence
     pins_read = pins and pins.get('readable', True)   # None standing (unread) -> leave classification stays 'unknown'
     shot_view.update(board_at_15ft=M.get('board_at_15ft'), board_at_0ft=M.get('board_at_0ft'), entry_angle_deg=M['entry_angle_deg'],
                      pins_standing=set(pins['standing']) if pins_read else None,
