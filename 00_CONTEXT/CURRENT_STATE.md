@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.27  
+Version: 1.28  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.26
+Supersedes: v1.27
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -17,6 +17,16 @@ Supersedes: v1.26
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 
 ## Where things stand
+- **Recommendation guardrails + design 3.7 (2026-10-25, GUARDRAILS 3.7 handoff; SHOT_REVIEW 14b234c8):** the lane session exposed the real failure — a close/off-axis camera corrupts the far-lane depth scale, so some shots came out with impossible metrics (late speed > early, entry board off by ~7) and others didn't analyze. Shipped (committed on the Dev Build branch, **not yet deployed to the live Mac service**):
+  - **B — plausibility gate (DEC-061):** `capture_quality.far_lane` ("limited" + a camera-spot reason) and far-lane metrics flagged `low_confidence` (not shown as measured) when the depth scale is implausible; `speed_release` → `best_effort`. Verified on 14b234c8 (flagged) and IMG_8753 (not false-flagged). Values unchanged.
+  - **C — recommendation state machine:** insights carry an explicit `state` (`move | low_confidence_move | strike_repeat | execution_miss | pins_unknown | no_reliable_data`) + confidence + note; a single shot never moves more than 2-and-1 (3-and-2 needs 2+ agreeing shots); boards clamped 1–39.
+  - **API — `POST /shots/{id}/pins`** (user reports the leave when the deck was unreadable) + insights now recomputed with the thrown intent + session history, so the execution check and transition read actually run (they never did on the API path).
+  - **D — pins:** read the deck from frames that still see it (recovers a clear settled frame); report the observed signal, not the false "bowler stepped into view". 14b234c8 now reads its strike.
+  - **E — uploads deduped by content hash** (migration 016); score-reset script for the contaminated session written (`ops/reset_contaminated_score_2026-10-25.sql`, do not auto-run).
+  - **F — iOS 3.7:** shot card renders from `state` + the camera banner; one status mapping; "boards" not "ft"; SessionReview read-only; Under-13 block. **G — profile photo** `/me/avatar` + `location` column (migration 017).
+  - **A — far-lane calibration (the real metric fix) is NOT done** — it's deep CV that must be validated against the regression clip + IMG_8751–8754 and benefits from the lane clips Shayne records next. Until then the honest flags (B) stop confident-wrong advice. **Biggest lever right now is capture framing: stable camera behind the lane, square to it, whole lane in frame.**
+  - **Needs Shayne:** apply migrations 016 + 017 to live; run the reset script; restart `com.lanesight.api` to deploy this backend; push to GitHub.
+
 - **Ball catalog + configured reaction (2026-10-21, DEC-044):** 211 current balls from 10 brands with stock-photo links, 15 lb specs, published ratings and a normalized expected reaction; a bowler's ball reaction is adjusted for its layout and current surface. Code and data in `lanesight-core` (`lanesight_core/arsenal/`, `data/ball_catalog/`); migrations 002/003 **applied to the LaneSight Supabase project** (`europwryibstnmipbvam`), `ball_models` seeded (211 rows), along with `004_rls_hardening` and `005_ball_catalog_refresh` (reconciled into the repo 2026-10-22 — see Dev Build v0 below). Adjustment sizes and recommendation weights are provisional (M4-08).
 - `lanesight-core` in `lanesight-core/` (54 tests passing, re-run 2026-10-15):
   - automatic video pipeline: tripod + handheld, pin reading, rev rate

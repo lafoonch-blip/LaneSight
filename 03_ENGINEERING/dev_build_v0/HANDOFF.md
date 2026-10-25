@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.8
+Version: 1.10
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -164,11 +164,11 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
 | Area | Endpoints |
 |---|---|
 | Health | `GET /health` (versions: app-compat, core, rules, formula) |
-| Profile | `GET`/`PUT /me/profile` · `GET`/`POST`/`DELETE /me/sensors` |
+| Profile | `GET`/`PUT /me/profile` (incl. `location`, `has_avatar`) · `PUT`/`GET`/`DELETE /me/avatar` (HEIC/JPEG/PNG → 512px JPEG, EXIF stripped, ≤10 MB) · `GET`/`POST`/`DELETE /me/sensors` |
 | Arsenal | `GET /catalog/balls?q=` · `GET`/`POST`/`PUT /me/arsenal` · `POST /me/arsenal/{id}/surface` |
 | Oil | `GET /oil-patterns` |
 | Sessions | `POST /sessions` · `GET /sessions` · `GET /sessions/{id}` · `POST /sessions/{id}/end` → returns summary + pending notifications |
-| Shots | `POST /sessions/{id}/shots` (multipart upload + metadata: mode, intent, sensor, capture fps, frame-timestamp sidecar) · `POST /uploads` (Photos clip) · `GET /jobs/{id}` · `GET /shots/{id}` · `PATCH /shots/{id}` (sensor answer, feedback 👍/👎) |
+| Shots | `POST /sessions/{id}/shots` (multipart upload + metadata: mode, intent, sensor, capture fps, frame-timestamp sidecar) · `POST /uploads` (Photos clip; deduped by content hash → `duplicate:true`) · `GET /jobs/{id}` · `GET /shots/{id}` · `PATCH /shots/{id}` (sensor answer, feedback 👍/👎) · `POST /shots/{id}/pins` (user reports leave when the deck was unreadable: `{strike}` / `{pins:[…]}` / `{leave}` → recomputes insights state) |
 | Spot check | `POST /spot-check` (single frame or short clip → advisory tip) |
 | Score | `GET /me/score` · `GET /me/score/history?range=` |
 | Achievements | `GET /me/achievements` · `GET /me/achievements/{id}` · `PUT /me/achievements/pins` |
@@ -277,6 +277,13 @@ Open the `.dc.html` files in a browser to view them; `canvas.json` gives titles 
 | 21 | `Profile.dc.html` | Profile | `/me/profile`, `/me/arsenal`, `/me/sensors` |
 | 22 | `Settings.dc.html` | Settings | local + `/me/profile` |
 | 23 | `DeleteAccount.dc.html` | Delete account | `DELETE /me` |
+| 3a | `BallPicker.dc.html` | Current ball picker (sheet) | `/me/arsenal` (set current) |
+| 3b | `OilPicker.dc.html` | Oil pattern picker (sheet) | `/oil-patterns` |
+| 4c | `Failures.dc.html` | Mac unreachable (pre-flight, queued, mid-job), unsupported clip, duplicate upload | `/health`, `/jobs/{id}`, `POST /uploads` |
+| 5a | `NextShotStates.dc.html` | Next-shot states, camera-spot banner, upload footer, status-chip rule | shot `insights` |
+| 5b | `SensorPicker.dc.html` | Sensor picker (sheet) | `/me/sensors` |
+| 6a | `SessionReview.dc.html` | Ended session, read-only | `GET /sessions/{id}` |
+| 18a | `Under13.dc.html` | Under-13 block (no profile saved) | — |
 
 **Navigation:**
 - Bottom tabs: Home · Stats · Lab · Leagues · Tourneys. Leagues and Tourneys are disabled (dimmed, no "Soon" label).
