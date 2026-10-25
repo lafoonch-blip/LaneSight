@@ -49,6 +49,7 @@ def _profile_out(row: dict | None) -> dict | None:
 class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
+        self.feedback_rows = []       # the one retained feedback store (DEC-059); survives shot/session/account deletion
         self.profiles, self.sensors, self.arsenal = {}, {}, {}
         # score/tier/achievement/benchmark engine state (SCORE_TIERS §7, BENCHMARKS §6)
         self.tier_state = {}          # user_id -> state dict
@@ -200,10 +201,44 @@ class MemoryStore:
     def score_history(self, user_id):
         return list(self.snapshots.get(user_id) or [])
 
-    # feedback
+    # feedback — one retained store for every source (DEC-059 / FEEDBACK_STORE_SPEC). Write-and-keep:
+    # nothing reads it to change a measurement, rule, score or advice.
+    _FEEDBACK_SOURCES = ('shot_note', 'session_feedback', 'advice_rating', 'form_note', 'general')
+
+    def add_feedback(self, user_id, data):
+        """Write one feedback row (any source). Links (shot/session/recommendation) are kept while the
+        source exists and set null when it's deleted; the row itself is retained. triage_* are owner-only
+        and start at their defaults."""
+        d = dict(data or {})
+        tags = d.get('tags')
+        row = dict(
+            id=d.get('id') or _new_id(), user_id=user_id, user_ref=d.get('user_ref'),
+            source=d.get('source') or 'general', app_phase=d.get('app_phase') or 'dev',
+            app_version=d.get('app_version'), core_version=d.get('core_version'),
+            rules_version=d.get('rules_version'), formula_version=d.get('formula_version'),
+            session_id=d.get('session_id'), shot_id=d.get('shot_id'),
+            recommendation_id=d.get('recommendation_id'), capture_mode=d.get('capture_mode'),
+            is_upload=bool(d.get('is_upload', False)), rating=d.get('rating'), thumbs=d.get('thumbs'),
+            tags=list(tags) if tags else [], text=d.get('text'), context=d.get('context'),
+            diagnostics=d.get('diagnostics'), triage_status='new', owner_notes=None, action_ref=None,
+            anonymized_at=None, created_at=time.time(), updated_at=time.time())
+        self.feedback_rows.append(row)
+        return row
+
+    def list_feedback(self, user_id):
+        return [r for r in self.feedback_rows if r.get('user_id') == user_id]
+
     def save_feedback(self, user_id, session_id, fb):
         row = dict(id=_new_id(), user_id=user_id, session_id=session_id, created_at=time.time(), **fb)
         self.feedback.setdefault(session_id, []).append(row)
+        # route session-end feedback into the retained store, same id (DEC-059 §7)
+        self.add_feedback(user_id, {
+            'id': row['id'], 'source': 'session_feedback', 'session_id': session_id,
+            'app_phase': fb.get('app_phase'), 'app_version': fb.get('app_version'),
+            'core_version': fb.get('core_version'), 'rules_version': fb.get('rules_version'),
+            'formula_version': fb.get('formula_version'), 'rating': fb.get('rating'),
+            'tags': fb.get('tags'), 'text': fb.get('text'), 'context': fb.get('context'),
+            'diagnostics': fb.get('diagnostics')})
         return row
 
     # ----------------------------------------------------------------- rules / engine config (owner-only)
@@ -414,7 +449,32 @@ class MemoryStore:
         return row
 
     # ----------------------------------------------------------------- account deletion
+    @staticmethod
+    def _anonymize_diagnostics(diag):
+        """Drop identifying fields (device name, email, IP) but keep the rest (timings, fps...)."""
+        if not isinstance(diag, dict):
+            return diag
+        drop = {'device', 'device_name', 'device_id', 'email', 'ip', 'ip_address'}
+        return {k: v for k, v in diag.items() if k not in drop}
+
+    def anonymize_feedback(self, user_id):
+        """DEC-059: deleting the account KEEPS the feedback but de-identifies it — user_id -> null,
+        anonymized_at set, identifying diagnostics stripped. user_ref and free text are kept so the
+        owner can still group and read it. Links to deleted shots/sessions are nulled (ON DELETE SET NULL)."""
+        n = 0
+        for r in self.feedback_rows:
+            if r.get('user_id') == user_id:
+                r['user_id'] = None
+                r['anonymized_at'] = time.time()
+                r['session_id'] = None
+                r['shot_id'] = None
+                r['recommendation_id'] = None
+                r['diagnostics'] = self._anonymize_diagnostics(r.get('diagnostics'))
+                n += 1
+        return n
+
     def delete_user(self, user_id):
+        self.anonymize_feedback(user_id)                      # keep feedback (de-identified), never delete it
         for sid in [s['id'] for s in self.list_sessions(user_id)]:
             self.sessions.pop(sid, None)
             self.feedback.pop(sid, None)
@@ -461,7 +521,19 @@ class PgStore(MemoryStore):
                                 'lane_pair': data.get('lane_pair'), 'oil_pattern_id': data.get('oil_pattern_id')})
         return s
 
+    _FEEDBACK_COLS = ('id', 'source', 'app_phase', 'app_version', 'core_version', 'rules_version',
+                      'formula_version', 'user_id', 'user_ref', 'session_id', 'shot_id',
+                      'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
+                      'text', 'context', 'diagnostics')
+
+    def add_feedback(self, user_id, data):
+        row = super().add_feedback(user_id, data)      # mirror in memory + normalize
+        self._post('feedback', {k: row.get(k) for k in self._FEEDBACK_COLS})
+        return row
+
     def save_feedback(self, user_id, session_id, fb):
+        # super() mirrors memory AND routes a 'session_feedback' row into feedback via self.add_feedback
+        # (PgStore.add_feedback -> the feedback table). Keep the legacy session_feedback table populated too.
         row = super().save_feedback(user_id, session_id, fb)
         self._post('session_feedback', {'id': row['id'], 'session_id': session_id, 'user_id': user_id,
                    'rating': fb.get('rating'), 'tags': fb.get('tags', []), 'text': fb.get('text'),
@@ -889,7 +961,22 @@ class PgStore(MemoryStore):
         return row
 
     # ----------------------------------------------------------------- account deletion (admin API)
+    def anonymize_feedback(self, user_id):
+        """DEC-059: de-identify the user's feedback IN PLACE before the auth user is deleted — set
+        anonymized_at and strip identifying diagnostics while user_id still matches. The FK
+        (user_id / session_id / shot_id ON DELETE SET NULL) nulls the links when the auth user and its
+        cascaded rows go. Rows are KEPT."""
+        import datetime as _dt
+        rows = self._get('feedback', f'user_id=eq.{user_id}&select=id,diagnostics')
+        now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        for r in rows:
+            self._req(f'feedback?id=eq.{r["id"]}', 'PATCH',
+                      {'anonymized_at': now,
+                       'diagnostics': self._anonymize_diagnostics(r.get('diagnostics'))})
+        return len(rows)
+
     def delete_user(self, user_id):
+        self.anonymize_feedback(user_id)      # keep feedback (de-identified); must run before the auth delete
         import urllib.request
         base = self._rest.rsplit('/rest/', 1)[0] if '/rest/' in self._rest else self._rest.rstrip('/')
         url = f'{base}/auth/v1/admin/users/{user_id}'

@@ -94,5 +94,63 @@ do $$ declare n int; t text; begin
   end loop;
 end $$;
 
+-- 6. feedback store (migration 014, DEC-059): own-rows-only read, triage columns hidden by column grant,
+--    insert own works / insert-as-other rejected, and NO client delete.
+reset role;
+-- seed one feedback row for each user as superuser (session_id null -> no session dependency needed).
+insert into feedback(id, source, user_id) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','general','11111111-1111-1111-1111-111111111111'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','general','22222222-2222-2222-2222-222222222222')
+  on conflict do nothing;
+-- owner-only triage columns must carry their defaults and stay owner-managed.
+do $$ declare s text; begin
+  select triage_status into s from feedback where id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if s = 'new' then raise notice 'PASS: feedback.triage_status defaults to new';
+  else raise exception 'FAIL: feedback.triage_status default wrong (%)', s; end if;
+end $$;
+
+select set_config('request.jwt.claim.sub','11111111-1111-1111-1111-111111111111', false);
+set role authenticated;
+
+-- 6a. own rows only
+do $$ declare n int; begin
+  select count(*) into n from feedback;
+  if n = 1 then raise notice 'PASS: feedback shows only own rows (1)';
+  else raise exception 'FAIL: feedback showed % rows to user A (expected 1)', n; end if;
+end $$;
+
+-- 6b. triage columns hidden from the bowler (column-level grant excludes them)
+do $$ begin
+  perform triage_status from feedback limit 1;
+  raise exception 'FAIL: authenticated read feedback.triage_status';
+exception when insufficient_privilege then raise notice 'PASS: feedback.triage_status denied';
+end $$;
+do $$ begin
+  perform owner_notes from feedback limit 1;
+  raise exception 'FAIL: authenticated read feedback.owner_notes';
+exception when insufficient_privilege then raise notice 'PASS: feedback.owner_notes denied';
+end $$;
+
+-- 6c. bowler can insert their own feedback, but not on behalf of another user (RLS with-check)
+do $$ begin
+  insert into feedback(source, user_id, text) values
+    ('shot_note','11111111-1111-1111-1111-111111111111','mine');
+  raise notice 'PASS: bowler can insert own feedback';
+end $$;
+do $$ begin
+  insert into feedback(source, user_id, text) values
+    ('shot_note','22222222-2222-2222-2222-222222222222','not mine');
+  raise exception 'FAIL: bowler inserted feedback for another user';
+exception when insufficient_privilege then raise notice 'PASS: insert-as-other denied (privilege)';
+         when check_violation then raise notice 'PASS: insert-as-other denied (RLS with-check)';
+end $$;
+
+-- 6d. no client delete (privilege revoked)
+do $$ begin
+  delete from feedback where user_id = '11111111-1111-1111-1111-111111111111';
+  raise exception 'FAIL: bowler deleted feedback (no client delete allowed)';
+exception when insufficient_privilege then raise notice 'PASS: client delete denied';
+end $$;
+
 reset role;
 \echo 'ALL RLS TESTS PASSED'

@@ -110,6 +110,71 @@ def test_arsenal_persistence_current_and_update():
     assert client.patch('/me/arsenal/nope', json={'surface': 'x'}, headers=hh).status_code == 404
 
 
+def test_feedback_store_generic_submit_and_versions():
+    hh = {'X-Dev-User': 'fb1'}
+    sid = client.post('/sessions', json={}, headers=hh).json()['id']
+    store = get_store()
+    shot = store.create_shot('fb1', sid, {})
+    r = client.post('/feedback', headers=hh, json={
+        'source': 'shot_note', 'shot_id': shot['id'], 'session_id': sid,
+        'tags': ['Missed right', 'Light'], 'text': 'felt light', 'app_phase': 'beta', 'app_version': 'ios-9'})
+    assert r.status_code == 200
+    row = r.json()
+    assert row['source'] == 'shot_note' and row['triage_status'] == 'new'
+    assert row['shot_id'] == shot['id'] and row['tags'] == ['Missed right', 'Light']
+    assert row['app_phase'] == 'beta' and row['app_version'] == 'ios-9'
+    # core/rules/formula are server-authoritative
+    assert row['core_version'] and row['formula_version'] == 'L-dev-0'
+    assert any(f['id'] == row['id'] for f in store.list_feedback('fb1'))
+    # unknown source rejected; a note for someone else's shot 404s
+    assert client.post('/feedback', headers=hh, json={'source': 'bogus'}).status_code == 400
+    assert client.post('/feedback', headers=hh, json={'source': 'shot_note', 'shot_id': 'nope'}).status_code == 404
+
+def test_feedback_store_no_client_delete():
+    # there is no DELETE route for feedback (owner-only removal).
+    assert client.delete('/feedback', headers={'X-Dev-User': 'fb1'}).status_code in (404, 405)
+
+def test_session_feedback_routes_into_store():
+    hh = {'X-Dev-User': 'fb2'}
+    sid = client.post('/sessions', json={}, headers=hh).json()['id']
+    fb = client.post(f'/sessions/{sid}/feedback', headers=hh,
+                     json={'rating': 4, 'tags': ['Bug'], 'text': 'camera drifted'}).json()
+    rows = get_store().list_feedback('fb2')
+    routed = next(r for r in rows if r['id'] == fb['id'])
+    assert routed['source'] == 'session_feedback' and routed['rating'] == 4
+    assert routed['session_id'] == sid and routed['formula_version'] == 'L-dev-0'
+
+def test_advice_rating_routes_into_store():
+    hh = {'X-Dev-User': 'fb3'}
+    sid = client.post('/sessions', json={}, headers=hh).json()['id']
+    store = get_store()
+    shot = store.create_shot('fb3', sid, {'capture_mode': 'shot'})
+    r = client.patch(f"/shots/{shot['id']}", headers=hh, json={'thumbs': 'down', 'advice_text': 'advice was off'})
+    assert r.status_code == 200
+    adv = [f for f in store.list_feedback('fb3') if f['source'] == 'advice_rating']
+    assert len(adv) == 1 and adv[0]['thumbs'] == 'down' and adv[0]['shot_id'] == shot['id']
+    assert adv[0]['text'] == 'advice was off' and adv[0]['session_id'] == sid
+
+def test_account_delete_anonymizes_feedback():
+    hh = {'X-Dev-User': 'fbdel'}
+    sid = client.post('/sessions', json={}, headers=hh).json()['id']
+    store = get_store()
+    shot = store.create_shot('fbdel', sid, {})
+    client.post('/feedback', headers=hh, json={
+        'source': 'shot_note', 'shot_id': shot['id'], 'session_id': sid, 'text': 'keep this text',
+        'user_ref': 'ref-xyz', 'diagnostics': {'fps': 120, 'device': 'iPhone of John', 'email': 'j@x.com'}})
+    assert client.delete('/me', headers=hh).json()['deleted'] is True
+    # feedback is RETAINED but de-identified
+    kept = [f for f in store.feedback_rows if f.get('user_ref') == 'ref-xyz']
+    assert len(kept) == 1
+    row = kept[0]
+    assert row['user_id'] is None and row['anonymized_at'] is not None
+    assert row['text'] == 'keep this text'                 # free text kept
+    assert row['shot_id'] is None and row['session_id'] is None    # links nulled
+    assert row['diagnostics'] == {'fps': 120}              # identifying fields stripped, timings kept
+    assert store.list_feedback('fbdel') == []              # nothing still owned by the deleted user
+
+
 def test_shot_persists_ball_link_and_full_intent():
     hh = {'X-Dev-User': 'ars2'}
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=hh).json()['id']

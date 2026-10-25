@@ -83,6 +83,20 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
     return _queue.submit('analyze', run)
 
 
+# The engine versions that produced the results a piece of feedback is about. core/rules/formula are
+# server-authoritative (the client can't be trusted to know them); app_version/app_phase come from the
+# build + Beta–Prod toggle and stay as the client sent them (default phase 'dev' for this build).
+_FEEDBACK_SOURCES = {'shot_note', 'session_feedback', 'advice_rating', 'form_note', 'general'}
+
+
+def _stamp_versions(data: dict) -> dict:
+    d = dict(data or {})
+    d['core_version'] = ALGO_VERSION
+    d['rules_version'] = BENCHMARK_VERSION
+    d['formula_version'] = SCORE_VERSION
+    return d
+
+
 def _ball_link(store, user, meta):
     """The ball configuration + user ball a shot was thrown with: explicit from the app, else the current ball."""
     cfg, ub = meta.get('ball_configuration_id'), meta.get('user_ball_id')
@@ -210,9 +224,28 @@ def get_shot(shot_id: str, user=Depends(current_user)):
 
 @app.patch('/shots/{shot_id}')
 def patch_shot(shot_id: str, body: dict, user=Depends(current_user)):
-    sh = get_store().patch_shot(user, shot_id, body or {})
+    store = get_store()
+    patch = dict(body or {})
+    # Advice 👍/👎 on next-shot advice is carried on the shot patch; route it into the retained feedback
+    # store (DEC-059) as an 'advice_rating' row rather than mutating the measured shot. The outcome tables
+    # keep their measurement role; this is write-and-keep and never changes runtime behavior.
+    thumbs = patch.pop('thumbs', None)
+    advice_text = patch.pop('advice_text', None)
+    sh = store.get_shot(user, shot_id)
     if not sh:
         raise HTTPException(404, 'shot not found')
+    if thumbs in ('up', 'down'):
+        rec = sh.get('record') or {}
+        store.add_feedback(user, _stamp_versions({
+            'source': 'advice_rating', 'shot_id': shot_id, 'session_id': sh.get('session_id'),
+            'recommendation_id': patch.pop('recommendation_id', None),
+            'capture_mode': sh.get('capture_mode'), 'is_upload': sh.get('source') == 'upload',
+            'thumbs': thumbs, 'text': advice_text,
+            'app_phase': patch.pop('app_phase', None), 'app_version': patch.pop('app_version', None),
+            'context': {'advice': (rec.get('insights') or {}).get('suggested_target'),
+                        'intent': sh.get('intent')}}))
+    if patch:
+        sh = store.patch_shot(user, shot_id, patch)
     return sh
 
 
@@ -252,11 +285,32 @@ def me_score_history(user=Depends(current_user)):
 
 
 # ----------------------------------------------------------------- feedback + export
+# One retained feedback store (DEC-059). Write-and-keep: nothing here is read to change a measurement,
+# rule, score or advice, and there is NO client delete — removing feedback is an owner action only.
 @app.post('/sessions/{sid}/feedback')
 def feedback(sid: str, body: dict, user=Depends(current_user)):
     if not get_store().get_session(user, sid):
         raise HTTPException(404, 'session not found')
-    return get_store().save_feedback(user, sid, body or {})
+    # keep the session-end submission working; routing into the feedback table happens in the store.
+    return get_store().save_feedback(user, sid, _stamp_versions(body or {}))
+
+@app.post('/feedback')
+def submit_feedback(body: dict, user=Depends(current_user)):
+    """Submit a feedback row for any source (shot_note, advice_rating, form_note, general). Shot notes
+    autosave: resend with the same `id` to update the row. Links to shot/session are optional and are
+    kept only while the source exists; the row itself is retained if they're deleted."""
+    store = get_store()
+    data = _stamp_versions(body or {})
+    src = data.get('source') or 'general'
+    if src not in _FEEDBACK_SOURCES:
+        raise HTTPException(400, f'unknown feedback source {src!r}')
+    data['source'] = src
+    # defense in depth (the service role bypasses RLS): a linked shot/session must belong to the caller.
+    if data.get('shot_id') and not store.get_shot(user, data['shot_id']):
+        raise HTTPException(404, 'shot not found')
+    if data.get('session_id') and not store.get_session(user, data['session_id']):
+        raise HTTPException(404, 'session not found')
+    return store.add_feedback(user, data)
 
 @app.get('/sessions/{sid}/export.csv')
 def export_csv(sid: str, user=Depends(current_user)):

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Permanent RLS / migration test for Dev Build v0 (migrations 006-011).
-# Spins an ephemeral Postgres 16 cluster, applies the Supabase shim + schema.sql + migrations 002-011
-# from scratch, re-runs 006-011 once to prove idempotency, then runs rls_dev_build_v0.sql + the 011
+# Permanent RLS / migration test for Dev Build v0 (migrations 006-014).
+# Spins an ephemeral Postgres 16 cluster, applies the Supabase shim + schema.sql + migrations 002-014
+# from scratch, re-runs 006-014 once to prove idempotency, then runs rls_dev_build_v0.sql + the 011
 # seed-presence check, and confirms the L-dev-0 formula reads the seeded power ranges end-to-end
 # (DB -> lanesight_core.score). Exits non-zero on any failure. No network, no cloud, no credentials.
 #
@@ -29,14 +29,14 @@ PSQL -f "$MOD/schema.sql" >/dev/null
 for n in 002_ball_catalog 003_ball_configuration_surface 004_rls_hardening 005_ball_catalog_refresh \
          006_rules_benchmarks 007_score_achievements 008_dev_build_fields 009_oil_patterns \
          010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface \
-         013_line_geometry_suggested_intent; do
+         013_line_geometry_suggested_intent 014_feedback_store; do
   PSQL -f "$MOD/migrations/$n.sql" >/dev/null
 done
 
-echo "Idempotency: re-running 006-013..."
+echo "Idempotency: re-running 006-014..."
 for n in 006_rules_benchmarks 007_score_achievements 008_dev_build_fields 009_oil_patterns \
          010_achievement_view_invoker 011_seed_dev_build 012_arsenal_current_surface \
-         013_line_geometry_suggested_intent; do
+         013_line_geometry_suggested_intent 014_feedback_store; do
   PSQL -f "$MOD/migrations/$n.sql" >/dev/null
 done
 
