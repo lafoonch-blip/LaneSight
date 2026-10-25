@@ -31,7 +31,13 @@ struct CaptureView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
-        .onDisappear { camera.stopSession() }
+        // Keep the screen awake for the whole capture flow (recording, trimming, upload, analysis).
+        // Auto-Lock otherwise sleeps the phone mid-shot.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear {
+            camera.stopSession()
+            if !busy { UIApplication.shared.isIdleTimerDisabled = false }
+        }
         .sheet(isPresented: $showTargetEditor) {
             TargetEditorSheet(target: $model.sessionTarget,
                               suggestedBreakpoint: model.sessionSuggested?.breakpointBoard)
@@ -41,6 +47,7 @@ struct CaptureView: View {
         // in the capture context — they never see the live preview or a highlighted Home tab mid-shot.
         .fullScreenCover(isPresented: $busy) {
             ProcessingCover(busy: $busy).environmentObject(model)
+                .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         }
     }
 

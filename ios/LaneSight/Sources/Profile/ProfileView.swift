@@ -18,6 +18,14 @@ struct ProfileView: View {
     @State private var showAddSensor = false
     @State private var newSensorName = ""
 
+    // Form baseline (swing timing to compare against; PUT /me/profile `form_baseline`).
+    @State private var baseline: FormBaseline?
+    @State private var basePushaway = ""
+    @State private var baseBackswing = ""
+    @State private var baseDownswing = ""
+    @State private var baseRelease = ""
+    @State private var baselineSaving = false
+
     private let deliveryOptions: [(String, String)] = [
         ("one_handed_thumb", "One-handed, thumb"),
         ("one_handed_no_thumb", "One-handed, no thumb"),
@@ -30,6 +38,7 @@ struct ProfileView: View {
                 LoadableView(state: profile, retry: { Task { await load() } }) { _ in
                     headerCard
                     bowlerCard
+                    baselineCard
                     sensorsCard
                     arsenalCard
                     if let saveNote { Text(saveNote).font(.lsCaption).foregroundStyle(LS.measured) }
@@ -87,9 +96,11 @@ struct ProfileView: View {
                     ForEach(deliveryOptions, id: \.0) { Text($0.1).tag($0.0) }
                 }.pickerStyle(.menu).tint(LS.cyan)
             }
-            labeledField("Approach steps") {
-                TextField("5", text: $steps).keyboardType(.numberPad)
-                    .foregroundStyle(LS.textPrimary).multilineTextAlignment(.trailing)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Approach steps").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
+                Picker("Approach steps", selection: $steps) {
+                    Text("4 steps").tag("4"); Text("5 steps").tag("5")
+                }.pickerStyle(.segmented)
             }
             labeledField("Location (optional)") {
                 TextField("City", text: $location).foregroundStyle(LS.textPrimary).multilineTextAlignment(.trailing)
@@ -102,6 +113,71 @@ struct ProfileView: View {
             .buttonStyle(PrimaryButtonStyle()).disabled(saving)
         }
         .lsCard()
+    }
+
+    // MARK: form baseline (swing timing to compare against — Form results swing-timing bar)
+
+    private var baselineCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("FORM BASELINE").lsEyebrow()
+                Spacer()
+                Text(baselineSummary).font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
+            Text("Swing timing the Form card compares each delivery against. Enter your phase splits, or use your measured average.")
+                .font(.lsCaption).foregroundStyle(LS.textSecondary)
+
+            if baseline?.mode == "average" {
+                Label("Using your measured average", systemImage: "checkmark.circle.fill")
+                    .font(.lsCaption).foregroundStyle(LS.measured)
+            }
+
+            HStack(spacing: 10) {
+                baselineField("Pushaway", text: $basePushaway)
+                baselineField("Backswing", text: $baseBackswing)
+            }
+            HStack(spacing: 10) {
+                baselineField("Downswing", text: $baseDownswing)
+                baselineField("Release", text: $baseRelease)
+            }
+
+            HStack(spacing: 10) {
+                Button { Task { await useAverageBaseline() } } label: {
+                    Text("Use my average")
+                }
+                .buttonStyle(SecondaryButtonStyle()).disabled(baselineSaving)
+                Button { Task { await saveEnteredBaseline() } } label: {
+                    LoadingLabel("Save baseline", busy: baselineSaving)
+                }
+                .buttonStyle(PrimaryButtonStyle()).disabled(baselineSaving)
+            }
+        }
+        .lsCard()
+    }
+
+    private var baselineSummary: String {
+        if let b = baseline {
+            if b.mode == "average" { return "Your average" }
+            if let t = b.total { return String(format: "%.2f s", t) }
+            let entered = [b.pushaway_time, b.backswing_time, b.downswing_time, b.release_time].compactMap { $0 }
+            if !entered.isEmpty { return String(format: "%.2f s", entered.reduce(0, +)) }
+        }
+        return "Not set"
+    }
+
+    private func baselineField(_ label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.lsCaption2).foregroundStyle(LS.textSecondary)
+            HStack(spacing: 4) {
+                TextField("0.00", text: text).keyboardType(.decimalPad)
+                    .foregroundStyle(LS.textPrimary)
+                Text("s").font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1))
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var sensorsCard: some View {
@@ -204,8 +280,9 @@ struct ProfileView: View {
             name = p.name ?? ""
             handedness = p.handedness ?? (model.handed == "L" ? "left" : "right")
             delivery = p.delivery_style ?? "one_handed_thumb"
-            steps = p.approach_steps?.value ?? "5"
+            steps = (p.approach_steps?.value == "4") ? "4" : "5"       // fundamentals support 4- or 5-step
             location = p.location ?? ""
+            loadBaseline(p.form_baseline)
             sensors = (try? await client.listSensors()) ?? []
             score = try? await client.score()
             await model.syncArsenal()
@@ -226,6 +303,53 @@ struct ProfileView: View {
             saveNote = "Profile saved."
         } catch { saveNote = "Couldn't save: \(error.localizedDescription)" }
         saving = false
+    }
+
+    // MARK: form baseline persistence
+
+    private func loadBaseline(_ b: FormBaseline?) {
+        baseline = b
+        func f(_ v: Double?) -> String { v.map { String(format: "%.2f", $0) } ?? "" }
+        basePushaway = f(b?.pushaway_time)
+        baseBackswing = f(b?.backswing_time)
+        baseDownswing = f(b?.downswing_time)
+        baseRelease = f(b?.release_time)
+    }
+
+    /// "Use my average": the engine fills the baseline from the bowler's measured per-phase medians.
+    private func useAverageBaseline() async {
+        baselineSaving = true
+        saveNote = nil
+        do {
+            let p = try await model.makeClient().putProfile(["form_baseline": ["mode": "average"]])
+            loadBaseline(p.form_baseline ?? FormBaseline(mode: "average"))
+            saveNote = "Form baseline set to your average."
+        } catch { saveNote = "Couldn't set baseline: \(error.localizedDescription)" }
+        baselineSaving = false
+    }
+
+    /// Entered baseline: persist only the phases the bowler typed, plus their total. No fabricated values.
+    private func saveEnteredBaseline() async {
+        baselineSaving = true
+        saveNote = nil
+        var fb: [String: Any] = ["mode": "entered"]
+        var total = 0.0
+        var any = false
+        func add(_ key: String, _ text: String) {
+            if let v = Double(text.trimmingCharacters(in: .whitespaces)) { fb[key] = v; total += v; any = true }
+        }
+        add("pushaway_time", basePushaway)
+        add("backswing_time", baseBackswing)
+        add("downswing_time", baseDownswing)
+        add("release_time", baseRelease)
+        guard any else { saveNote = "Enter at least one phase time (seconds) to save a baseline."; baselineSaving = false; return }
+        fb["total"] = total
+        do {
+            let p = try await model.makeClient().putProfile(["form_baseline": fb])
+            loadBaseline(p.form_baseline)
+            saveNote = "Form baseline saved."
+        } catch { saveNote = "Couldn't save baseline: \(error.localizedDescription)" }
+        baselineSaving = false
     }
 
     private func addSensor() async {

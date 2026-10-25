@@ -30,12 +30,24 @@ struct ShotResult: Equatable {
     var formView: String?
     var formStatus: String?
     var formVersion: String?
+    var formFPS: Double?
+
+    // Form fundamentals v1 (DEC-057): the after_form_analyzed footer fields carried from the shot record.
+    var keyFrames: [String] = []
+    var events: [String: Double] = [:]
+    var timingCheckpoints: [String: TimingCheckpoint] = [:]
+    var measuredPositions: [String: MeasuredPosition] = [:]
+    var swingTiming: SwingTiming?
+    var coachingCues: CoachingCues?
+    var formFocus: FormFocus?
+    var formFooter: FormFooter?
 
     static func == (lhs: ShotResult, rhs: ShotResult) -> Bool {
         lhs.shotId == rhs.shotId && lhs.metrics.map(\.0) == rhs.metrics.map(\.0)
             && lhs.footer == rhs.footer && lhs.suggestedTarget == rhs.suggestedTarget
             && lhs.isForm == rhs.isForm && lhs.formStatus == rhs.formStatus
-            && lhs.formView == rhs.formView
+            && lhs.formView == rhs.formView && lhs.keyFrames == rhs.keyFrames
+            && lhs.formFooter == rhs.formFooter
     }
 }
 
@@ -436,14 +448,16 @@ final class AppModel: ObservableObject {
             // names a direction + move distance; otherwise the first rec with a reason. Ball-only.
             let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
                 ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
-            result = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
-                                footer: isForm ? nil : last.result,
-                                suggestedTarget: isForm ? nil : insights?.suggested_target,
-                                recommendation: isForm ? nil : moveRec,
-                                isForm: isForm,
-                                formView: record?.view,
-                                formStatus: record?.status,
-                                formVersion: record?.form_version)
+            var built = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
+                                   footer: isForm ? nil : last.result,
+                                   suggestedTarget: isForm ? nil : insights?.suggested_target,
+                                   recommendation: isForm ? nil : moveRec,
+                                   isForm: isForm,
+                                   formView: record?.view,
+                                   formStatus: record?.status,
+                                   formVersion: record?.form_version)
+            if isForm { Self.attachFormFundamentals(&built, record) }
+            result = built
             shotCount += 1
             pipeline = .done
             showResult = true
@@ -475,18 +489,35 @@ final class AppModel: ObservableObject {
             let insights = record?.insights
             let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
                 ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
-            result = ShotResult(shotId: shotId, metrics: metrics, score: score,
-                                footer: nil,
-                                suggestedTarget: isForm ? nil : insights?.suggested_target,
-                                recommendation: isForm ? nil : moveRec,
-                                isForm: isForm,
-                                formView: record?.view,
-                                formStatus: record?.status,
-                                formVersion: record?.form_version)
+            var built = ShotResult(shotId: shotId, metrics: metrics, score: score,
+                                   footer: nil,
+                                   suggestedTarget: isForm ? nil : insights?.suggested_target,
+                                   recommendation: isForm ? nil : moveRec,
+                                   isForm: isForm,
+                                   formView: record?.view,
+                                   formStatus: record?.status,
+                                   formVersion: record?.form_version)
+            if isForm { Self.attachFormFundamentals(&built, record) }
+            result = built
             return true
         } catch {
             return false
         }
+    }
+
+    /// Copies the form fundamentals v1 payload (DEC-057) from the shot record onto the result. Everything
+    /// stays absent when the record didn't carry it — nothing is fabricated.
+    private static func attachFormFundamentals(_ r: inout ShotResult, _ record: ShotRecord?) {
+        guard let record else { return }
+        r.formFPS = record.fps
+        r.keyFrames = record.key_frames ?? []
+        r.events = (record.events ?? [:]).compactMapValues { $0.value }
+        r.timingCheckpoints = record.timing_checkpoints ?? [:]
+        r.measuredPositions = record.measured_positions ?? [:]
+        r.swingTiming = record.swing_timing
+        r.coachingCues = record.coaching_cues
+        r.formFocus = record.focus
+        r.formFooter = record.footer
     }
 
     // MARK: notifications / celebrations

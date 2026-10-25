@@ -146,6 +146,17 @@ struct APIClient {
         try await send(makeRequest("shots/\(id)"), as: ShotResponse.self)
     }
 
+    /// Fetches one KEY POSITIONS still for the Form card (GET /shots/{id}/frame/{key}). Owner-scoped,
+    /// bowler-cropped JPEG. Returns nil on a 404 (the pose engine didn't export that key) so the caller
+    /// shows an honest "not found" placeholder instead of a guessed frame.
+    func shotFrame(shotId: String, key: String) async throws -> Data? {
+        do {
+            return try await sendRaw(makeRequest("shots/\(shotId)/frame/\(key)"))
+        } catch APIError.http(let status, _) where status == 404 {
+            return nil
+        }
+    }
+
     func score() async throws -> ScoreResponse {
         try await send(makeRequest("me/score"), as: ScoreResponse.self)
     }

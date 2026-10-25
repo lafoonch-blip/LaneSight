@@ -75,6 +75,151 @@ struct ShotRecord: Codable {
     let form_version: String?
     let view: String?
     let status: String?
+    let fps: Double?
+
+    // Form fundamentals v1 (DEC-057) — the after_form_analyzed footer fields written onto the record.
+    // key_frames: the KEY POSITIONS stills actually exported (fetched via GET /shots/{id}/frame/{key}).
+    // events: located event times (E2/E3/E4/E7 …) so a thumbnail can show its honest timestamp.
+    let key_frames: [String]?
+    let events: [String: FlexNum]?
+    let timing_checkpoints: [String: TimingCheckpoint]?
+    let measured_positions: [String: MeasuredPosition]?
+    let swing_timing: SwingTiming?
+    let coaching_cues: CoachingCues?
+    let focus: FormFocus?
+    let footer: FormFooter?
+
+    enum CodingKeys: String, CodingKey {
+        case shot_id, metrics, insights, form_version, view, status, fps
+        case key_frames, events, timing_checkpoints, measured_positions
+        case swing_timing, coaching_cues, focus, footer
+    }
+
+    // Lenient decode: decode each field independently with `try?` so one malformed/unexpected form field
+    // can never break the whole record (a ball shot carries none of these; a form shot may carry a
+    // subset while the pose backend evolves).
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        shot_id = (try? c?.decodeIfPresent(String.self, forKey: .shot_id)) ?? nil
+        metrics = (try? c?.decodeIfPresent([String: Metric].self, forKey: .metrics)) ?? nil
+        insights = (try? c?.decodeIfPresent(ShotInsights.self, forKey: .insights)) ?? nil
+        form_version = (try? c?.decodeIfPresent(String.self, forKey: .form_version)) ?? nil
+        view = (try? c?.decodeIfPresent(String.self, forKey: .view)) ?? nil
+        status = (try? c?.decodeIfPresent(String.self, forKey: .status)) ?? nil
+        fps = (try? c?.decodeIfPresent(Double.self, forKey: .fps)) ?? nil
+        key_frames = (try? c?.decodeIfPresent([String].self, forKey: .key_frames)) ?? nil
+        events = (try? c?.decodeIfPresent([String: FlexNum].self, forKey: .events)) ?? nil
+        timing_checkpoints = (try? c?.decodeIfPresent([String: TimingCheckpoint].self, forKey: .timing_checkpoints)) ?? nil
+        measured_positions = (try? c?.decodeIfPresent([String: MeasuredPosition].self, forKey: .measured_positions)) ?? nil
+        swing_timing = (try? c?.decodeIfPresent(SwingTiming.self, forKey: .swing_timing)) ?? nil
+        coaching_cues = (try? c?.decodeIfPresent(CoachingCues.self, forKey: .coaching_cues)) ?? nil
+        focus = (try? c?.decodeIfPresent(FormFocus.self, forKey: .focus)) ?? nil
+        footer = (try? c?.decodeIfPresent(FormFooter.self, forKey: .footer)) ?? nil
+    }
+}
+
+// MARK: - Form fundamentals v1 contract (DEC-057, after_form_analyzed footer / shot record)
+
+/// A JSON number that tolerates null (and int/float). Form phase splits & event times arrive as a number
+/// or null; this keeps a null from breaking the surrounding object and never fabricates a value.
+struct FlexNum: Codable, Equatable {
+    let value: Double?
+    init(value: Double?) { self.value = value }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        value = c.decodeNil() ? nil : (try? c.decode(Double.self))
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        if let value { try c.encode(value) } else { try c.encodeNil() }
+    }
+}
+
+/// One timing checkpoint (T1 pushaway · T2 ball-start step · T3 backswing apex · T4 leverage window).
+/// `verdict` is early/on_time/late or nil; `status` ok|unavailable. `offset` is the measured amount in
+/// `unit`; `bar_pos` is the normalized 0…1 marker on the early→late scale. `detail`/`note` are honest text.
+struct TimingCheckpoint: Codable, Equatable {
+    let id: String?
+    let label: String?
+    let phase: String?
+    let unit: String?
+    let offset: Double?
+    let verdict: String?
+    let status: String?
+    let bar_pos: Double?
+    let detail: String?
+    let note: String?
+    let provisional: Bool?
+}
+
+/// One measured position (M1 foul line · M2 spine tilt · M3 balance arm · M4 shoulders · M5 follow-through
+/// · M6 finish hold · M7 pendulum). `display` is the backend's honest display string (e.g. "22° · steady",
+/// "Up to ear", "—"); `status` is ok|best_effort|unavailable with `note` carrying the reason/target.
+struct MeasuredPosition: Codable, Equatable {
+    let id: String?
+    let metric: String?
+    let value: Double?
+    let unit: String?
+    let status: String?
+    let note: String?
+    let display: String?
+    let view_required: String?
+}
+
+/// Swing-timing comparison (§0.4): this delivery's phase splits vs the bowler's Profile baseline, per phase.
+/// `building == true` → no baseline set, only this delivery, with `prompt`. Phase dicts are keyed by the
+/// phase name (pushaway_time/backswing_time/downswing_time/release_time) plus "total".
+struct SwingTiming: Codable, Equatable {
+    let phases: [String]?
+    let phase_labels: [String: String]?
+    let this_delivery: [String: FlexNum]?
+    let baseline: [String: FlexNum]?
+    let diff: [String: FlexNum]?
+    let source: String?
+    let building: Bool?
+    let prompt: String?
+}
+
+/// §0.3 hand/wrist coaching cues — text only, never a measured result.
+struct CoachingCues: Codable, Equatable {
+    let note: String?
+    let cues: [String]?
+}
+
+/// The prioritized form focus insight (shown as the session-focus card when a rule fires; nil until the
+/// bowler's baselines are established). `comparison_text` is the "N of your last 5" honest comparison.
+struct FormFocus: Codable, Equatable {
+    let cue: String?
+    let metric: String?
+    let comparison_text: String?
+    let rule_id: String?
+    let drill: FormDrill?
+}
+
+struct FormDrill: Codable, Equatable {
+    let id: String?
+    let name: String?
+    let how: String?
+}
+
+/// The form-card footer: analyzed seconds + the three engine versions (form / rules / fundamentals).
+struct FormFooter: Codable, Equatable {
+    let analyzed_s: Double?
+    let form_version: String?
+    let rules_version: Double?
+    let fundamentals_version: String?
+}
+
+/// The bowler's swing-timing baseline, persisted on the profile (PUT /me/profile `form_baseline`).
+/// `mode` is "entered" (the four phase seconds the bowler typed) or "average" ("use my average"); phase
+/// values are present only for an entered baseline.
+struct FormBaseline: Codable, Equatable {
+    var mode: String? = nil
+    var pushaway_time: Double? = nil
+    var backswing_time: Double? = nil
+    var downswing_time: Double? = nil
+    var release_time: Double? = nil
+    var total: Double? = nil
 }
 
 /// Analyzed-shot insights (record.insights). `suggested_target` is the server-computed target line for
@@ -410,6 +555,7 @@ struct Profile: Codable, Equatable {
     var delivery_style: String?       // one_handed_thumb | one_handed_no_thumb | two_handed
     var approach_steps: FlexString?
     var location: String?
+    var form_baseline: FormBaseline?
 }
 
 struct Sensor: Codable, Identifiable, Equatable {
