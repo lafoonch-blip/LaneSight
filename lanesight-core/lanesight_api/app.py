@@ -259,7 +259,7 @@ def patch_shot(shot_id: str, body: dict, user=Depends(current_user)):
 
 # Key-position stills for the Form screen's KEY POSITIONS row. Owner-scoped; only frames the pose exported
 # exist on disk (recorded in the form record's key_frames), so a missing frame is an honest 404.
-_FORM_FRAME_KEYS = {'ball_start', 'top_of_swing', 'release', 'finish'}
+_FORM_FRAME_KEYS = {'ball_start', 'end_pushaway', 'top_of_swing', 'release'}   # DEC-057 key positions
 
 
 @app.get('/shots/{shot_id}/frame/{key}')

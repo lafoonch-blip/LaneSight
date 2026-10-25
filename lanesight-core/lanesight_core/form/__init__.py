@@ -13,6 +13,9 @@ classifier, spot-check tips) stay dependency-light.
 from .analyze import FORM_VERSION, FORM_P1, VIEWS, analyze_form_clip, classify_view
 from .spotcheck import spot_check
 from .pose import build_backend as build_pose_backend, POSE_BACKEND_VERSION
+from .fundamentals import (FUNDAMENTALS_VERSION, DEFAULT_TIMING_WINDOWS, timing_checkpoints,
+                           measured_positions, gate_positions, coaching_cues, swing_timing)
 
 __all__ = ['FORM_VERSION', 'FORM_P1', 'VIEWS', 'analyze_form_clip', 'classify_view', 'spot_check',
-           'build_pose_backend', 'POSE_BACKEND_VERSION']
+           'build_pose_backend', 'POSE_BACKEND_VERSION', 'FUNDAMENTALS_VERSION', 'DEFAULT_TIMING_WINDOWS',
+           'timing_checkpoints', 'measured_positions', 'gate_positions', 'coaching_cues', 'swing_timing']
