@@ -2,7 +2,7 @@
 Status: RESEARCH RESULTS (prototype analysis; nothing here is validated product output)
 Version: 1.0
 Last Updated: 2026-10-21
-Source: `~/Developer/LaneSight/Training Videos` IMG_8845–8848 (recorded 2026-10-20, ~7:55–9:00 pm)
+Source: `~/LaneSightData/training_videos` (moved from `~/Developer/LaneSight/Training Videos` on 2026-10-25) IMG_8845–8848 (recorded 2026-10-20, ~7:55–9:00 pm)
 Note: copied into the repo from the claude.ai Project on 2026-10-22. The prototype scripts behind these numbers ran in a claude.ai session and are not in the repo; reproduce them in `lanesight-core`.
 
 ## Clips

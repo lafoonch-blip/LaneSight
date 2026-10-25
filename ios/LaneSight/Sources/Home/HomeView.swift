@@ -24,8 +24,15 @@ struct HomeView: View {
             }
             .background(LSBackground())
             .navigationTitle("Home")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Image("LaneSightLogo")
+                        .resizable().scaledToFit()
+                        .frame(height: 30)
+                        .accessibilityLabel("LaneSight")
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     NavigationLink { ProfileView() } label: {
                         Image(systemName: "person.crop.circle.fill")

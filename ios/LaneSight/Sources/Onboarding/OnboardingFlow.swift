@@ -19,16 +19,14 @@ private struct WelcomeStep: View {
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
-            HStack(spacing: 2) {
-                Text("Lane").font(.largeTitle.bold()).foregroundStyle(LS.textPrimary)
-                Text("Sight").font(.largeTitle.bold()).foregroundStyle(LS.cyan)
-            }
+            Image("LaneSightLogo")
+                .resizable().scaledToFit()
+                .frame(maxWidth: 260)
+                .accessibilityLabel("LaneSight")
             Text("UNDERSTAND EVERY SHOT. IMPROVE EVERY GAME.")
                 .font(.caption.weight(.semibold)).tracking(1).foregroundStyle(LS.textSecondary)
                 .multilineTextAlignment(.center)
-            Image(systemName: "figure.bowling")
-                .font(.system(size: 90)).foregroundStyle(LS.blue.opacity(0.7))
-                .padding(.vertical, 24)
+                .padding(.top, 8)
             Spacer()
             NavigationLink { CreateAccountStep() } label: { Text("Create Account") }
                 .buttonStyle(PrimaryButtonStyle())

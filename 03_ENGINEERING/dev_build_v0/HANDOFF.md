@@ -1,7 +1,7 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.0
-Last Updated: 2026-10-22
+Version: 1.1
+Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
 Location: `03_ENGINEERING/dev_build_v0/HANDOFF.md`
@@ -16,7 +16,7 @@ Location: `03_ENGINEERING/dev_build_v0/HANDOFF.md`
 
 | Doc | What it is |
 |---|---|
-| `03_ENGINEERING/dev_build_v0/DECISIONS_TO_ADD.md` | New decisions (DEC-045…053). **Phase 0 records them in DECISIONS.md.** |
+| `00_CONTEXT/DECISIONS.md` | DEC-045…053 (recorded; the staging file `DECISIONS_TO_ADD.md` was removed 2026-10-25). |
 | `03_ENGINEERING/DEV_BUILD_PLAN.md` | Goal, architecture, screen scope, dev score formula `L-dev-0` (§8) |
 | `01_PRODUCT/SCORE_TIERS_ACHIEVEMENTS_SPEC.md` | Score/tier/achievement engine, migration 006 SQL draft, API, display rules |
 | `01_PRODUCT/BENCHMARKS_AND_RECOMMENDATIONS_SPEC.md` | Benchmark layers, form rules, prioritizer, owner-only rules admin |
@@ -26,7 +26,7 @@ Location: `03_ENGINEERING/dev_build_v0/HANDOFF.md`
 | `02_DESIGN/dev_build_v0/` | The **approved** screens (24 `.dc.html` files + `canvas.json` + `README.md`) |
 
 3. Where docs conflict:
-   - New decisions in `DECISIONS_TO_ADD.md` win over older docs once you record them.
+   - DEC-045…053 in `DECISIONS.md` win over older docs.
    - Otherwise follow `AGENTS.md`: DECISIONS and CURRENT_STATE win.
    - Ask Shayne about anything still ambiguous; don't guess.
 
@@ -82,7 +82,7 @@ Mac: lanesight_api (FastAPI, launchd, Mac kept awake)
 Work in order. Each phase ends with tests green, a short report to Shayne (numbers, not claims), and a local commit.
 
 ### Phase 0 — Record and reconcile (docs)
-- [ ] Add DEC-045…053 from `DECISIONS_TO_ADD.md` to `00_CONTEXT/DECISIONS.md`. Mark nothing superseded except where an entry says so.
+- [x] DEC-045…053 recorded in `00_CONTEXT/DECISIONS.md`.
 - [ ] Update `CURRENT_STATE.md` and `BUILD_PLAN.md`:
   - new "Dev Build v0" stage, task IDs `DV-xx`, mirroring the phases below
   - fix BUILD_PLAN "MVP exit" per DEC-047

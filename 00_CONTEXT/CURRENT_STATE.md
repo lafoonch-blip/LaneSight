@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.26  
-Last Updated: 2026-10-22  
+Version: 1.27  
+Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.25
+Supersedes: v1.26
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -80,7 +80,7 @@ Back end first, with moving-camera measurement and coaching/stats in MVP (DEC-01
 
 ## Brand
 - Master brand: LaneSight
-- Preferred mark: LS Monogram with lane/trajectory motif
+- Logo: official Figma brand-standards logo (lane-and-arc mark + LaneSight wordmark), DEC-054; icon pack in `02_DESIGN/brand/`; shipped in the iOS app as the app icon and in the Welcome + Home headers
 - Tagline: See More. Bowl Smarter.
 
 ## Product direction update — 2026-10-18 (DEC-040/041)

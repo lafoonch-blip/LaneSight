@@ -1,5 +1,34 @@
 # Instructions for AI assistants (Claude, ChatGPT, others)
 
+## Quick start: where the truth is (read before anything else)
+**One central location: this repo.** Every change to context, decisions, designs (as synced files) and code lands here. Anything elsewhere is either an upstream editor that syncs into this repo, or a read-only mirror.
+
+| Area | Source of truth | Not a source |
+|---|---|---|
+| Newest state of everything | Repo on Shayne's Mac, `~/Developer/LaneSight`, current working branch (often ahead of GitHub) | Your memory of an earlier chat |
+| Pushed state | GitHub `lafoonch-blip/LaneSight` | — |
+| Decisions | `00_CONTEXT/DECISIONS.md` (highest DEC number wins) | Older docs, `99_ARCHIVE/` |
+| What's being built now | `00_CONTEXT/CURRENT_STATE.md`, `03_ENGINEERING/DEV_BUILD_PLAN.md` | — |
+| Dev Build v0 screens | `02_DESIGN/dev_build_v0/` (synced from the Claude Design canvas "LaneSight Dev Build v0 Screens") | Figma screens, old mockups |
+| Visual standards (color, type, spacing) | Figma "01 - Design Standards" page | Colors in old docs/UI Spec v1 |
+| Logo and app/web icons | Figma Design Components › "Brand standards" → exported to `02_DESIGN/brand/` (DEC-054) | **The LS monogram concept: never use it** |
+| Later-version (target-state) screens | Figma "Lanesight - Product UX - Design" | — |
+| Code | `lanesight-core/` (Python CV/API), `ios/LaneSight/` (SwiftUI) | — |
+| Mirrors (read-only, may lag) | Google Drive LaneSight folder, claude.ai LaneSight Project docs | Never edit these as the source |
+
+### Freshness check (do this first, every session)
+1. If you can reach the repo: `git fetch && git status && git branch --show-current && git log --oneline -5`. Work from the newest local branch, not an old clone or a pasted file.
+2. Read the last ~5 entries of `DECISIONS.md` and the top of `CURRENT_STATE.md`.
+3. Compare any doc you were handed (mirror, upload, paste) by its `Version` / `Last Updated` header against the repo copy. If the repo is newer, use the repo.
+4. Before building UI: `git diff 02_DESIGN/` and read `02_DESIGN/dev_build_v0/README.md` (changelog at the bottom).
+5. Several AI sessions may work at once. Re-read a file right before you edit it; never overwrite changes you didn't read.
+
+### When you change something
+- Write it to this repo in the same session (doc, DEC entry, design sync or code). A change that lives only in a chat, canvas, Figma or a mirror is not done.
+- Decisions: add a new DEC; mark the old one superseded. Docs: bump `Version` / `Last Updated`.
+- Commit locally; push to GitHub only when Shayne says so. Then re-sync the Drive and claude.ai Project mirrors.
+- Report what you changed and anything you could not update.
+
 This repo is the **source of truth** for LaneSight product and engineering context. Read these files first, in this order:
 
 1. `00_CONTEXT/LANESIGHT_MASTER_CONTEXT.md`: what LaneSight is, strategy, terminology

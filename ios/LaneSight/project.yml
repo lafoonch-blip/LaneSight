@@ -34,3 +34,4 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: GK3N928748   # personal team (lafoonch@gmail.com); pinned so xcodegen regen keeps signing
         ENABLE_PREVIEWS: "YES"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon   # brand app icon from Sources/Assets.xcassets (DEC-054 official logo)

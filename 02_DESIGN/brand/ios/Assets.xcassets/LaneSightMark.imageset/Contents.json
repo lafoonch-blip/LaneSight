@@ -1,0 +1,23 @@
+{
+  "images": [
+    {
+      "filename": "LaneSightMark.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "LaneSightMark@2x.png",
+      "idiom": "universal",
+      "scale": "2x"
+    },
+    {
+      "filename": "LaneSightMark@3x.png",
+      "idiom": "universal",
+      "scale": "3x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

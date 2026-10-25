@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.18  
-Last Updated: 2026-10-22  
+Version: 1.19  
+Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.17
+Supersedes: v1.18
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -71,12 +71,11 @@ Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a
 **Status:** ACCEPTED  
 **Supersedes:** —
 
-### DEC-011 — LS Monogram is preferred logo direction
-**Decision:** Evolve away from an eye-led master mark to the LS lane/trajectory monogram.  
-**Why:** Better represents a platform spanning performance, coaching, teams, leagues and centers.  
-**Date:** 2026-09-27 (recorded)  
-**Status:** ACCEPTED  
-**Supersedes:** Eye-shaped logo (UI Spec v1 §2.1)
+### DEC-011 — Logo direction (superseded)
+**Decision:** Withdrawn. An LS monogram concept was briefly recorded here; it was never adopted and has been removed from the repo, designs and Figma.  
+**Date:** 2026-09-27 (recorded) · withdrawn 2026-10-25  
+**Status:** SUPERSEDED by DEC-054  
+**Supersedes:** —
 
 ### DEC-012 — Smart glasses are a capture adapter, not the product
 **Decision:** Meta/other glasses may reduce capture friction later but are not a dependency or primary identity.  
@@ -544,7 +543,15 @@ Other rules:
 **Status:** ACCEPTED
 **Supersedes:** —
 
+### DEC-054 — Official LaneSight logo is the Figma brand-standards logo
+**Decision:** The only LaneSight logo is the official logo component in Figma (Design Components › "Brand standards / Official LaneSight identity", component `LaneSight / Brand / Official logo and wordmark`): the lane-and-arc mark with the "LaneSight" wordmark. App and web icons use that arc mark (`02_DESIGN/brand/`, Figma "Brand standards / App & web icons"). The LS monogram concept is not a LaneSight mark and must not be used.  
+**Why:** It is the approved Home-header logo; the monogram was an unadopted concept that caused wrong assets.  
+**Date:** 2026-10-25  
+**Status:** ACCEPTED  
+**Supersedes:** DEC-011
+
 ## Superseded decisions
+- DEC-011 — withdrawn; replaced by DEC-054 (official Figma logo).
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
 - DEC-001 — partially superseded by DEC-018 (see entry above).
 - DEC-019 — partially superseded by DEC-035 (video replay deferred; Practice-only sessions).

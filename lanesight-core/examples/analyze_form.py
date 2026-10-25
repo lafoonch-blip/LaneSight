@@ -8,7 +8,7 @@ Usage:
 
 Needs the pose model at ~/LaneSightData/models/pose_landmarker_heavy.task (or $LANESIGHT_POSE_MODEL) and the
 MediaPipe "form" extra. Prints a computed-vs-reference table with within-tolerance flags and writes one JSON
-per clip to a scratch directory (never into the repo or the Training Videos folder).
+per clip to a scratch directory (never into the repo or ~/LaneSightData/training_videos).
 
 Reference tables: 02_RESEARCH/TRAINING_VIDEOS_CALIBRATED_METRICS.md (footwork) and
 TRAINING_VIDEOS_2026-10-20_ANALYSIS.md (swing timing). These are unvalidated research results (no Ruby ground
@@ -20,7 +20,7 @@ from lanesight_core.form import pose
 from lanesight_core.form.analyze import analyze_form_clip
 
 CLIP_DIR = os.environ.get('LANESIGHT_FORM_CLIPS',
-                          os.path.expanduser('~/Developer/LaneSight/Training Videos'))
+                          os.path.expanduser('~/LaneSightData/training_videos'))
 OUT_DIR = os.environ.get('LANESIGHT_FORM_OUT', os.path.join(tempfile.gettempdir(), 'lanesight_form'))
 
 # Reference values (from the research tables). Swing splits are session means; footwork is per clip.
