@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.2
+Version: 1.3
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -145,7 +145,7 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
   - swing phase splits, swing time, approach time, step count, ball-start step, rhythm, finish hold, backswing height (relative)
   - drift (rear view, best effort)
   - per-metric status + reason; capture view classifier
-- [ ] **Bowler-in-view on shot clips:** detect when the bowler is in a Shot clip and run the Form P1 metrics that angle supports. If detection or a metric isn't reliable, return Unavailable with a reason; never a guess.
+- [ ] ~~**Bowler-in-view on shot clips**~~ **Deferred (DEC-056):** Shot Analysis returns shot metrics only and Form Analysis returns form metrics only. Don't run form metrics on Shot clips for now.
 - [ ] **Spot check (advisory only):** a fast framing check that returns a tip ("raise the phone ~1 ft", "move back ~3 ft"). It **never blocks** recording (DEC-045). The same tip comes back with failed/degraded results.
 - [ ] **Owner reset:** archive + clear score/tier/achievement/activity/notification data for chosen users (DEC-051).
 
@@ -253,7 +253,7 @@ Open the `.dc.html` files in a browser to view them; `canvas.json` gives titles 
 | 2 | `Lab.dc.html` | Performance Lab tab (Start Live Session, Upload, PBA disabled, sessions) | `/sessions` |
 | 3 | `Setup.dc.html` | Session setup: mode, lane, ball, oil pattern, pre-flight | `/health`, `/me/arsenal`, `/oil-patterns`, `POST /sessions` |
 | 4 | `Capture.dc.html` | Capture: free framing, advisory spot check, intent, record, queue status | `/spot-check`, `POST …/shots` |
-| 5 | `Shot.dc.html` | Shot card: next-shot advice, target vs actual, ball metrics, form-from-clip, sensor question, score/achievement nudges | `/shots/{id}`, `PATCH /shots/{id}` |
+| 5 | `Shot.dc.html` | Shot card (Shot Analysis only): next-shot advice, target vs actual, ball metrics, sensor question, score/achievement nudges. No form metrics (DEC-056) | `/shots/{id}`, `PATCH /shots/{id}` |
 | 6 | `Session.dc.html` | Live session: KPIs, current ball, shot rows with upload/analyze/fail states | `/sessions/{id}` |
 | 7 | `Form.dc.html` | Form results: focus + drill, key positions, swing timing, approach/balance | `/shots/{id}` (form) |
 | 8 | `Stats.dc.html` | Stats tabs Score / Throw / Form + metric coverage | `/me/stats`, `/me/score/history` |

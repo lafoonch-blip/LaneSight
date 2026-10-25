@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.1
+Version: 3.2
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -21,6 +21,10 @@ Last Updated: 2026-10-25
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
 ## Changelog
+- **3.2 (2026-10-25):** shot and form metrics split by mode (DEC-056).
+  - **Shot card** (Shot Analysis): the "Form from this clip" section is removed; subtitle says "Shot Analysis". Frame shortened to 1420 px.
+  - **Form results** (Form Analysis) already show form metrics only; unchanged.
+  - **Session summary** (Shot session): "3 form deliveries", the Form focus card and the form-based achievement are removed. Frame shortened to 1060 px.
 - **3.1 (2026-10-25):** uploads, recent activity, tabs, setup button (DEC-055).
   - **Upload is not a session.** Upload video no longer has an "Add to session" row; the screen says uploads aren't saved as a session. An uploaded clip never appears in Recent sessions or Recent activity, and never counts toward Stats, the LaneSight Score, tiers or achievements (so its shot card shows no score/achievement nudges). Past uploads are listed under **Lab › Uploads**, below Sessions.
   - **Home Recent activity** shows only practice sessions, achievements and LaneSight tier (rank) changes. The sample "Consistency up 6 this week" row became a tier change.

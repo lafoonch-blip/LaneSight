@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.20  
+Version: 1.21  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.19
+Supersedes: v1.20
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -483,7 +483,7 @@ Other rules:
 - After each shot the app asks "Was a sensor in the ball?" (No / Yes plus one of the user's own sensors) and stores it on the shot for later comparison. No sensor brand names are built into the UI.
 
 **Date:** 2026-10-22
-**Status:** ACCEPTED
+**Status:** ACCEPTED; the "form from clip" bullet is SUPERSEDED by DEC-056
 **Supersedes:** —
 
 ### DEC-050 — No pinfall in the dev build
@@ -564,7 +564,20 @@ Other rules:
 **Status:** ACCEPTED (Dev Build v0 designs 3.1)
 **Supersedes:** the "Add to session" option on the Upload screen (designs ≤3.0) and the "Soon" / "Coming soon" label on the Leagues and Tournaments tabs.
 
+### DEC-056 — Shot and Form metrics are split by analysis mode (for now)
+**Decision:**
+- **Shot Analysis** results show only shot metrics: next-shot advice, target vs actual, ball metrics, the sensor question and score/achievement nudges. No form metrics, even when the bowler is in view.
+- **Form Analysis** results show only form metrics. No ball or lane metrics.
+- The Shot session summary shows shot results only (no form focus or form deliveries).
+- Later, results will combine naturally based on what is detected in the video. That needs a new DEC.
+
+**Why:** Keeps each mode simple and its numbers trustworthy while bowler-in-view detection and cross-mode metrics are unproven.
+**Date:** 2026-10-25
+**Status:** ACCEPTED (Dev Build v0 designs 3.2)
+**Supersedes:** DEC-049 "form from clip" bullet; SCORE_TIERS_ACHIEVEMENTS_SPEC "Form on shot clips"; HANDOFF Phase 2 "Bowler-in-view on shot clips" (deferred).
+
 ## Superseded decisions
+- DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).
 - DEC-011 — withdrawn; replaced by DEC-054 (official Figma logo).
 - DEC-037 — composite weighting superseded by DEC-038; S subformula and historical definition retained.
 - DEC-001 — partially superseded by DEC-018 (see entry above).

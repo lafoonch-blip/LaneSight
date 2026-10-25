@@ -1,7 +1,7 @@
 # LaneSight Score, Tiers & Achievements — Dev Launch System Spec
 Status: DRAFT (for Shayne's review)
-Version: 0.2
-Last Updated: 2026-10-22
+Version: 0.3
+Last Updated: 2026-10-25
 Owner: Shayne
 Builds on: ACHIEVEMENTS.md v1.1 (catalog + data contract), DEC-038/039/041, DEV_BUILD_PLAN §8 (formula `L-dev-0`), BENCHMARKS_AND_RECOMMENDATIONS_SPEC (owner-only rules)
 Proposed home: `01_PRODUCT/SCORE_TIERS_ACHIEVEMENTS_SPEC.md` + migration `006_score_achievements.sql`
@@ -298,7 +298,7 @@ The shot result payload includes `score_delta` and `achievement_nudges[]` for th
 - **Target vs actual line:** a lane diagram draws the intended line (feet → arrows → breakpoint, entered on the capture screen) against the actual line (laydown → arrows → breakpoint → entry), with per-point miss in boards. The execution class appears as plain text ("On target — the lane hooked less", "Missed left at the arrows").
   - "Did you hit your mark?" is removed because the target is known.
   - With no target entered, Accuracy shows "Set a target on the capture screen".
-- **Form on shot clips:** when the bowler is detected in a Shot clip, a "Form from this clip" section shows the P1 form metrics that this angle supports (others Unavailable with a reason). Detection is automatic; no extra setting.
+- ~~**Form on shot clips**~~ **Superseded by DEC-056 (2026-10-25):** Shot Analysis results show shot metrics only; form metrics appear only in Form Analysis results, for now.
 - **Sensor question after each shot:** "Was a sensor in the ball?" No / Yes (pick from the sensors in your profile). Stored on the shot as `sensor_used` + `sensor_id` so the readings can be matched later. Sensor brand names come only from the bowler's own profile entries; no brand names are built into the app screens.
 
 ## 10. Decisions (2026-10-22)
