@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.21  
+Version: 1.22  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.20
+Supersedes: v1.21
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -575,6 +575,24 @@ Other rules:
 **Date:** 2026-10-25
 **Status:** ACCEPTED (Dev Build v0 designs 3.2)
 **Supersedes:** DEC-049 "form from clip" bullet; SCORE_TIERS_ACHIEVEMENTS_SPEC "Form on shot clips"; HANDOFF Phase 2 "Bowler-in-view on shot clips" (deferred).
+
+### DEC-057 — Shayne's form fundamentals v1 drive form findings and feedback
+**Decision:**
+- Shayne's fundamentals (`01_PRODUCT/FORM_BENCHMARKS.md` §0) are the default L0 owner rules for form findings, feedback and drills.
+- **Timing checkpoints with early / on time / late verdicts:**
+  - pushaway: ball beside the ball-side leg when the foot after the pushaway step lands
+  - ball-start step: step 1 of a 4-step approach, step 2 of a 5-step approach
+  - backswing apex at slide start
+  - release after the slide foot stops (leverage window)
+  - Every verdict is shown with its measured offset.
+- **New measured metrics:** foul-line distance when the slide stops; spine tilt and its consistency; balance arm; shoulder tilt; follow-through height.
+- **Hand and wrist rules** (behind and under, inside-out, finger exit, suitcasing, broken wrist) are coaching cues only, not measured, until a validated method exists.
+- **Swing-timing baseline:** the bowler can set a baseline in **Profile › Form baseline** (entered, or "use my average"). Form results compare each delivery to it phase by phase.
+
+**Why:** Gives form feedback concrete, coach-standard checkpoints while keeping unmeasurable advice clearly separate from measured results.
+**Date:** 2026-10-25
+**Status:** ACCEPTED (Dev Build v0 designs 3.4). On-time windows and thresholds are provisional owner settings until validated on real clips.
+**Supersedes:** FORM_ANALYSIS_SPEC §2 honesty note ("never as a grade") for these owner-defined checkpoints; DEC-046 in part (a bowler may set a swing-timing baseline in Profile; other self-set targets still wait for the Coaching tab).
 
 ## Superseded decisions
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).

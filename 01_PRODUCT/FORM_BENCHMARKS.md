@@ -1,11 +1,52 @@
 # Foundational Form Metrics & Benchmarks
 Status: DRAFT (for Shayne's review)
-Version: 0.1
+Version: 0.2
 Last Updated: 2026-10-25
 Owner: Shayne
 Builds on: FORM_ANALYSIS_SPEC, BENCHMARKS_AND_RECOMMENDATIONS_SPEC (L0–L3 layers, owner-only rules), DEC-041/046/047
 Code checked: `lanesight-core/lanesight_core/form/pose.py` + `analyze.py` on branch `dev-build-v0` (2026-10-25)
 Proposed home: `01_PRODUCT/FORM_BENCHMARKS.md`
+
+## 0. Shayne's fundamentals v1 (owner rules, 2026-10-25, DEC-057)
+These are the default **L0 fundamentals** for form findings and feedback. They are owner rules (DEC-046): stored as rule data, editable only by Shayne, never shipped to the app. Every verdict shows the measured value next to it; a metric that can't be measured from the clip's view is Unavailable with a reason, never a guess.
+
+### 0.1 Timing checkpoints (early / on time / late)
+Events are from FORM_ANALYSIS_SPEC §3 (E2 ball start, E3 ball at hip, E4 top of backswing, E5 slide start, E7 release, E8 slide stop; S1…Sn foot contacts).
+
+| # | Checkpoint | Rule | How it's measured | Early | Late | View | Phase |
+|---|---|---|---|---|---|---|---|
+| T1 | Pushaway | When the foot **after** the pushaway step lands (step 2 of a 4-step, step 3 of a 5-step), the ball is in line with the ball-side leg (right thigh for a right-hander) | Ball (or bowling wrist) fore-aft position vs ball-side thigh at that foot contact | Ball already past the leg | Ball not yet at the leg | Side ★ | P2 |
+| T2 | Ball start step | 4-step: ball moves on step 1. 5-step: ball moves on step 2 | `ball_start_step` (E2 in S_k) vs the profile's approach steps | Before that step | After that step | Side | P1 (exists) |
+| T3 | Backswing apex | Ball at the top of the backswing as the slide starts | E4 − E5 (s) | Top reached before the slide starts | Top reached after the slide started | Side ★ | P2 |
+| T4 | Leverage window | Release after the slide foot stops | E7 − E8 (s) | Release before the slide foot stops (loses power and balance) | Foot stopped and still waiting for the ball (forces muscling) | Side ★ | P2 |
+
+- **On-time windows are owner settings.** Start values are provisional and must be tuned on real clips before they're shown as validated: T1 ±1 in of the thigh line, T3 ±0.05 s, T4 0 to +0.10 s after slide stop.
+- **Repetition rule** before a finding becomes the session focus: ≥3 of the last 5 comparable deliveries (BENCHMARKS spec).
+
+### 0.2 Measured positions
+| # | Metric | Rule / target | How it's measured | View | Phase |
+|---|---|---|---|---|---|
+| M1 | Foul-line distance | Track how far the slide toe is from the foul line **when the slide stops** (E8). Personal trend; no fixed target | Slide toe to foul line at E8 (in) | Side or rear, foul line visible | P2 |
+| M2 | Spine tilt | Forward tilt 15–30°, kept steady through the approach; no lift at release | Torso angle from vertical through the approach and at E7; flag a rise of >5° into release (provisional) | Side | P2 |
+| M3 | Balance arm | Non-bowling arm out to the side ~90° from the body | Off-arm abduction angle at E7 | Front / rear | P2 |
+| M4 | Shoulders | Bowling shoulder slightly lower; chest square or slightly open to the target; no over-rotation | Shoulder-line tilt at E7 (front/rear); chest rotation needs rear/overhead | Front / rear | P2 (tilt), P3 (rotation) |
+| M5 | Follow-through | Hand finishes up toward the ear/forehead ("answer the phone") | Bowling-wrist height vs head after E7 | Side / front | P2 |
+| M6 | Finish hold | Hold the finish until the ball reaches the pins | Finish hold (E8→E9); target is an owner setting (start ≥ 2.5 s ≈ ball travel time) | Any | P1 (exists) |
+| M7 | Pendulum swing | Relaxed, gravity-driven swing; don't muscle the ball down | Proxy only: downswing time vs the bowler's baseline and T4 "late". No direct "muscling" metric | Side | P3 |
+
+### 0.3 Coaching cues only (not measured)
+Phone video can't reliably see these yet, so they appear only as cue/drill text attached to a measured finding, never as a measured result:
+- Pushaway direction "match ball movement to footwork" (covered by T2).
+- **Behind and under:** firm or slightly cupped wrist, hand under the ball.
+- **Inside-out path:** hand slightly inside the ball before release, rolling outside on the follow-through.
+- **Finger exit:** thumb out first, then middle and ring fingers.
+- **Avoid "suitcasing":** hand not on top or fully on the side early.
+- **Avoid a broken wrist:** wrist not collapsing backward.
+- Non-bowling arm palm facing down or back (part of M3; palm not measured).
+
+### 0.4 Swing-timing comparison
+- The Form results swing-timing bar shows **this delivery vs the bowler's baseline** (pushaway, backswing, downswing, release), with the difference per phase.
+- The baseline comes from **Profile › Form baseline**: entered by the bowler or "use my average". If none is set, only this delivery shows, with a prompt to add one.
 
 ## 1. What Form Analysis captures today
 **Method:** MediaPipe pose plus ball/wrist event detection. Every value carries a status (Measured, Best effort, Unavailable + reason) and a confidence.

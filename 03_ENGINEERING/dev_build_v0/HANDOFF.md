@@ -1,6 +1,6 @@
 # Claude Code Handoff — LaneSight Dev Build v0 (iPhone)
 Status: READY FOR BUILD
-Version: 1.4
+Version: 1.5
 Last Updated: 2026-10-25
 Owner: Shayne
 Prepared in: claude.ai LaneSight Project session (design + spec work, 2026-10-21/22)
@@ -143,6 +143,7 @@ Work in order. Each phase ends with tests green, a short report to Shayne (numbe
   - an unanalyzable shot never breaks a streak
 - [ ] **Form P1** (`analyze_form_clip`):
   - swing phase splits, swing time, approach time, step count, ball-start step, rhythm, finish hold, backswing height (relative)
+  - **Form fundamentals (DEC-057, FORM_BENCHMARKS §0):** detect E5 slide start, E8 slide stop and the foot contact after the pushaway step. Return checkpoint verdicts T1–T4 (early / on time / late + offset) using owner-setting windows, foul-line distance at E8, and spine tilt / balance arm / shoulder tilt / follow-through where the view supports them (else Unavailable + reason). Hand/wrist rules are cue text only. Add `form_baseline` (per-phase seconds, source `entered` | `average`) and `approach_steps` to the bowler profile and API; Form results compare each delivery to it.
   - **Key-position thumbnails (designs 3.3):** export frames for `ball_start` (E2), `end_of_pushaway` (E3, the event that ends the pushaway split), `top_of_swing` (E4) and `release` (E7) — drop `finish` from `KEY_FRAME_EVENTS` in `form/pose.py`. Crop each to the bowler's pose bounding box (with margin) for the thumbnail; keep the full frame for tap-to-open. A missing event → no tile image, never a substitute frame. No AI clean-up for now.
   - drift (rear view, best effort)
   - per-metric status + reason; capture view classifier
