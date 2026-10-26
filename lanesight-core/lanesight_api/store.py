@@ -863,6 +863,15 @@ class PgStore(MemoryStore):
             params['power_ref_ranges'] = pr
         return params
 
+    def _get_in(self, table, field, ids, extra, chunk=150):
+        """GET rows where `field` is in `ids`, CHUNKED so a large id list can't overflow the request URL
+        (PostgREST/proxy ~8-16 KB limit -> a 400 once the window has a few hundred shots). ~150 UUIDs/req."""
+        out = []
+        for i in range(0, len(ids), chunk):
+            batch = ','.join(ids[i:i + chunk])
+            out += self._get(table, f'{field}=in.({batch})&{extra}')
+        return out
+
     # ----------------------------------------------------------------- shot history read-back (from Supabase)
     def read_shot_records(self, user_id, window_days=None):
         import datetime as _dt
@@ -876,10 +885,10 @@ class PgStore(MemoryStore):
         shots = [s for s in self._get('shots', q) if s.get('source') != 'upload']  # exclude uploads (DEC-055)
         if not shots:
             return [], {}, 'R'
-        ids = ','.join(s['id'] for s in shots)
-        meas = self._get('measurements', f'shot_id=in.({ids})&source=eq.lanesight_video'
-                                          '&select=shot_id,metric,value,status,confidence,note')
-        ints = self._get('shot_intents', f'shot_id=in.({ids})&select=shot_id,arrows_board,breakpoint_board')
+        ids = [s['id'] for s in shots]
+        meas = self._get_in('measurements', 'shot_id', ids,
+                            'source=eq.lanesight_video&select=shot_id,metric,value,status,confidence,note')
+        ints = self._get_in('shot_intents', 'shot_id', ids, 'select=shot_id,arrows_board,breakpoint_board')
         by_shot = {}
         for m in meas:
             by_shot.setdefault(m['shot_id'], {})[m['metric']] = {
@@ -911,9 +920,9 @@ class PgStore(MemoryStore):
         shots = [s for s in self._get('shots', q) if s.get('source') != 'upload']  # exclude uploads (DEC-055)
         if not shots:
             return []
-        ids = ','.join(s['id'] for s in shots)
-        meas = self._get('measurements', f'shot_id=in.({ids})&source=eq.lanesight_form'
-                                          '&select=shot_id,metric,value,status,confidence,note')
+        ids = [s['id'] for s in shots]
+        meas = self._get_in('measurements', 'shot_id', ids,
+                            'source=eq.lanesight_form&select=shot_id,metric,value,status,confidence,note')
         by_shot = {}
         for m in meas:
             by_shot.setdefault(m['shot_id'], {})[m['metric']] = {
