@@ -335,6 +335,66 @@ def test_fit_focal_recovers_focal_and_cross_validates_arrows():
     assert xcheck["arrow"]["in_band"] == xcheck["arrow"]["n"] == 4      # all held-out arrows land in band
 
 
+def _synthetic_pose_clip(w=1080, h=1920, f_true=1600.0, pitch_deg=22.0, add_arrows=True):
+    """A verified LandmarkSet from a KNOWN camera pose+focal (foul+pins, optionally arrows), plus the pose."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL as G, x_in_for_board
+    K = P.nominal_K(w, h, f_true)
+    pitch = np.radians(pitch_deg)
+    Cw = np.array([G.landmarks["foul_r"].x_in / 2, 72.0, -300.0])
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    R = np.vstack([xc, yc, zc]); tvec = (-R @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(R)
+
+    def proj(x_in, y_in, z_ft):
+        return cv2.projectPoints(np.array([[x_in, y_in, z_ft * P.IN_PER_FT]], float),
+                                 rvec, tvec, K, None)[0].reshape(2)
+
+    ls = LandmarkSet.template("SYNTH_POSECAL", (w, h))
+    for n in ("foul_l", "foul_r"):
+        ls.set_point(n, *proj(G.landmarks[n].x_in, 0.0, 0.0))
+    for i in (1, 2, 3, 4, 6, 7, 10):
+        ls.set_point(f"pin_{i}", *proj(G.landmarks[f"pin_{i}"].x_in, 0.0, G.landmarks[f"pin_{i}"].z_ft))
+    if add_arrows:
+        for b in (5, 15, 25, 35):
+            ls.set_point(f"arrow_{b}", *proj(x_in_for_board(b), 0.0, 14.0))
+    return ls, rvec, tvec, K
+
+
+def test_pose_calibrate_self_calibrates_and_gates_far():
+    """calibrate() self-calibrates the focal (no focal supplied), validates the near lane with held-out arrows,
+    and keeps the far lane gated OFF until independently validated (DEC-065)."""
+    from lanesight_core.cv.calib import pose as P
+    ls, rvec, tvec, K = _synthetic_pose_clip(f_true=1600.0)
+    cal = P.calibrate(ls)                           # no focal -> fitted
+    assert cal is not None and cal.focal_source == "fitted"
+    assert abs(cal.focal_px - 1600.0) < 80
+    assert cal.near_valid is True and cal.arrows_in_band == "4/4"
+    assert cal.far_valid is False and "unavailable" in cal.far_reason
+    assert cal.sensitivity_profile[0.0] < cal.sensitivity_profile[round(CANONICAL.z_impact_ft, 1)]
+
+
+def test_pose_plane_homography_reconstructs_near_and_far_is_gated():
+    """A pose induces the same lane-plane homography the reconstruction core expects, so reconstruct_near
+    recovers a known near board path; far metrics (entry/breakpoint) are forced unavailable."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    ls, rvec, tvec, K = _synthetic_pose_clip(f_true=1600.0)
+    cal = P.calibrate(ls, focal_px=1600.0)          # supply the true focal -> source 'given', exact geometry
+    assert cal.focal_source == "given"
+    # synthetic straight shot down board 20 (lane center), near lane only (Z 0.5..16 ft)
+    centers = []
+    for k, z in enumerate(np.arange(0.5, 16.0, 0.5)):
+        uv = cv2.projectPoints(np.array([[LANE_IN / 2, 0.0, z * P.IN_PER_FT]], float),
+                               rvec, tvec, K, None)[0].reshape(2)
+        centers.append((0.5 + k / 30.0, float(uv[0]), float(uv[1])))
+    r = P.reconstruct_near(cal, centers)
+    assert r["ok"] is True
+    assert abs(r["laydown_board"] - (CANONICAL.boards + 1) / 2) < 1.0    # ~board 20 (center)
+    assert r["entry_board"] is None and r["breakpoint_board"] is None    # far gated off
+    assert "unavailable" in r["far_unavailable_reason"]
+
+
 def test_near_field_homography_from_on_plane_fiducials():
     """Near-field calibration from foul + on-plane dots/arrows (coplanar, unlike pins). Recovers the near
     lane with low residual; this is the partial-results path."""

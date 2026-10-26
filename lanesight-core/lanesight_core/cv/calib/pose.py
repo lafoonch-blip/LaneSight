@@ -1,17 +1,28 @@
-"""Phase-1 follow-up prototype (Shayne 2026-10-26): does a full 3D camera POSE (solvePnP) recover the lane
-geometry where the single-plane homography failed? Phase 1 only tested a homography; the review warns a 2D
-warp isn't a 3D pose. This treats pins as 3D points (X lateral, Z downlane, Y height above the lane) so the
-foul line (Y=0) + pins (Y=pin_height) give real 3D structure.
+"""Pose-based lane geometry (DEC-065, Shayne 2026-10-26): a full 3D camera POSE (solvePnP) from foul+pins,
+self-calibrating the focal length from the labels so NO mandatory user calibration is required. Phase 1
+tested only a single-plane homography (degenerate here); §3.4/§3.6 of CV_PHASE1_VALIDATION_REPORT showed the
+pose recovers the near-to-mid lane once the focal is right.
 
-Honest caveats baked in:
-- iPhone intrinsics aren't confirmed post-trim (open decision #2), so K is a NOMINAL assumption; we report
-  sensitivity to the focal length and never claim accuracy we can't back.
-- Pins are small/far, so even a valid pose may leave the far lane ill-conditioned — that would be a property
-  of the camera POSITION, not the method, which is exactly the question. We measure it, not assert it.
+What this is used for:
+- `calibrate()` -> a `PoseCalibration` (pose + lane-plane homography + validity flags), the geometry a
+  pose-based reconstruction consumes. Self-calibrating: focal source is explicit > EXIF (hook) > FITTED.
+- `reconstruct_near()` -> near-lane ball metrics via the pose; far-lane metrics stay `unavailable` with a
+  reason until the far geometry AND real ball measurements pass validation (DEC-065; Phase-2 reference).
 
-Additive / off the production path. Units: all 3D in INCHES (Z = feet*12). Nothing here is ML.
+Honest caveats baked in (reported, never hidden):
+- The fitted focal is a per-clip FIT, trustworthy only when consistent across a camera's clips and
+  cross-validated against held-out fiducials; it is evidence the focal is calibratable, not a calibration.
+  Every pose-derived number carries its focal sensitivity.
+- Coplanar foul+pins give a planar-PnP sign ambiguity (recovered camera height can read negative); lane
+  coordinates are reproduced correctly but the pose sign is flagged, not asserted.
+- Far-lane (40-60 ft) has no independent held-out fiducial in this cohort, so `far_valid` stays False.
+
+Additive / off the production path (production CV frozen, DEC-062). Units: all 3D in INCHES (Z = feet*12).
+Nothing here is ML.
 """
 from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Optional
 import numpy as np
 import cv2
 
@@ -193,3 +204,160 @@ def pose_report(landmark_set, focal_px=None, pin_height_in=None):
                 cam_height_in=round(float(C[1]), 1), cam_standoff_ft=round(float(-C[2] / IN_PER_FT), 1),
                 cam_lateral_in=round(float(C[0]), 1),
                 entry_board_sensitivity_per_px=sens, focal_px=round(float(K[0, 0]), 1))
+
+
+# ---------------------------------------------------------------- pose-based calibration (DEC-065)
+NEAR_REPROJ_PX_MAX = 4.0       # pose reprojection over foul+pins (real clips: ~0.6-1.7 px)
+NEAR_SENS_BOARD_MAX = 1.5      # near conditioning: boards of error per pixel at the arrows (15 ft)
+ARROW_IN_BAND_MIN = 0.6        # when arrows are labeled, fraction that must land in their USBC band
+# Far-lane stays unavailable until BOTH the far geometry and real ball measurements pass a reference test.
+FAR_UNVALIDATED_REASON = ("far-lane geometry unvalidated — no independent held-out fiducial past 16 ft in "
+                          "this cohort; pending the Phase-2 mid-lane tape/cross-camera reference + a real "
+                          "ball-measurement test (DEC-065). Far metrics (entry/breakpoint/late speed) are "
+                          "reported `unavailable`, never estimated.")
+
+
+def plane_homography(rvec, tvec, K):
+    """Image <-> lane-plane (Y=0) homography induced by the camera pose, in the canonical (X inches, Z feet)
+    frame used by `ablation.reconstruct_from_homography`. A lane-plane point is [X_in, 0, Z_ft*12]; its
+    projection is a 3x3 homography with columns K@R[:,0] (per inch of X), K@R[:,2]*12 (per foot of Z), K@t.
+    Returns H_img_to_world (the inverse). Lets the tested reconstruction core run on a pose, unchanged."""
+    R, _ = cv2.Rodrigues(np.asarray(rvec, float))
+    t = np.asarray(tvec, float).reshape(3)
+    H_wi = K @ np.column_stack([R[:, 0], R[:, 2] * IN_PER_FT, t])
+    return np.linalg.inv(H_wi)
+
+
+@dataclass
+class PoseCalibration:
+    clip_id: str
+    focal_px: float
+    focal_source: str            # 'given' | 'exif' | 'fitted'
+    pin_height_in: float
+    reproj_px: float
+    cam_height_in: float
+    cam_standoff_ft: float
+    cam_lateral_in: float
+    cam_pitch_deg: float
+    rvec: np.ndarray
+    tvec: np.ndarray
+    K: np.ndarray
+    H_iw: np.ndarray             # image -> lane-plane (X in, Z ft) homography for reconstruction
+    near_valid: bool
+    near_reason: str
+    far_valid: bool
+    far_reason: str
+    sensitivity_profile: dict = field(default_factory=dict)      # {z_ft: board/px}
+    arrows_in_band: Optional[str] = None                         # "k/n" when arrows are labeled (held-out)
+    sign_caveat: bool = False    # recovered camera height negative (planar-PnP chirality) -> flagged
+
+    def to_dict(self):
+        return dict(clip_id=self.clip_id, focal_px=round(self.focal_px, 1), focal_source=self.focal_source,
+                    pin_height_in=self.pin_height_in, reproj_px=round(self.reproj_px, 2),
+                    cam_height_in=round(self.cam_height_in, 1), cam_standoff_ft=round(self.cam_standoff_ft, 1),
+                    cam_lateral_in=round(self.cam_lateral_in, 1), cam_pitch_deg=round(self.cam_pitch_deg, 1),
+                    near_valid=self.near_valid, near_reason=self.near_reason,
+                    far_valid=self.far_valid, far_reason=self.far_reason,
+                    sensitivity_profile={k: round(v, 3) for k, v in self.sensitivity_profile.items()},
+                    arrows_in_band=self.arrows_in_band, sign_caveat=self.sign_caveat)
+
+
+def sensitivity_profile(rvec, tvec, K, z_list_ft=(0.0, 7.0, 15.0, 40.0, None)):
+    """Board error per pixel of ball/landmark localization, probed down-lane at board-20 center. `None` in
+    the list means the entry reference (z_impact_ft). Shows WHERE the geometry is well-conditioned."""
+    out = {}
+    for z in z_list_ft:
+        zf = CANONICAL.z_impact_ft if z is None else z
+        world = np.array([[LANE_WIDTH_IN / 2.0, 0.0, zf * IN_PER_FT]])
+        uv0 = cv2.projectPoints(world, rvec, tvec, K, None)[0].reshape(2)
+        base = _ray_plane_board(rvec, tvec, K, uv0)
+        if base is None:
+            continue
+        dmax = 0.0
+        for du, dv in ((1, 0), (0, 1)):
+            bp = _ray_plane_board(rvec, tvec, K, uv0 + [du, dv])
+            if bp is not None:
+                dmax = max(dmax, abs((bp[0] - LANE_WIDTH_IN / 2.0) / LANE_WIDTH_IN * BOARDS))
+        out[round(zf, 1)] = float(dmax)
+    return out
+
+
+def calibrate(landmark_set, focal_px=None, focal_source=None):
+    """Pose-based lane calibration from verified foul+pins, self-calibrating the focal (fit from the labels)
+    unless one is supplied. Returns a `PoseCalibration` or None (too few anchors / solve failed).
+
+    focal_px: explicit focal (source 'given'); if None, fit it (`fit_focal`, source 'fitted'). An EXIF-derived
+    focal should be passed in with focal_source='exif'. No mandatory user calibration — the fitted focal is the
+    default path; its trustworthiness is reported via `sensitivity_profile` and (when arrows are labeled)
+    `arrows_in_band`."""
+    names, _, image = landmark_set.correspondences()
+    names = list(names)
+    if sum(1 for n in names if n.startswith("pin_")) < 4 or not any(n.startswith("foul_") for n in names):
+        return None
+    w, h = landmark_set.image_size
+    if focal_px is None:
+        fit = fit_focal(landmark_set)
+        if fit is None:
+            return None
+        focal_px, pin_h, reproj = fit["focal_px"], fit["pin_height_in"], fit["reproj_px"]
+        rvec, tvec = fit["rvec"], fit["tvec"]
+        focal_source = focal_source or "fitted"
+    else:
+        focal_source = focal_source or "given"
+        pin_h = fit_pin_height(landmark_set, focal_px)[0] or 0.0
+        K0 = nominal_K(w, h, focal_px)
+        r = _pnp(_object_points(names, pin_h), image, K0)
+        if r is None:
+            return None
+        rvec, tvec, reproj = r
+    K = nominal_K(w, h, focal_px)
+    R, _ = cv2.Rodrigues(rvec)
+    C = (-R.T @ tvec).ravel()
+    axis = R.T @ np.array([0.0, 0.0, 1.0])            # camera optical axis in world
+    horiz = float(np.hypot(axis[0], axis[2]))
+    pitch = float(np.degrees(np.arctan2(-axis[1], horiz))) if horiz > 1e-9 else 0.0
+    H_iw = plane_homography(rvec, tvec, K)
+    prof = sensitivity_profile(rvec, tvec, K)
+
+    # near-geometry validity: pose fits foul+pins tightly AND near conditioning is good. When arrows are
+    # labeled (validation clips), additionally require them to land in band — the independent held-out check.
+    s15 = prof.get(15.0)
+    xb = interval_backprojection(landmark_set, rvec, tvec, K).get("arrow")
+    arrows_str, arrows_ok = None, True
+    if xb and xb["n"]:
+        arrows_str = f"{xb['in_band']}/{xb['n']}"
+        arrows_ok = (xb["in_band"] / xb["n"]) >= ARROW_IN_BAND_MIN
+    why = []
+    if reproj > NEAR_REPROJ_PX_MAX:
+        why.append(f"pose reproj {round(reproj,2)} px > {NEAR_REPROJ_PX_MAX}")
+    if s15 is None or s15 > NEAR_SENS_BOARD_MAX:
+        why.append(f"near conditioning {s15} > {NEAR_SENS_BOARD_MAX} board/px")
+    if not arrows_ok:
+        why.append(f"held-out arrows only {arrows_str} in USBC band")
+    near_valid = not why
+
+    return PoseCalibration(
+        clip_id=landmark_set.clip_id, focal_px=float(focal_px), focal_source=focal_source,
+        pin_height_in=float(pin_h), reproj_px=float(reproj),
+        cam_height_in=float(C[1]), cam_standoff_ft=float(-C[2] / IN_PER_FT), cam_lateral_in=float(C[0]),
+        cam_pitch_deg=pitch, rvec=rvec, tvec=tvec, K=K, H_iw=H_iw,
+        near_valid=near_valid, near_reason=("ok" if near_valid else "; ".join(why)),
+        far_valid=False, far_reason=FAR_UNVALIDATED_REASON,
+        sensitivity_profile=prof, arrows_in_band=arrows_str, sign_caveat=bool(C[1] < 0))
+
+
+def reconstruct_near(cal, centers_img, geometry=CANONICAL):
+    """Reconstruct the ball track through the pose's lane-plane homography and return NEAR-lane metrics only.
+    Far-lane outputs (entry/breakpoint) are forced `unavailable` with `cal.far_reason` until validated
+    (DEC-065). Reuses the tested `ablation.reconstruct_from_homography` core (a pose induces exactly this
+    plane homography). Speed is intentionally not computed here — it needs reliable timing endpoints."""
+    from .ablation import reconstruct_from_homography
+    r = reconstruct_from_homography(cal.H_iw, centers_img, geometry)
+    if not r.get("ok"):
+        return r
+    for k in ("entry_board", "breakpoint_board", "breakpoint_ft"):
+        r[k] = None
+    r["far_unavailable_reason"] = cal.far_reason
+    r["near_valid"] = cal.near_valid
+    r["focal_source"] = cal.focal_source
+    return r

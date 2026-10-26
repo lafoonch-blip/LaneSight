@@ -1,14 +1,15 @@
 # CV Phase-1 Validation Report (geometry proof) — DEC-062
-Version: 1.1 (VERDICT + §3.6 corrections pending Shayne — fixed near-field run & calibrated-focal pose)
+Version: 1.2 (pose-based architecture ADOPTED — DEC-065; §3.6 + §5 added)
 Last Updated: 2026-10-26
-Status: Phase-1 gate CLEARED. FAR-lane verdict (§3.1–3.3) stands: far-lane measurement is NOT recoverable
-from the elevated ball-return camera position these clips used. **But §3.6 (2026-10-26) corrects §3.4 and
-§3.5 and needs Shayne's sign-off:** the near_field_homography partial-results path FAILS on the real labels
-(0/17 valid, reproj 16–2,600 boards — §3.5 over-read sensitivity-without-reprojection), while a
-calibrated-focal 3D pose DOES recover the near-to-mid (0–16 ft) lane (foul+pins <1.7 px; held-out arrows
-7/7 in band on 11/12 clips at a cohort-consistent ~1640 px focal — qualifying §3.4's "positional, not
-method"). Far-lane (40–60 ft) remains unproven either way. Capture-position recommendation unchanged; ML
-still frozen (DEC-062). Evidence §3; three-question answers §4.1; gate verdict §4.
+Status: Phase-1 gate CLEARED. **Pose-based geometry adopted (DEC-065, Shayne 2026-10-26).** Near-to-mid lane
+(0–16 ft) is RECOVERABLE and independently validated (held-out arrows in band 12/12; self-cal focal ~1640 px
+std 45; near board focal-robust to ≤0.2 board at ±10% focal) — ships as 🟡 partial without mandatory
+calibration. The §3.5 near_field_homography path FAILS on real labels (0/17, reproj 16–2,600 boards) and is
+replaced by the pose. FAR-lane (40–60 ft) stays `unavailable` — not estimated — until the Phase-2 mid-lane
+reference + a real ball-measurement test (the §3.4 "physical limit" sub-conclusion is amended → "unvalidated",
+not asserted; §3.1–3.3 far-degeneracy-of-the-homography evidence stands). Capture-position recommendation
+still shown for the ungated metrics; ML still frozen (DEC-062). Evidence §3/§3.6; architecture + validation
+status §5; three-question answers §4.1.
 
 Related: `03_ENGINEERING/CV_REARCHITECTURE_RESPONSE_2026-10-25.md` (plan), `CV_MEASUREMENT_DEFINITIONS.md`
 (score against these), `TRAINING_CLIPS_2026-10-25_pale_lanes.md` (the Run-A baseline narrative).
@@ -344,3 +345,54 @@ investment belongs.
 - Decide handling of IMG_8901 (re-stabilize vs exclude — find_lanes finds no wood; likely invalid input).
 
 **After the six clips are verified and B/C run, STOP at the §4 gate before expanding development** (Shayne).
+
+## 5. Pose-based architecture adopted (DEC-065) — validation status (2026-10-26)
+
+Per Shayne: proceed with the **pose-based geometry + independent validation**, keep the goal of accurate
+analysis from **ordinary phone videos without mandatory calibration**, and **do not promise far-lane metrics**
+until the new geometry *and* real ball measurements pass testing. This section records what is built and what
+is validated vs pending. Code: `cv/calib/pose.py` (`calibrate`, `plane_homography`, `reconstruct_near`,
+`fit_focal`, `interval_backprojection`) and `cv/calib/validate_pose.py`. Additive; production CV frozen
+(DEC-062); no ML.
+
+**Architecture.** `pose.calibrate(landmark_set)` solves a 3D camera pose from foul+pins and **self-calibrates
+the focal** (fit from the labels; source pluggable explicit > EXIF > fitted — no checkerboard required). It
+returns a `PoseCalibration` with the induced **image↔lane-plane homography**, so the existing tested
+reconstruction core (`ablation.reconstruct_from_homography`) runs on a pose unchanged. `reconstruct_near`
+returns near-lane metrics and forces far-lane outputs `unavailable` with a reason.
+
+**Independent validation on the 17-clip cohort** (`validate_pose.py`, run at the session-median focal):
+
+| signal | result | reading |
+|---|---|---|
+| self-calibration focal | median **1640 px**, range 1505–1675, **std 45** (n=12) | a consistent lens constant → calibratable without mandatory user calibration |
+| pose reprojection (foul+pins) | **< 1.8 px** every clip | the pose fits the exact anchors tightly |
+| **near geometry — held-out arrows in USBC 12–16 ft band** | **12/12 clips** | independent check (arrows are NOT in the solve) → near-lane *position* is recovered |
+| near conditioning (board/px) | 0.17 @0 ft · 0.22 @7 ft · 0.27 @15 ft | well-conditioned through the arrows |
+| focal sensitivity of a near **board** reading, ±10 % focal | **≤ 0.2 board** | near lateral-board metrics are focal-robust → no mandatory calibration needed for them |
+| far lane (40–60 ft) | **UNVALIDATED** | no independent held-out fiducial past 16 ft; **not reported** |
+
+**What this validates (ships as 🟡 partial):** near-lane **lateral board** metrics — laydown board, board @ 7 ft,
+arrows board — and launch angle, plus all form metrics (no lane calibration). These passed an independent
+held-out check on 12/12 clips and are robust to the self-calibrated focal.
+
+**What stays gated (`unavailable`, never estimated):**
+- **Near speed / any depth-dependent near metric:** the lateral board is scale-invariant but *depth* (hence
+  speed) scales with focal, so near speed carries focal uncertainty — report the band or use an EXIF/known
+  focal; do not ship a bare number yet.
+- **All far-lane metrics (entry board/angle, breakpoint, late/full-lane speed):** gated until the Phase-2
+  mid-lane tape / cross-camera reference confirms the far geometry **and** a real tracked ball reproduces a
+  known far position within tolerance (`CV_PHASE2_CAMERA_VALIDATION_PROTOCOL`).
+
+**Honest caveats (reported in code, not hidden):** the focal is a *fit* (consistency across clips is strong
+evidence it is a real constant, but a one-time EXIF/known-object confirmation removes the last assumption); the
+coplanar foul+pins give a planar-PnP sign ambiguity so the recovered camera height can read negative
+(`sign_caveat` — lane coordinates are still correct); and real-ball near reconstruction across the cohort is
+pending usable tracks (the production tracker fails lane-detection on this elevated framing — a separate
+issue), so near geometry is validated via the arrows, which are real painted features on the ball's plane and
+region, with the centroid-precision floor from `resolution.py` (§0.1).
+
+**Next (to lift the far-lane gate):** record the Phase-2 positions with removable tape at known boards/distances
+(and/or a synchronized second camera), run `validate_pose.py` + `reconstruct_near`/far against that reference,
+and only then promote far-lane metrics from `unavailable` to measured. Until then the app shows the near set
+and a capture note for the rest.

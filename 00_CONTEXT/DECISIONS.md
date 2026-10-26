@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.29  
+Version: 1.30  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.28
+Supersedes: v1.29
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -661,7 +661,7 @@ Other rules:
 
 **Why:** The 17 pale-lane training clips (3/17 analysable) exposed that metrics are only reliable from a narrow framing. Root cause is a 4-point homography whose far anchor is the ball itself (circular), zero real downlane depth anchors, and difference-based detection that loses the back-half ball — not a tuning problem. An honest geometry-proof ablation is the cheapest way to know whether correct geometry alone fixes it before spending on annotation/training.
 **Date:** 2026-10-25
-**Status:** ACCEPTED (supersedes GUARDRAILS workstream A). Phase-1 harness landed; ablation pending ground-truth labeling.
+**Status:** ACCEPTED (supersedes GUARDRAILS workstream A). Phase-1 harness + ablation done. **Phase-1 outcome amended by DEC-065** (pose-based geometry: near recoverable, far re-opened as unvalidated) — the spine (geometry-first, decoupled from the ball, solve from real fiducials) stands.
 **Supersedes:** GUARDRAILS 3.7 workstream A (far-lane calibration)
 
 ### DEC-063 — Staged test accounts for dev build and testing
@@ -688,6 +688,39 @@ Other rules:
 **Date:** 2026-10-26
 **Status:** ACCEPTED (definitions; production implementation deferred under DEC-062 freeze)
 **Supersedes:** refines DEC-036 (speed) and the entry-metric conventions; no decision withdrawn
+
+### DEC-065 — Pose-based, self-calibrating lane geometry; near-field partial results, far-lane gated
+**Decision (Shayne, 2026-10-26):** adopt a **3D camera pose (solvePnP from foul + pin spots)** as the lane
+geometry solver, replacing the degenerate single-plane homography the Phase-1 verdict tested. It is
+**self-calibrating**: the focal length is fit from the lane labels (no mandatory user/checkerboard
+calibration), with the focal source pluggable (explicit > EXIF > fitted) and its sensitivity always reported.
+- **Goal preserved:** accurate analysis from **ordinary phone videos without mandatory calibration**. The
+  fitted focal is validated as a usable lens constant per clip/session, not assumed.
+- **Near-field partial results are ON now** where the geometry validates: laydown board, board @ 7 ft, arrows
+  board, launch angle (+ all form). These are the 🟡 path — never reject a whole video.
+- **Far-lane metrics stay `unavailable`** (entry board/angle, breakpoint, late/full-lane speed) — *not*
+  estimated — **until BOTH the new geometry AND real ball measurements pass a reference test** (Phase-2
+  mid-lane tape / cross-camera reference; `CV_PHASE2_CAMERA_VALIDATION_PROTOCOL`). No far-lane promise ships
+  before that.
+- **Validation status (independent, on the 17-clip cohort, `cv/calib/validate_pose.py`):** self-cal focal is
+  consistent (median 1640 px, std 45, n=12 — calibratable); the pose reprojects foul+pins < 1.8 px; the
+  **held-out arrows land in their USBC 12–16 ft band on 12/12 clips** (an independent check — arrows are not
+  used in the solve); a ±10 % focal error moves a near **board** reading by ≤ 0.2 board (so near lateral-board
+  metrics need no mandatory calibration). Near **speed** depends on the depth scale and carries focal
+  uncertainty — use EXIF/known focal or report the band. Far lane: UNVALIDATED (no held-out fiducial past
+  16 ft). Evidence: `CV_PHASE1_VALIDATION_REPORT` §3.6 + §5.
+- **Still not ML; production CV still frozen (DEC-062).** This is geometry-first, exactly DEC-062's spine; the
+  Phase-1 "physical limit" sub-conclusion (report §3.4/§4) is **amended** — the near-to-mid lane is
+  recoverable with the correct model + intrinsics; the far-lane limit is re-opened as "unvalidated", pending
+  the Phase-2 reference, not asserted as physical.
+
+**Why:** the fixed near-field run showed the §3.5 near-homography fails on real labels (0/17, reproj
+16–2,600 boards), while the calibrated-focal pose recovers the near-to-mid lane and cross-validates against
+held-out arrows. Accuracy-over-coverage: ship the validated near set, gate the unproven far set.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (near path validated on cohort; far path gated pending Phase-2 reference + ball test)
+**Supersedes:** amends DEC-062's Phase-1 outcome (near recoverable; far re-opened as unvalidated). Consistent
+with DEC-062's geometry-first spine; no decision withdrawn.
 
 ## Superseded decisions
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
