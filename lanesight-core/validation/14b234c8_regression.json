@@ -1,0 +1,35 @@
+{
+  "_doc": "Regression case for SHOT_REVIEW 2026-10-25 / GUARDRAILS 3.7 workstream A (far-lane calibration).",
+  "_rule": "Videos never go in the repo; this is the expectation sheet. The clip lives on the Mac.",
+  "clip": "~/LaneSightData/out/14b234c874cf4c34afb5865ea50d6be5_trim.mov",
+  "shot_id": "14b234c8-74cf-4c34-afb5-865ea50d6be5",
+  "camera": "close, low, left of the bowler's line; portrait 1080x1920 @120fps — outside standard S1 framing",
+  "ground_truth": {
+    "entry_board_range": [16, 19.5],
+    "entry": "pocket",
+    "result": "strike (deck clear by ~7.5 s)",
+    "speed_late_lt_speed_early": true,
+    "breakpoint": "ball near the right edge"
+  },
+  "pre_fix_wrong_output": {
+    "entry_board": 10.5,
+    "speed_early": 15.8,
+    "speed_late": 19.4,
+    "breakpoint_board": 2.0,
+    "advice": "Move right 8 (feet 12, arrows 6, breakpoint 0)"
+  },
+  "current_guardrail_behavior_after_BCD": {
+    "capture_quality.far_lane": "limited (with a camera-spot reason)",
+    "far_lane_metrics_status": "low_confidence (speed_late, entry_board/angle, breakpoint board/distance, entry_angle_52_55)",
+    "speed_release_status": "best_effort",
+    "insights.state": "no_reliable_data (no confident move)",
+    "pins": "strike — recovered by reading the clear settled deck (workstream D)"
+  },
+  "A_acceptance": {
+    "entry_board_range": [16, 19.5],
+    "speed_late_lt_speed_early": true,
+    "deterministic": "same frames -> same numbers across runs (14b234c8 currently drifts: loft 0.97 vs 1.16)",
+    "no_regression": "IMG_8751-8754 no worse than today vs Ruby (validation/IMG_875x_ruby.json)",
+    "once_A_lands": "far_lane should read 'ok' and the state should become strike_repeat (pins already read strike)"
+  }
+}
