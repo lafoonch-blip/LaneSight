@@ -222,6 +222,16 @@ def test_uncertainty_attribution_runs_and_ranks():
     assert r["dominant"] in ("landmark_placement", "ball_center", "calibration_conditioning")
 
 
+def test_geometry_meta_anchors_vs_intervals():
+    """The browser/cv2 tools split exact anchors (foul + pins) from interval checks (arrows/dots)."""
+    from lanesight_core.cv.calib.label_server import _geometry_meta
+    m = _geometry_meta()
+    assert set(m["anchors"]) == {"foul_l", "foul_r", *(f"pin_{i}" for i in range(1, 11))}
+    assert "arrow_20" in m["intervals"] and "approach_dot_20" in m["intervals"]
+    assert "foul_l" not in m["intervals"]            # anchors are never interval checks
+    assert len(m["arm_order"]) == len(set(m["arm_order"]))   # no dupes in the cycle order
+
+
 def test_resolution_scale_invariant_bounds():
     """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
     from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT

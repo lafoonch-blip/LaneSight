@@ -64,10 +64,12 @@ thus over-states the pin-area ball size — we do not claim per-clip resolvabili
   approach dots, all marked **`suggested` (UNVERIFIED)** with source + confidence. Ran on all 17:
   **15/17 got foul suggestions** (8895 also an approach dot); **8900/8901/8908 produced none** (find_lanes
   fails — foul off-frame / no saturated wood), which is itself the signal those need manual foul labeling.
-- **Verification tool** (`cv/calib/label_tool.py`): local cv2-HighGUI app — zoom/pan, accept/drag/reject/add,
-  mark not-visible/ambiguous, saves the schema JSON, navigates clips. Safeguards enforced: original-pixel
-  storage, verified-only calibration, merge never clobbers verified, suggested (amber) vs verified (green)
-  distinct. Run: `python -m lanesight_core.cv.calib.label_tool "<…>/calib_landmarks" --autofill`.
+- **Verification tool — two front-ends, same schema + safeguards** (original-pixel storage, verified-only
+  calibration, merge never clobbers verified, suggested amber vs verified green):
+  - **Browser (recommended, reliable):** `python -m lanesight_core.cv.calib.label_server "<…>/calib_landmarks"
+    --autofill` → open `http://localhost:8765/` in Chrome. Stdlib http.server; renders everywhere. (opencv
+    5.0.0's cv2 Cocoa window is unreliable on macOS — the browser tool is the dependable path.)
+  - **cv2 (fallback):** `python -m lanesight_core.cv.calib.label_tool "<…>/calib_landmarks" --autofill`.
 - Suggestions written into each `calib_landmarks/<clip>.landmarks.json` (merged over the templates; no
   verified work exists yet to clobber).
 

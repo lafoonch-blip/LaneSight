@@ -234,8 +234,23 @@ class LabelEditor:
     def run(self):
         import cv2
         name = "LaneSight landmark labeler"
-        cv2.namedWindow(name, cv2.WINDOW_AUTOSIZE)
+        try:
+            cv2.startWindowThread()
+        except Exception:
+            pass
+        cv2.namedWindow(name, cv2.WINDOW_NORMAL)        # NORMAL is more reliable than AUTOSIZE on macOS
+        cv2.resizeWindow(name, self.win_w, self.win_h)
+        cv2.moveWindow(name, 60, 40)
         cv2.setMouseCallback(name, self.on_mouse)
+        # bring to front once (macOS often opens the window behind the terminal)
+        try:
+            cv2.setWindowProperty(name, cv2.WND_PROP_TOPMOST, 1)
+            cv2.imshow(name, self.render()); cv2.waitKey(1)
+            cv2.setWindowProperty(name, cv2.WND_PROP_TOPMOST, 0)
+        except Exception:
+            pass
+        print("cv2 window opening — if you don't see it, check behind the terminal / Mission Control, or use")
+        print("the browser tool instead:  python -m lanesight_core.cv.calib.label_server <dir> --autofill")
         print(__doc__)
         while True:
             cv2.imshow(name, self.render())
