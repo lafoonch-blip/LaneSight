@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.30  
+Version: 1.33  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.29
+Supersedes: v1.32
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -380,7 +380,7 @@ Form Analysis roadmap: approach duration/step count/cadence, footwork/drift/slid
 **Decision:** Performance Lab offers three top-level paths: Start Live Session, Upload Video to Analyze, and Compare to a PBA Pro. The third tile is visible but **disabled / Coming Soon during MVP**. No PBA comparison engine, catalog, video reuse license, or pro stats are required for MVP. After MVP, enable comparison only with authorized pro footage/data, validated camera-angle-sensitive form metrics, metric provenance/quality, and explicit non-comparable/unavailable states. Show side-by-side synchronized video and approach/timing differences when validated; speed/revs optional where comparable data exists. A pro profile is a reference, not a universal ideal, performance baseline, coach-prescribed target, or LaneSight Score input. **Do not edit Figma now**; review standalone image mockups first.
 **Why:** Demonstrates the future product story without delaying validated core shot and form analysis or promising rights we don't own.
 **Date:** 2026-10-19
-**Status:** ACCEPTED PRODUCT DIRECTION; MVP tile only, comparison post-MVP.
+**Status:** ACCEPTED PRODUCT DIRECTION; comparison post-MVP. The MVP tile is PARTIALLY SUPERSEDED by DEC-069 (hidden for now).
 **Supersedes:** any prior implication that full pro comparison is MVP.
 
 ### DEC-043 — Performance/reliability SLOs are target state; upload is MVP; one analysis at a time; cost caps bound performance work
@@ -494,7 +494,7 @@ Other rules:
 
 **Why:** No center score data; pinfall isn't a focus for this pass.
 **Date:** 2026-10-22
-**Status:** ACCEPTED (dev build)
+**Status:** PARTIALLY SUPERSEDED by DEC-066 (strike / not-strike per throw is in scope)
 **Supersedes:** —
 
 ### DEC-051 — Score tiers, achievements and display
@@ -722,6 +722,80 @@ held-out arrows. Accuracy-over-coverage: ship the validated near set, gate the u
 **Supersedes:** amends DEC-062's Phase-1 outcome (near recoverable; far re-opened as unvalidated). Consistent
 with DEC-062's geometry-first spine; no decision withdrawn.
 
+### DEC-066 — Strike / not-strike per throw; no game scores
+**Decision (Shayne, 2026-10-26):**
+- Each recorded throw records whether it was a **strike or not**, read from video **when the pins are visible**.
+- No game scores, frames, series, spares, leaves or pin-by-pin results are tracked.
+- When the pins aren't visible or can't be read, the result is "not read" — never guessed (DEC-026). The DEC-061 next-shot states still apply.
+- Applies to the dev build and the target-state (Figma) designs.
+
+**Why:** A strike is the clearest outcome of a throw and is useful without center score data; full pinfall and game scoring aren't needed yet.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (dev build and target state)
+**Supersedes:** DEC-050 in part (strike result per throw is now in scope; the rest of DEC-050 stands). Target-state Figma pinfall screens (Spares stats, pin-leave entry) are out of MVP.
+
+### DEC-067 — Live session setup: practice only, no lane picker, no target for Form Analysis
+**Decision (Shayne, 2026-10-26):**
+- **No session-type choice.** MVP Lab sessions are practice only, so Setup doesn't ask for Practice / League / Tournament.
+- **No lane picker** anywhere (Setup, Active Session, Shot card, summaries).
+- **Form Analysis has no target line.** The optional target (feet / arrows / breakpoint) shows only for Shot Analysis.
+- The **Leagues and Tournaments tabs** stay in the bottom nav, disabled (dimmed, not tappable, no label), per DEC-055.
+- Applies to the dev build and the target-state (Figma) designs.
+
+**Why:** Only practice exists in MVP; the lane number added a step with no metric value; a target line means nothing for a form clip.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (dev build and target state)
+**Supersedes:** the Figma Setup Session type chips and "Lane" row; the dev build 2.0 lane-picker removal is now recorded as a decision.
+
+### DEC-068 — Analysis is a blocking modal and keeps the screen awake
+**Decision (Shayne, 2026-10-26):**
+- While a clip is trimming, uploading or analyzing, the app shows a **modal overlay with the analyzing animation and progress** that **blocks all input** behind it. Nothing can be changed during analysis (for example the analysis type, target, ball or oil pattern).
+- While analysis is running, the **phone does not sleep and the screen stays on** (idle timer disabled for the duration; restored when it finishes, fails or is cancelled).
+- The modal's failure state offers the existing next steps (4c), and closes only on result, failure or an explicit cancel.
+- Applies to the dev build and the target-state (Figma) designs.
+
+**Why:** In the dev build the analysis type could be changed while a video was analyzing, which can corrupt or mislabel the result; sleep during analysis interrupts the job.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (dev build and target state)
+**Supersedes:** the non-blocking Analyzing screen (4b) behavior.
+
+### DEC-069 — Lab starts with the analysis mode, then live or upload; PBA compare hidden for now
+**Decision (Shayne, 2026-10-26):**
+- The Lab tab starts with the **analysis mode**: the bowler picks **Shot Analysis** or **Form Analysis**.
+- A sheet then asks **Live session** or **Upload video**.
+  - Live session → session setup → camera. Setup no longer has a mode toggle (the mode was already chosen).
+  - Upload video → pick a clip → analysis; still a standalone upload under Lab › Uploads (DEC-055).
+- The separate **Upload Video** and **Compare to a PBA Pro** tiles are removed from Lab. Pro comparison is hidden entirely for now (not shown as a disabled tile) and can return later.
+- Applies to the dev build and the target-state (Figma) designs.
+
+**Why:** One clear starting choice (what to analyze), then how to capture it, instead of three parallel entry points.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (dev build and target state)
+**Supersedes:** DEC-042 in part (the disabled "Compare to a PBA Pro" tile is no longer shown in MVP; post-MVP direction unchanged); the Lab entry tiles in Dev Build v0 designs ≤3.7.
+
+### DEC-070 — No sensor features in MVP; sensor designs parked for a future partnership
+**Decision (Shayne, 2026-10-26):**
+- The MVP app has **no sensor references**: no per-shot "Was a sensor in the ball?" question, no sensor picker, no sensor list in Profile or Settings, and no sensor-vs-video variance.
+- The **dev build keeps** the per-shot sensor question. It exists only so Shayne can compare video metrics with his own sensor; it is not a user feature.
+- The sensor designs are **parked** in Figma (section "Parked · Sensor partnership (post-MVP)") for a possible sensor partnership later. Bringing them back needs a new DEC.
+- Applies to the target-state (MVP) designs.
+
+**Why:** Sensor references were a validation aid for the owner, not something MVP bowlers need.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (MVP / target state; dev build unchanged)
+**Supersedes:** DEC-021 and DEC-049's sensor question for MVP (both remain valid for the dev build and as post-MVP direction); memory/scope note "optional sensor pairing in MVP".
+
+### DEC-071 — The target line is edited only at session setup and on the session screen
+**Decision (Shayne, 2026-10-26):**
+- The bowler sets the target line (feet / arrows / breakpoint) at **session setup** and can change it on the **Active Session** screen.
+- The **camera (Record) screen has no target controls**: no target chip and no "Edit target" sheet. It keeps the current-ball chip and the advisory spot-check tip.
+- Applies to the target-state (MVP) designs. The dev build follows when its designs are next updated.
+
+**Why:** Fewer controls on the camera screen; the target rarely changes between shots and the session screen is one tap away.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Supersedes:** the capture-screen target chip and Edit-target sheet (Dev Build v0 designs 2.0 / 4a) for target state.
+
 ## Superseded decisions
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).
@@ -735,3 +809,6 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-030 — release-speed headline superseded by DEC-036 (60 ft average, after far-lane track recovery); release kept as the secondary `speed_release`.
 - DEC-035 — "importing clips from Photos is post-MVP" superseded by DEC-043 (Upload Video to Analyze is MVP).
 - DEC-033 / DEC-035 — the capture framing gate is superseded **for the dev build** by DEC-045 (an advisory spot check replaces the blocking gate); the gate remains the plan for later builds unless a further DEC changes it.
+- DEC-050 — "no strike" superseded by DEC-066 (strike / not-strike per throw); no game scores, spares or leaves still stands.
+- DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
+- DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
