@@ -1,7 +1,7 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.10  
-Last Updated: 2026-10-25  
+Version: 3.11  
+Last Updated: 2026-10-26  
 Owner: Shayne  
 Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
@@ -239,3 +239,19 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 - [ ] **PBA-03 (POST-MVP):** optional verified compatible speed/rev comparison; separate pro reference from personal/coach baseline and LaneSight Score.
 - [ ] **OPS-01 (MVP instrumentation):** capture-to-feedback timestamps, analysis p50/p95/p99, valid metric yield, failure reasons, job trace, upload retry and compute/storage cost per 1,000 shots. Targets in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md` are **target state** (DEC-043): measured and reported in dev/beta, not enforced. Cost per 1,000 shots is reported against the DEC-043 caps. First slice: p50/p95/p99 per pipeline step from `examples/eval_session.py` over the live-session clips (no new infrastructure).
 - **Design instruction:** no Figma updates until image mockup review and approval; concept images are illustrative only.
+
+## MVP design handoff work items — 2026-10-26 (DEC-075–082)
+Detail and acceptance criteria: `03_ENGINEERING/MVP_HANDOFF.md` §3. Designs: Figma "Target state – v3.7" (`02_DESIGN/target_state/README.md`).
+- [ ] **MVP-01** key-position frame capture during Form analysis
+- [ ] **MVP-02** pose landmarks stored per key frame; client-drawn skeleton (confident joints only)
+- [ ] **MVP-03** camera-view detection (side / rear / front) and metric availability by view
+- [ ] **MVP-04** one key measurement per key position
+- [ ] **MVP-05** provisional MVP LaneSight Score (DEC-077) with eligibility progress
+- [ ] **MVP-06** recommendation `why` + `expected` text
+- [ ] **MVP-07** "vs your typical" session comparison
+- [ ] **MVP-08** per-metric detail endpoint (avg, spread, range, coverage, trend, by ball, by pattern)
+- [ ] **MVP-09** last-used setup prefill
+- [ ] **MVP-10** upload kept on phone with automatic and manual retry
+- [ ] **MVP-11** Analyzing screen: keep awake, lock clip settings, auto-open results (DEC-068/080)
+- [ ] **MVP-12** Home "next focus"
+- [ ] **MVP-13** first-use states and camera permission screens

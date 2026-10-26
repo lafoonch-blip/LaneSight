@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.42  
+Version: 1.43  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.41
+Supersedes: v1.42
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -825,7 +825,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** ChatGPT's metric-hierarchy review (2026-10-26), adjusted to existing decisions; keeps each screen focused while the stored data stays complete.
 **Date:** 2026-10-26
-**Status:** ACCEPTED (target state); spec v0.1 is a draft for review
+**Status:** ACCEPTED (target state); spec approved as v1.0 on 2026-10-26
 **Supersedes:** the Score / Throw / Form tab set (Dev Build v0 designs 3.7) for target state.
 
 ### DEC-074 — Grip (pitch, span) and PAP belong to the bowler profile, not the ball
@@ -843,7 +843,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Decision (Shayne, 2026-10-26):**
 - The Key positions row on Form results (ball start, end of pushaway, top of swing, release) shows **frames taken from that delivery's video** at the detected event times. Tapping one opens that frame. No stock or illustrated poses.
 - Upload clip thumbnails are a frame from the uploaded clip.
-- Design default (not yet reviewed): if an event isn't detected, its tile shows the event name with "Not detected" instead of a frame.
+- Design detail (approved by Shayne 2026-10-26): if an event isn't detected, its tile shows the event name with "Not detected" instead of a frame.
 - Marketing imagery stays separate: the Shot and Form Analysis card images are LaneSight-generated and kept; the Welcome hero keeps its composition and will be replaced with an AI-generated image of Shayne (asset to come).
 
 **Why:** The thumbnails are evidence for the timing call; they must show the bowler's actual body position in that delivery.
@@ -856,7 +856,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - Form results show the detected view in the header (e.g. "rear view (detected)").
 - The Key positions thumbnails (DEC-075) are frames from that clip, so they show the bowler from the detected view.
 - The metric set follows the view (FORM_ANALYSIS_SPEC §5.1). Metrics the view can't see show UNAVAILABLE with the view they need (e.g. "Side view"), never a number.
-- Design defaults (not yet reviewed): if detection is unsure, the result shows the best guess and the bowler can correct the view on the results screen; the rear-view example screen measures drift and balance arm (best effort) and marks spine tilt and foul-line distance as needing a side view, with steps best effort.
+- Design details (approved by Shayne 2026-10-26): if detection is unsure, the result shows the best guess and the bowler can correct the view on the results screen; the rear-view example screen measures drift and balance arm (best effort) and marks spine tilt and foul-line distance as needing a side view, with steps best effort.
 
 **Why:** One recording supports one view (DEC-040). Showing the wrong pose angle or a metric the camera can't see would undermine trust in the timing call.
 **Date:** 2026-10-26
@@ -924,7 +924,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - **Live Form flow** (mirrors DEC-080): Setup → Record delivery → Analyzing screen → Form results → **Record next delivery** or **close** to the Form session → End session → Form session summary.
 - **Metric detail screens** follow the Speed template: average, spread, range, coverage, trend by session, by ball and by oil pattern, with small samples labeled.
 - **First-use and permission screens** are part of the MVP designs.
-- Design defaults (not yet reviewed): camera access is explained before the iOS prompt, with a denied state that offers Open Settings or uploading a video; there is no Photos permission screen because the iOS video picker needs none; new users see "Building your LaneSight Score" on Home and Stats and empty Lab lists.
+- Design details (approved by Shayne 2026-10-26): camera access is explained before the iOS prompt, with a denied state that offers Open Settings or uploading a video; there is no Photos permission screen because the iOS video picker needs none; new users see "Building your LaneSight Score" on Home and Stats and empty Lab lists.
 
 **Why:** Ball and oil don't affect body mechanics; the live Form loop should match the Shot loop so bowlers see each delivery's result before the next.
 **Date:** 2026-10-26
@@ -935,7 +935,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - **No full video playback** on Form results in MVP.
 - During analysis the app **captures a thumbnail at each key moment** (ball start, end of pushaway, top of swing, release) from the bowler's clip (DEC-075), in the detected view (DEC-076).
 - Each thumbnail can carry a **line-skeleton overlay** showing the pose, plus the one measurement or angle that matters at that moment (e.g. spine tilt at release from the side, shoulder tilt at release from behind).
-- Design defaults (not yet reviewed): tapping a thumbnail opens the full frame with the skeleton, the measured angle drawn against a vertical reference, and the measurements available at that position; only joints detected with confidence are drawn; when pose confidence is too low the thumbnail shows no overlay and says so; overlays are drawn by the app from stored landmarks, not burned into the image.
+- Design details (approved by Shayne 2026-10-26): tapping a thumbnail opens the full frame with the skeleton, the measured angle drawn against a vertical reference, and the measurements available at that position; only joints detected with confidence are drawn; when pose confidence is too low the thumbnail shows no overlay and says so; overlays are drawn by the app from stored landmarks, not burned into the image.
 
 **Why:** Thumbnails plus measured angles give the coaching value of playback at much lower cost and scope (DEC-035 kept replay post-MVP).
 **Date:** 2026-10-26

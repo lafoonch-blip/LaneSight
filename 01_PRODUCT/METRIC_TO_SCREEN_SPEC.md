@@ -1,5 +1,5 @@
 # Metric-to-Screen Spec (MVP target state)
-Status: DRAFT for review · Version: 0.2 · Last Updated: 2026-10-26 · Owner: Shayne
+Status: APPROVED (Shayne, 2026-10-26) · Version: 1.0 · Last Updated: 2026-10-26 · Owner: Shayne
 Decisions: DEC-073 (this hierarchy), DEC-061 (status chips, moves), DEC-066 (strike only), DEC-070 (no sensors), DEC-072 (session end).
 
 ## Rules
@@ -56,7 +56,7 @@ P = primary (always visible) · S = secondary (expanded or lower on the screen) 
 ## Not in MVP
 Carry, game scores, spares, leaves (DEC-066) · sensor metrics and variance (DEC-070) · knee flexion · shot↔form "intelligence layer" (post-MVP, worded as association, not cause) · Session Score · Form score.
 
-## Updates in v0.2 (DEC-076, DEC-077, DEC-079, DEC-080, DEC-081)
+## Updates in v0.2 (approved in v1.0) (DEC-076, DEC-077, DEC-079, DEC-080, DEC-081)
 - **Shot flow (DEC-080):** stop recording → Analyzing screen → Shot card. The Shot card offers Close (to Active Session) or Record next shot.
 - **Active Session (DEC-079):** latest shot first (lane picture with pin result, target, pocket entry and lane reaction labeled separately; recap and next shot), then Speed · Rev rate · Accuracy · Consistency, target line, and collapsed Shot history and Lane transition. The second ring row moved to Stats.
 - **Recommendations:** move → Why (evidence) → Expected effect.
