@@ -1,5 +1,5 @@
 # MVP Engineering Review — concerns before the rebuild
-Status: FOR SHAYNE · Version: 1.0 · Last Updated: 2026-10-26 · Owner: Claude Code
+Status: FOR SHAYNE · Version: 1.1 · Last Updated: 2026-10-26 · Owner: Claude Code
 Scope: the target-state v3.7 designs + MVP_HANDOFF v1.0 vetted against the **actual** backend on `dev-build-v0`
 (Cloud Run + Supabase, as deployed 2026-10-26). Purpose: surface risks/gaps before any code is written.
 Not a plan — a risk list. Per-phase plans come after you've reacted to this.
@@ -123,3 +123,36 @@ From MVP_HANDOFF §5 (restated) + surfaced here:
 3. Build the **new read-endpoints + response fields** (C6) on the existing engines; verify eligibility/expected.
 4. Decide durable-jobs scope (C4) — at least make live-shot retries idempotent to avoid duplicates.
 5. Then the screen rebuild from Figma, with C7 (concurrency) revisited when more than one tester is live.
+
+## 5. Progress + new findings (2026-10-26, from executing the above)
+Done and validated on Cloud Run (rev 00005):
+- **C3a avatars → Storage** — PUT/GET/DELETE use the private `shot-images` bucket; round-trip validated on live
+  Storage. (commit 4fedaf8)
+- **C2 Form in the cloud** — image builds with mediapipe + the sha-pinned heavy pose model; needed two Linux
+  libs the first build missed (`libgl1`, then `libegl1`+`libgles2` — mediapipe opens an EGL/GLES context even on
+  CPU; found via an end-to-end cloud failure). Form clip analyzed in the cloud: 126 s on 4 vCPU, 11 metrics,
+  4 key frames. Peak RAM locally 1.62 GB (4 GiB fine). (commits a325753, b924c7c)
+- **C3b key-position frames → Storage** — uploaded after analysis; GET /shots/{id}/frame/{key} serves from
+  Storage; all 4 frames returned HTTP 200 in the cloud. (a325753)
+- **C4 partial — live-shot retry idempotency** — content-hash dedup extended to live shots (session-scoped);
+  committed, not yet deployed (no retrying client until the iOS rebuild). (53ce9b3)
+- **C1 capture guidance** — drafted (`02_RESEARCH/MVP_CAPTURE_GUIDANCE.md`); pending field validation.
+
+Corrections / new findings:
+- **C6 eligibility ALREADY EXISTS.** `/me/score` already returns `eligibility` {part:{have,need,met}} live — the
+  review listed it as new. The remaining C6 endpoints (`/me/last-setup`, `/me/focus`, `/me/stats/metric/{m}`,
+  `/sessions/{id}/summary`+typical, `insights.expected`, structured `key_positions[]`) are genuinely new and are
+  **best built against the Figma contract** (exact per-screen fields), i.e. with the rebuild — not speculatively.
+- **C9 — NEW DECISION: Supabase free tier caps Storage uploads at ~50 MB per file.** A 43 MB clip uploads; 61 MB
+  (a full 120 fps Form clip) is rejected (413 EntityTooLarge) regardless of the bucket's own limit. So full-size
+  clips — especially Form (120 fps) and untrimmed Shot — can't upload on the free plan. Options: (a) **trim/
+  compress on-device before upload** (free; aligns with the trimming goal; a trimmed delivery fits easily — a
+  tight ~11 s Form trim was 23 MB); (b) resumable/TUS upload (verify it bypasses the free cap); (c) Supabase Pro
+  (~$25/mo, 50 GB). Recommend (a). This gates whether large clips work at the bowling center.
+- **MVP-03 view classifier not auto-detecting.** Form on the canonical side clip (IMG_8905) returns
+  `view=unknown`, so view-specific metric gating can't apply. The pose pipeline still produced 11 metrics; view
+  detection is its own MVP-03 work item.
+- **Follow-up (pre-existing): dedup can return a FAILED shot.** `find_upload_by_hash`/`find_shot_by_hash` match any
+  shot with the content hash, including one whose analysis failed (empty record) — so re-uploading a clip that
+  failed returns the failure instead of retrying. Fix: only dedup to a successfully-analyzed shot (persist a
+  success marker — PgStore.save_shot_result doesn't currently write the `result` column — and filter on it).
