@@ -738,6 +738,22 @@ class PgStore(MemoryStore):
         return dict(session_id=sid, shots=len(self.session_shots(user_id, sid)),
                     ended_at=now.timestamp())                                        # epoch for the API contract
 
+    # Shots are DB-backed (not just the in-memory mirror) — so a shot card opens from a past session / activity
+    # and survives a cold Cloud Run instance. GET /shots/{id} returned 404 for seeded / post-restart shots before.
+    def get_shot(self, user_id, shot_id):
+        rows = self._get('shots', f'id=eq.{shot_id}&user_id=eq.{user_id}&select=*')
+        if not rows:
+            return None
+        sh = rows[0]
+        sh['created_at'] = _ts_epoch(sh.get('created_at'))
+        return sh
+
+    def patch_shot(self, user_id, shot_id, patch):
+        if not self.get_shot(user_id, shot_id):
+            return None
+        self._req(f'shots?id=eq.{shot_id}', 'PATCH', patch)   # persist the sensor answer / feedback flag
+        return self.get_shot(user_id, shot_id)
+
     _FEEDBACK_COLS = ('id', 'source', 'app_phase', 'app_version', 'core_version', 'rules_version',
                       'formula_version', 'user_id', 'user_ref', 'session_id', 'shot_id',
                       'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
