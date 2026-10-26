@@ -13,7 +13,7 @@ from pathlib import Path
 import shutil
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from . import API_VERSION, APP_COMPAT
 from . import engines
@@ -441,7 +441,9 @@ def put_profile(body: dict, user=Depends(current_user)):
 
 # ----------------------------------------------------------------- profile photo (handoff G)
 _AVATAR_MAX_BYTES = 10 * 1024 * 1024
-_AVATAR_DIR = DATA_ROOT / 'avatars'
+# Durable image bucket (avatars, Form key-position frames). Cloud Run disk is ephemeral (scale-to-zero), so
+# images that outlive one request MUST live in Supabase Storage, not DATA_ROOT. Private; service-role access.
+_IMAGE_BUCKET = 'shot-images'
 
 
 def _iso_now():
@@ -483,9 +485,8 @@ async def put_avatar(file: UploadFile = File(...), user=Depends(current_user)):
         jpeg = _process_avatar(data)
     except ValueError:
         raise HTTPException(415, 'unsupported image — send HEIC, JPEG or PNG')
-    _AVATAR_DIR.mkdir(parents=True, exist_ok=True)
     rel = f'avatars/{user}.jpg'
-    (DATA_ROOT / rel).write_bytes(jpeg)
+    get_store().storage_upload(_IMAGE_BUCKET, rel, jpeg, 'image/jpeg')
     ts = _iso_now()
     get_store().set_avatar(user, rel, ts)
     return {'has_avatar': True, 'avatar_updated_at': ts}
@@ -494,10 +495,13 @@ async def put_avatar(file: UploadFile = File(...), user=Depends(current_user)):
 @app.get('/me/avatar')
 def get_avatar(user=Depends(current_user)):
     path = (get_store().get_avatar(user) or {}).get('avatar_path')
-    full = (DATA_ROOT / path) if path else None
-    if not full or not full.exists():
+    if not path:
         raise HTTPException(404, 'no avatar set')
-    return FileResponse(str(full), media_type='image/jpeg')
+    try:
+        data = get_store().storage_download(_IMAGE_BUCKET, path)
+    except Exception:
+        raise HTTPException(404, 'no avatar set')
+    return Response(content=data, media_type='image/jpeg')
 
 
 @app.delete('/me/avatar')
@@ -505,10 +509,7 @@ def delete_avatar(user=Depends(current_user)):
     store = get_store()
     path = (store.get_avatar(user) or {}).get('avatar_path')
     if path:
-        try:
-            (DATA_ROOT / path).unlink()
-        except OSError:
-            pass
+        store.storage_delete(_IMAGE_BUCKET, path)
     store.clear_avatar(user)
     return {'has_avatar': False}
 

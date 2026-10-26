@@ -186,6 +186,13 @@ class MemoryStore:
         except OSError:
             pass
 
+    def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
+        p = self._local_storage_path(bucket, path)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'wb') as f:
+            f.write(data)
+        return {'path': path}
+
     # sessions
     def create_session(self, user_id, data):
         s = dict(id=_new_id(), user_id=user_id, started_at=time.time(), ended_at=None, **data)
@@ -1190,6 +1197,17 @@ class PgStore(MemoryStore):
             urllib.request.urlopen(req, timeout=30)
         except Exception as e:
             print(f'storage_delete {path} skipped ({e})')
+
+    def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
+        """Upload bytes to Storage with the service role (create-or-overwrite via x-upsert). For durable images
+        (avatars, Form key-position frames) that must survive Cloud Run's scale-to-zero ephemeral disk."""
+        import urllib.request
+        url = f'{self._storage_base()}/object/{bucket}/{path}'
+        req = urllib.request.Request(url, method='POST', data=data,
+                                     headers={**self._storage_headers(),
+                                              'Content-Type': content_type, 'x-upsert': 'true'})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return __import__('json').loads(r.read())
 
     def reset_user_data(self, user_id):
         """Delete ALL per-user data (keeps the auth user + profile row, so is_staged survives). Used by the
