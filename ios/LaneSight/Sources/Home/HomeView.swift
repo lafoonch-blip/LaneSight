@@ -22,8 +22,7 @@ struct HomeView: View {
                             nextFocusCard(f, title: title)
                         }
 
-                        NavigationLink { SetupView() } label: { Text("Start practice") }
-                            .buttonStyle(PrimaryButtonStyle())
+                        performanceLab
 
                         recentSessions
                         recentActivity
@@ -123,6 +122,43 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .lsCard()
+    }
+
+    private var performanceLab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Performance Lab").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text("Analyze your game. Improve every shot.").font(.lsCallout).foregroundStyle(LS.textSecondary)
+            }
+            HStack(alignment: .top, spacing: 12) {
+                labCard(mode: "shot", title: "Shot Analysis",
+                        desc: "Track ball motion, lane reaction and results.",
+                        symbol: "scope", action: "Start Shot Analysis")
+                labCard(mode: "form", title: "Form Analysis",
+                        desc: "Analyze approach, timing, release and mechanics.",
+                        symbol: "figure.bowling", action: "Start Form Analysis")
+            }
+        }
+    }
+
+    private func labCard(mode: String, title: String, desc: String, symbol: String, action: String) -> some View {
+        NavigationLink { SetupView(initialMode: mode) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                // TODO(v3.7 assets): swap this placeholder for the Figma Shot/Form card photo.
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(LS.raised)
+                    .frame(height: 84)
+                    .overlay(Image(systemName: symbol).font(.title2).foregroundStyle(LS.action))
+                Text(title).font(.lsHeadline).foregroundStyle(LS.textPrimary)
+                Text(desc).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(action).font(.lsCaption.weight(.semibold)).foregroundStyle(LS.onAction)
+                    .padding(.vertical, 7).frame(maxWidth: .infinity)
+                    .background(LS.action, in: Capsule())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lsCard(padding: 12)
+        }
+        .buttonStyle(.plain)
     }
 
     private func loadAll() async {

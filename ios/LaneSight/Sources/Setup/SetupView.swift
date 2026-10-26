@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SetupView: View {
     @EnvironmentObject var model: AppModel
+    /// Pre-selects the capture mode when opened from Home's Performance Lab cards (nil = leave as-is).
+    var initialMode: String? = nil
     @State private var oilPatterns: [OilPattern] = []
     @State private var oilLoadError: String?
     @State private var healthText: String?
@@ -37,6 +39,7 @@ struct SetupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationDestination(isPresented: $goCapture) { CaptureView() }
+        .onAppear { if let initialMode { model.captureMode = initialMode } }
         .task {
             await loadOil()
             await loadHealth()
