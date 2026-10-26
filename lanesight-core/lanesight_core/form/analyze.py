@@ -54,7 +54,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
     """Form P1 analysis. With a pose_backend callable, returns its measurements; without one, returns the
     full P1 set as `unavailable` with a reason (never guessed). `view` may be passed from the capture-view
     classifier; otherwise 'unknown'."""
-    view = view if view in VIEWS else 'unknown'
+    caller_view = view if view in VIEWS else None    # explicit caller view wins; else pose-detected (MVP-03)
     extras = {}
     if pose_backend is None:
         reason = ('Form pose backend not configured — P1 metrics need pose estimation '
@@ -68,12 +68,16 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
                                                           note='not returned by pose backend'))
                         for k, u in FORM_P1]
         status = 'ok'
+    # Capture view (MVP-03): an explicit caller view wins; otherwise use the pose-detected view.
+    view = caller_view or (extras.get('view_info') or {}).get('view', 'unknown')
+    view = view if view in VIEWS else 'unknown'
     # Form fundamentals v1 measured positions M1–M7 (DEC-057): surface the pose geometry, then gate each by
     # the actual capture view (a position its view can't support becomes unavailable with a reason).
     from .fundamentals import gate_positions
     measured_positions = gate_positions(extras.get('measured_positions') or {}, view)
     return dict(
         form_version=FORM_VERSION, view=view, status=status,
+        view_info=extras.get('view_info'),      # detected view + confidence + reason (MVP-03)
         measurements=measurements,
         metrics={mm['metric']: mm for mm in measurements},
         handed=handed,

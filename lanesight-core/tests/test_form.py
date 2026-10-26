@@ -69,3 +69,29 @@ def test_reset_plan_archives_then_clears_fk_safe():
     assert p['clear_order'].index('tier_event') < p['clear_order'].index('score_snapshot')
     assert 'achievement_definition' in p['keep'] and 'score_formula_version' in p['keep']
     assert reset_plan([])['clear_order'] == []
+
+
+def test_classify_view_from_pose_side_vs_rear():
+    # MVP-03: pure-function view classifier (no mediapipe). Side = horizontal travel -> down_lane;
+    # rear = vertical travel (up-frame toward pins) -> rear; barely moving -> unknown.
+    import numpy as np
+    from lanesight_core.form.pose import classify_view_from_pose, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP
+
+    def track(dx, dy, n=40):
+        lms = np.zeros((n, 33, 5), np.float32)
+        lms[:, :, 3] = 1.0
+        xs = np.linspace(0.2, 0.2 + dx, n)
+        ys = np.linspace(0.5, 0.5 + dy, n)
+        for idx in (L_HIP, R_HIP, L_SHOULDER, R_SHOULDER):
+            lms[:, idx, 0] = xs
+            lms[:, idx, 1] = ys
+        lms[:, L_SHOULDER, 1] -= 0.2      # shoulders above hips so torso height > 0
+        lms[:, R_SHOULDER, 1] -= 0.2
+        return np.linspace(0, 2, n), lms
+
+    t, side = track(0.6, 0.08)
+    assert classify_view_from_pose(t, side)['view'] == 'down_lane'
+    t, rear = track(0.3, 0.5)
+    assert classify_view_from_pose(t, rear)['view'] == 'rear'
+    t, still = track(0.02, 0.02)
+    assert classify_view_from_pose(t, still)['view'] == 'unknown'

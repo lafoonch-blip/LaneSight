@@ -619,6 +619,35 @@ def export_key_frames(video, out_prefix, events, crops=None, log=print) -> list:
     return [key for key, _ in KEY_FRAME_EVENTS if key in written]
 
 
+def classify_view_from_pose(t, lms) -> dict:
+    """Detect the capture view from the pose track (MVP-03). Returns {view, confidence, reason} with view in
+    down_lane (side profile) / rear / unknown. Discriminator: the bowler's TRAVEL DIRECTION in frame — a side
+    camera sees the approach move ACROSS the frame (horizontal); a rear camera sees it move UP the frame toward
+    the pins (vertical). Validated on IMG_8905 (side, dy/dx≈0.14) vs IMG_8907 (rear, dy/dx≈0.56); threshold 0.30
+    separates them. Front (bowler_facing) is NOT separately detected — it's advisory-only for MVP and would read
+    as 'rear' (documented limitation; needs a front clip to validate). Confidence stays modest until more
+    bowlers are validated (FORM_ANALYSIS_SPEC §6)."""
+    vis = lms[:, :, 3]
+    ok = ((vis[:, L_SHOULDER] > MIN_VIS) & (vis[:, R_SHOULDER] > MIN_VIS)
+          & (vis[:, L_HIP] > MIN_VIS) & (vis[:, R_HIP] > MIN_VIS))
+    if ok.sum() < 8:
+        return dict(view='unknown', confidence=0.0, reason='Not enough clear pose frames to tell the camera view.')
+    f = lms[ok]
+    hip_x = (f[:, L_HIP, 0] + f[:, R_HIP, 0]) / 2
+    hip_y = (f[:, L_HIP, 1] + f[:, R_HIP, 1]) / 2
+    dx = float(np.nanmax(hip_x) - np.nanmin(hip_x))
+    dy = float(np.nanmax(hip_y) - np.nanmin(hip_y))
+    if max(dx, dy) < 0.08:
+        return dict(view='unknown', confidence=0.1,
+                    reason='The bowler barely moves in frame — the camera view is unclear (check framing).')
+    frac = float(ok.mean())
+    if dy / max(dx, 1e-3) < 0.30:
+        return dict(view='down_lane', confidence=round(0.5 + 0.2 * frac, 2),
+                    reason='The bowler moves across the frame — a side (profile) view.')
+    return dict(view='rear', confidence=round(0.4 + 0.2 * frac, 2),
+                reason='The bowler moves up the frame toward the pins — a rear view.')
+
+
 def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log=print) -> dict:
     """Full per-clip analysis. Returns a dict {metric_key: Measurement-dict} covering the FORM_P1 keys plus
     diagnostic extras (step_intervals, first_step_to_release, slide_to_release, tempo_ratio, ball_at_hip_to_release,
@@ -642,6 +671,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
 
     out = {}
     extras = {}
+    extras['view_info'] = classify_view_from_pose(t, lms)   # MVP-03: detected capture view (both return paths)
 
     if delivery is None:
         reason = ('could not isolate the delivery (no clear finish hold — pose likely failed on this clip, '
