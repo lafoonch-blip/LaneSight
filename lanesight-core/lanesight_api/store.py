@@ -250,6 +250,15 @@ class MemoryStore:
                      if sh.get('user_id') == user_id and sh.get('source') == 'upload'
                      and sh.get('content_hash') == content_hash), None)
 
+    def find_shot_by_hash(self, user_id, content_hash, session_id):
+        """A shot already analyzed from the same clip bytes in this session — live-shot retry idempotency: a
+        dropped-connection re-send carries identical bytes, so return the existing shot instead of duplicating."""
+        if not content_hash or session_id is None:
+            return None
+        return next((sh for sh in self.shots.values()
+                     if sh.get('user_id') == user_id and sh.get('session_id') == session_id
+                     and sh.get('content_hash') == content_hash), None)
+
     def shots_for_session(self, session_id):
         return [sh for sh in self.shots.values() if sh['session_id'] == session_id]
 
@@ -717,6 +726,16 @@ class PgStore(MemoryStore):
                                        f"content_hash=eq.{content_hash}&select=*&limit=1")
         except Exception:
             return None                                    # column absent (pre-016) -> dedupe disabled
+        return rows[0] if rows else None
+
+    def find_shot_by_hash(self, user_id, content_hash, session_id):
+        if not content_hash or session_id is None:
+            return None
+        try:
+            rows = self._get('shots', f"user_id=eq.{user_id}&session_id=eq.{session_id}&"
+                                       f"content_hash=eq.{content_hash}&select=*&limit=1")
+        except Exception:
+            return None
         return rows[0] if rows else None
 
     def save_shot_result(self, shot_id, record, result):

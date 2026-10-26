@@ -646,12 +646,19 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
         if dup:
             store.storage_delete('shot-clips', storage_path)
             return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
+    else:
+        # Live-shot retry idempotency: a dropped-connection re-send carries identical clip bytes, so return the
+        # already-analyzed shot in this session instead of creating a duplicate (C4; serial queue avoids races).
+        dup = store.find_shot_by_hash(user, content_hash, session_id) if hasattr(store, 'find_shot_by_hash') else None
+        if dup:
+            store.storage_delete('shot-clips', storage_path)
+            return {'shot_id': dup['id'], 'duplicate': True, 'source': 'live'}
     shot = store.create_shot(user, session_id,
                              {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                               'source': 'upload' if is_upload else meta.get('source', 'live'),
                               'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id'),
                               'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub})
-    if is_upload and hasattr(store, 'set_content_hash'):
+    if hasattr(store, 'set_content_hash'):                  # live shots too, so a retry can dedupe (above)
         store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / ('uploads' if is_upload else 'sessions')
     dest.mkdir(parents=True, exist_ok=True)

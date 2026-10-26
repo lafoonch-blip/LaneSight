@@ -110,6 +110,22 @@ def test_upload_dedupe_returns_existing_shot():
     assert body.get('duplicate') is True and body['shot_id'] == prior['id'] and 'job_id' not in body
 
 
+def test_live_shot_dedupe_is_session_scoped():
+    # Live-shot retry idempotency (C4): a dropped-connection re-send of the same clip bytes in the same session
+    # returns the existing shot; the same bytes in a DIFFERENT session are a genuine new shot, not a duplicate.
+    import hashlib
+    store = get_store()
+    h = hashlib.sha256(b'live-clip-bytes').hexdigest()
+    s1 = store.create_session('u_liveidem', {'mode': 'practice'})['id']
+    s2 = store.create_session('u_liveidem', {'mode': 'practice'})['id']
+    shot = store.create_shot('u_liveidem', s1, {'source': 'live'})
+    store.set_content_hash(shot['id'], h)
+    assert store.find_shot_by_hash('u_liveidem', h, s1)['id'] == shot['id']   # same bytes, same session -> dup
+    assert store.find_shot_by_hash('u_liveidem', h, s2) is None               # same bytes, other session -> new
+    assert store.find_shot_by_hash('u_liveidem', None, s1) is None            # no hash -> never dedupe
+    assert store.find_shot_by_hash('u_liveidem', h, None) is None             # no session (upload) -> not here
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output
