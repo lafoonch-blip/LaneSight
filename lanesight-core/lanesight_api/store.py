@@ -6,6 +6,7 @@ service must enforce ownership itself).
 from __future__ import annotations
 import csv
 import io
+import os
 import time
 import uuid
 from .config import settings
@@ -162,6 +163,28 @@ class MemoryStore:
 
     def oil_patterns(self):
         return []
+
+    # Storage (clip upload path). MemoryStore simulates a bucket on local disk so the endpoints can be
+    # exercised offline; PgStore talks to real Supabase Storage. The clip never persists — it's downloaded,
+    # analyzed, then deleted.
+    def _local_storage_path(self, bucket, path):
+        import tempfile
+        return os.path.join(tempfile.gettempdir(), 'ls_storage', bucket, path)
+
+    def storage_signed_upload_url(self, bucket, path):
+        p = self._local_storage_path(bucket, path)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        return {'path': path, 'upload_url': 'file://' + p}
+
+    def storage_download(self, bucket, path):
+        with open(self._local_storage_path(bucket, path), 'rb') as f:
+            return f.read()
+
+    def storage_delete(self, bucket, path):
+        try:
+            os.remove(self._local_storage_path(bucket, path))
+        except OSError:
+            pass
 
     # sessions
     def create_session(self, user_id, data):
@@ -1130,6 +1153,43 @@ class PgStore(MemoryStore):
                       {'anonymized_at': now,
                        'diagnostics': self._anonymize_diagnostics(r.get('diagnostics'))})
         return len(rows)
+
+    # ----------------------------------------------------------------- Supabase Storage (clip uploads)
+    def _storage_base(self):
+        return settings().supabase_base.rstrip('/') + '/storage/v1'
+
+    def _storage_headers(self):
+        return {'apikey': self._key, 'Authorization': f'Bearer {self._key}'}
+
+    def storage_signed_upload_url(self, bucket, path):
+        """Create a one-shot signed URL the client PUTs the clip to (direct to Storage — no 32 MiB API cap).
+        Returns {path, upload_url}. The token in the URL authorizes exactly this object, so no bucket RLS."""
+        import urllib.request
+        url = f'{self._storage_base()}/object/upload/sign/{bucket}/{path}'
+        req = urllib.request.Request(url, method='POST', data=b'{}',
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = __import__('json').loads(r.read())
+        rel = body['url'].lstrip('/')                      # "object/upload/sign/{bucket}/{path}?token=..."
+        return {'path': path, 'upload_url': f'{self._storage_base()}/{rel}'}
+
+    def storage_download(self, bucket, path):
+        """Download a clip (service role) for analysis."""
+        import urllib.request
+        url = f'{self._storage_base()}/object/authenticated/{bucket}/{path}'
+        req = urllib.request.Request(url, headers=self._storage_headers())
+        with urllib.request.urlopen(req, timeout=180) as r:
+            return r.read()
+
+    def storage_delete(self, bucket, path):
+        """Delete a clip after analysis (clips are never retained — DEC-019 replay deferred)."""
+        import urllib.request
+        url = f'{self._storage_base()}/object/{bucket}/{path}'
+        req = urllib.request.Request(url, method='DELETE', headers=self._storage_headers())
+        try:
+            urllib.request.urlopen(req, timeout=30)
+        except Exception as e:
+            print(f'storage_delete {path} skipped ({e})')
 
     def reset_user_data(self, user_id):
         """Delete ALL per-user data (keeps the auth user + profile row, so is_staged survives). Used by the

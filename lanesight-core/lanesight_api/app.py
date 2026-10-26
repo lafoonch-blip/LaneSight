@@ -6,12 +6,13 @@ their DB-backed handlers land, so the OpenAPI contract lists the full surface ho
 from __future__ import annotations
 import json
 import os
+import uuid
 import time
 from pathlib import Path
 
 import shutil
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body
 from fastapi.responses import FileResponse
 
 from . import API_VERSION, APP_COMPAT
@@ -597,6 +598,61 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, None,
                        mode=(meta.get('capture_mode') or 'shot'), is_upload=True)
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
+
+
+# ---------------------------------------------------------- Storage-based upload (no 32 MiB API cap; cloud)
+@app.post('/uploads/signed-url')
+def create_upload_url(user=Depends(current_user)):
+    """Direct-to-Storage signed upload URL for a clip. The app PUTs the clip bytes to `upload_url` (bypassing
+    the API request-size cap), then calls POST /shots/analyze with the returned `path`."""
+    store = get_store()
+    path = f'{user}/{uuid.uuid4().hex}.mov'            # user-scoped object key
+    return store.storage_signed_upload_url('shot-clips', path)
+
+
+@app.post('/shots/analyze')
+async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user)):
+    """Analyze a clip already uploaded to Storage. body: {storage_path, session_id?, metadata?}. With a
+    session_id it's a live session shot (feeds Score/Stats); without, a standalone upload (DEC-055). The clip
+    is downloaded (service role), analyzed on the same serial path, then DELETED (clips aren't retained)."""
+    store = get_store()
+    storage_path = body.get('storage_path')
+    if not storage_path or not storage_path.startswith(f'{user}/'):
+        raise HTTPException(403, 'storage_path missing or not owned by the user')
+    session_id = body.get('session_id')
+    meta = body.get('metadata') or {}
+    is_upload = session_id is None
+    if session_id is not None and not get_store().get_session(user, session_id):
+        raise HTTPException(404, 'session not found')
+    cfg, ub = _ball_link(store, user, meta)
+    data = store.storage_download('shot-clips', storage_path)
+    import hashlib
+    content_hash = hashlib.sha256(data).hexdigest()
+    if is_upload:
+        dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+        if dup:
+            store.storage_delete('shot-clips', storage_path)
+            return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
+    shot = store.create_shot(user, session_id,
+                             {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
+                              'source': 'upload' if is_upload else meta.get('source', 'live'),
+                              'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id'),
+                              'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub})
+    if is_upload and hasattr(store, 'set_content_hash'):
+        store.set_content_hash(shot['id'], content_hash)
+    dest = DATA_ROOT / ('uploads' if is_upload else 'sessions')
+    dest.mkdir(parents=True, exist_ok=True)
+    local = dest / f"{shot['id']}.mov"
+    with open(local, 'wb') as f:
+        f.write(data)
+    job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload)
+    store.storage_delete('shot-clips', storage_path)      # clip analyzed; don't retain it
+    try:
+        os.remove(local)
+    except OSError:
+        pass
+    return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload' if is_upload else 'live'}
 
 
 @app.get('/me/uploads')
