@@ -51,7 +51,17 @@ struct APIClient {
     // MARK: request plumbing
 
     private func makeRequest(_ path: String, method: String = "GET", auth: Bool = true) -> URLRequest {
-        var req = URLRequest(url: baseURL.appendingPathComponent(path))
+        // A path carrying a query string ("me/stats?view=throw") must NOT go through appendingPathComponent,
+        // which percent-encodes the "?" and yields a 404. Build those by string; plain paths keep the
+        // component API (which correctly encodes each segment).
+        let url: URL
+        if path.contains("?") {
+            let base = baseURL.absoluteString
+            url = URL(string: base + (base.hasSuffix("/") ? "" : "/") + path) ?? baseURL.appendingPathComponent(path)
+        } else {
+            url = baseURL.appendingPathComponent(path)
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = method
         if auth { applyAuth(&req) }
         req.setValue("application/json", forHTTPHeaderField: "Accept")

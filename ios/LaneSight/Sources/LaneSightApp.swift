@@ -67,6 +67,10 @@ struct PreviewHarness: View {
                     if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
                         NavigationStack { SessionView(reviewSessionId: id, readOnly: false) }
                     } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
+                case "metricdetail":
+                    NavigationStack {
+                        MetricDetailView(metric: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] ?? "ball_speed")
+                    }
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
                 }
             }

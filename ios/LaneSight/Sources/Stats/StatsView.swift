@@ -32,6 +32,9 @@ struct StatsView: View {
                 .task { await loadScore() }
                 .task(id: tab) { await loadForTab() }
                 .refreshable { await loadScore(); await loadForTab() }
+                #if DEBUG
+                .onAppear { if let t = ProcessInfo.processInfo.environment["LS_PREVIEW_TAB"], let i = Int(t) { tab = i } }
+                #endif
             }
             .background(LSBackground())
             .navigationBarHidden(true)
@@ -226,19 +229,49 @@ struct StatsView: View {
 
     // MARK: Throw
 
+    // v3.7 Shot tab (Figma 427:5614): a 3×3 grid of metric rings (each taps through to its detail), a
+    // guidance note, and the metric-coverage card. Ring values are live — measured means from /me/stats
+    // plus pocket %/accuracy from the score breakdown; a metric without data shows "—".
+    private struct RingSpec {
+        let metric: String; let title: String; let unit: String; let lo: Double; let hi: Double; let color: Color
+        let value: Double?
+    }
+    private func shotRings(_ s: StatsResponse) -> [RingSpec] {
+        func avg(_ k: String) -> Double? { s.averages?[k]?.mean }
+        return [
+            RingSpec(metric: "ball_speed", title: "Speed", unit: "mph", lo: 8, hi: 24, color: LS.action, value: avg("ball_speed")),
+            RingSpec(metric: "rev_rate", title: "Rev Rate", unit: "rpm", lo: 100, hi: 600, color: LS.dataPurple, value: avg("rev_rate")),
+            RingSpec(metric: "accuracy", title: "Accuracy", unit: "", lo: 0, hi: 100, color: LS.action, value: breakdown?.accuracy?.value),
+            RingSpec(metric: "pocket", title: "Pocket", unit: "%", lo: 0, hi: 100, color: LS.dataPurple, value: breakdown?.performance?.pocket_pct),
+            RingSpec(metric: "strike", title: "Strike %", unit: "%", lo: 0, hi: 100, color: LS.success, value: nil),
+            RingSpec(metric: "entry_angle", title: "Entry", unit: "°", lo: 2, hi: 8, color: LS.action, value: avg("entry_angle")),
+            RingSpec(metric: "breakpoint_distance", title: "Breakpoint", unit: "ft", lo: 30, hi: 55, color: LS.dataOrange, value: avg("breakpoint_distance")),
+            RingSpec(metric: "loft", title: "Loft", unit: "ft", lo: 0, hi: 5, color: LS.dataYellow, value: avg("loft")),
+            RingSpec(metric: "impact_energy", title: "Impact", unit: "J", lo: 0, hi: 300, color: LS.dataPurple, value: avg("impact_energy")),
+        ]
+    }
+
     private var throwTab: some View {
         LoadableView(state: throwStats, retry: { Task { await loadThrow() } }) { s in
             if s.empty == true || (s.n_shots ?? 0) == 0 {
-                emptyCard("Throw stats need more shots",
-                          "Record shots and they'll roll up here — speed, rev rate, entry board, breakpoint and angle, with coverage and top failure reasons.")
+                emptyCard("Shot stats need more shots",
+                          "Record shots and they'll roll up here — speed, rev rate, entry, breakpoint, loft and more, each with its own trend and breakdown by ball and pattern.")
             } else {
                 VStack(alignment: .leading, spacing: 14) {
-                    averagesGrid(s, order: ["ball_speed", "rev_rate", "entry_board", "entry_angle",
-                                            "breakpoint_board", "arrows_board"],
-                                 units: ["ball_speed": "mph avg", "rev_rate": "rpm avg", "entry_board": "board avg",
-                                         "entry_angle": "deg avg", "breakpoint_board": "board avg", "arrows_board": "board avg"])
+                    let cols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+                    LazyVGrid(columns: cols, spacing: 12) {
+                        ForEach(shotRings(s), id: \.metric) { r in
+                            NavigationLink { MetricDetailView(metric: r.metric) } label: {
+                                let vstr = r.value.map { String(format: $0 >= 100 ? "%.0f" : ($0 == $0.rounded() ? "%.0f" : "%.1f"), $0) } ?? "—"
+                                MetricRing(label: r.title, value: vstr, unit: r.value == nil ? "" : r.unit,
+                                           fraction: r.value.map { ($0 - r.lo) / (r.hi - r.lo) } ?? 0, color: r.color)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    Text("Tap any metric for its average, range, trend and breakdown by ball and pattern. Impact Energy is energy at entry, not a carry prediction.")
+                        .font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
                     coverageCard(s)
-                    failureReasonsCard(s)
                     sampleNote(s)
                 }
             }
