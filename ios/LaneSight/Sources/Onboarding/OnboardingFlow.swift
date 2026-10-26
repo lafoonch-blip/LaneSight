@@ -24,7 +24,7 @@ private struct WelcomeStep: View {
                 .frame(maxWidth: 240)
                 .accessibilityLabel("LaneSight")
 
-            Text("UNDERSTAND EVERY SHOT. IMPROVE EVERY GAME.")
+            Text("SEE MORE. BOWL SMARTER.")   // brand tagline — kept over the Figma copy (Shayne, 2026-10-26)
                 .font(.lsSubheadline).tracking(3)
                 .foregroundStyle(LS.textSecondary)
 
