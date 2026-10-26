@@ -182,6 +182,39 @@ it produces no measurement. (Run C — manual ball centers — is moot: with no 
 centers cannot be placed on the lane plane. The §0.1 scale-invariant bound already shows even perfect centers
 give ≈1–2.4 board lateral error at the pins.)
 
+### 3.4 PnP (3D pose) — confirms it's the position, not the method (2026-10-26)
+
+Phase 1 tested only a single-plane homography. A full 3D camera pose (`cv/calib/pose.py`, solvePnP, pins as
+3D points) was tried on the verified labels. The code is verified correct — it recovers a **known synthetic
+pose to 0.0 px** and shows a good position (~10 ft standoff, 48 in high, square) is **well-conditioned
+(0.33 board/px at entry)**. But on the real ball-return clips PnP returns **physically impossible poses
+(camera below the lane)** with ~5 px reprojection, and the fitted pin height collapses to ~0 inconsistently:
+the pins' height structure is **unobservable** at that standoff, so there is no 3D information to disambiguate
+pose (the planar-ambiguity + unknown-intrinsics failure the review warned about). **A better reconstruction
+technique does not rescue this camera position** — the limit is positional. (Bonus: `pose.py` also *estimates*
+camera height/standoff/angle from labels — useful for Phase-2/3 classification by recovered pose.)
+
+### 3.5 Partial results — what IS recoverable from these positions (the 🟡 path)
+
+The far lane fails, but the **near lane does not**. A near-field calibration from the on-plane fiducials
+(`solve.near_field_homography`: foul Z=0 exact + approach dots / guide dots / arrows at band-midpoint Z — all
+painted on the surface, so coplanar, unlike the pins) is well-conditioned where the fiducials bracket the
+ball. Per-region board sensitivity (boards per pixel), on the well-labeled clips:
+
+| region | 0 ft (laydown) | 7 ft | 15 ft (arrows) | 40 ft | 59 ft (entry) |
+|--------|----------------|------|----------------|-------|----------------|
+| typical sensitivity | **0.25** | **0.32** | **0.41** | 0.65 | 0.86 |
+
+0–15 ft is both **precise** (≤0.41 board/px) **and accurate** (INTERPOLATED within the labeled fiducial span,
+foul→arrows). 40–60 ft is EXTRAPOLATED beyond the deepest fiducial → locally smooth but **biased** (the same
+homography puts the 60 ft pins at 160–230 ft), so it is not trustworthy despite the modest sensitivity number.
+
+**So from an elevated ball-return clip LaneSight can still return** (🟡 Partial): **laydown board, board at
+7 ft / arrows (15 ft), early/skid speed, launch angle — plus all form metrics** (form needs no lane calibration
+at all). It should mark entry board/angle, breakpoint, and late/full-lane speed `unavailable` with a reposition
+reason. This is the data basis for the "never reject a whole video" rule; the region-aware `eligibility.classify`
+(`near_calib_valid`) encodes it.
+
 Report columns (filled above/below as runs complete): A entry (auto geom+track), B entry (manual
 foul+pins geom + auto track), calibration sensitivity @entry, dominant uncertainty source. Per
 `CV_MEASUREMENT_DEFINITIONS.md` there is **no Ruby ground truth for this cohort**, so B is read for

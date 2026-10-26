@@ -26,20 +26,22 @@ FAR_BALL_MIN_PX = 6.0          # far ball must be this big to be detectable/cent
 GREEN, YELLOW, RED = "full", "partial", "reposition"
 TIER_EMOJI = {GREEN: "🟢", YELLOW: "🟡", RED: "🔴"}
 
-# metric -> the conditions it requires. Conditions are keys into the computed `checks` dict.
+# metric -> the conditions it requires. Conditions are keys into the computed `checks` dict. Near-lane
+# metrics need only the NEAR-field calibration (foul + on-plane dots/arrows) — recoverable even when the far
+# lane is not (the partial-results path). Far-lane metrics need the far calibration + far conditioning + track.
 METRIC_REQUIREMENTS = {
-    "laydown_board":      ["calib_valid", "near_track"],
-    "board_at_7ft":       ["calib_valid", "near_track"],
-    "launch_angle":       ["calib_valid", "near_track"],
-    "speed_early":        ["near_track"],
-    "speed_release":      ["near_track"],
-    "arrows_board":       ["calib_valid", "mid_track"],
-    "breakpoint_board":   ["calib_valid", "far_conditioning", "mid_track"],
-    "breakpoint_distance":["calib_valid", "far_conditioning", "mid_track"],
-    "entry_board":        ["calib_valid", "far_conditioning", "far_track"],
-    "entry_angle":        ["calib_valid", "far_conditioning", "far_track"],
-    "speed_late":         ["far_track"],
-    "ball_speed":         ["far_track"],      # 60 ft foul->pins average needs the ball to the pins
+    "laydown_board":      ["near_calib", "near_track"],
+    "board_at_7ft":       ["near_calib", "near_track"],
+    "launch_angle":       ["near_calib", "near_track"],
+    "speed_early":        ["near_calib", "near_track"],
+    "speed_release":      ["near_calib", "near_track"],
+    "arrows_board":       ["near_calib", "near_track"],
+    "breakpoint_board":   ["far_calib", "far_conditioning", "mid_track"],
+    "breakpoint_distance":["far_calib", "far_conditioning", "mid_track"],
+    "entry_board":        ["far_calib", "far_conditioning", "far_track"],
+    "entry_angle":        ["far_calib", "far_conditioning", "far_track"],
+    "speed_late":         ["far_calib", "far_track"],
+    "ball_speed":         ["far_calib", "far_track"],   # 60 ft foul->pins average needs the ball to the pins
 }
 
 
@@ -60,13 +62,17 @@ def track_coverage(centers_or_track):
     return {"near_ft": float(min(zs)), "far_ft": float(max(zs))}
 
 
-def classify(diag=None, interval_checks=None, coverage=None, far_ball_px=None):
+def classify(diag=None, interval_checks=None, coverage=None, far_ball_px=None, near_calib_valid=None):
     """Return {tier, emoji, checks, metrics:{name:{eligible,reason}}}. Any input may be None (treated as
-    'not established' → the dependent checks fail closed)."""
+    'not established' → the dependent checks fail closed).
+
+    `diag` is the FAR/full calibration (foul+pins). `near_calib_valid` (bool) is whether the separate
+    NEAR-field calibration (solve.near_field_homography) is valid — pass it to enable near-lane metrics even
+    when the far calibration is degenerate (the partial-results path). None → near falls back to far."""
     checks = {}
-    # calibration validity
+    # far / full calibration validity
     if diag is None:
-        checks["calib_valid"] = (False, "no calibration")
+        checks["far_calib"] = (False, "no calibration")
     else:
         resid = diag.get("reproj_board_rmse")
         zones = diag.get("longitudinal_zones", 0)
@@ -80,7 +86,14 @@ def classify(diag=None, interval_checks=None, coverage=None, far_ball_px=None):
             why.append(f"only {zones} depth zone(s) < {MIN_ZONES}")
         if not arr_ok:
             why.append("arrows fail USBC-band check")
-        checks["calib_valid"] = (ok, "ok" if ok else "; ".join(why))
+        checks["far_calib"] = (ok, "ok" if ok else "; ".join(why))
+    # near-field calibration — explicit flag if given, else mirror the far calibration
+    if near_calib_valid is None:
+        checks["near_calib"] = checks["far_calib"]
+    else:
+        checks["near_calib"] = (bool(near_calib_valid),
+                                "near-field calibration ok" if near_calib_valid else "near-field calibration invalid")
+    checks["calib_valid"] = checks["far_calib"]        # backward-compat alias
     # far-lane conditioning
     sens = None if diag is None else diag.get("sensitivity_per_px", {}).get("entry_59ft", {}).get("d_board_per_px")
     checks["far_conditioning"] = ((sens is not None and sens <= SENS_ENTRY_MAX),
@@ -106,8 +119,8 @@ def classify(diag=None, interval_checks=None, coverage=None, far_ball_px=None):
                          "reason": "ok" if not failed else "needs " + ", ".join(
                              f"{r} ({checks[r][1]})" for r in failed)}
 
-    far_full = checks["calib_valid"][0] and checks["far_conditioning"][0] and checks["far_track"][0]
-    near_ok = checks["near_track"][0] and (checks["calib_valid"][0] or far is not None)
+    far_full = checks["far_calib"][0] and checks["far_conditioning"][0] and checks["far_track"][0]
+    near_ok = checks["near_track"][0] and checks["near_calib"][0]
     if far_full:
         tier = GREEN
     elif near_ok:

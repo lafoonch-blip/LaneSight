@@ -58,6 +58,46 @@ def _apply(H, pts):
     return h[:, :2] / h[:, 2:3]
 
 
+# Approximate Z (ft) for on-plane interval fiducials, used ONLY for a NEAR-field calibration (partial
+# results). Band midpoints from the USBC ranges — approximate, fine for near conditioning; never for an
+# exact far anchor. A center's measured positions should override these.
+NEAR_Z_DEFAULTS = {"approach_dot": -12.0, "dot": 7.0, "arrow": 14.0}
+
+
+def near_field_homography(landmark_set, z_overrides=None, geometry: LaneGeometry = CANONICAL):
+    """Build a NEAR-field lane-plane homography from the on-plane fiducials a human verified — foul (exact
+    Z=0) + approach dots / guide dots / arrows at approximate band-midpoint Z. These are all painted on the
+    surface (Y=0), so unlike the pins they are coplanar. Returns (H_iw, H_wi, diag) or raises CalibrationError.
+
+    Purpose: recover the NEAR lane (laydown / early boards / early speed) from a camera position whose FAR
+    lane is unrecoverable — the "return partial results, never reject the video" path. The diagnostics'
+    per-region sensitivity shows where it's trustworthy: metrics at/under the deepest labeled fiducial are
+    INTERPOLATED (precise + accurate); beyond are EXTRAPOLATED (locally smooth but biased)."""
+    z_overrides = z_overrides or NEAR_Z_DEFAULTS
+    names, world, image = [], [], []
+    for n in ("foul_l", "foul_r"):
+        ob = landmark_set.observations.get(n)
+        if ob and ob.usable:
+            names.append(n); world.append(list(geometry.world_point(n))); image.append([ob.x, ob.y])
+    for n, ob in landmark_set.observations.items():
+        if not ob.usable:
+            continue
+        grp = n.rsplit("_", 1)[0]
+        if grp in z_overrides and geometry.landmarks.get(n) and geometry.landmarks[n].x_in is not None:
+            names.append(n); world.append([geometry.landmarks[n].x_in, z_overrides[grp]]); image.append([ob.x, ob.y])
+    if len(names) < 4:
+        raise CalibrationError(f"near-field: only {len(names)} on-plane fiducials; need >=4 (foul + dots/arrows)")
+    world = np.asarray(world, float); image = np.asarray(image, float)
+    if len(set(round(z, 1) for z in world[:, 1])) < 2:
+        raise CalibrationError("near-field: on-plane fiducials span only one depth (degenerate)")
+    Hwi, _ = cv2.findHomography(world, image, 0)
+    if Hwi is None:
+        raise CalibrationError("near-field: findHomography failed (degenerate)")
+    H_iw = np.linalg.inv(Hwi)
+    diag = calibration_diagnostics(H_iw, world, image, names, geometry)
+    return H_iw, Hwi, diag
+
+
 def interval_consistency(H_iw, landmark_set, geometry: LaneGeometry = CANONICAL):
     """Validate a calibration (solved from exact anchors) against the USBC interval landmarks (arrows/dots).
     For each interval landmark that the human VERIFIED in the image, map it to the lane plane and check the

@@ -302,6 +302,38 @@ def test_pnp_recovers_known_pose_and_good_position_is_well_conditioned():
     assert sens < 1.5                                         # good position is well-conditioned
 
 
+def test_near_field_homography_from_on_plane_fiducials():
+    """Near-field calibration from foul + on-plane dots/arrows (coplanar, unlike pins). Recovers the near
+    lane with low residual; this is the partial-results path."""
+    from lanesight_core.cv.calib.solve import near_field_homography, NEAR_Z_DEFAULTS
+    from lanesight_core.cv.calib.lane_geometry import x_in_for_board
+    _, H_wi_true = _true_homographies()
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    for n in ("foul_l", "foul_r"):
+        w = CANONICAL.world_point(n); ls.set_point(n, *(_project(H_wi_true, w[0], w[1])))
+    for b in (5, 15, 25, 35):          # on-plane fiducials at approx band-midpoint depths
+        ls.set_point(f"dot_{b}", *(_project(H_wi_true, x_in_for_board(b), NEAR_Z_DEFAULTS["dot"])))
+        ls.set_point(f"arrow_{b}", *(_project(H_wi_true, x_in_for_board(b), NEAR_Z_DEFAULTS["arrow"])))
+    H_iw, H_wi, diag = near_field_homography(ls)
+    assert diag["reproj_board_rmse"] < 0.1 and diag["reproj_ft_rmse"] < 0.1
+    # near region (0-15 ft) is well-conditioned
+    assert diag["sensitivity_per_px"]["foul_0ft"]["d_board_per_px"] < 1.0
+
+
+def test_eligibility_partial_path_near_valid_far_degenerate():
+    """The key #2 capability: a degenerate FAR calibration (like the ball-return clips) but a VALID near
+    calibration → near-lane metrics stay eligible, far-lane don't, tier = partial."""
+    from lanesight_core.cv.calib import eligibility as E
+    bad_far = {"reproj_board_rmse": 200.0, "longitudinal_zones": 2,
+               "sensitivity_per_px": {"entry_59ft": {"d_board_per_px": 2000.0}}}
+    r = E.classify(diag=bad_far, coverage={"near_ft": 0.5, "far_ft": 30.0}, near_calib_valid=True)
+    assert r["tier"] == E.YELLOW
+    assert r["metrics"]["laydown_board"]["eligible"] is True
+    assert r["metrics"]["speed_early"]["eligible"] is True
+    assert r["metrics"]["entry_board"]["eligible"] is False
+    assert r["metrics"]["breakpoint_board"]["eligible"] is False
+
+
 def test_resolution_scale_invariant_bounds():
     """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
     from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT
