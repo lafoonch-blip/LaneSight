@@ -19,6 +19,13 @@ def test_shot1_like_light_hit_moves_right():
     r = strike_adjustment(dict(entry_board=14.5, entry_angle_deg=4.5, pins_standing={3, 6, 10}))
     m = r['recommendations'][0]
     assert r['hit']['hit'] == 'light' and m['direction'] == 'right' and m['move_feet'] == 2 * m['move_target']
+    # MVP-06: every actionable move carries both why (reason) and an expected-effect string.
+    assert m.get('reason') and m.get('expected')
+
+def test_execution_and_strike_carry_expected():
+    # execution miss (a move_feet=0 action) also gets an expected-effect line
+    ex = strike_adjustment(dict(entry_board=21, board_at_15ft=13.0, entry_angle_deg=5), intent=dict(arrows_board=10))
+    assert ex['recommendations'][0].get('expected')
 
 def test_strike_in_pocket_no_move():
     r = strike_adjustment(dict(entry_board=17.6, entry_angle_deg=5.5, pins_standing=set()))

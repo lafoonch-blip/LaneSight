@@ -173,7 +173,8 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
         k, v = max(ex['off'].items(), key=lambda kv: abs(kv[1]))
         where = {'laydown_board': 'laydown', 'arrows_board': 'the arrows', 'breakpoint_board': 'the breakpoint'}[k]
         recs.append(_rec('execution', f"Missed your target by {abs(v):.1f} boards at {where}. Repeat the same line and hit your mark before moving.",
-                         dict(intent=intent, actual=actual), 'high', move_feet=0, move_target=0))
+                         dict(intent=intent, actual=actual), 'high', move_feet=0, move_target=0,
+                         expected="Hitting your mark tells us whether the lane actually needs a move — most 'bad' shots are execution, not the lane."))
     elif leave.get('leave') == 'unknown':
         # Unreadable deck (SHOT_REVIEW 2026-10-25, fix #3a): can't tell a strike from a miss, so no line move.
         recs.append(_rec('none', "Can't confirm the result — the pins weren't readable, so I can't tell a strike "
@@ -187,30 +188,36 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
                          'high' if hit['hit'] == 'pocket' else 'medium', watch=hit['hit'] if hit['hit'] != 'pocket' else None))
     else:
         d = hit.get('boards_from_pocket', 0.0)
+        exp_pocket = f"Should bring your entry about {abs(d):.0f} board{'s' if round(abs(d)) != 1 else ''} toward the pocket."
         if hit['hit'] in ('high', 'brooklyn'):
             feet, tgt, lab = _move_size(d, confirmed)
             recs.append(_rec('move', f"{hit['reason']} Move {left}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
                              'medium' if cls == 'REACTION_CHANGE' else 'low', direction=left, move_feet=feet, move_target=tgt,
+                             expected=exp_pocket,
                              note=None if cls != 'NO_INTENT' else 'Set your target line to separate a missed shot from a lane change.'))
         elif hit['hit'] == 'light':
             feet, tgt, lab = _move_size(d, confirmed)
             recs.append(_rec('move', f"{hit['reason']} Move {right}: feet {feet} boards, target {tgt} board{'s' if tgt != 1 else ''} ({lab}).",
                              dict(entry_board=shot.get('entry_board'), boards_from_pocket=d, leave=leave.get('leave')),
                              'medium' if cls == 'REACTION_CHANGE' else 'low', direction=right, move_feet=feet, move_target=tgt,
+                             expected=exp_pocket,
                              note=None if cls != 'NO_INTENT' else 'Set your target line to separate a missed shot from a lane change.'))
         else:   # pocket
             if leave.get('read') == 'light':
                 recs.append(_rec('move', f"{hit['reason']} {leave.get('reason', '')} Move toward the miss: {right}, feet 2 boards and target 1 board (2-and-1).",
                                  dict(entry_board=shot.get('entry_board'), leave=leave.get('leave')), 'low',
-                                 direction=right, move_feet=2, move_target=1))
+                                 direction=right, move_feet=2, move_target=1,
+                                 expected="Should tighten your entry angle and carry that corner."))
             elif leave.get('read') in ('weak_or_light', 'weak', 'slightly_light') or hit.get('angle') == 'flat':
                 recs.append(_rec('release', f"{hit['reason']} {leave.get('reason', '')} Keep the line; get more entry angle and drive: "
                                  "a touch less speed or a stronger release.".strip(),
-                                 dict(entry_angle=shot.get('entry_angle_deg'), leave=leave.get('leave')), 'low', speed='slightly slower'))
+                                 dict(entry_angle=shot.get('entry_angle_deg'), leave=leave.get('leave')), 'low', speed='slightly slower',
+                                 expected="More entry angle should help the ball drive through the pocket and carry."))
             elif leave.get('read') in ('high', 'slightly_high'):
                 recs.append(_rec('speed', f"{hit['reason']} {leave.get('reason', '')} Good line; a touch more speed or a firmer release usually carries this.",
-                                 dict(leave=leave.get('leave')), 'low', speed='slightly faster'))
+                                 dict(leave=leave.get('leave')), 'low', speed='slightly faster',
+                                 expected="A touch more speed should hold the pocket and improve carry."))
             else:
                 recs.append(_rec('none', f"{hit['reason']} Pocket hit with an unlucky leave ({leave.get('leave')}). Repeat the shot.", {}, 'medium'))
     tr = transition(history or [], shot, handed)
