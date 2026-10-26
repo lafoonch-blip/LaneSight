@@ -21,11 +21,13 @@ COPY . .
 RUN pip install ".[api]"
 RUN mkdir -p /data
 
-# Secrets come from the host as env vars (fly secrets set ...), read by lanesight_api/config.py:
+# Secrets come from the host as env vars (Cloud Run secrets / fly secrets), read by lanesight_api/config.py:
 #   LANESIGHT_DB_URL  LANESIGHT_SERVICE_ROLE  LANESIGHT_JWT_SECRET
+# Cloud Run: also set LANESIGHT_SYNC_JOBS=1 (run analysis inline — request-scoped CPU).
 # Do NOT set LANESIGHT_API_DEV or LANESIGHT_FORCE_MEMORY in prod (real Supabase auth only).
+# Shell form so $PORT (Cloud Run injects 8080; overridable) is honored; defaults to 8080 for Fly/local.
 EXPOSE 8080
-CMD ["uvicorn", "lanesight_api.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD exec uvicorn lanesight_api.app:app --host 0.0.0.0 --port ${PORT:-8080}
 
 # ---- FOLLOW-UP: enable Form analysis ----
 # 1) change `pip install ".[api]"` -> `pip install ".[api,form]"`

@@ -2,6 +2,7 @@
 In-process, single worker thread. Job states queued/running/done/failed(+reason) with per-step timings
 (OPS-01). No in-session concurrency in MVP."""
 from __future__ import annotations
+import os
 import threading
 import time
 import uuid
@@ -33,14 +34,25 @@ class SerialJobQueue:
         self._q: list[tuple[Job, callable]] = []
         self._lock = threading.Lock()
         self._wake = threading.Condition(self._lock)
-        self._worker = threading.Thread(target=self._run, name='lanesight-jobs', daemon=True)
-        self._worker.start()
+        # SYNC mode (LANESIGHT_SYNC_JOBS=1): run the analysis INLINE in the request thread instead of a
+        # background worker. Cloud Run (Phase 1, DEPLOY_CLOUDRUN.md) throttles CPU to ~zero once a request
+        # returns, so a background thread would stall; running inside the request keeps CPU allocated and
+        # lets the instance scale to zero afterward. The Mac/local service keeps the async background worker.
+        self._sync = os.environ.get('LANESIGHT_SYNC_JOBS') == '1'
+        if not self._sync:
+            self._worker = threading.Thread(target=self._run, name='lanesight-jobs', daemon=True)
+            self._worker.start()
 
     def submit(self, kind: str, fn) -> Job:
-        """fn(job) -> result dict. fn may record per-step timings via job.timings[...]. Runs serially."""
+        """fn(job) -> result dict. fn may record per-step timings via job.timings[...]. Runs serially on the
+        background worker, or INLINE (done when this returns) in sync mode."""
         job = Job(id=uuid.uuid4().hex, kind=kind)
         with self._lock:
             self._jobs[job.id] = job
+        if self._sync:
+            self._execute(job, fn)
+            return job
+        with self._lock:
             self._q.append((job, fn))
             self._wake.notify()
         return job
@@ -49,20 +61,24 @@ class SerialJobQueue:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def _execute(self, job, fn):
+        """Run one job to completion (shared by the background worker and sync mode)."""
+        job.state = 'running'
+        job.started_at = time.monotonic()
+        try:
+            job.result = fn(job)
+            job.state = 'done'
+        except Exception as e:                   # fail visibly with the reason (DEC-043), never silently
+            job.state = 'failed'
+            job.reason = f'{type(e).__name__}: {e}'
+        finally:
+            job.finished_at = time.monotonic()
+            job.timings['total'] = job.finished_at - job.started_at
+
     def _run(self):
         while True:
             with self._lock:
                 while not self._q:
                     self._wake.wait()
                 job, fn = self._q.pop(0)
-            job.state = 'running'
-            job.started_at = time.monotonic()
-            try:
-                job.result = fn(job)
-                job.state = 'done'
-            except Exception as e:               # fail visibly with the reason (DEC-043), never silently
-                job.state = 'failed'
-                job.reason = f'{type(e).__name__}: {e}'
-            finally:
-                job.finished_at = time.monotonic()
-                job.timings['total'] = job.finished_at - job.started_at
+            self._execute(job, fn)
