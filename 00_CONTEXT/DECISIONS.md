@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.27  
-Last Updated: 2026-10-25  
+Version: 1.29  
+Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.26
+Supersedes: v1.28
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -663,6 +663,31 @@ Other rules:
 **Date:** 2026-10-25
 **Status:** ACCEPTED (supersedes GUARDRAILS workstream A). Phase-1 harness landed; ablation pending ground-truth labeling.
 **Supersedes:** GUARDRAILS 3.7 workstream A (far-lane calibration)
+
+### DEC-063 — Staged test accounts for dev build and testing
+**Decision:**
+- Shayne's real account stays real-only (practice/validation data). Full-experience testing uses **separate staged accounts**, never staged data in a real account.
+- Seven kinds: `new_user`, `active` (main showcase), `improving`, `struggling`, `edge_cases`, `heavy`, `under_13` (`03_ENGINEERING/dev_build_v0/HANDOFF_2026-10-26_STAGED_TEST_ACCOUNTS.md`).
+- Staged accounts are flagged (`profiles.is_staged`); their feedback is flagged too and excluded from feedback review, analytics and cross-user baselines. Uploads still never count (DEC-055).
+- Staged history is generated from real analyzed shots and run through the real score, tier, achievement and recommendation engines; a re-runnable seed tool resets any staged account to its known state and refuses to touch non-staged accounts.
+
+**Why:** Staging data inside the real account would contaminate Stats, LaneSight Score, achievements and the retained feedback store (a contaminated session already needed a reset script on 2026-10-25). Known-state accounts also give repeatable regression testing and carry forward into Beta.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (dev build onward)
+**Supersedes:** —
+
+### DEC-064 — Canonical metric reference definitions (entry board / entry angle / speed)
+**Decision:** (resolves D-1/D-2/D-3 in `03_ENGINEERING/CV_MEASUREMENT_DEFINITIONS.md`)
+- **Entry board (D-1):** the canonical metric is read at a **fixed 60.0 ft plane** (foul line → head-pin spot), named `entry_board@60ft`. The other positions are kept as **separately named secondary** metrics — `entry_board@59.44ft` (ball centre at first contact, the current production value) and `entry_board@55ft` (sensor-style). Every entry-board metric name carries its reference plane; no bare "entry_board".
+- **Entry angle (D-2):** canonical is `entry_angle@52–55ft` — a **fixed window**, `atan(dX/dZ)` in degrees, sign positive = toward the pocket. The dynamic last-1.5-ft version is demoted to an internal diagnostic.
+- **Speed (D-3):** keep four **separately named** speeds — `ball_speed` (60 ft foul→pins average, canonical headline), `speed_release`, `speed_early`, `speed_late`. Speeds are **planar** unless suffixed `_dz` (downlane dZ/dt).
+- (D-4 Ruby speed definition remains OPEN — treat Ruby as a secondary reference and flag the mismatch; D-5 USBC ranges already implemented.)
+- The canonical constants live in `cv/calib/lane_geometry` (`ENTRY_REFERENCE_FT`, `ENTRY_ANGLE_WINDOW_FT`, `ENTRY_SECONDARY_FT`). Applying them to the production `cv/metrics` outputs is a small, mechanical follow-up, **deferred while production CV is frozen (DEC-062)**.
+
+**Why:** Production shipped two different "entry" references (board @ 59.44 ft contact vs angle @ 52–55 ft) and a floating entry-angle window — the exact ambiguity the CV review (§4) warned makes a *perfectly calibrated* clip disagree with ground truth. Fixing the definitions now lets Phase-2 accuracy be scored against a stable reference.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (definitions; production implementation deferred under DEC-062 freeze)
+**Supersedes:** refines DEC-036 (speed) and the entry-metric conventions; no decision withdrawn
 
 ## Superseded decisions
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).

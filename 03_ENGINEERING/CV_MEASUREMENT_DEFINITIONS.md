@@ -1,8 +1,8 @@
 # CV Measurement Definitions — canonical conventions (DEC-062 Phase 1)
-Version: 1.1
-Last Updated: 2026-10-25
-Status: Direction APPROVED (Shayne 2026-10-25); specific D-1/2/3 values pending ratification; D-5 implemented
-(USBC 2026 ranges). Canonical reference for judging ablation accuracy. Grounds every metric in the real code
+Version: 1.2
+Last Updated: 2026-10-26
+Status: D-1/2/3 RATIFIED (DEC-064); D-5 implemented (USBC 2026 ranges); D-4 open (needs Ruby docs). Canonical
+reference for judging ablation accuracy. Grounds every metric in the real code
 (`lanesight_core/cv/metrics.py`, `cv/calib/lane_geometry.py`) and the Ruby fields
 (`validation/IMG_875x_ruby.json`). Flags the conflicts that can make a *perfectly calibrated* clip still
 disagree with ground truth — resolve these BEFORE reading ablation errors (handoff §4; response §3).
@@ -34,15 +34,17 @@ contact**, derived as `60 ft − (ball_radius 4.30" + pin_radius 2.38")/12`. Thi
 reference, **not** a fixed plane. But `entry_angle_52_55` (below) uses a **fixed 52–55 ft** plane. So the
 two "entry" numbers live at different Z — exactly the ambiguity the review warns about.
 
-**Decision D-2 (choose one canonical entry reference):**
-| Option | Z reference | Pro | Con |
-|---|---|---|---|
-| **A (recommended)** | fixed **60.0 ft plane** (foul→headpin spot) | unambiguous, matches "entry at the pins", geometry-only (no ball/pin radius coupling) | ~0.56 ft nearer than contact; tiny board delta |
-| B | keep `59.44 ft` contact plane | current behavior; physically "where it hits" | couples to ball+pin radii; reads like a plane but isn't |
-| C | fixed **55 ft** (common sensor "entry") | matches some sensors | not where the app says "entry" |
+**Decision D-1 — RATIFIED (DEC-064, 2026-10-26): canonical `entry_board @ 60.0 ft`** (fixed
+foul→head-pin-spot plane). Geometry-first: unambiguous, no ball/pin-radius coupling, matches "entry at the
+pins". The other positions are kept as **separately named** secondary metrics, each carrying its Z:
+`entry_board@59.44ft` (ball-center at first contact — the current production value) and `entry_board@55ft`
+(sensor-style). **Every entry-board metric name carries its reference plane** — no bare "entry_board".
 
-Recommend **A**: report `entry_board @ 60.0 ft` as a named, fixed plane; keep the 59.44 ft contact figure
-only as an internal note. Whatever we pick, the metric name must carry the Z (`entry_board@60ft`).
+| Option | Z reference | Status |
+|---|---|---|
+| **A** | fixed **60.0 ft** (foul→head-pin spot) | **CANONICAL** |
+| B | `59.44 ft` contact plane (current production) | kept as named secondary `entry_board@59.44ft` |
+| C | fixed **55 ft** (sensor-style) | kept as named secondary `entry_board@55ft` |
 
 ## 3. Entry angle — declare the window
 
@@ -50,10 +52,10 @@ only as an internal note. Whatever we pick, the metric name must carry the Z (`e
   curve** — a *floating* window that depends on where the track ends. Fragile across clips.
 - `entry_angle_52_55_deg`: mean angle over a **fixed 52–55 ft** span (Specto-compatible). Stable, comparable.
 
-**Decision D-3 (recommended):** make **`entry_angle @ 52–55 ft`** the canonical reported angle (fixed
-window, sensor-comparable); demote the floating last-1.5-ft version to a diagnostic. `atan(dX/dZ)`, degrees,
-sign convention: positive = toward the pocket. Derivative uncertainty will exceed position uncertainty —
-report it.
+**Decision D-2 — RATIFIED (DEC-064, 2026-10-26): canonical `entry_angle @ 52–55 ft`** — a fixed window, NOT
+the dynamic last-1.5-ft one. `atan(dX/dZ)` in degrees, sign convention **positive = toward the pocket**. The
+floating last-1.5-ft version is demoted to an internal diagnostic. Report the derivative uncertainty (it
+exceeds the position uncertainty).
 
 ## 4. Speed — match Ruby's definition or don't compare
 
@@ -67,13 +69,14 @@ Production speeds:
 Ruby provides `speed_mph` (e.g. IMG_8753 = 17.8). **Its exact location/time definition is unconfirmed**
 (release-point? a fixed sensor location?). Most optical sensors report a near-release/early-lane speed.
 
-**Decision D-3/D-4 (Shayne, 2026-10-25):** **Retain full-lane average AND early/late segment speeds as
-separate measurements** — do not collapse them. For Ruby: its public docs confirm speed/rev tracking but do
-**not** establish the exact measurement location/averaging, so **do NOT assume Ruby = full-lane average.**
-Until the definition is obtained, treat Ruby as a **secondary reference only** and **flag the measurement
-mismatch** in any comparison (never present a Ruby-vs-LaneSight delta as accuracy). Also distinguish downlane
-`dZ/dt` from planar `sqrt(dX² + dZ²)` speed (handoff §4); for a nearly-straight line they're within rounding,
-but name it.
+**Decision D-3 — RATIFIED (DEC-064, 2026-10-26): keep four separately named speeds** — `ball_speed` (60 ft
+foul→pins average; **canonical headline**), `speed_release` (front-half skid), `speed_early`, `speed_late`.
+Do not collapse them. Speeds are **planar** `sqrt(dX²+dZ²)/dt` unless suffixed `_dz` (downlane `dZ/dt`); for
+a near-straight line they're within rounding, but the convention is declared.
+
+**Decision D-4 — STILL OPEN (needs Ruby docs):** do **NOT assume Ruby = full-lane average**. Treat Ruby as a
+**secondary reference only** and **flag the measurement mismatch** in any comparison — never present a
+Ruby-vs-LaneSight delta as accuracy until Ruby's exact location/averaging is confirmed.
 
 ## 5. Breakpoint, laydown, arrows
 
@@ -112,14 +115,15 @@ anchors (does a verified arrow map into its 12–16 ft band?).
 
 ## Summary — the four that can fake an error
 
-| # | Thing | Current state | Direction (Shayne approved 2026-10-25) |
-|---|-------|---------------|----------------------|
-| D-1 | Entry board | two conflicting references | **one explicitly-defined** longitudinal reference is canonical; keep the others as **separately named** metrics |
-| D-2 | Entry angle | floating last-1.5-ft window | **fixed** reference distance/window (not dynamic) |
-| D-3 | Speed | headline 60 ft avg | **retain full-lane average + early/late segments as separate** measurements |
-| D-4 | Ruby speed | assumed comparable | **do not assume full-lane average**; secondary reference only, **flag the mismatch** |
-| D-5 | Arrow/dot coords | nominal/ambiguous | **USBC 2026 ranges** (6–8 / 12–16 / 33–44 ft; approach behind foul); center-specific where measured — **done** in `lane_geometry` |
+| # | Thing | Status | Ratified value (DEC-064, 2026-10-26) |
+|---|-------|--------|--------------------------------------|
+| D-1 | Entry board | **RATIFIED** | canonical `entry_board@60.0ft`; `@59.44ft` + `@55ft` kept as named secondaries |
+| D-2 | Entry angle | **RATIFIED** | canonical `entry_angle@52–55ft` (fixed window); floating version → diagnostic |
+| D-3 | Speed | **RATIFIED** | keep `ball_speed`(60 ft avg, headline) + `speed_release`/`speed_early`/`speed_late`; planar unless `_dz` |
+| D-4 | Ruby speed | **OPEN** | needs Ruby docs; secondary reference only, flag the mismatch |
+| D-5 | Arrow/dot coords | **DONE** | USBC 2026 ranges (6–8 / 12–16 / 33–44 ft; approach behind foul) in `lane_geometry` |
 
-Direction is approved; the **specific D-1/D-2/D-3 reference values** (e.g. 60.0 ft, the 52–55 ft window) are
-still to be ratified against the local doc. D-5 is implemented. Resolve the specific values before the
-ablation's B/C columns are read as accuracy.
+D-1/2/3/5 are settled. D-4 waits on Ruby's published definition. **Implementation note:** the canonical
+reference constants live in `cv/calib/lane_geometry` (`ENTRY_REFERENCE_FT`, `ENTRY_ANGLE_WINDOW_FT`,
+`ENTRY_SECONDARY_FT`); applying them to the production `cv/metrics` outputs is a small follow-up, deferred
+while production CV is frozen (DEC-062) — the definitions are fixed now so the later change is mechanical.

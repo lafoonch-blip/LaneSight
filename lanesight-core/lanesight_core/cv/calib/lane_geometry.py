@@ -30,6 +30,14 @@ BALL_DIAMETER_IN = 8.59        # legal ~8.5"–8.595"; matches cv/track.BALL_IN
 # (4.30 in ball radius + 2.38 in pin radius); kept as the value shipped in cv/metrics.Z_IMPACT.
 Z_IMPACT_FT = round(LANE_LENGTH_FT - (4.30 + 2.38) / 12.0, 2)   # 59.44
 
+# --- Ratified metric-reference conventions (DEC-064, 2026-10-26; CV_MEASUREMENT_DEFINITIONS D-1/D-2/D-3) ---
+# D-1: canonical entry board is read at a FIXED 60.0 ft plane (foul -> head-pin spot); the other positions
+# are named secondaries. D-2: canonical entry angle over a FIXED 52-55 ft window. These are the definitions;
+# applying them to cv/metrics outputs is a deferred follow-up (production CV frozen, DEC-062).
+ENTRY_REFERENCE_FT = 60.0                               # canonical entry_board plane
+ENTRY_SECONDARY_FT = {"contact": Z_IMPACT_FT, "sensor": 55.0}   # kept as named secondary metrics
+ENTRY_ANGLE_WINDOW_FT = (52.0, 55.0)                   # canonical entry_angle window
+
 _SPEC = "USBC Equipment Specifications Manual (2026-03-26)"
 
 # USBC 2026 permits RANGES, not a single universal marking position (Shayne, 2026-10-25). So arrows/dots are

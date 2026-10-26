@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.31  
+Version: 1.33  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.30
+Supersedes: v1.32
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -17,6 +17,9 @@ Supersedes: v1.30
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 
 ## Where things stand
+- **Canonical metric definitions ratified (2026-10-26, DEC-064):** resolved the D-1/2/3 ambiguities in `03_ENGINEERING/CV_MEASUREMENT_DEFINITIONS.md` — canonical `entry_board@60ft` (with `@59.44ft`/`@55ft` as named secondaries), `entry_angle@52–55ft` (fixed window), and four separately-named speeds (`ball_speed` headline + release/early/late). Constants added to `cv/calib/lane_geometry` (`ENTRY_REFERENCE_FT`/`ENTRY_ANGLE_WINDOW_FT`/`ENTRY_SECONDARY_FT`); applying them to production `cv/metrics` is a deferred mechanical follow-up (CV frozen, DEC-062). D-4 (Ruby speed definition) still open; D-5 (USBC ranges) done.
+- **CV Phase-1 follow-ups (2026-10-26):** (a) **PnP 3D-pose test** (`cv/calib/pose.py`) — a full camera pose does NOT rescue the elevated ball-return view (physically impossible poses; pin height unobservable) → the limit is positional, not the homography method; a good position measures 0.33 board/px. (b) **Partial-results path** — a near-field calibration from the on-plane fiducials (`solve.near_field_homography`) recovers the near lane (0–15 ft at 0.25–0.41 board/px, interpolated), so an elevated clip still yields laydown + early boards + early speed + launch + all form; `eligibility.classify` is now region-aware (`near_calib_valid`). Both in `02_RESEARCH/CV_PHASE1_VALIDATION_REPORT.md` §3.4–3.5. Phase-2 camera-position protocol + harness ready (`03_ENGINEERING/CV_PHASE2_CAMERA_VALIDATION_PROTOCOL.md`), awaiting Shayne's tripod recordings.
+- **Staged test accounts (2026-10-26, DEC-063):** real account stays real-only; seven staged accounts (new user, active, improving, struggling, edge cases, heavy, under-13) seeded from real shots through the real engines, flagged and excluded from feedback/analytics, resettable. Handoff: `03_ENGINEERING/dev_build_v0/HANDOFF_2026-10-26_STAGED_TEST_ACCOUNTS.md`. **Not built yet.**
 - **Recommendation guardrails + design 3.7 (2026-10-25, GUARDRAILS 3.7 handoff; SHOT_REVIEW 14b234c8):** the lane session exposed the real failure — a close/off-axis camera corrupts the far-lane depth scale, so some shots came out with impossible metrics (late speed > early, entry board off by ~7) and others didn't analyze. Shipped and **deployed to the live Mac service 2026-10-25** (see the Deployed note below):
   - **B — plausibility gate (DEC-061):** `capture_quality.far_lane` ("limited" + a camera-spot reason) and far-lane metrics flagged `low_confidence` (not shown as measured) when the depth scale is implausible; `speed_release` → `best_effort`. Verified on 14b234c8 (flagged) and IMG_8753 (not false-flagged). Values unchanged.
   - **C — recommendation state machine:** insights carry an explicit `state` (`move | low_confidence_move | strike_repeat | execution_miss | pins_unknown | no_reliable_data`) + confidence + note; a single shot never moves more than 2-and-1 (3-and-2 needs 2+ agreeing shots); boards clamped 1–39.
