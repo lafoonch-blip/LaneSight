@@ -42,25 +42,37 @@ struct ShotCardView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    nextShotCard
+                    if !result.isForm { resultBadge }
                     if result.captureFarLaneLimited { captureBanner }
                     laneAndTarget
-                    ballSection
-                    if !formMetrics.isEmpty { formSection }
-                    sensorSection
-                    if result.isUpload {
-                        uploadFooter
-                    } else {
-                        ScoreCard(score: result.score, showBreakdown: false)
-                        if result.footer != nil { scoreNudges }
+                    nextShotCard
+                    if !result.isForm {
+                        ringRow
+                        allMetricsSection
                     }
+                    if !formMetrics.isEmpty { formSection }
+                    // v3.7 folds leave/sensor correction into the result badge's "Change" — no standalone
+                    // "Was a sensor in the ball?" card on the shot screen (kept wired for the report sheet).
+                    if result.isUpload { uploadFooter }
                     ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
                     analyzedFooter
+                    Color.clear.frame(height: 1).id("ls-bottom")
                 }
                 .padding(16)
             }
+            #if DEBUG
+            .task {
+                // Headless preview: optionally scroll to a named anchor so a screenshot can capture the
+                // below-the-fold sections (no CLI scroll in this sim). No-op outside the preview harness.
+                if let a = ProcessInfo.processInfo.environment["LS_PREVIEW_SCROLL"], !a.isEmpty {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    withAnimation(.none) { proxy.scrollTo(a == "bottom" ? "ls-bottom" : a, anchor: .bottom) }
+                }
+            }
+            #endif
             .background(LSBackground())
             .navigationTitle("Shot")
             .navigationBarTitleDisplayMode(.inline)
@@ -78,6 +90,7 @@ struct ShotCardView: View {
                     CelebrationRouter(notification: n, onClose: { pendingNotification = nil })
                         .environmentObject(model)
                 }
+            }
             }
         }
     }
@@ -348,6 +361,8 @@ struct ShotCardView: View {
 
     // MARK: lane recreation + target vs actual
 
+    // v3.7 lane card (Figma 413:4132): the simulated lane recreation + legend only. The target-vs-actual
+    // comparison moved into the "All metrics" rows as "Target N" sublabels, so there is no table here.
     private var laneAndTarget: some View {
         let t = model.sessionTarget
         let laydown = metricDict["laydown_board"]?.value
@@ -358,19 +373,6 @@ struct ShotCardView: View {
         let entryAngle = metricDict["entry_angle"]?.value
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Target vs actual").font(.lsHeadline).foregroundStyle(LS.textPrimary)
-                Spacer()
-                if let badge = onTargetBadge(targetArrows: t.arrowsBoard, actualArrows: arrowsAct,
-                                             targetBreakpoint: t.breakpointBoard, actualBreakpoint: bpAct) {
-                    Text(badge.text)
-                        .font(.lsCaption.weight(.semibold))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(badge.color.opacity(0.18), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .foregroundStyle(badge.color)
-                }
-            }
-
             LaneRecreationView(
                 targetFeet: t.feetBoard, targetArrows: t.arrowsBoard, targetBreakpoint: t.breakpointBoard,
                 laydown: laydown, actualArrows: arrowsAct, actualBreakpoint: bpAct,
@@ -378,9 +380,6 @@ struct ShotCardView: View {
                 handed: model.handed, oilLengthFt: nil)
 
             legend
-
-            targetTable(target: t, laydown: laydown, arrowsAct: arrowsAct, bpAct: bpAct,
-                        entryBoard: entryBoard, entryAngle: entryAngle, bpDist: bpDist)
         }
         .lsCard()
     }
@@ -483,29 +482,121 @@ struct ShotCardView: View {
 
     // MARK: ball metrics grid
 
-    private var ballSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("BALL").lsEyebrow()
-            if ballMetrics.isEmpty {
-                Text("No ball metrics returned for this shot.").font(.lsCallout).foregroundStyle(LS.textSecondary)
-            } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                    ForEach(ballMetrics, id: \.0) { name, metric in
-                        BallMetricTile(name: MetricDisplay.humanize(name), metric: metric)
-                    }
-                }
-                if let note = unavailableNote {
-                    Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
+    // v3.7 shot result badge (Figma 413:4143). "Change" lets the bowler report the leave when the deck
+    // couldn't be read (wiring the report sheet is a follow-up).
+    private var resultBadge: some View {
+        ShotResultBadge(state: result.insightsState, confidence: result.insightsConfidence) { }
+    }
+
+    private func metric(_ name: String) -> Metric? { result.metrics.first { $0.0 == name }?.1 }
+
+    // 3 headline rings (Figma 413:4147): Speed · Rev rate · Accuracy.
+    private var ringRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            ring("Speed", "ball_speed", unit: "mph", lo: 8, hi: 24, color: LS.action)
+            ring("Rev Rate", "rev_rate", unit: "rpm", lo: 100, hi: 600, color: LS.action)
+            ring("Accuracy", "accuracy", unit: "", lo: 0, hi: 100, color: LS.success)
+        }
+    }
+
+    private func ring(_ label: String, _ name: String, unit: String, lo: Double, hi: Double, color: Color) -> some View {
+        let m = metric(name)
+        let status = MetricStatus(m?.status)
+        let v = status == .unavailable ? nil : m?.value
+        let valueStr = v.map { String(format: $0 >= 100 ? "%.0f" : "%.1f", $0) } ?? "—"
+        return MetricRing(label: label, value: valueStr, unit: v == nil ? "" : unit,
+                          fraction: v.map { ($0 - lo) / (hi - lo) } ?? 0, color: color,
+                          subLabel: status == .bestEffort ? "best effort" : nil)
+    }
+
+    // All-metrics list (Figma 413:4154) — one unified, ordered list: ball speed, the positional boards
+    // with their "Target N" sublabels, the read result, then the remaining ball dynamics. Each row is an
+    // honest status icon + name/context + value; an unmeasured value shows "—" with the reason.
+    private struct ShotMetricRow: Identifiable {
+        let id: String
+        let name: String
+        let sublabel: String?
+        let value: String
+        let status: MetricStatus
+    }
+
+    private func fmtVal(_ m: Metric?, suffix: String = "") -> String {
+        guard let m, let v = m.value, MetricStatus(m.status) != .unavailable else { return "—" }
+        let unit = suffix.isEmpty ? (m.unit ?? "") : suffix
+        return unit.isEmpty ? Fmt.number(v) : "\(Fmt.number(v)) \(unit)"
+    }
+
+    /// Positional boards read as a bare board number ("15.1") — the "board" unit is implied by the lane.
+    private func posVal(_ m: Metric?) -> String {
+        guard let m, let v = m.value, MetricStatus(m.status) != .unavailable else { return "—" }
+        return Fmt.number(v)
+    }
+
+    private func target(_ v: Double?) -> String? { v.map { "Target \(Fmt.number($0))" } }
+
+    private var shotMetricRows: [ShotMetricRow] {
+        let t = model.sessionTarget
+        var rows: [ShotMetricRow] = []
+        var used = Set<String>()
+        func status(_ key: String) -> MetricStatus { MetricStatus(metricDict[key]?.status) }
+
+        // Ball speed (headline dynamic).
+        if let m = metricDict["ball_speed"] {
+            used.insert("ball_speed")
+            rows.append(.init(id: "ball_speed", name: "Ball speed", sublabel: m.note,
+                              value: fmtVal(m, suffix: "mph"), status: status("ball_speed")))
+        }
+        // Positional boards carry their set target as the sublabel.
+        if let m = metricDict["arrows_board"] {
+            used.insert("arrows_board")
+            rows.append(.init(id: "arrows_board", name: "Arrows", sublabel: target(t.arrowsBoard),
+                              value: posVal(m), status: status("arrows_board")))
+        }
+        if let m = metricDict["breakpoint_board"] {
+            used.insert("breakpoint_board"); used.insert("breakpoint_distance")
+            var v = posVal(m)
+            if v != "—", let d = metricDict["breakpoint_distance"]?.value { v += " at \(Int(d.rounded())) ft" }
+            rows.append(.init(id: "breakpoint_board", name: "Breakpoint", sublabel: target(t.breakpointBoard),
+                              value: v, status: status("breakpoint_board")))
+        }
+        if let m = metricDict["entry_board"] {
+            used.insert("entry_board"); used.insert("entry_angle")
+            var v = posVal(m)
+            if v != "—", let a = metricDict["entry_angle"]?.value { v += " · \(String(format: "%.1f", a))°" }
+            rows.append(.init(id: "entry_board", name: "Entry board · angle", sublabel: metricDict["entry_board"]?.note,
+                              value: v, status: status("entry_board")))
+        }
+        // Read result (mirrors the badge up top).
+        let res = ShotResultBadge(state: result.insightsState, confidence: result.insightsConfidence, onChange: {}).resultText
+        rows.append(.init(id: "result", name: "Result", sublabel: res.sub,
+                          value: res.title, status: res.title == "Not read" ? .unavailable : .measured))
+        // Remaining ball dynamics (rev rate, loft, …) in their returned order.
+        for (name, m) in ballMetrics where !used.contains(name) {
+            rows.append(.init(id: name, name: MetricDisplay.humanize(name), sublabel: m.note,
+                              value: fmtVal(m), status: MetricStatus(m.status)))
+        }
+        return rows
+    }
+
+    private var allMetricsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("All metrics").font(.system(size: 15, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Spacer()
+            }
+            .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 6)
+            let rows = shotMetricRows
+            ForEach(rows) { r in
+                MetricStatusRowV37(name: r.name, sublabel: r.sublabel, value: r.value, status: r.status)
+                if r.id != rows.last?.id {
+                    Divider().overlay(LS.border).padding(.leading, 40)
                 }
             }
         }
-        .lsCard()
-    }
-
-    /// Surface the first honest note from any unavailable/best-effort ball metric (e.g. "a strip of tape
-    /// on the ball helps"), if the backend provided one.
-    private var unavailableNote: String? {
-        ballMetrics.compactMap { $0.1.note }.first { !$0.isEmpty }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     private var formSection: some View {
