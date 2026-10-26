@@ -205,6 +205,12 @@ struct APIClient {
         try await send(makeRequest("sessions/\(sid)/shots"), as: [SessionShotRow].self)
     }
 
+    /// Session aggregates for the Active Session rings + Session summary (GET /sessions/{id}/summary):
+    /// per-metric mean/spread + a consistency repeatability score.
+    func sessionSummary(_ sid: String) async throws -> SessionSummary {
+        try await send(makeRequest("sessions/\(sid)/summary"), as: SessionSummary.self)
+    }
+
     // MARK: stats
 
     func stats(view: String, range: String?) async throws -> StatsResponse {

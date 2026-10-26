@@ -388,10 +388,40 @@ struct TierEvent: Codable, Equatable {
 struct SessionShotRow: Codable, Identifiable, Equatable {
     let id: String
     let state: String?           // pending | analyzed | failed
-    let created_at: Double?
+    let created_at: Double?      // epoch seconds — decoded leniently from a Double OR an ISO-8601 string
     let classification: String?  // e.g. pocket / light / high (from insights)
     let source: String?          // live | upload
     let metrics: ShotRowMetrics?
+
+    enum CodingKeys: String, CodingKey { case id, state, created_at, classification, source, metrics }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        state = try? c.decodeIfPresent(String.self, forKey: .state)
+        created_at = APIDate.epoch(c, .created_at)
+        classification = try? c.decodeIfPresent(String.self, forKey: .classification)
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+        metrics = try? c.decodeIfPresent(ShotRowMetrics.self, forKey: .metrics)
+    }
+}
+
+/// Decodes a timestamp that the API may send as epoch seconds (Double) OR an ISO-8601 string, so a
+/// backend that hasn't normalized a column to epoch never breaks the client. Returns epoch seconds.
+enum APIDate {
+    static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    static let isoNoFrac = ISO8601DateFormatter()
+
+    static func epoch<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ key: K) -> Double? {
+        if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d }
+        guard let s = try? c.decodeIfPresent(String.self, forKey: key) else { return nil }
+        if let date = iso.date(from: s) ?? isoNoFrac.date(from: s) { return date.timeIntervalSince1970 }
+        return Double(s)
+    }
 }
 
 struct ShotRowMetrics: Codable, Equatable {
@@ -400,6 +430,29 @@ struct ShotRowMetrics: Codable, Equatable {
     let entry_board: Double?
     let entry_angle: Double?
     let arrows_board: Double?
+}
+
+// MARK: - Session summary / aggregates (GET /sessions/{id}/summary)
+
+struct SessionSummary: Codable {
+    let session_id: String?
+    let n_shots: Int?
+    let metrics: [String: MetricAggregate]?
+    let consistency: SessionConsistency?
+
+    func mean(_ key: String) -> Double? { metrics?[key]?.mean }
+}
+
+struct MetricAggregate: Codable {
+    let n: Int?
+    let mean: Double?
+    let sd: Double?
+    let min: Double?
+    let max: Double?
+}
+
+struct SessionConsistency: Codable {
+    let repeatability_score: Double?
 }
 
 // MARK: - Standalone upload analyses (GET /me/uploads, DEC-055)

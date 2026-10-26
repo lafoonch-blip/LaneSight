@@ -63,6 +63,10 @@ struct PreviewHarness: View {
                 case "shotcard":
                     if let r = model.result { NavigationStack { ShotCardView(result: r) } }
                     else { Text("no shot result (set LS_PREVIEW_ID)").foregroundStyle(LS.textPrimary) }
+                case "activesession":
+                    if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
+                        NavigationStack { SessionView(reviewSessionId: id, readOnly: false) }
+                    } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
                 }
             }

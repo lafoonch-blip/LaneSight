@@ -250,7 +250,8 @@ struct SetupView: View {
 
 /// A compact FEET / ARROWS / BREAKPOINT board stepper: label on top, − value + below. Edits an optional
 /// Int; blank shows "—" and the first +/- seeds a sensible starting board. Matches Figma 411:3514.
-private struct TargetStepper: View {
+/// Shared by Setup and the Active Session target block.
+struct TargetStepper: View {
     let label: String
     @Binding var value: Int?
     let start: Int
