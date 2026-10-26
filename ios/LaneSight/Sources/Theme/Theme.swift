@@ -32,10 +32,10 @@ enum LS {
     static let cardStroke = Color(hex: 0x0C2B40)    // legacy name → standard border
 
     // Accent / action
-    static let action = Color(hex: 0x009BFF)        // primary action (cyan)
-    static let onAction = Color(hex: 0x001018)      // text / icon on an action surface
-    static let blue = Color(hex: 0x009BFF)          // legacy name → action
-    static let cyan = Color(hex: 0x009BFF)          // legacy name → action
+    static let action = Color(hex: 0x00A8F5)        // action/primary (authoritative v3.7 variable)
+    static let onAction = Color(hex: 0x001018)      // text/on-accent on an action surface
+    static let blue = Color(hex: 0x00A8F5)          // legacy name → action
+    static let cyan = Color(hex: 0x00A8F5)          // legacy name → action
 
     // Text
     static let textPrimary = Color(hex: 0xF5F6FA)

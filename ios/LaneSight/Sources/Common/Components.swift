@@ -108,11 +108,11 @@ struct LSTabTitle: View {
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.lsHeadline)
-            .foregroundStyle(LS.onAction)                       // dark text on cyan (3.0)
+            .font(.lsRoboto(21, weight: .semibold, relativeTo: .title3))  // Action/Label (v3.7)
+            .foregroundStyle(LS.onAction)                       // text/on-accent on action/primary
             .frame(maxWidth: .infinity, minHeight: 52)
             .background(LS.action.opacity(configuration.isPressed ? 0.8 : 1),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: 26, style: .continuous))  // pill (v3.7)
     }
 }
 
