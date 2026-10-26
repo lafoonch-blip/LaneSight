@@ -23,7 +23,11 @@ def lane_roi(lane, vp, shape, pad=0.25):
 def extract_blobs(path, S, lane, vp, thr=35, log=print):
     bg = S['bg']; h, w = bg.shape[:2]
     roi = lane_roi(lane, vp, bg.shape)
-    ys, xs = np.where(roi); y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    ys, xs = np.where(roi)
+    if ys.size == 0:          # degenerate lane geometry (VP/foul inverted the ROI): no region to search
+        raise RuntimeError("lane geometry unusable: the detected lane produced an empty search region "
+                           "(awkward camera angle). Reshoot with the camera behind the lane, square to it.")
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     roic = roi[y0:y1, x0:x1]; bgc = bg[y0:y1, x0:x1].astype(np.int16)
     Hs = S['Hs']; ts = S['ts']
     # Each frame is processed independently (warp + background diff + connected components), so fan the per-frame
