@@ -267,6 +267,38 @@ def end_session(sid: str, user=Depends(current_user)):
     return summary
 
 
+@app.get('/sessions/{sid}/summary')
+def session_summary(sid: str, user=Depends(current_user)):
+    """Re-openable session summary (MVP-07): per-metric averages ± spread + range, consistency, and a
+    'vs your typical' block from recent comparable sessions (same oil pattern). Typical stays 'building' until
+    3 comparable sessions exist. NOTE: typical relies on list_sessions, which is not yet DB-backed in PgStore
+    (see the session-persistence follow-up), so on a cold Cloud Run instance it reports 'building' until the
+    session lifecycle is persisted — graceful, never wrong."""
+    store = get_store()
+    sess = store.get_session(user, sid)
+    if not sess:
+        raise HTTPException(404, 'session not found')
+    from lanesight_core.insights import session as si
+    records = store.session_records(user, sid)
+    pattern = sess.get('oil_pattern_id')
+    others = [s for s in store.list_sessions(user)
+              if s.get('id') != sid and s.get('oil_pattern_id') == pattern]
+    others.sort(key=lambda s: s.get('started_at') or 0, reverse=True)
+    others = others[:5]
+    MIN_COMPARABLE = 3
+    if len(others) < MIN_COMPARABLE:
+        typical = {'status': 'building', 'n_sessions': len(others), 'need': MIN_COMPARABLE}
+    else:
+        agg: dict = {}
+        for s in others:
+            for metric, a in si.summary(store.session_records(user, s['id'])).items():
+                agg.setdefault(metric, []).append(a['mean'])
+        typical = {'status': 'ok', 'n_sessions': len(others),
+                   'metrics': {m: round(sum(v) / len(v), 2) for m, v in agg.items() if v}}
+    return {'session_id': sid, 'n_shots': len(records), 'oil_pattern_id': pattern,
+            'metrics': si.summary(records), 'consistency': si.consistency(records), 'typical': typical}
+
+
 # ----------------------------------------------------------------- shots
 @app.post('/sessions/{sid}/shots')
 async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Form('{}'),

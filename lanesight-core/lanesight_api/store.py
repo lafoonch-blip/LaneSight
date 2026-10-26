@@ -460,6 +460,17 @@ class MemoryStore:
                             source=sh.get('source'), metrics=key))
         return out
 
+    def session_records(self, user_id, session_id):
+        """Full analyzed ShotRecord dicts for a session (for the summary aggregates / typical comparison)."""
+        out = []
+        for sh in sorted(self.shots_for_session(session_id), key=lambda s: s.get('created_at') or 0):
+            if sh.get('user_id') != user_id:
+                continue
+            rec = sh.get('record') or {}
+            if rec.get('metrics'):
+                out.append(rec)
+        return out
+
     # ----------------------------------------------------------------- tier state / events
     def get_tier_state(self, user_id):
         return self.tier_state.get(user_id)
@@ -1048,6 +1059,11 @@ class PgStore(MemoryStore):
                             created_at=sh.get('created_at'), classification=sh.get('classification'),
                             source=sh.get('source'), metrics=key))
         return out
+
+    def session_records(self, user_id, session_id):
+        rows = self._get('shots', f'user_id=eq.{user_id}&session_id=eq.{session_id}'
+                                  '&select=record&order=created_at')
+        return [r['record'] for r in rows if (r.get('record') or {}).get('metrics')]
 
     # ----------------------------------------------------------------- tier state / events
     def get_tier_state(self, user_id):

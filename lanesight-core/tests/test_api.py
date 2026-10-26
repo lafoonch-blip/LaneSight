@@ -144,6 +144,37 @@ def test_last_setup_empty_for_new_user():
     assert b == {'user_ball_id': None, 'ball_configuration_id': None, 'oil_pattern_id': None, 'intent': None}
 
 
+def _rec_speed(v):
+    return {'metrics': {'ball_speed': {'value': v, 'status': 'ok'}}}
+
+
+def test_session_summary_aggregates_and_typical_building():
+    # MVP-07: summary returns per-metric aggregates; typical is 'building' with no comparable sessions.
+    store = get_store()
+    sid = store.create_session('u_sum', {'mode': 'practice', 'oil_pattern_id': 'oilX'})['id']
+    for v in (17.0, 17.4):
+        sh = store.create_shot('u_sum', sid, {'source': 'live'})
+        store.save_shot_result(sh['id'], _rec_speed(v), {'ok': True})
+    r = client.get(f'/sessions/{sid}/summary', headers={'X-Dev-User': 'u_sum'}).json()
+    assert r['n_shots'] == 2 and r['metrics']['ball_speed']['n'] == 2
+    assert r['typical']['status'] == 'building'
+
+
+def test_session_summary_typical_ok_with_comparable_sessions():
+    store = get_store()
+    # three prior comparable sessions (same pattern) each with a shot
+    for v in (16.5, 16.9, 17.1):
+        psid = store.create_session('u_typ', {'mode': 'practice', 'oil_pattern_id': 'oilT'})['id']
+        sh = store.create_shot('u_typ', psid, {'source': 'live'})
+        store.save_shot_result(sh['id'], _rec_speed(v), {'ok': True})
+    cur = store.create_session('u_typ', {'mode': 'practice', 'oil_pattern_id': 'oilT'})['id']
+    sh = store.create_shot('u_typ', cur, {'source': 'live'})
+    store.save_shot_result(sh['id'], _rec_speed(18.0), {'ok': True})
+    t = client.get(f'/sessions/{cur}/summary', headers={'X-Dev-User': 'u_typ'}).json()['typical']
+    assert t['status'] == 'ok' and t['n_sessions'] == 3
+    assert abs(t['metrics']['ball_speed'] - 16.83) < 0.05   # mean of the 3 prior sessions
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output
