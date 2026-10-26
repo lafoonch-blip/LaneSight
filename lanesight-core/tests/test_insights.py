@@ -150,6 +150,14 @@ def test_state_machine_covers_every_card_state():
     assert all(s in STATES for s in [r['state']])
 
 
+def test_far_lane_limited_flag_forces_no_reliable_data():
+    # When the CV plausibility gate flags the far lane (e.g. off-lane entry from broken geometry), the insights
+    # state must be no_reliable_data — never a move — even if speeds look monotonic.
+    r = strike_adjustment(dict(entry_board=45.6, speed_early=22.0, speed_late=22.0,
+                               far_lane_limited=True, far_lane_reason='off lane', pins_standing=None))
+    assert r['state'] == 'no_reliable_data' and r['recommendations'][0]['type'] == 'none'
+
+
 def test_big_move_needs_two_agreeing_shots():
     # A single big miss stays capped at 2-and-1 (handoff C.5)...
     r = strike_adjustment(dict(entry_board=28.0, entry_angle_deg=5.0, speed_early=17.0, speed_late=15.5, pins_standing={4, 7}))

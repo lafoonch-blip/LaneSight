@@ -182,6 +182,9 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                       **({'reason': cq_reason} if cq_reason else {})})
     shot_view = {x.metric: x.value for x in meas}
     shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence
+    shot_view['far_lane_limited'] = cq_limited      # the gate's verdict drives the insights state (single source)
+    if cq_reason:
+        shot_view['far_lane_reason'] = cq_reason
     pins_read = pins and pins.get('readable', True)   # None standing (unread) -> leave classification stays 'unknown'
     shot_view.update(board_at_15ft=M.get('board_at_15ft'), board_at_0ft=M.get('board_at_0ft'), entry_angle_deg=M['entry_angle_deg'],
                      pins_standing=set(pins['standing']) if pins_read else None,

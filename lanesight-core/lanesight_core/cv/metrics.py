@@ -118,10 +118,13 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     ang = np.degrees(np.arctan(sl * (LANE_IN / BOARDS) / 12))
     out['lateral_res_boards'] = float(np.median(np.abs(board - np.interp(Z, zz, bb))) * 1.4826)
     mid = (zz > 15) & (zz < 55)
-    k = np.where(mid)[0][int(np.argmin(bb[mid]))]
-    out['breakpoint_board'] = float(to_abs(bb[k])); out['breakpoint_extreme_ft'] = float(zz[k])
-    after = np.where(bb[k:] > bb[k] + 0.25)[0]
-    out['breakpoint_ft'] = float(zz[k + after[0]]) if len(after) else None     # end of the flat (skid) top
+    if mid.any():
+        k = np.where(mid)[0][int(np.argmin(bb[mid]))]
+        out['breakpoint_board'] = float(to_abs(bb[k])); out['breakpoint_extreme_ft'] = float(zz[k])
+        after = np.where(bb[k:] > bb[k] + 0.25)[0]
+        out['breakpoint_ft'] = float(zz[k + after[0]]) if len(after) else None     # end of the flat (skid) top
+    else:                      # ball not tracked through the mid lane (15–55 ft): no breakpoint to read
+        out['breakpoint_board'] = out['breakpoint_extreme_ft'] = out['breakpoint_ft'] = None
     seg = (zz >= 52) & (zz <= 55)
     out['entry_angle_52_55_deg'] = float(np.mean(ang[seg])) if seg.sum() >= 4 else None     # Specto-compatible definition
     late = zz > zz.max() - 1.5

@@ -21,6 +21,9 @@ def far_lane_unreliable(shot: dict) -> tuple[bool, str | None]:
     trusted. Noise band = max(0.5 mph, 3% of the early speed). Secondary signal (only checked when a
     trajectory is attached to the shot dict): a lateral jump of more than 3 boards between neighbouring
     samples. Returns (unreliable, reason)."""
+    if shot.get('far_lane_limited'):      # the CV plausibility gate already judged the far lane unreliable
+        return True, (shot.get('far_lane_reason')
+                      or 'The far-lane measurements are unreliable for this camera position.')
     early, late = shot.get('speed_early'), shot.get('speed_late')
     if early is not None and late is not None:
         noise = max(0.5, 0.03 * abs(early))
