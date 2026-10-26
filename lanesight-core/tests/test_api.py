@@ -175,6 +175,24 @@ def test_session_summary_typical_ok_with_comparable_sessions():
     assert abs(t['metrics']['ball_speed'] - 16.83) < 0.05   # mean of the 3 prior sessions
 
 
+def test_metric_detail_stats():
+    # MVP-08: per-metric detail — avg, coverage, by-ball, by-pattern, per-session trend, small-sample flag.
+    store = get_store()
+    sid1 = store.create_session('u_md', {'mode': 'practice', 'oil_pattern_id': 'oilA'})['id']
+    for v in (17.0, 17.5):
+        sh = store.create_shot('u_md', sid1, {'source': 'live', 'ball_configuration_id': 'ballA'})
+        store.save_shot_result(sh['id'], _rec_speed(v), {'ok': True})
+    sid2 = store.create_session('u_md', {'mode': 'practice', 'oil_pattern_id': 'oilB'})['id']
+    sh = store.create_shot('u_md', sid2, {'source': 'live', 'ball_configuration_id': 'ballB'})
+    store.save_shot_result(sh['id'], _rec_speed(16.0), {'ok': True})
+    sh = store.create_shot('u_md', sid2, {'source': 'live', 'ball_configuration_id': 'ballB'})
+    store.save_shot_result(sh['id'], {'metrics': {'ball_speed': {'value': None, 'status': 'unavailable'}}}, {'ok': True})
+    d = client.get('/me/stats/metric/ball_speed', headers={'X-Dev-User': 'u_md'}).json()
+    assert d['n'] == 3 and d['small_sample'] is True
+    assert abs(d['avg'] - 16.83) < 0.05 and d['coverage'] == 0.75   # 3 measured of 4 total
+    assert len(d['by_ball']) == 2 and len(d['by_pattern']) == 2 and len(d['trend']) == 2
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output

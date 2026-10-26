@@ -394,6 +394,22 @@ class MemoryStore:
                 handed = sh['handed']
         return records, intents, handed
 
+    def shot_points(self, user_id):
+        """Per-shot context for metric-detail stats (MVP-08): live analyzed shots annotated with session, ball,
+        oil pattern, time and record. Uploads excluded (DEC-055)."""
+        out = []
+        for sh in sorted(self.user_shots(user_id), key=lambda s: s.get('created_at') or 0):
+            if sh.get('source') == 'upload':
+                continue
+            rec = sh.get('record')
+            if not rec or not rec.get('metrics'):
+                continue
+            sess = self.sessions.get(sh.get('session_id')) or {}
+            out.append(dict(shot_id=sh['id'], created_at=sh.get('created_at'), session_id=sh.get('session_id'),
+                            ball=sh.get('ball_configuration_id') or sh.get('user_ball_id'),
+                            pattern=sess.get('oil_pattern_id'), record=rec))
+        return out
+
     def read_form_records(self, user_id, window_days=None):
         """Prior FORM shot records for the user (source 'lanesight_form'), ordered oldest->newest. A form
         record is discriminated by its 'form_version' key, so it never mixes with ball shots. Offline: memory."""
@@ -1018,6 +1034,21 @@ class PgStore(MemoryStore):
             if s.get('handed'):
                 handed = s['handed']
         return records, intents, handed
+
+    def shot_points(self, user_id):
+        rows = self._get('shots', f'user_id=eq.{user_id}&source=neq.upload&order=created_at&'
+                         'select=id,created_at,session_id,ball_configuration_id,user_ball_id,record,'
+                         'sessions(oil_pattern_id)')
+        out = []
+        for sh in rows:
+            rec = sh.get('record') or {}
+            if not rec.get('metrics'):
+                continue
+            sess = sh.get('sessions') if isinstance(sh.get('sessions'), dict) else {}
+            out.append(dict(shot_id=sh['id'], created_at=sh.get('created_at'), session_id=sh.get('session_id'),
+                            ball=sh.get('ball_configuration_id') or sh.get('user_ball_id'),
+                            pattern=(sess or {}).get('oil_pattern_id'), record=rec))
+        return out
 
     def read_form_records(self, user_id, window_days=None):
         """Prior FORM shot records from Supabase: measurements with source 'lanesight_form' (the pose pipeline),
