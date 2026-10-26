@@ -165,6 +165,11 @@ struct APIClient {
         try await send(makeRequest("me/focus"), as: FocusResponse.self)
     }
 
+    /// Score-parts detail inputs for the Stats · Score screen (GET /me/score/breakdown).
+    func scoreBreakdown() async throws -> ScoreBreakdown {
+        try await send(makeRequest("me/score/breakdown"), as: ScoreBreakdown.self)
+    }
+
     func scoreHistory() async throws -> [ScoreResponse] {
         try await send(makeRequest("me/score/history"), as: [ScoreResponse].self)
     }

@@ -432,6 +432,23 @@ struct ShotRowMetrics: Codable, Equatable {
     let arrows_board: Double?
 }
 
+// MARK: - Score-parts breakdown (GET /me/score/breakdown)
+
+struct ScoreBreakdown: Codable {
+    let performance: PerfPart?
+    let accuracy: AccPart?
+    let consistency: ConsPart?
+    let power: PowerPart?
+
+    struct PerfPart: Codable { let value: Double?; let pocket_pct: Double?; let angle_pct: Double? }
+    struct AccPart: Codable {
+        let value: Double?; let avg_arrow_miss: Double?; let avg_bp_miss: Double?
+        let n_with_target: Int?; let n_total: Int?
+    }
+    struct ConsPart: Codable { let value: Double?; let spreads: [String: Double]? }
+    struct PowerPart: Codable { let value: Double?; let entry_speed: Double?; let rev_rate: Double?; let entry_angle: Double? }
+}
+
 // MARK: - Session summary / aggregates (GET /sessions/{id}/summary)
 
 struct SessionSummary: Codable {

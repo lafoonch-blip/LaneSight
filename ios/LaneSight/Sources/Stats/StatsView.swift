@@ -5,26 +5,25 @@ struct StatsView: View {
     @State private var tab = 0
     @State private var score: Loadable<ScoreResponse> = .idle
     @State private var history: [ScoreResponse] = []
+    @State private var breakdown: ScoreBreakdown?
     @State private var throwStats: Loadable<StatsResponse> = .idle
     @State private var formStats: Loadable<StatsResponse> = .idle
+
+    private let tabs = ["Score", "Shot", "Form", "Equipment"]
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 LSTabHeader(title: "Stats")
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Picker("View", selection: $tab) {
-                            Text("Score").tag(0)
-                            Text("Throw").tag(1)
-                            Text("Form").tag(2)
-                        }
-                        .pickerStyle(.segmented)
-
+                    VStack(alignment: .leading, spacing: 14) {
+                        filterChips
+                        tabBar
                         switch tab {
                         case 0: scoreTab
                         case 1: throwTab
-                        default: formTab
+                        case 2: formTab
+                        default: equipmentTab
                         }
                         Spacer(minLength: 8)
                     }
@@ -39,33 +38,190 @@ struct StatsView: View {
         }
     }
 
+    // MARK: tab bar + filters
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach(tabs.indices, id: \.self) { i in
+                Button { tab = i } label: {
+                    Text(tabs[i])
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(tab == i ? LS.onAction : LS.textSecondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(tab == i ? LS.action : Color.clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(LS.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(LS.border, lineWidth: 1))
+    }
+
+    private var filterChips: some View {
+        HStack(spacing: 8) {
+            filterChip("Last 90 days")
+            filterChip("All balls")
+            filterChip("All patterns")
+            Spacer(minLength: 0)
+        }
+    }
+
+    // The filters are display for the MVP: the Score window is fixed at 90 days and the staged views are
+    // unfiltered. Shown for parity with the design; wiring ball/pattern filtering is a later enhancement.
+    private func filterChip(_ label: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(LS.textPrimary)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(LS.textSecondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(LS.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(LS.border, lineWidth: 1))
+    }
+
     // MARK: Score
 
     private var scoreTab: some View {
         LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-            VStack(alignment: .leading, spacing: 14) {
-                ScoreCard(score: s, history: history)
-                historyCard
+            VStack(alignment: .leading, spacing: 12) {
+                ScoreCard(score: s, history: history, showBreakdown: false)
+                scoreTrendCard(s)
+                provisionalNote
+                scorePartsSection(s)
             }
         }
     }
 
-    private var historyCard: some View {
-        let scored = history.compactMap { $0.eligible == true ? $0.score : nil }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("SCORE HISTORY").lsEyebrow()
-            if scored.isEmpty {
-                Text("No eligible score snapshots yet. Your history fills in as you log shots.")
-                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
-            } else {
+    private var scoredHistory: [Double] { history.compactMap { $0.eligible == true ? $0.score : nil } }
+    private var overallDelta: Double? {
+        guard let f = scoredHistory.first, let l = scoredHistory.last, scoredHistory.count >= 2 else { return nil }
+        return l - f
+    }
+
+    private func scoreTrendCard(_ s: ScoreResponse) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Text("Score trend").font(.system(size: 17, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(Fmt.intStr(s.score)).font(.system(size: 28, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    deltaLabel(overallDelta)
+                    Text("90 days").font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                }
+            }
+            if scoredHistory.count >= 2 {
+                Sparkline(values: scoredHistory, color: LS.dataPurple).frame(height: 44)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    @ViewBuilder private func deltaLabel(_ d: Double?) -> some View {
+        if let d {
+            Label("\(d >= 0 ? "+" : "")\(Int(d.rounded()))", systemImage: d >= 0 ? "arrow.up" : "arrow.down")
+                .font(.system(size: 13, weight: .bold)).labelStyle(.titleAndIcon)
+                .foregroundStyle(d >= 0 ? LS.positive : LS.bestEffort)
+        }
+    }
+
+    private var provisionalNote: some View {
+        let best = scoredHistory.max()
+        return Text("Provisional · personal index, not a ranking." + (best.map { " Best \(Int($0.rounded()))." } ?? ""))
+            .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private struct PartRow: Identifiable { let id = UUID(); let label: String; let value: String }
+
+    private func scorePartsSection(_ s: ScoreResponse) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Score parts").font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Spacer()
+                Text("How it's calculated").font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link)
+            }
+            Text("Provisional formula (DEC-077). Weighted parts; a part with too few measured shots reads “—”.")
+                .font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
+            partCard("Performance", weight: 40, value: s.s_perf, delta: partDelta(\.s_perf), rows: performanceRows)
+            partCard("Accuracy", weight: 25, value: s.a_acc, delta: partDelta(\.a_acc), rows: accuracyRows)
+            partCard("Consistency", weight: 25, value: s.c_cons, delta: partDelta(\.c_cons), rows: consistencyRows)
+            partCard("Power", weight: 10, value: s.p_power, delta: partDelta(\.p_power), rows: powerRows)
+        }
+    }
+
+    private func partDelta(_ kp: KeyPath<ScoreResponse, Double?>) -> Double? {
+        let vals = history.filter { $0.eligible == true }.compactMap { $0[keyPath: kp] }
+        guard let f = vals.first, let l = vals.last, vals.count >= 2 else { return nil }
+        return l - f
+    }
+
+    private func partCard(_ title: String, weight: Int, value: Double?, delta: Double?, rows: [PartRow]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                (Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(LS.textPrimary)
+                 + Text("  ·  \(weight)%").font(.system(size: 13, weight: .medium)).foregroundStyle(LS.textSecondary))
+                Spacer()
+                HStack(spacing: 6) {
+                    Text(value.map { String(Int($0.rounded())) } ?? "—")
+                        .font(.system(size: 22, weight: .bold)).foregroundStyle(value == nil ? LS.textFaint : LS.textPrimary)
+                    if let d = delta {
+                        Label("\(d >= 0 ? "" : "")\(Int(d.rounded()))", systemImage: d > 0 ? "arrow.up" : (d < 0 ? "arrow.down" : "minus"))
+                            .font(.system(size: 12, weight: .bold)).labelStyle(.titleAndIcon)
+                            .foregroundStyle(d > 0 ? LS.positive : (d < 0 ? LS.bestEffort : LS.textSecondary))
+                    }
+                }
+            }
+            ForEach(rows) { r in
                 HStack {
-                    KPITile(label: "Snapshots", value: "\(history.count)")
-                    KPITile(label: "Best", value: Fmt.intStr(scored.max()))
-                    KPITile(label: "Latest", value: Fmt.intStr(scored.last))
+                    Text(r.label).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    Spacer()
+                    Text(r.value).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(LS.textPrimary)
                 }
             }
         }
-        .lsCard()
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    private func pct(_ v: Double?) -> String { v.map { "\(Int($0.rounded()))%" } ?? "—" }
+    private func boards(_ v: Double?) -> String { v.map { "\(Fmt.number($0)) boards" } ?? "—" }
+
+    private var performanceRows: [PartRow] {
+        let p = breakdown?.performance
+        return [PartRow(label: "Pocket % (entry board 16–19)", value: pct(p?.pocket_pct)),
+                PartRow(label: "Entry angle in 4–6°", value: pct(p?.angle_pct))]
+    }
+    private var accuracyRows: [PartRow] {
+        let a = breakdown?.accuracy
+        let cov = (a?.n_with_target).map { "\($0) of \(a?.n_total ?? 0)" } ?? "—"
+        return [PartRow(label: "Avg miss at arrows", value: boards(a?.avg_arrow_miss)),
+                PartRow(label: "Avg miss at breakpoint", value: boards(a?.avg_bp_miss)),
+                PartRow(label: "Shots with a target set", value: cov)]
+    }
+    private var consistencyRows: [PartRow] {
+        let sp = breakdown?.consistency?.spreads
+        func spread(_ k: String, _ unit: String) -> String { sp?[k].map { "\(Fmt.number($0)) \(unit)" } ?? "—" }
+        return [PartRow(label: "Speed spread", value: spread("ball_speed", "mph")),
+                PartRow(label: "Arrows spread", value: spread("arrows", "boards")),
+                PartRow(label: "Breakpoint spread", value: spread("breakpoint", "boards"))]
+    }
+    private var powerRows: [PartRow] {
+        let p = breakdown?.power
+        let weight = model.currentBall?.weight_lb.map { "\(Int($0.rounded())) lb" } ?? "—"
+        return [PartRow(label: "Entry speed", value: p?.entry_speed.map { "\(Fmt.number($0)) mph" } ?? "—"),
+                PartRow(label: "Rev rate", value: p?.rev_rate.map { "\(Int($0.rounded())) rpm" } ?? "—"),
+                PartRow(label: "Entry angle", value: p?.entry_angle.map { String(format: "%.1f°", $0) } ?? "—"),
+                PartRow(label: "Ball weight", value: weight)]
+    }
+
+    private var equipmentTab: some View {
+        emptyCard("Equipment stats",
+                  "Per-ball speed, rev rate and pocket % roll up here once you log shots with more than one ball in the session.")
     }
 
     // MARK: Throw
@@ -219,8 +375,10 @@ struct StatsView: View {
             let client = try model.makeClient()
             async let s = client.score()
             async let h = client.scoreHistory()
+            async let b = try? client.scoreBreakdown()      // nil until the endpoint is deployed → rows show "—"
             let (sv, hv) = try await (s, h)
             history = hv
+            breakdown = await b
             score = .loaded(sv)
         } catch { score = .failed(error.localizedDescription) }
     }
@@ -235,5 +393,45 @@ struct StatsView: View {
         formStats = .loading
         do { formStats = .loaded(try await model.makeClient().stats(view: "form", range: nil)) }
         catch { formStats = .failed(error.localizedDescription) }
+    }
+}
+
+/// A compact score sparkline (filled area + line) for the Stats trend card. Scales to its values' range.
+struct Sparkline: View {
+    let values: [Double]
+    var color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let pts = points(in: geo.size)
+            ZStack {
+                if pts.count >= 2 {
+                    area(pts, height: geo.size.height)
+                        .fill(LinearGradient(colors: [color.opacity(0.28), color.opacity(0)],
+                                             startPoint: .top, endPoint: .bottom))
+                    line(pts).stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                }
+            }
+        }
+    }
+
+    private func points(in size: CGSize) -> [CGPoint] {
+        guard values.count >= 2 else { return [] }
+        let lo = values.min() ?? 0, hi = values.max() ?? 1
+        let span = max(hi - lo, 1)
+        let dx = size.width / CGFloat(values.count - 1)
+        return values.enumerated().map { i, v in
+            CGPoint(x: CGFloat(i) * dx, y: size.height * (1 - CGFloat((v - lo) / span)) * 0.9 + size.height * 0.05)
+        }
+    }
+    private func line(_ pts: [CGPoint]) -> Path {
+        var p = Path(); p.move(to: pts[0]); pts.dropFirst().forEach { p.addLine(to: $0) }; return p
+    }
+    private func area(_ pts: [CGPoint], height: CGFloat) -> Path {
+        var p = line(pts)
+        p.addLine(to: CGPoint(x: pts.last!.x, y: height))
+        p.addLine(to: CGPoint(x: pts.first!.x, y: height))
+        p.closeSubpath()
+        return p
     }
 }

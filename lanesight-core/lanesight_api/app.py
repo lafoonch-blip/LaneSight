@@ -432,6 +432,41 @@ def me_score(user=Depends(current_user)):
     return snap or engines.recompute_score(store, user, trigger='shot')
 
 
+@app.get('/me/score/breakdown')
+def me_score_breakdown(user=Depends(current_user)):
+    """Score-parts detail for the Stats · Score screen (v3.7). Returns the already-computed component
+    inputs behind each part score — pocket %/angle % (Performance), avg board miss + target coverage
+    (Accuracy), per-checkpoint spreads (Consistency), and the raw power means (Power). Recomputes purely
+    over the 90-day window (no persistence / side effects); nothing is fabricated — a part with too few
+    measured shots reports null, which the UI renders as '—'."""
+    from lanesight_core.score import compute as score_compute
+    from lanesight_core.insights import session as si
+    store = get_store()
+    params = store.score_formula_params()
+    records, intents, handed = store.read_shot_records(user, window_days=params.get('window_days'))
+    snap = score_compute(records, intents=intents, params=params, handed=handed,
+                         weight_lb=engines._weight_lb(store, user))
+    comps = snap.get('components') or {}
+    S, A, C, P = (comps.get(k) or {} for k in ('s_perf', 'a_acc', 'c_cons', 'p_power'))
+    per = A.get('per_shot') or []
+    arrow_errs = [p['arrow_err'] for p in per if p.get('arrow_err') is not None]
+    bp_errs = [p['bp_err'] for p in per if p.get('bp_err') is not None]
+    sm = si.summary(records)
+    def _mean(m): return (sm.get(m) or {}).get('mean')
+    return {
+        'eligible': snap.get('eligible'), 'score': snap.get('score'), 'tier': snap.get('tier'),
+        'performance': {'value': S.get('value'), 'pocket_pct': S.get('pocket_pct'),
+                        'angle_pct': S.get('angle_pct')},
+        'accuracy': {'value': A.get('value'),
+                     'avg_arrow_miss': round(sum(arrow_errs) / len(arrow_errs), 1) if arrow_errs else None,
+                     'avg_bp_miss': round(sum(bp_errs) / len(bp_errs), 1) if bp_errs else None,
+                     'n_with_target': A.get('n', 0), 'n_total': len(records)},
+        'consistency': {'value': C.get('value'), 'spreads': C.get('components') or {}},
+        'power': {'value': P.get('value'), 'entry_speed': _mean('ball_speed'),
+                  'rev_rate': _mean('rev_rate'), 'entry_angle': _mean('entry_angle')},
+    }
+
+
 @app.get('/me/last-setup')
 def me_last_setup(user=Depends(current_user)):
     """Prefill Setup with the last-used ball, oil pattern and target (MVP-09). Nulls for a new user."""

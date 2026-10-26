@@ -368,3 +368,18 @@ def test_shot_persists_ball_link_and_full_intent():
                                            'ball_configuration_id': b['ball_configuration_id'], 'user_ball_id': b['id']})
     intent = store.get_shot_intent('ars2', shot['id'])
     assert intent['arrows_board'] == 15 and intent['feet_board'] == 20
+
+
+def test_score_breakdown_shape_building():
+    """/me/score/breakdown returns the 4 part blocks for a brand-new user, all null (building) — never a
+    fabricated number and never a 500."""
+    H = {'X-Dev-User': 'uScoreBreakdown'}
+    r = client.get('/me/score/breakdown', headers=H)
+    assert r.status_code == 200
+    b = r.json()
+    for k in ('performance', 'accuracy', 'consistency', 'power'):
+        assert k in b, f'missing part {k}'
+    assert b['performance']['value'] is None
+    assert b['accuracy']['n_total'] == 0
+    assert b['accuracy']['avg_arrow_miss'] is None
+    assert b['consistency']['spreads'] == {}
