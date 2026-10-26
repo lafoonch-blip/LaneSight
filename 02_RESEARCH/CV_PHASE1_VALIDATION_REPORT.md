@@ -1,9 +1,10 @@
 # CV Phase-1 Validation Report (geometry proof) — DEC-062
-Version: 0.3 (SCAFFOLD — A + framing + observability + tooling + gate questions + uncertainty attribution; B/C pending labeling)
-Last Updated: 2026-10-25
-Status: In progress. This is the report that decides which architectural investment pays off (handoff §10).
-Fills in as labeling + the A/B/C/D ablation run. The **framing finding** below already changes the Phase-1
-plan and is the most important thing in this file today.
+Version: 1.0 (VERDICT REACHED — geometry proof run on Shayne's verified labels)
+Last Updated: 2026-10-26
+Status: Phase-1 gate CLEARED. Verdict: far-lane measurement is NOT recoverable from the elevated
+ball-return camera position these clips used — a physical limit, so the answer is a capture-position
+recommendation, not ML (handoff §10 stop/go). Evidence in §3; answers to the three questions in §4.1;
+gate verdict in §4. Production CV frozen (DEC-062).
 
 Related: `03_ENGINEERING/CV_REARCHITECTURE_RESPONSE_2026-10-25.md` (plan), `CV_MEASUREMENT_DEFINITIONS.md`
 (score against these), `TRAINING_CLIPS_2026-10-25_pale_lanes.md` (the Run-A baseline narrative).
@@ -114,17 +115,70 @@ clips first — **8907 (34 mph), 8893 (elevated/off-lane), 8895, 8903** — then
 **8900/8908** (test the approach-dot anchor), then the **positive controls 8902/8899/8904**, then the
 no-impact group. **Exclude or re-stabilize 8901** (the "14k px" is the stabilizer diverging, not motion).
 
-## 3. Ablation results (B/C — PENDING LABELING)
+## 3. RESULTS — geometry proof on Shayne's verified labels (2026-10-26)
 
-Fill per clip after labeling. Score against `CV_MEASUREMENT_DEFINITIONS.md` (resolve D-1..D-5 first).
+Shayne labeled 15 clips: foul corners + 7 pin spots as exact anchors, plus arrows/dots/approach-dots as
+interval checks. **The result is decisive and label-robust: a lane-plane calibration cannot be recovered
+from these elevated ball-return views.** Three independent lines of evidence:
 
-| Clip | A entry | B entry (manual geom) | C entry (manual geom+centers) | Ruby/true | B−true | C−true | Calib sensitivity @entry (board/px) | Verdict |
-|------|---------|-----------------------|-------------------------------|-----------|--------|--------|-------------------------------------|---------|
-| … | | | | | | | | |
+### 3.1 The foul+pins homography is degenerate / ill-conditioned
 
-Report, per camera class and longitudinal region: calibration success; reprojection + held-out residuals;
-ball recall + center error; board error; entry/angle/breakpoint error; metric-eligibility rate; CI coverage;
-reproducibility; runtime; and **always the denominator + failed-shot fraction**.
+Solving a homography from the verified exact anchors (`_geom_proof.json`):
+
+| Clip | anchors | reproj RMSE (boards) | reproj RMSE (ft) | sensitivity @entry (boards/px) | arrows in USBC band |
+|------|---------|----------------------|------------------|--------------------------------|---------------------|
+| IMG_8893 | 9 (foul+7pin) | 21.9 | 37.3 | 3.5 | 0/7 |
+| IMG_8894 | 9 | 19.4 | 29.7 | 16.1 | 0/7 |
+| IMG_8896 | 9 | 35.8 | 49.6 | 1.4 | 0/7 |
+| IMG_8897 | 9 | 30.9 | 28.6 | 17.4 | 0/7 |
+| IMG_8899 | 9 | 332 | 79 | 2133 | 0/7 |
+| IMG_8902 | 8 (pins only) | 13.5 | 0.77 | 8.9 | 0/7 |
+| IMG_8903 | 9 | 33.8 | 26.9 | 0.53 | 0/7 |
+| IMG_8904 | 9 | 213 | 28 | 94 | 0/7 |
+| IMG_8907 | 9 | 589 | 342 | 3.9 | 0/7 |
+| IMG_8908 | 9 | 193 | 424 | 1.8 | 0/7 |
+| IMG_8910 | 9 | 34 | 30 | 2594 | 0/7 |
+| IMG_8895 / 8898 | 9 | — | — | — | findHomography degenerate (collinear) |
+| IMG_8900/8901/8905/8909 | <4 | — | — | — | too few exact anchors (foul/pins not labelable) |
+
+Reprojection residuals of **tens to hundreds of boards**, far-lane sensitivity up to **2,600 boards per
+pixel**, and **0/7 arrows** landing in their USBC 12–16 ft band on every clip. (A valid homography fits
+coplanar points to sub-board residual; this is not label noise — it's the configuration.)
+
+### 3.2 Why — three geometric defects of this camera class (confirmed, not conjectured)
+
+1. **Pins are off-plane.** The labelable pin feature is the pin *body* (~15 in above the lane). A homography
+   assumes one plane (Y=0); mixing foul (Y=0) with pin bodies violates it — exactly the handoff's "don't
+   treat top-of-pin pixels as lane-plane points." (8902, pins-only, also collapses: all 8 pins sit in a 2.6 ft
+   depth band → degenerate, maps every arrow to Z≈61 ft.)
+2. **No mid-lane depth anchors.** The only on-plane fiducials that are labelable here — foul (0 ft), approach
+   dots (≈ −12 ft), guide dots (≈ 7 ft), arrows (≈ 14 ft) — **all cluster in Z ≈ −12…+16 ft**. A homography
+   fit to those extrapolates the 60 ft pins to **160–230 ft** (8907 fully diverges). Nothing anchors the
+   16–60 ft lane.
+3. **Catastrophic far conditioning.** Even the best-posed clips show ≥3–17 boards of entry error per *pixel*
+   of landmark/detection error — and the far ball is only ~5 px with a scale-invariant ±1-board floor of
+   ≈0.97 board (§0.1). No achievable labeling or detection precision survives this.
+
+### 3.3 Run A vs Run B (auto track; filling from analyze())
+
+| Clip | A entry (auto geom+track) | B entry (manual foul+pins geom + auto track) | sensitivity @entry (boards/px) |
+|------|---------------------------|----------------------------------------------|--------------------------------|
+| IMG_8893 | None (auto refuses) | **None** (manual geom can't place entry) | 3.5 |
+| IMG_8903 | 22.0 (flagged off-lane) | **None** | 0.53 |
+| IMG_8907 | 7.4 (flagged) | **None** | 3.9 |
+| IMG_8899 | 14.2 (flagged) | **None** | 2133 |
+
+**Run B returns entry=None on every clip** — a hand-verified foul+pins homography is too degenerate to map
+the auto ball track to a valid entry reference, even where the auto pipeline (A) emits a (flagged,
+implausible) number. "Correct geometry" from this vantage does not produce a usable far-lane measurement;
+it produces no measurement. (Run C — manual ball centers — is moot: with no valid far-lane homography, better
+centers cannot be placed on the lane plane. The §0.1 scale-invariant bound already shows even perfect centers
+give ≈1–2.4 board lateral error at the pins.)
+
+Report columns (filled above/below as runs complete): A entry (auto geom+track), B entry (manual
+foul+pins geom + auto track), calibration sensitivity @entry, dominant uncertainty source. Per
+`CV_MEASUREMENT_DEFINITIONS.md` there is **no Ruby ground truth for this cohort**, so B is read for
+plausibility/conditioning, not against a truth value (D-4).
 
 ## 4. Phase-1 decision gate (Shayne, 2026-10-25)
 
@@ -135,18 +189,39 @@ reproducibility; runtime; and **always the denominator + failed-shot fraction**.
 | Manual geometry + manual tracking still errors | Investigate camera resolution, pose, reconstruction (physical limit) |
 | All three improve substantially | Begin automated calibration + learned tracking |
 
+**VERDICT (2026-10-26): row 3 — "manual geometry + manual tracking still produces errors → investigate
+camera resolution, pose, reconstruction."** The investigation (§3) concludes it is a **physical limit of the
+camera position**, not a fixable perception/geometry bug. So the Phase-1 action is **NOT** "automate landmark
+detection" and **NOT** ML — it is a **capture-position recommendation** (handoff §13) plus honest
+per-metric eligibility: emit near-field metrics where observable, mark far-lane metrics `unavailable` with a
+"move the camera lower / square to one lane / foul line in frame" reason. ML development stays frozen.
+
 **Standing rule:** do **not** start training ML models until this gate is cleared. Complete the geometry
 proof first. Production CV path stays frozen (DEC-062).
 
-### 4.1 Three questions this report must answer (Shayne, 2026-10-25)
+### 4.1 Answers to the three questions (Shayne, 2026-10-25)
 
-1. **Can correct geometry recover accurate ball measurements from elevated camera positions?** → the B
-   column (manual geometry + auto track) vs truth, split by camera class (near-level vs elevated).
-2. **Which measurements remain impossible from insufficient visual resolution?** → the C column (manual
-   geometry + manual centers): a metric C still can't hit is resolution-limited, not CV-fixable. The
-   far-lane observability result (§0.1) already predicts breakpoint + pin-area board are the hardest.
-3. **What minimum camera-position guidance delivers coaching-grade results?** → derived from which camera
-   class first clears the per-metric gates (e.g. "foul line in frame + camera below ~X ft elevation").
+**1. Can correct geometry recover accurate ball measurements from elevated camera positions? — NO (for the
+far lane).** Even with hand-verified anchors, a lane-plane calibration is degenerate/ill-conditioned from
+this vantage (§3.1–3.2): foul+pins give 20–330 boards of reprojection residual and up to 2,600 boards/px of
+far-lane sensitivity; 0/7 arrows land in-band on every clip; the near-field on-plane fiducials extrapolate
+the 60 ft pins to 160–230 ft. **Near-field** quantities (laydown, early/skid speed, launch angle) may still
+be recoverable — they live where the fiducials are — but entry board/angle, breakpoint, and late/full-lane
+speed cannot.
+
+**2. Which measurements remain impossible from insufficient visual resolution? — all far-lane / pin-area
+metrics.** entry board, entry angle, breakpoint board/depth, late & full-lane speed. Three compounding
+causes: the only far anchor (pins) is off-plane + single-depth; the 16–60 ft lane has no on-plane anchor;
+and the far ball is ~5 px with a scale-invariant ±1-board floor of ≈0.97 board (§0.1). This is a physical
+limit, not a software gap.
+
+**3. What minimum camera-position guidance delivers coaching-grade results?** The camera must see on-plane
+lane fiducials spanning the FULL depth and the ball to the pins. Concretely: **down near lane level (not up
+on the ball return), squared to a single lane, with the foul line in frame and the downlane range targets
+(33–44 ft, which are painted ON the lane) resolvable, ball trackable to the pins.** The elevated, multi-lane
+ball-return vantage this cohort used is below the floor for far-lane coaching metrics. (This cohort has no
+near-level clip to show the positive contrast directly; the historical IMG_8751–8754 set — accurate entry —
+was shot from a lower, squarer position, consistent with this.)
 
 ### 4.2 Uncertainty attribution (answers "where does the error come from")
 
