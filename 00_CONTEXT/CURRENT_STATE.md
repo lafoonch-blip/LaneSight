@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.28  
+Version: 1.29  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.27
+Supersedes: v1.28
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -25,7 +25,8 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
   - **E — uploads deduped by content hash** (migration 016); score-reset script for the contaminated session written (`ops/reset_contaminated_score_2026-10-25.sql`, do not auto-run).
   - **F — iOS 3.7:** shot card renders from `state` + the camera banner; one status mapping; "boards" not "ft"; SessionReview read-only; Under-13 block. **G — profile photo** `/me/avatar` + `location` column (migration 017).
   - **A — far-lane calibration (the real metric fix) is NOT done** — it's deep CV that must be validated against the regression clip + IMG_8751–8754 and benefits from the lane clips Shayne records next. Until then the honest flags (B) stop confident-wrong advice. **Biggest lever right now is capture framing: stable camera behind the lane, square to it, whole lane in frame.**
-  - **Needs Shayne:** apply migrations 016 + 017 to live; run the reset script; restart `com.lanesight.api` to deploy this backend; push to GitHub.
+  - **Deployed 2026-10-25 (Shayne authorized):** migrations 016 + 017 applied to live; score-reset run (3 pre-DEC-055 uploads detached from session 3338e9ec, derived score/tier/achievement/finding/notification state cleared for the owner); `com.lanesight.api` restarted (pid live, mode live, new `/shots/{id}/pins` + `/me/avatar` routes serving); branch `dev-build-v0` pushed to GitHub.
+  - **Pale-lane + training-clip work (2026-10-25):** the 17 pale-maple clips (IMG_8893–8910) took the lane detector from 0/17 → 3/17 analysing (saturation-floor retry), with the rest honestly flagged or failing with clear errors (no crashes, no garbage advice). Detection robustness for elevated / approach-dominant framings is the remaining coverage work — see `02_RESEARCH/TRAINING_CLIPS_2026-10-25_pale_lanes.md`.
 
 - **Ball catalog + configured reaction (2026-10-21, DEC-044):** 211 current balls from 10 brands with stock-photo links, 15 lb specs, published ratings and a normalized expected reaction; a bowler's ball reaction is adjusted for its layout and current surface. Code and data in `lanesight-core` (`lanesight_core/arsenal/`, `data/ball_catalog/`); migrations 002/003 **applied to the LaneSight Supabase project** (`europwryibstnmipbvam`), `ball_models` seeded (211 rows), along with `004_rls_hardening` and `005_ball_catalog_refresh` (reconciled into the repo 2026-10-22 — see Dev Build v0 below). Adjustment sizes and recommendation weights are provisional (M4-08).
 - `lanesight-core` in `lanesight-core/` (54 tests passing, re-run 2026-10-15):
