@@ -16,15 +16,33 @@ import numpy as np
 from .lane_geometry import LaneGeometry, CANONICAL
 
 
+# Landmark lifecycle (Step 3 safeguards): a point only feeds calibration once a human has VERIFIED it.
+# Auto-prefill produces 'suggested'; the verification tool promotes to 'verified' or marks it out. Nothing
+# except 'verified' is ever used as ground truth — suggestions and ambiguous/not-visible are excluded.
+STATUS_SUGGESTED = "suggested"      # auto-detected, UNVERIFIED — never used for calibration
+STATUS_VERIFIED = "verified"        # a human confirmed/placed it — the only status that calibrates
+STATUS_REJECTED = "rejected"        # a human rejected the suggestion
+STATUS_AMBIGUOUS = "ambiguous"      # visible but identity/location unclear — excluded from calibration
+STATUS_NOT_VISIBLE = "not_visible"  # not in frame — excluded
+
+
 @dataclass
 class LandmarkObservation:
     name: str
-    x: Optional[float]           # image pixel x (stabilized/background-plate coordinates)
-    y: Optional[float]           # image pixel y
+    x: Optional[float]           # image pixel x in ORIGINAL plate pixels (never scaled-preview coords)
+    y: Optional[float]           # image pixel y in ORIGINAL plate pixels
+    status: Optional[str] = None     # one of STATUS_* ; None == empty template slot
+    source: str = ""                 # 'manual' | 'auto:find_lanes' | 'auto:approach_dots' | ...
+    confidence: Optional[float] = None   # detector confidence for a suggestion (0..1); None for manual
 
     @property
     def labeled(self) -> bool:
         return self.x is not None and self.y is not None
+
+    @property
+    def usable(self) -> bool:
+        """Fail-closed: only a labeled, human-VERIFIED point is ground truth for calibration."""
+        return self.labeled and self.status == STATUS_VERIFIED
 
 
 @dataclass
@@ -44,20 +62,28 @@ class LandmarkSet:
                    notes="UNLABELED TEMPLATE — fill pixel coordinates with the overlay tool; "
                          "leave a landmark null if it is not visible in this clip.")
 
-    def set_point(self, name: str, x: float, y: float):
-        self.observations[name] = LandmarkObservation(name, float(x), float(y))
+    def set_point(self, name: str, x: float, y: float, status: str = STATUS_VERIFIED, source: str = "manual"):
+        """Place/confirm a point. Defaults to VERIFIED+manual (so a human-placed point calibrates)."""
+        self.observations[name] = LandmarkObservation(name, float(x), float(y), status=status, source=source)
+        return self
+
+    def suggest(self, name: str, x: float, y: float, confidence: float, source: str):
+        """Record an auto-detected, UNVERIFIED candidate. Never used for calibration until a human verifies it."""
+        self.observations[name] = LandmarkObservation(name, float(x), float(y),
+                                                       status=STATUS_SUGGESTED, source=source, confidence=confidence)
         return self
 
     # ---- correspondences for the solver ------------------------------------
     def correspondences(self, geometry: LaneGeometry = CANONICAL):
-        """Matched (world_xy_inches_ft, image_xy_px) for every landmark that is BOTH labeled here AND has a
-        fully-known world coordinate in the geometry. Returns (names, world Nx2, image Nx2)."""
+        """Matched (world_xy_inches_ft, image_xy_px) for every landmark that is VERIFIED here AND has a
+        fully-known world coordinate in the geometry. Suggested/ambiguous/not-visible are excluded (Step 3).
+        Returns (names, world Nx2, image Nx2)."""
         names, world, image = [], [], []
         for name, ob in self.observations.items():
-            if not ob.labeled:
+            if not ob.usable:                       # fail-closed: verified-only
                 continue
             w = geometry.world_point(name)
-            if w is None:
+            if w is None:                           # identity check: must map to a KNOWN world coordinate
                 continue
             names.append(name)
             world.append([w[0], w[1]])
@@ -66,6 +92,12 @@ class LandmarkSet:
 
     def labeled_count(self) -> int:
         return sum(1 for o in self.observations.values() if o.labeled)
+
+    def verified_count(self) -> int:
+        return sum(1 for o in self.observations.values() if o.usable)
+
+    def suggested_count(self) -> int:
+        return sum(1 for o in self.observations.values() if o.status == STATUS_SUGGESTED)
 
     # ---- JSON round-trip ----------------------------------------------------
     def to_dict(self):
@@ -82,7 +114,9 @@ class LandmarkSet:
 
     @classmethod
     def from_dict(cls, d: dict) -> "LandmarkSet":
-        obs = {n: LandmarkObservation(o.get("name", n), o.get("x"), o.get("y"))
+        obs = {n: LandmarkObservation(o.get("name", n), o.get("x"), o.get("y"),
+                                      status=o.get("status"), source=o.get("source", ""),
+                                      confidence=o.get("confidence"))
                for n, o in d.get("observations", {}).items()}
         return cls(clip_id=d["clip_id"], image_size=tuple(d.get("image_size", (0, 0))),
                    observations=obs, coordinate_space=d.get("coordinate_space", "stabilized_background_plate"),
@@ -104,11 +138,15 @@ def render_overlay(image, landmark_set: LandmarkSet, geometry: LaneGeometry = CA
     production path."""
     import cv2
     out = image.copy()
+    # colors (BGR): verified = green, suggested = amber, ambiguous/not-visible = grey, rejected skipped
+    colors = {STATUS_VERIFIED: (0, 255, 0), STATUS_SUGGESTED: (0, 200, 255),
+              STATUS_AMBIGUOUS: (150, 150, 150), STATUS_NOT_VISIBLE: (120, 120, 120)}
     for ob in landmark_set.observations.values():
-        if ob.labeled:
-            cv2.circle(out, (int(ob.x), int(ob.y)), 5, (0, 255, 0), -1)
+        if ob.labeled and ob.status != STATUS_REJECTED:
+            c = colors.get(ob.status, (0, 255, 0))
+            cv2.circle(out, (int(ob.x), int(ob.y)), 5, c, -1)
             cv2.putText(out, ob.name, (int(ob.x) + 6, int(ob.y) - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, c, 1, cv2.LINE_AA)
     if H_world_to_img is not None:
         for name, lm in geometry.known_landmarks().items():
             w = np.array([lm.x_in, lm.z_ft, 1.0])

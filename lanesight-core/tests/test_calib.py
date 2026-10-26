@@ -132,3 +132,50 @@ def test_reconstruct_needs_enough_centers():
     H_iw_true, _ = _true_homographies()
     r = reconstruct_from_homography(H_iw_true, [(0.0, 200.0, 500.0)] * 3)
     assert not r["ok"] and "need" in r["error"]
+
+
+# ------------------------------------------------- verification-tool safeguards (Step 3)
+
+def test_only_verified_points_calibrate():
+    """Fail-closed: suggested/ambiguous/not-visible are excluded; only verified feed correspondences."""
+    from lanesight_core.cv.calib.landmarks import (STATUS_SUGGESTED, STATUS_VERIFIED, STATUS_AMBIGUOUS)
+    ls = LandmarkSet.template("C", (1080, 1920))
+    ls.suggest("foul_l", 300, 1500, 0.9, "auto")          # suggested -> excluded
+    ls.set_point("foul_r", 760, 1500)                      # verified   -> included
+    ls.set_point("pin_1", 540, 300, status=STATUS_AMBIGUOUS)   # ambiguous -> excluded
+    assert ls.observations["foul_l"].usable is False
+    assert ls.observations["foul_r"].usable is True
+    names, world, image = ls.correspondences()
+    assert names == ["foul_r"]
+    assert ls.verified_count() == 1 and ls.suggested_count() == 1
+    # round-trip preserves status/source/confidence
+    rt = LandmarkSet.from_json(ls.to_json())
+    assert rt.observations["foul_l"].status == STATUS_SUGGESTED and rt.observations["foul_l"].confidence == 0.9
+    assert rt.observations["foul_r"].status == STATUS_VERIFIED
+
+
+def test_merge_never_clobbers_verified():
+    from lanesight_core.cv.calib.label_tool import (merge_existing_and_suggestions,
+                                                    view_to_image, image_to_view)
+    ex = LandmarkSet.template("C", (1080, 1920)); ex.set_point("foul_l", 300, 1500)
+    sg = LandmarkSet.template("C", (1080, 1920))
+    sg.suggest("foul_l", 999, 999, 0.9, "auto")           # must NOT overwrite the verified foul_l
+    sg.suggest("foul_r", 700, 1500, 0.9, "auto")
+    m = merge_existing_and_suggestions(ex, sg)
+    assert m.observations["foul_l"].x == 300 and m.observations["foul_l"].usable
+    assert m.observations["foul_r"].status == "suggested"
+    # coordinate transform stores ORIGINAL image pixels (round-trips exactly)
+    view = dict(zoom=0.37, ox=140.0, oy=512.0)
+    for ix, iy in ((0, 0), (1080, 1920), (537.5, 999.25)):
+        vx, vy = image_to_view(ix, iy, view)
+        rx, ry = view_to_image(vx, vy, view)
+        assert abs(rx - ix) < 1e-6 and abs(ry - iy) < 1e-6
+
+
+def test_resolution_scale_invariant_bounds():
+    """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
+    from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT
+    assert BOARD_ERR_CLEAN == pytest.approx(0.97, abs=0.05)
+    assert BOARD_ERR_BLUR == pytest.approx(2.42, abs=0.05)
+    assert BOARD_ERR_CLEAN < 1.0 < BOARD_ERR_BLUR          # ±1 board only with a clean ball
+    assert SCALE_INVARIANT["board_err_clean"] == BOARD_ERR_CLEAN

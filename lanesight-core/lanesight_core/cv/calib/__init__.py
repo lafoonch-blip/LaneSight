@@ -13,8 +13,13 @@ from .lane_geometry import LaneGeometry, CANONICAL
 from .landmarks import LandmarkSet, LandmarkObservation
 from .solve import homography_from_landmarks, calibration_diagnostics
 
+# autofill / resolution import cv.lanes (heavy) lazily inside their functions; expose the entry points.
+from .autofill import autofill
+from .resolution import far_lane_ball_resolution, SCALE_INVARIANT
+
 __all__ = [
     "LaneGeometry", "CANONICAL",
     "LandmarkSet", "LandmarkObservation",
     "homography_from_landmarks", "calibration_diagnostics",
+    "autofill", "far_lane_ball_resolution", "SCALE_INVARIANT",
 ]

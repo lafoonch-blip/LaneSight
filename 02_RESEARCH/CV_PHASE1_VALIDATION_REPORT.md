@@ -1,5 +1,5 @@
 # CV Phase-1 Validation Report (geometry proof) — DEC-062
-Version: 0.1 (SCAFFOLD — A column + framing finding filled; B/C pending labeling)
+Version: 0.2 (SCAFFOLD — A column + framing finding + far-lane observability + tooling; B/C pending labeling)
 Last Updated: 2026-10-25
 Status: In progress. This is the report that decides which architectural investment pays off (handoff §10).
 Fills in as labeling + the A/B/C/D ablation run. The **framing finding** below already changes the Phase-1
@@ -40,6 +40,36 @@ edges/gutters (continuous) + pin deck (60 ft)** — a long baseline with a **lar
 
 > Caveat: 4 of 17 inspected directly; the pattern was uniform. The per-clip table below marks camera class
 > for all 17 from the plates + the Run-A narrative; confirm each during labeling.
+
+## 0.1 Far-lane observability — answers the ±1-board question (before labeling)
+
+Shayne's additional consideration: is the ball big/sharp enough near the pins to localize its board to
+±1 board? The rigorous result (`cv/calib/resolution.py`) is **scale-invariant** — it does not depend on how
+many pixels the lane spans, because the ball image and the board width both scale with pixels-per-foot:
+
+> **lateral board error ≈ k_centroid · (BALL_IN/LANE_IN) · BOARDS ≈ k_centroid · 8.07 boards.**
+> Clean, sharp, well-segmented ball (k≈0.12) → **≈0.97 board.** Blurred/small/occluded ball (k≈0.30) → **≈2.42 boards.**
+
+**So ±1 board at the pins is only achievable with a sharp, cleanly-segmented far ball AND valid far-lane
+calibration. Under realistic back-half blur it is not — and more pixels do not fix it;** pixel scale governs
+only whether the ball is big enough to *detect* at all. This is a strong prior for the decision gate: if
+Run C can't reach ±1 board on the clean clips, it's a physical limit → **capture-position recommendation**,
+not more CV. (Per-clip pixel-scale context is in `calib_landmarks/_resolution_summary.json`, but note it's
+measured at the end of the *detected* lane region, which on foreshortened clips is short of the true pins and
+thus over-states the pin-area ball size — we do not claim per-clip resolvability from it.)
+
+## 0.2 Tooling built (Option B + verification tool) — ready for labeling
+
+- **Auto-prefill** (`cv/calib/autofill.py`): foul-line endpoints from the existing `find_lanes` + best-effort
+  approach dots, all marked **`suggested` (UNVERIFIED)** with source + confidence. Ran on all 17:
+  **15/17 got foul suggestions** (8895 also an approach dot); **8900/8901/8908 produced none** (find_lanes
+  fails — foul off-frame / no saturated wood), which is itself the signal those need manual foul labeling.
+- **Verification tool** (`cv/calib/label_tool.py`): local cv2-HighGUI app — zoom/pan, accept/drag/reject/add,
+  mark not-visible/ambiguous, saves the schema JSON, navigates clips. Safeguards enforced: original-pixel
+  storage, verified-only calibration, merge never clobbers verified, suggested (amber) vs verified (green)
+  distinct. Run: `python -m lanesight_core.cv.calib.label_tool "<…>/calib_landmarks" --autofill`.
+- Suggestions written into each `calib_landmarks/<clip>.landmarks.json` (merged over the templates; no
+  verified work exists yet to clobber).
 
 ---
 
@@ -108,8 +138,13 @@ proof first. Production CV path stays frozen (DEC-062).
 
 ## 5. Open items blocking a verdict
 
-- Ground-truth labeling (landmarks on 17; ball centers on the failing ones). Plates + templates ready in
-  `10-25 training videos/calib_landmarks/` (all 17). Needs a human/tool — not auto-generated.
+- **Verify the auto-suggested landmarks** in the label tool for the **first six priority clips** (8907,
+  8893, 8895, 8903, 8900, 8908), adding pins + any missing points. Tooling + suggestions are ready
+  (`calib_landmarks/`). Then run B/C on those six — **do not wait for all 17** (Shayne's Step 4).
+- Hand-label ball centers on the failing clips for Run C (the label tool can be pointed at per-frame crops;
+  for the first pass, Run B uses the existing auto track so B can run immediately after geometry verify).
 - Measurement definitions D-1..D-5 (`CV_MEASUREMENT_DEFINITIONS.md`): ratify D-1/2/3; get Ruby def (D-4) +
-  USBC edition (D-5).
-- Decide handling of IMG_8901 (re-stabilize vs exclude as invalid input).
+  USBC edition (D-5) — needed before B/C errors are read as accuracy.
+- Decide handling of IMG_8901 (re-stabilize vs exclude — find_lanes finds no wood; likely invalid input).
+
+**After the six clips are verified and B/C run, STOP at the §4 gate before expanding development** (Shayne).
