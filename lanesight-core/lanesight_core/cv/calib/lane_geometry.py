@@ -127,11 +127,17 @@ def _canonical() -> LaneGeometry:
         add(Landmark(f"arrow_{b}", round(x_in_for_board(b), 3), None, "tbd",
                      _SPEC, "arrow X known; longitudinal stagger pending USBC edition (open decision #4)"))
 
-    # Guide dots ~ a few feet past the foul line; approach dots are BEHIND it (negative Z). Positions pending
-    # the same citation — structure present, values tbd (no fabricated Z).
+    # Guide dots ~ a few feet PAST the foul line (positive Z). X known; Z pending citation.
     for b in (5, 10, 15, 20, 25, 30, 35):
         add(Landmark(f"dot_{b}", round(x_in_for_board(b), 3), None, "tbd",
-                     _SPEC, "guide-dot X known; Z pending edition confirm"))
+                     _SPEC, "guide-dot X known; Z (small positive) pending edition confirm"))
+    # Approach dots are BEHIND the foul line (negative Z), modeled separately (handoff §4). In the actual
+    # ball-return / settee camera framing this cohort uses (CV_PHASE1_VALIDATION_REPORT finding), these are
+    # often the BEST-resolved fiducials in frame, so they are first-class landmarks here. X known; the two
+    # standard rows' distances (nominally ~12 ft and ~15 ft behind the foul line) pending citation.
+    for b in (5, 10, 15, 20, 25, 30, 35):
+        add(Landmark(f"approach_dot_{b}", round(x_in_for_board(b), 3), None, "tbd",
+                     _SPEC, "approach-dot X known; Z (negative, ~12-15 ft behind foul) pending edition confirm"))
 
     for lm in _pin_spots():
         add(lm)
