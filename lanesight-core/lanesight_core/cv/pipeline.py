@@ -4,15 +4,49 @@ from __future__ import annotations
 import os, json, pickle, argparse, time, numpy as np
 from contextlib import contextmanager
 from .stabilize import stabilize
-from .lanes import find_lanes
+from .lanes import find_lanes, classify_capture_view
 from .track import extract_blobs, candidates, link, detect_impact, extend_back, extend_forward, touchdown
 from .metrics import compute, lane_homography
 from .refine import refine
 from .pins import read_pins
 from .revrate import ball_crops, rev_rate
 from ..models.shot import ShotRecord, m, ALGO_VERSION
-from ..insights.adjust import strike_adjustment
+from ..insights.adjust import strike_adjustment, no_reliable_data_insight
 from ..insights.spares import spare_plan
+
+# Every shot metric, as (name, unit) — used to emit an all-`unavailable` record when the capture view can't
+# support lane metrics (side/approach view), so we never fabricate geometry (DEC-061 / side-view-misroute).
+_METRIC_CATALOG = [
+    ('ball_speed', 'mph'), ('speed_release', 'mph'), ('speed_early', 'mph'), ('speed_late', 'mph'),
+    ('loft', 'ft'), ('laydown_board', 'board'), ('board_at_7ft', 'board'), ('arrows_board', 'board'),
+    ('launch_angle', 'deg'), ('breakpoint_board', 'board'), ('breakpoint_distance', 'ft'),
+    ('entry_board', 'board'), ('entry_angle', 'deg'), ('entry_angle_52_55', 'deg'),
+    ('rev_rate_lane', 'rpm'), ('rev_rate', 'rpm'), ('axis_rotation', 'deg'), ('axis_tilt', 'deg'), ('pap', 'in'),
+]
+
+
+def _unsupported_view_record(video, S, view_info, context, out_prefix, handed):
+    """Graceful 'no reliable data' ShotRecord for a view that can't yield lane metrics (side/approach/unknown):
+    every metric `unavailable` with the camera reason, a `no_reliable_data` insight with the camera tip and no
+    move, and capture_quality naming the view. Never fabricates a lane fit or a number."""
+    tip = view_info['reason']
+    try:
+        fps = round(1 / float(np.median(np.diff(S['ts']))), 2)
+    except Exception:
+        fps = None
+    rec = ShotRecord(
+        shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)),
+        handed=handed or 'R',
+        video=dict(file=os.path.basename(video), fps=fps,
+                   camera_motion_px=round(float(S['shift'].max()), 1) if 'shift' in S else None,
+                   reference_frame=int(S['ref']) if 'ref' in S else None),
+        events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
+        measurements=[m(name, None, unit, 0, tip) for name, unit in _METRIC_CATALOG],
+        trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
+        capture_quality={'view': view_info['view'], 'supported': False, 'far_lane': 'limited',
+                         'reason': tip, 'lane_center_frac': view_info.get('lane_center_frac')})
+    rec.insights = no_reliable_data_insight(tip)
+    return rec
 
 REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot calibration; pending blind validation)
 
@@ -64,6 +98,15 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     S['vp_y'] = None
     with _stage('find_lanes_s'):
         G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+    # Capture-view gate (side-view-misroute handoff / DEC-061): refuse a view no lane metric can come from —
+    # a side/approach clip fits a lane high in the frame and would otherwise fabricate confident-wrong geometry
+    # (IMG_8905). Classify from the lane geometry BEFORE any ball extraction; if no candidate lane is a valid
+    # rear/down-lane view, return an honest no_reliable_data record + camera tip with zero shot metrics.
+    views = [classify_capture_view(l, vp, S['bg'].shape) for l in G['lanes']]
+    if views and not any(v['supported'] for v in views):
+        vinfo = max(views, key=lambda v: (v.get('lane_center_frac') or 0.0))
+        log(f"capture view unsupported ({vinfo['view']}, lane center {vinfo['lane_center_frac']}): refusing")
+        return _unsupported_view_record(video, S, vinfo, context, out_prefix, handed)
     bcache = out_prefix + '_blobs.pkl'
     best = None
     for lane in G['lanes']:

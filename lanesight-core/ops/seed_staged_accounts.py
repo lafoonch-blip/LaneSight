@@ -141,21 +141,52 @@ def _keychain_get(account):
 
 
 # ----------------------------------------------------------------------- time backdating (store-aware)
+# MemoryStore keeps created_at as an epoch float and reads it directly; PgStore must PATCH Postgres over
+# PostgREST (its inherited patch_shot only touches the in-memory mirror). Backdating makes the shot list,
+# session list and score-trend chart look like real history rather than "all today". Live patches are
+# best-effort (the measured data persists regardless of a cosmetic timestamp patch).
+def _is_pg(store):
+    return store.__class__.__name__ == 'PgStore'
+
+
+def _iso(epoch):
+    return dt.datetime.fromtimestamp(epoch, dt.timezone.utc).isoformat()
+
+
 def _set_created(store, user_id, shot_id, epoch):
-    """Backdate a shot's created_at in the store's native type (MemoryStore: epoch float; Pg: ISO8601)."""
-    from lanesight_api.store import MemoryStore
-    if isinstance(store, MemoryStore):
-        store.patch_shot(user_id, shot_id, {'created_at': epoch})
+    if _is_pg(store):
+        try:
+            store._req(f'shots?id=eq.{shot_id}', 'PATCH', {'created_at': _iso(epoch)})
+        except Exception as e:
+            print(f'backdate shot skipped ({e})')
     else:
-        iso = dt.datetime.fromtimestamp(epoch, dt.timezone.utc).isoformat()
-        store.patch_shot(user_id, shot_id, {'created_at': iso})
+        store.patch_shot(user_id, shot_id, {'created_at': epoch})
+
+
+def _backdate_session(store, user_id, sid, start_epoch, end_epoch):
+    """Backdate a session's started_at/ended_at and its session-end score snapshot's computed_at."""
+    if _is_pg(store):
+        try:
+            store._req(f'sessions?id=eq.{sid}', 'PATCH',
+                       {'started_at': _iso(start_epoch), 'ended_at': _iso(end_epoch)})
+            store._req(f'score_snapshot?session_id=eq.{sid}&trigger=eq.session_end', 'PATCH',
+                       {'computed_at': _iso(end_epoch)})
+        except Exception as e:
+            print(f'backdate session skipped ({e})')
+    else:
+        s = store.sessions.get(sid)
+        if s:
+            s['started_at'], s['ended_at'] = start_epoch, end_epoch
+        for snap in store.snapshots.get(user_id, []):
+            if snap.get('session_id') == sid and snap.get('trigger') == 'session_end':
+                snap['computed_at'] = end_epoch
 
 
 # ----------------------------------------------------------------------- account identity / guard
 def resolve_user(store, kind, cfg, target, create):
-    """Return the user_id for a staged account, creating the auth user (live) or a deterministic id (local)."""
-    from lanesight_api.store import MemoryStore
-    if isinstance(store, MemoryStore):
+    """Return the user_id for a staged account, creating the auth user (live) or a deterministic id (local).
+    NOTE: PgStore subclasses MemoryStore, so test the EXACT type, not isinstance."""
+    if not _is_pg(store):
         return f'staged-{kind}'
     # live: create (or find) the Supabase auth user, store a generated password in the Keychain
     from lanesight_api import userauth
@@ -246,6 +277,7 @@ def seed_account(store, kind, cfg, target, reset=False, now=None):
         # app shows as score history, and tiers only move at session end anyway — so this reproduces the
         # app's final state while avoiding thousands of per-shot recomputes against live PostgREST.
         engines.at_session_end(store, user_id, sid)
+        _backdate_session(store, user_id, sid, s_epoch, s_epoch + nshots * 40 + 60)
         counts['sessions'] += 1
         # a session rating + the occasional note (flagged is_staged by the profile)
         store.add_feedback(user_id, {'source': 'session_feedback', 'session_id': sid,

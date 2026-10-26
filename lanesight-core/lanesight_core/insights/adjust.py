@@ -14,6 +14,15 @@ def _clamp_board(b):
     Guards against off-lane projections like the breakpoint-board 0/-1 seen in SHOT_REVIEW 2026-10-25."""
     return None if b is None else float(min(39.0, max(1.0, b)))
 
+def no_reliable_data_insight(note: str) -> dict:
+    """Canonical `no_reliable_data` insights payload (no move, low confidence) for callers that must refuse a
+    shot before any metric is measured — e.g. an unsupported capture view (side-view-misroute handoff,
+    DEC-061). Same shape `strike_adjustment` emits on its no_reliable_data path."""
+    rec = _rec('none', note, {'reason': 'no_reliable_data'}, 'low', low_confidence=True, move_feet=0, move_target=0)
+    return dict(hit=None, leave=None, execution=None, classification='LOW_CONFIDENCE',
+                state='no_reliable_data', confidence='low', note=note, recommendations=[rec])
+
+
 def far_lane_unreliable(shot: dict) -> tuple[bool, str | None]:
     """Plausibility gate on far-lane metrics (SHOT_REVIEW 2026-10-25, fix #2). A real ball LOSES speed down
     the lane, so a late speed that reads faster than the early speed (beyond measurement noise) means the

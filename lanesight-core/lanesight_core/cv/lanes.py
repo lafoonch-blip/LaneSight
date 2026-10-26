@@ -237,3 +237,30 @@ def foul_corners(l):
     for a, b in (l['left'], l['right']):
         y = (c * b + d) / (1 - c * a); out.append((a * y + b, y))
     return np.array(out)
+
+
+# A valid rear/down-lane SHOT view puts the foul line + near lane in the LOWER frame (camera behind the foul
+# line looking at the pins). A side/approach view (camera on the approach, across lanes — IMG_8905) compresses
+# the playing lane into a thin band HIGH in the frame, with no pin deck and no measurable down-lane geometry.
+# Threshold is the vertical center of the detected lane band as a fraction of frame height; calibrated on the
+# 2026-10-25 cohort + the IMG_8751–8754 validation clips (valid views ≥ 0.48; the IMG_8905 side view = 0.16).
+# Provisional — revisit as more labeled views arrive.
+VIEW_MIN_LANE_CENTER_FRAC = 0.40
+VIEW_TIP = ("No down-lane view. Set the camera behind the lane, square to it, with the foul line and the pins "
+            "in frame. A side/approach view can't measure ball or lane position.")
+
+
+def classify_capture_view(lane, vp, frame_shape):
+    """Classify the capture view from the fitted lane geometry so the shot pipeline can refuse a view that no
+    lane metric can come from (side-view-misroute handoff / DEC-061) instead of fabricating geometry. Returns
+    dict(view, supported, reason, lane_center_frac); `view` in {'rear','side','unknown'} ('rear' covers
+    down-lane; both are supported). Conservative: refuses only when the detected lane band sits clearly high
+    in the frame."""
+    h = (frame_shape[0] if frame_shape is not None else 0) or 0
+    yr = (lane or {}).get('y_rng')
+    if not yr or h <= 0:
+        return dict(view='unknown', supported=False, reason=VIEW_TIP, lane_center_frac=None)
+    center = (float(yr[0]) + float(yr[1])) / 2.0 / h
+    if center < VIEW_MIN_LANE_CENTER_FRAC:
+        return dict(view='side', supported=False, reason=VIEW_TIP, lane_center_frac=round(center, 3))
+    return dict(view='rear', supported=True, reason=None, lane_center_frac=round(center, 3))

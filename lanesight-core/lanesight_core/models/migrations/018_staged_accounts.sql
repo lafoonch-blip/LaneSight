@@ -36,7 +36,9 @@ alter table feedback add column if not exists is_staged boolean not null default
 create index if not exists feedback_is_staged_idx on feedback (is_staged);
 
 create or replace function feedback_set_is_staged() returns trigger
-  language plpgsql as $$
+  language plpgsql
+  set search_path = public, pg_temp      -- pin search_path (advisor: function_search_path_mutable)
+  as $$
 begin
   if new.user_id is not null then
     select coalesce(p.is_staged, false) into new.is_staged
