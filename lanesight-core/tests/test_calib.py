@@ -275,6 +275,33 @@ def test_phase2_score_clip_on_synthetic(tmp_path):
     assert "tier" in r["eligibility"] and r["eligibility"]["tier"] in ("full", "partial", "reposition")
 
 
+def test_pnp_recovers_known_pose_and_good_position_is_well_conditioned():
+    """PnP code is correct: it recovers a known synthetic camera pose exactly, and a good (low, ~10 ft
+    standoff, square) position gives far-lane sensitivity well under the eligibility threshold. This is the
+    control that makes the real-clip finding (impossible poses from the ball-return view) trustworthy."""
+    import cv2
+    from lanesight_core.cv.calib.pose import _object_points, nominal_K, _pnp, _ray_plane_board, IN_PER_FT
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL, LANE_WIDTH_IN, BOARDS
+    w, h = 1080, 1920
+    K = nominal_K(w, h)
+    names = ["foul_l", "foul_r"] + [f"pin_{i}" for i in (1, 2, 3, 4, 6, 7, 10)]
+    obj = _object_points(names, 15.0)
+    pitch = np.radians(18)
+    Cw = np.array([LANE_WIDTH_IN / 2, 48.0, -120.0])          # 48 in high, 10 ft behind foul
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    Rwc = np.vstack([xc, yc, zc]); tvec = (-Rwc @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(Rwc)
+    img = cv2.projectPoints(obj, rvec, tvec, K, None)[0].reshape(-1, 2)
+    rvec2, tvec2, rmse = _pnp(obj, img, K)
+    R2, _ = cv2.Rodrigues(rvec2); C2 = (-R2.T @ tvec2).ravel()
+    assert rmse < 0.5                                         # recovers the pose essentially exactly
+    assert abs(C2[1] - 48.0) < 2 and abs(C2[2] - (-120.0)) < 5
+    ent = np.array([[LANE_WIDTH_IN / 2, 0.0, CANONICAL.z_impact_ft * IN_PER_FT]])
+    uv = cv2.projectPoints(ent, rvec, tvec, K, None)[0].reshape(2)
+    b1 = _ray_plane_board(rvec, tvec, K, uv + [1, 0])
+    sens = abs((b1[0] - LANE_WIDTH_IN / 2) / LANE_WIDTH_IN * BOARDS)
+    assert sens < 1.5                                         # good position is well-conditioned
+
+
 def test_resolution_scale_invariant_bounds():
     """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
     from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT
