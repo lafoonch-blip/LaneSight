@@ -48,6 +48,17 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             from lanesight_core.form.pose import pose_backend
             rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
             rec['shot_id'] = shot_id
+            # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
+            # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
+            for fkey in (rec.get('key_frames') or []):
+                local = f'{out_prefix}_form_{fkey}.jpg'
+                if os.path.exists(local):
+                    try:
+                        with open(local, 'rb') as fh:
+                            store.storage_upload(_IMAGE_BUCKET, f'frames/{shot_id}_form_{fkey}.jpg',
+                                                 fh.read(), 'image/jpeg')
+                    except Exception as e:
+                        print(f'key-frame upload {fkey} skipped ({e})')
             job.timings['analyze'] = time.monotonic() - t0
             # Form-only engine step (baselines -> watch -> focus -> footer). Runs BEFORE save so the current
             # delivery is counted once; never touches the ball L-dev-0 score / Accuracy.
@@ -331,10 +342,11 @@ def get_shot_frame(shot_id: str, key: str, user=Depends(current_user)):
         raise HTTPException(404, 'unknown frame key')
     if not get_store().get_shot(user, shot_id):        # owner-scoped
         raise HTTPException(404, 'shot not found')
-    path = DATA_ROOT / 'out' / f'{shot_id}_form_{key}.jpg'
-    if not path.exists():
+    try:                                               # durable in Storage (Cloud Run disk is ephemeral)
+        data = get_store().storage_download(_IMAGE_BUCKET, f'frames/{shot_id}_form_{key}.jpg')
+    except Exception:
         raise HTTPException(404, 'frame not available')
-    return FileResponse(str(path), media_type='image/jpeg')
+    return Response(content=data, media_type='image/jpeg')
 
 
 @app.post('/shots/{shot_id}/pins')

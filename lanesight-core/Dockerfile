@@ -11,15 +11,26 @@ ENV PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     LANESIGHT_DATA=/data
 
-# opencv-python-headless needs libglib2.0-0 (libgthread); ffmpeg ensures robust .mov/h264 decode.
+# opencv-python-headless needs libglib2.0-0 (libgthread); mediapipe (Form pose) needs libgl1 (libGL.so.1);
+# ffmpeg ensures robust .mov/h264 decode; curl + ca-certificates fetch the pose model below.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libglib2.0-0 ffmpeg \
+ && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 ffmpeg curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . .
-RUN pip install ".[api]"
+RUN pip install ".[api,form]"
 RUN mkdir -p /data
+
+# Form (pose) support: fetch the heavy pose model at build time and pin it by sha256 (NEVER committed to the
+# repo). The "latest" URL currently serves this exact sha; if Google ever republishes it, the build fails here
+# loudly rather than shipping an unverified model. Baked into the image (read-only, always present — unlike the
+# ephemeral /tmp DATA_ROOT). lanesight_core/form/pose.py re-verifies the same sha at load.
+RUN mkdir -p /app/models \
+ && curl -fsSL "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task" \
+      -o /app/models/pose_landmarker_heavy.task \
+ && echo "64437af838a65d18e5ba7a0d39b465540069bc8aae8308de3e318aad31fcbc7b  /app/models/pose_landmarker_heavy.task" | sha256sum -c -
+ENV LANESIGHT_POSE_MODEL=/app/models/pose_landmarker_heavy.task
 
 # Secrets come from the host as env vars (Cloud Run secrets / fly secrets), read by lanesight_api/config.py:
 #   LANESIGHT_DB_URL  LANESIGHT_SERVICE_ROLE  LANESIGHT_JWT_SECRET
@@ -29,8 +40,5 @@ RUN mkdir -p /data
 EXPOSE 8080
 CMD exec uvicorn lanesight_api.app:app --host 0.0.0.0 --port ${PORT:-8080}
 
-# ---- FOLLOW-UP: enable Form analysis ----
-# 1) change `pip install ".[api]"` -> `pip install ".[api,form]"`
-# 2) put the model on the volume at /data/models/pose_landmarker_heavy.task (or bake it in), and confirm the
-#    pose backend's model path resolves to $LANESIGHT_DATA/models.
-# mediapipe pulls more libs + size; keep it out of the first deploy.
+# Form analysis is ENABLED (mediapipe + baked pose model above). mediapipe adds image size + build time; if a
+# form clip's RAM peak exceeds the Cloud Run memory, raise --memory on deploy (re-benchmark after enabling).
