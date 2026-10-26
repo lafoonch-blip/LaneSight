@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.41  
+Version: 1.42  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.40
+Supersedes: v1.41
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -896,7 +896,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - **Session summary** leads with What went well / What to improve / Next focus and a "vs your typical" comparison, shown only with enough comparable shots.
 - **Setup** defaults to the last-used ball, oil and target, and shows one "Ready to bowl" line above the detailed checks; the service check does not imply a warm worker.
 - **Lab** explains uploads vs sessions in plain language.
-- **Form results** lets the bowler tap a key position or checkpoint to play the video from that frame; Early / On time / Late are judged against the bowler's own baseline.
+- **Form results** lets the bowler tap a key position or checkpoint to play the video from that frame (playback superseded by DEC-082: thumbnails with a skeleton overlay instead); Early / On time / Late are judged against the bowler's own baseline.
 - **Stats** metric tiles open a detail view; Shot stats add an Accuracy trend; Impact Energy is labeled as not a carry prediction (DEC-024).
 - **States** added: resume an interrupted session, retry an upload without re-recording, first-use baseline explainer, small-sample labels.
 - Not adopted: Practice / League / Tournament filters in Lab (DEC-067).
@@ -929,6 +929,18 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Why:** Ball and oil don't affect body mechanics; the live Form loop should match the Shot loop so bowlers see each delivery's result before the next.
 **Date:** 2026-10-26
 **Status:** ACCEPTED (target state)
+
+### DEC-082 — Form: no video playback in MVP; key-position thumbnails with a measured skeleton overlay
+**Decision (Shayne, 2026-10-26):**
+- **No full video playback** on Form results in MVP.
+- During analysis the app **captures a thumbnail at each key moment** (ball start, end of pushaway, top of swing, release) from the bowler's clip (DEC-075), in the detected view (DEC-076).
+- Each thumbnail can carry a **line-skeleton overlay** showing the pose, plus the one measurement or angle that matters at that moment (e.g. spine tilt at release from the side, shoulder tilt at release from behind).
+- Design defaults (not yet reviewed): tapping a thumbnail opens the full frame with the skeleton, the measured angle drawn against a vertical reference, and the measurements available at that position; only joints detected with confidence are drawn; when pose confidence is too low the thumbnail shows no overlay and says so; overlays are drawn by the app from stored landmarks, not burned into the image.
+
+**Why:** Thumbnails plus measured angles give the coaching value of playback at much lower cost and scope (DEC-035 kept replay post-MVP).
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Supersedes:** the Form results video player added under DEC-079.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
