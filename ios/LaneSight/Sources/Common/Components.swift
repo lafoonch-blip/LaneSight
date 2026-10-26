@@ -97,7 +97,7 @@ struct LSTabTitle: View {
     let title: String
     var body: some View {
         Text(title)
-            .font(.lsRoboto(20, weight: .semibold))
+            .font(.lsRoboto(24, weight: .semibold))     // Heading/Screen (v3.7)
             .foregroundStyle(LS.textPrimary)
             .accessibilityAddTraits(.isHeader)
     }

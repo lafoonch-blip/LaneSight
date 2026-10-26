@@ -88,7 +88,7 @@ struct SessionView: View {
         let seqTxt = latest?.seq.map { "Shot \($0)" } ?? "\(rows.count) shots"
         return VStack(spacing: 1) {
             Text(readOnly ? "Session review" : "Practice Session")
-                .font(.lsHeadline).foregroundStyle(LS.textPrimary)
+                .font(.lsRoboto(20, weight: .semibold)).foregroundStyle(LS.textPrimary)
             Text("\(model.captureMode == "form" ? "Form" : "Shot") Analysis · \(seqTxt)")
                 .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
         }

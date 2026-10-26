@@ -490,7 +490,7 @@ struct ShotCardView: View {
         let subtitle = result.isForm ? "Form Analysis"
             : (result.isUpload ? "Uploaded clip · Shot Analysis" : "Shot Analysis")
         return VStack(spacing: 1) {
-            Text(title).font(.lsHeadline).foregroundStyle(LS.textPrimary)
+            Text(title).font(.lsRoboto(20, weight: .semibold)).foregroundStyle(LS.textPrimary)
             Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
         }
     }

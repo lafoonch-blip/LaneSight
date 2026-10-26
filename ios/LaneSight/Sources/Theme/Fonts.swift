@@ -105,7 +105,7 @@ enum LSAppearance {
         nav.shadowColor = .clear
         nav.titleTextAttributes = [
             .foregroundColor: UIColor(LS.textPrimary),
-            .font: UIFont(name: LSFont.semibold, size: 17) ?? .systemFont(ofSize: 17, weight: .semibold)]
+            .font: UIFont(name: LSFont.semibold, size: 22) ?? .systemFont(ofSize: 22, weight: .semibold)]
         nav.largeTitleTextAttributes = [
             .foregroundColor: UIColor(LS.textPrimary),
             .font: UIFont(name: LSFont.semibold, size: 34) ?? .systemFont(ofSize: 34, weight: .bold)]
