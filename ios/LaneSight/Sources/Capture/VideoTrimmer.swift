@@ -16,7 +16,9 @@ import CoreGraphics
 /// Everything runs off the main actor (the entry point is `nonisolated async`).
 enum VideoTrimmer {
     /// Supabase's free tier rejects Storage uploads over ~50 MB per file, so keep the uploaded clip under this.
-    static let maxUploadBytes = 48_000_000
+    /// nonisolated so it can be a default argument of the nonisolated `trimForUpload` under Swift 6 default
+    /// main-actor isolation.
+    nonisolated static let maxUploadBytes = 48_000_000
 
     /// Prepare ANY clip (live capture or Photos upload) for upload: trim to the shot window (lossless), then
     /// guarantee it fits under `maxBytes`. The lossless window trim handles the common case with no quality
