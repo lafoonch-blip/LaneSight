@@ -24,7 +24,7 @@ enum LS {
     // Surfaces
     static let bg = Color(hex: 0x001018)            // canvas / app background
     static let bgAuth = Color(hex: 0x001018)        // auth uses the same canvas in 3.0
-    static let card = Color(hex: 0x031B29)          // card fill
+    static let card = Color(hex: 0x031A2D)          // card fill
     static let raised = Color(hex: 0x062132)        // raised surface (e.g. score card)
     static let selected = Color(hex: 0x0C2B40)      // selected / standard border fill
     static let border = Color(hex: 0x0C2B40)        // standard 1px border
@@ -32,15 +32,15 @@ enum LS {
     static let cardStroke = Color(hex: 0x0C2B40)    // legacy name → standard border
 
     // Accent / action
-    static let action = Color(hex: 0x00A8F5)        // primary action (cyan)
+    static let action = Color(hex: 0x009BFF)        // primary action (cyan)
     static let onAction = Color(hex: 0x001018)      // text / icon on an action surface
-    static let blue = Color(hex: 0x00A8F5)          // legacy name → action
-    static let cyan = Color(hex: 0x00A8F5)          // legacy name → action
+    static let blue = Color(hex: 0x009BFF)          // legacy name → action
+    static let cyan = Color(hex: 0x009BFF)          // legacy name → action
 
     // Text
     static let textPrimary = Color(hex: 0xF5F6FA)
-    static let textSecondary = Color(hex: 0xBFCBDD)
-    static let textFaint = Color(hex: 0xBFCBDD).opacity(0.6)
+    static let textSecondary = Color(hex: 0xB9C6D9)
+    static let textFaint = Color(hex: 0xB9C6D9).opacity(0.6)
 
     // Success (positive deltas / "Measured" status)
     static let success = Color(hex: 0x00EB92)
@@ -52,10 +52,17 @@ enum LS {
     static let dataYellow = Color(hex: 0xF5CD31)
     static let dataOrange = Color(hex: 0xFA923C)
 
+    // v3.7 design-standard additions (Figma variable defs)
+    static let positive = Color(hex: 0x3DEB7C)          // home/positive — score delta up
+    static let link = Color(hex: 0x1BAEFF)              // home/link — "View Details" / "How it's calculated"
+    static let heroStroke = Color(hex: 0x007DFF)        // home/hero-stroke — highlighted (focus) card border
+    static let track = Color(hex: 0x28444B)             // data/track — progress-bar track fill
+    static let cardStrokeBright = Color(hex: 0x135079)  // home/card-stroke — Home content card border
+
     // Metric-status helpers kept so existing screens compile (full restyle later). There is no error
     // color in v1 — failures use neutral surfaces + plain text.
     static let bestEffort = Color(hex: 0xF5CD31)    // amber attention (data-yellow hue)
-    static let unavailable = Color(hex: 0xBFCBDD).opacity(0.5)
+    static let unavailable = Color(hex: 0xB9C6D9).opacity(0.5)
 }
 
 // MARK: - Metric status

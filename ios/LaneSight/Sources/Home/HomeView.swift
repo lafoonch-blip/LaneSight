@@ -105,58 +105,71 @@ struct HomeView: View {
         }
     }
 
+    // Your Next Focus (DEC-079, Figma 453:3649): highlighted card — blue gradient + hero-stroke border.
     private func nextFocusCard(_ f: FocusResponse, title: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("YOUR NEXT FOCUS").lsEyebrow()
-            Text(title).font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
-            if let detail = f.detail, !detail.isEmpty {
-                Text(detail).font(.lsCallout).foregroundStyle(LS.textSecondary)
-            }
-            NavigationLink { SetupView() } label: {
-                HStack(spacing: 4) {
-                    Text("Practice this focus")
-                    Image(systemName: "chevron.right").font(.lsCaption)
-                }
-                .font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.action)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .lsCard()
-    }
-
-    private var performanceLab: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Performance Lab").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
-                Text("Analyze your game. Improve every shot.").font(.lsCallout).foregroundStyle(LS.textSecondary)
-            }
-            HStack(alignment: .top, spacing: 12) {
-                labCard(mode: "shot", title: "Shot Analysis",
-                        desc: "Track ball motion, lane reaction and results.",
-                        symbol: "scope", action: "Start Shot Analysis")
-                labCard(mode: "form", title: "Form Analysis",
-                        desc: "Analyze approach, timing, release and mechanics.",
-                        symbol: "figure.bowling", action: "Start Form Analysis")
-            }
-        }
-    }
-
-    private func labCard(mode: String, title: String, desc: String, symbol: String, action: String) -> some View {
-        NavigationLink { SetupView(initialMode: mode) } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                // TODO(v3.7 assets): swap this placeholder for the Figma Shot/Form card photo.
-                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(LS.raised)
-                    .frame(height: 84)
-                    .overlay(Image(systemName: symbol).font(.title2).foregroundStyle(LS.action))
-                Text(title).font(.lsHeadline).foregroundStyle(LS.textPrimary)
-                Text(desc).font(.lsCaption).foregroundStyle(LS.textSecondary)
+        NavigationLink { SetupView() } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("YOUR NEXT FOCUS").font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.link)
+                Text(title).font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(action).font(.lsCaption.weight(.semibold)).foregroundStyle(LS.onAction)
-                    .padding(.vertical, 7).frame(maxWidth: .infinity)
-                    .background(LS.action, in: Capsule())
+                if let detail = f.detail, !detail.isEmpty {
+                    Text(detail).font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("Practice this focus ›").font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .lsCard(padding: 12)
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(
+                LinearGradient(colors: [Color(hex: 0x04213F), Color(hex: 0x031B35)], startPoint: .top, endPoint: .bottom),
+                in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.heroStroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Performance Lab (Figma 405:3167): header + trailing chip, two photo cards (Form button is purple).
+    private var performanceLab: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Performance Lab").font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    Text("Analyze your game. Improve every shot.").font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                }
+                Spacer()
+                Text("›").font(.system(size: 14, weight: .semibold)).foregroundStyle(LS.textSecondary)
+                    .frame(width: 28, height: 28)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.border, lineWidth: 1))
+            }
+            HStack(alignment: .top, spacing: 8) {
+                labCard(mode: "shot", title: "Shot Analysis", desc: "Track ball motion, lane reaction and results.",
+                        photo: "LabShotPhoto", action: "Start Shot Analysis", accent: LS.action)
+                labCard(mode: "form", title: "Form Analysis", desc: "Analyze approach, timing, release and mechanics.",
+                        photo: "LabFormPhoto", action: "Start Form Analysis", accent: LS.dataPurple)
+            }
+        }
+    }
+
+    private func labCard(mode: String, title: String, desc: String, photo: String, action: String, accent: Color) -> some View {
+        NavigationLink { SetupView(initialMode: mode) } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                Image(photo).resizable().scaledToFill().frame(height: 120).frame(maxWidth: .infinity).clipped()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    Text(desc).font(.system(size: 11)).lineSpacing(2).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 4) { Text(action); Text("›") }
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.onAction)
+                        .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity)
+                        .background(accent, in: Capsule())
+                }
+                .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 10)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LS.card)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
