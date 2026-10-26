@@ -50,6 +50,46 @@ def metric_detail(points: list[dict], metric: str) -> dict:
                 trend=trend, by_ball=grp(by_ball), by_pattern=grp(by_pat), small_sample=len(vals) < 20)
 
 
+_FOCUS_TITLES = {
+    'execution_miss': 'Hit your mark',
+    'move': 'Dial in your line',
+    'release': 'Finish through the ball',
+    'speed': 'Match your speed',
+    'no_reliable_data': 'Fix your camera position',
+    'pins_unknown': 'Frame the pins',
+}
+
+
+def next_focus(points: list[dict], lookback: int = 15, min_share: float = 0.34) -> dict:
+    """Home 'next focus' (MVP-12): the single recurring issue across recent live shots. Reuses each shot's own
+    recommendation copy (no invented numbers/text) — only the short focus TITLE is templated. Returns a
+    'building' status under 3 recent shots; 'Keep repeating' when recent shots are mostly striking."""
+    recent = points[-lookback:]
+    if len(recent) < 3:
+        return {'status': 'building', 'reason': 'Not enough recent shots to pick a focus yet.'}
+    states, reps = {}, {}
+    for p in recent:
+        ins = p.get('record', {}).get('insights') or {}
+        st = ins.get('state')
+        if not st or st == 'strike_repeat':           # strikes aren't a problem to focus on
+            continue
+        states[st] = states.get(st, 0) + 1
+        if st not in reps:
+            rec0 = (ins.get('recommendations') or [{}])[0] or {}
+            reps[st] = {'reason': rec0.get('reason'), 'expected': rec0.get('expected')}
+    if not states:
+        return {'status': 'ok', 'focus': 'Keep repeating', 'state': 'strike_repeat', 'based_on': len(recent),
+                'detail': 'Your recent shots are hitting — repeat your line and speed.'}
+    dom, n = max(states.items(), key=lambda kv: kv[1])
+    if n / len(recent) < min_share:
+        return {'status': 'ok', 'focus': 'Mixed results', 'state': None, 'based_on': len(recent),
+                'detail': 'No single issue stands out in your recent shots — keep logging shots.'}
+    rep = reps.get(dom, {})
+    return {'status': 'ok', 'focus': _FOCUS_TITLES.get(dom, 'Next focus'), 'state': dom,
+            'detail': rep.get('reason'), 'expected': rep.get('expected'),
+            'based_on': len(recent), 'share': round(n / len(recent), 2)}
+
+
 def consistency(shots: list[dict]) -> dict:
     """dispersion at each checkpoint (boards) + a 0-100 repeatability score (lower spread = higher score)"""
     d = {k: float(np.std(_vals(shots, m))) for k, m in KEY.items() if len(_vals(shots, m)) >= 3}

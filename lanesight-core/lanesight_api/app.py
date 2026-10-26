@@ -437,6 +437,14 @@ def me_last_setup(user=Depends(current_user)):
     """Prefill Setup with the last-used ball, oil pattern and target (MVP-09). Nulls for a new user."""
     return get_store().last_setup(user)
 
+
+@app.get('/me/focus')
+def me_focus(user=Depends(current_user)):
+    """Home 'next focus' (MVP-12): the single recurring issue across recent shots, or a building / keep-repeating
+    state. Reuses each shot's own recommendation copy — one focus at a time."""
+    from lanesight_core.insights import session as si
+    return si.next_focus(get_store().shot_points(user))
+
 @app.get('/me/score/history')
 def me_score_history(user=Depends(current_user)):
     return get_store().score_history(user)
@@ -724,6 +732,14 @@ def me_uploads(user=Depends(current_user)):
 @app.get('/me/stats')
 def me_stats(view: str = 'throw', range: str | None = None, user=Depends(current_user)):
     return engines.user_stats(get_store(), user, view=view, range_=range)
+
+
+@app.get('/me/stats/metric/{metric}')
+def me_metric_detail(metric: str, user=Depends(current_user)):
+    """Per-metric detail for a Stats detail screen (MVP-08): avg, robust spread, range, coverage, per-session
+    trend, by ball, by oil pattern, small-sample flag (<20)."""
+    from lanesight_core.insights import session as si
+    return si.metric_detail(get_store().shot_points(user), metric)
 
 
 # ----------------------------------------------------------------- achievements

@@ -193,6 +193,26 @@ def test_metric_detail_stats():
     assert len(d['by_ball']) == 2 and len(d['by_pattern']) == 2 and len(d['trend']) == 2
 
 
+def test_next_focus_dominant_issue():
+    # MVP-12: the dominant recurring recent issue becomes the Home focus; strikes don't count against it.
+    store = get_store()
+    def rec_state(state, reason):
+        return {'metrics': {'ball_speed': {'value': 17.0, 'status': 'ok'}},
+                'insights': {'state': state, 'recommendations': [{'reason': reason, 'expected': 'x'}]}}
+    sid = store.create_session('u_focus', {'mode': 'practice'})['id']
+    for _ in range(4):
+        sh = store.create_shot('u_focus', sid, {'source': 'live'})
+        store.save_shot_result(sh['id'], rec_state('execution_miss', 'Missed your mark'), {'ok': True})
+    sh = store.create_shot('u_focus', sid, {'source': 'live'})
+    store.save_shot_result(sh['id'], rec_state('strike_repeat', 'Strike'), {'ok': True})
+    d = client.get('/me/focus', headers={'X-Dev-User': 'u_focus'}).json()
+    assert d['status'] == 'ok' and d['state'] == 'execution_miss' and d['focus'] == 'Hit your mark'
+
+
+def test_next_focus_building_for_new_user():
+    assert client.get('/me/focus', headers={'X-Dev-User': 'u_focusnew'}).json()['status'] == 'building'
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output
