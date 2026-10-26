@@ -1,5 +1,5 @@
 # CV Phase-1 Validation Report (geometry proof) — DEC-062
-Version: 0.2 (SCAFFOLD — A column + framing finding + far-lane observability + tooling; B/C pending labeling)
+Version: 0.3 (SCAFFOLD — A + framing + observability + tooling + gate questions + uncertainty attribution; B/C pending labeling)
 Last Updated: 2026-10-25
 Status: In progress. This is the report that decides which architectural investment pays off (handoff §10).
 Fills in as labeling + the A/B/C/D ablation run. The **framing finding** below already changes the Phase-1
@@ -136,11 +136,37 @@ reproducibility; runtime; and **always the denominator + failed-shot fraction**.
 **Standing rule:** do **not** start training ML models until this gate is cleared. Complete the geometry
 proof first. Production CV path stays frozen (DEC-062).
 
+### 4.1 Three questions this report must answer (Shayne, 2026-10-25)
+
+1. **Can correct geometry recover accurate ball measurements from elevated camera positions?** → the B
+   column (manual geometry + auto track) vs truth, split by camera class (near-level vs elevated).
+2. **Which measurements remain impossible from insufficient visual resolution?** → the C column (manual
+   geometry + manual centers): a metric C still can't hit is resolution-limited, not CV-fixable. The
+   far-lane observability result (§0.1) already predicts breakpoint + pin-area board are the hardest.
+3. **What minimum camera-position guidance delivers coaching-grade results?** → derived from which camera
+   class first clears the per-metric gates (e.g. "foul line in frame + camera below ~X ft elevation").
+
+### 4.2 Uncertainty attribution (answers "where does the error come from")
+
+`cv/calib/ablation.uncertainty_attribution()` decomposes entry-board uncertainty into the three sources, so
+we invest where it actually binds:
+- **landmark placement** — Monte-Carlo jitter of the verified landmark pixels → re-solve → Δentry std.
+- **calibration conditioning** — the solved per-pixel sensitivity at the entry reference × labeling σ.
+- **ball-center localization** — jitter of the ball centers, floored by the scale-invariant centroid bound
+  (§0.1). *If this dominates, the limit is resolution/capture — a camera-position recommendation, not more
+  labeling or calibration.*
+
+Run per clip alongside B/C; report the dominant source. This is the signal that tells us where Phase-2+
+investment belongs.
+
 ## 5. Open items blocking a verdict
 
 - **Verify the auto-suggested landmarks** in the label tool for the **first six priority clips** (8907,
   8893, 8895, 8903, 8900, 8908), adding pins + any missing points. Tooling + suggestions are ready
   (`calib_landmarks/`). Then run B/C on those six — **do not wait for all 17** (Shayne's Step 4).
+  **Guidance (Shayne): do not force a barely-visible landmark — mark it ambiguous (`b`) or not-visible
+  (`v`).** We're testing whether the video HAS the information, not manufacturing a calibration. Interval
+  landmarks (arrows/dots) are consistency checks only; exact anchors are foul + pin spots.
 - Hand-label ball centers on the failing clips for Run C (the label tool can be pointed at per-frame crops;
   for the first pass, Run B uses the existing auto track so B can run immediately after geometry verify).
 - Measurement definitions D-1..D-5 (`CV_MEASUREMENT_DEFINITIONS.md`): ratify D-1/2/3; get Ruby def (D-4) +

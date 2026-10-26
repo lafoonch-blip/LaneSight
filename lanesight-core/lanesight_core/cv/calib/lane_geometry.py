@@ -30,22 +30,43 @@ BALL_DIAMETER_IN = 8.59        # legal ~8.5"–8.595"; matches cv/track.BALL_IN
 # (4.30 in ball radius + 2.38 in pin radius); kept as the value shipped in cv/metrics.Z_IMPACT.
 Z_IMPACT_FT = round(LANE_LENGTH_FT - (4.30 + 2.38) / 12.0, 2)   # 59.44
 
-_SPEC = "USBC Equipment Specifications & Certifications (edition pending confirmation — open decision #4)"
+_SPEC = "USBC Equipment Specifications Manual (2026-03-26)"
+
+# USBC 2026 permits RANGES, not a single universal marking position (Shayne, 2026-10-25). So arrows/dots are
+# encoded as intervals (z_min, z_max), NOT exact points — they are calibration *constraints* / consistency
+# checks, never exact anchors. Exact anchors are foul (Z=0) + pin spots (12-in centers). Where a center's
+# actual measured positions are known, override with exact (x_in, z_ft) and source='measured'.
+USBC_RANGES_FT = {
+    "guide_dot": (6.0, 8.0),         # lane guide dots: 6-8 ft beyond the foul line
+    "arrow": (12.0, 16.0),           # target arrows: 12-16 ft beyond the foul line
+    "downlane_target": (33.0, 44.0), # downlane targets: 33-44 ft beyond the foul line
+    "approach_guide": (-15.0, -2.0), # approach guides: several permitted distances BEHIND the foul line
+}
 
 
 @dataclass
 class Landmark:
-    """A named physical landmark. (x_in, z_ft) is its world coordinate, or None when not yet known."""
+    """A named physical landmark. (x_in, z_ft) is its exact world coordinate when known; otherwise a
+    landmark may carry only a longitudinal INTERVAL (z_min..z_max) per the USBC range — usable as a
+    consistency constraint but never as an exact calibration anchor."""
     name: str
     x_in: Optional[float]
     z_ft: Optional[float]
-    source: str                      # 'spec' | 'derived' | 'nominal' | 'tbd'
+    source: str                      # 'spec' | 'derived' | 'measured' | 'usbc-range' | 'nominal' | 'tbd'
     citation: str = ""
     note: str = ""
+    z_min: Optional[float] = None    # USBC permitted interval (longitudinal), when z_ft is not fixed
+    z_max: Optional[float] = None
 
     @property
     def known(self) -> bool:
+        """Exact point (usable as a calibration anchor)."""
         return self.x_in is not None and self.z_ft is not None
+
+    @property
+    def has_z_interval(self) -> bool:
+        """X known + a permitted Z range, but no fixed Z (usable as a consistency constraint, not an anchor)."""
+        return self.x_in is not None and self.z_ft is None and self.z_min is not None and self.z_max is not None
 
     def world(self):
         return (float(self.x_in), float(self.z_ft)) if self.known else None
@@ -94,9 +115,16 @@ class LaneGeometry:
     landmarks: dict = field(default_factory=dict)
 
     def known_landmarks(self):
+        """Exact-point landmarks — the only ones usable as calibration anchors (foul + pin spots)."""
         return {k: v for k, v in self.landmarks.items() if v.known}
 
+    def interval_landmarks(self):
+        """X-known, Z-interval landmarks (arrows/dots/targets) — consistency constraints, not anchors.
+        Returns {name: (x_in, z_min, z_max)}."""
+        return {k: (v.x_in, v.z_min, v.z_max) for k, v in self.landmarks.items() if v.has_z_interval}
+
     def world_point(self, name: str):
+        """Exact world coordinate for calibration; None for interval-only landmarks (by design)."""
         lm = self.landmarks.get(name)
         return lm.world() if lm else None
 
@@ -121,23 +149,31 @@ def _canonical() -> LaneGeometry:
     add(Landmark("gutter_l", 0.0, None, "spec", _SPEC, "left edge line (X known, any Z)"))
     add(Landmark("gutter_r", LANE_WIDTH_IN, None, "spec", _SPEC, "right edge line (X known, any Z)"))
 
-    # Target arrows at boards 5,10,15,20,25,30,35. X is known; Z is longitudinally STAGGERED and NOT yet
-    # filled (handoff §4 warns against a single Z=15 cross-line). Left as tbd/None until decision #4.
+    # Target arrows at boards 5..35. X known; Z is a permitted INTERVAL (12-16 ft), not a universal point —
+    # USBC allows a range and the arrows are longitudinally staggered. Interval constraint, never an anchor.
+    amn, amx = USBC_RANGES_FT["arrow"]
     for b in (5, 10, 15, 20, 25, 30, 35):
-        add(Landmark(f"arrow_{b}", round(x_in_for_board(b), 3), None, "tbd",
-                     _SPEC, "arrow X known; longitudinal stagger pending USBC edition (open decision #4)"))
-
-    # Guide dots ~ a few feet PAST the foul line (positive Z). X known; Z pending citation.
+        add(Landmark(f"arrow_{b}", round(x_in_for_board(b), 3), None, "usbc-range", _SPEC,
+                     "arrow X known; Z in the USBC 12-16 ft range (staggered; measure center-specific for exact)",
+                     z_min=amn, z_max=amx))
+    # Guide dots: 6-8 ft PAST the foul line (USBC range). X known; Z interval.
+    gmn, gmx = USBC_RANGES_FT["guide_dot"]
     for b in (5, 10, 15, 20, 25, 30, 35):
-        add(Landmark(f"dot_{b}", round(x_in_for_board(b), 3), None, "tbd",
-                     _SPEC, "guide-dot X known; Z (small positive) pending edition confirm"))
-    # Approach dots are BEHIND the foul line (negative Z), modeled separately (handoff §4). In the actual
-    # ball-return / settee camera framing this cohort uses (CV_PHASE1_VALIDATION_REPORT finding), these are
-    # often the BEST-resolved fiducials in frame, so they are first-class landmarks here. X known; the two
-    # standard rows' distances (nominally ~12 ft and ~15 ft behind the foul line) pending citation.
+        add(Landmark(f"dot_{b}", round(x_in_for_board(b), 3), None, "usbc-range", _SPEC,
+                     "guide-dot X known; Z in the USBC 6-8 ft range", z_min=gmn, z_max=gmx))
+    # Downlane targets: 33-44 ft past the foul line (USBC range) — in the breakpoint region, if visible.
+    dmn, dmx = USBC_RANGES_FT["downlane_target"]
     for b in (5, 10, 15, 20, 25, 30, 35):
-        add(Landmark(f"approach_dot_{b}", round(x_in_for_board(b), 3), None, "tbd",
-                     _SPEC, "approach-dot X known; Z (negative, ~12-15 ft behind foul) pending edition confirm"))
+        add(Landmark(f"downlane_target_{b}", round(x_in_for_board(b), 3), None, "usbc-range", _SPEC,
+                     "downlane-target X known; Z in the USBC 33-44 ft range", z_min=dmn, z_max=dmx))
+    # Approach dots BEHIND the foul line (negative Z); USBC permits several distances. Modeled separately
+    # (handoff §4) and first-class here — the best-resolved fiducials in the ball-return framing this cohort
+    # uses (CV_PHASE1_VALIDATION_REPORT). X known; Z interval (behind foul). Measure center-specific for exact.
+    rmn, rmx = USBC_RANGES_FT["approach_guide"]
+    for b in (5, 10, 15, 20, 25, 30, 35):
+        add(Landmark(f"approach_dot_{b}", round(x_in_for_board(b), 3), None, "usbc-range", _SPEC,
+                     "approach-dot X known; Z negative (behind foul), several USBC-permitted distances",
+                     z_min=rmn, z_max=rmx))
 
     for lm in _pin_spots():
         add(lm)

@@ -117,6 +117,85 @@ def run_C(manual_centers_img, landmark_set: LandmarkSet, geometry: LaneGeometry 
     return r
 
 
+def uncertainty_attribution(landmark_set, centers_img, geometry: LaneGeometry = CANONICAL,
+                            sigma_px: float = 1.5, n_mc: int = 120, seed: int = 0):
+    """Attribute entry-board uncertainty to its three sources (Shayne's request): landmark placement,
+    calibration conditioning, and ball-center localization. Tells us where further investment belongs.
+
+    - landmark placement: Monte-Carlo jitter the VERIFIED landmark pixels by N(0, sigma_px), re-solve the
+      homography, re-read entry board -> std.
+    - ball-center localization: jitter the ball centers by N(0, sigma_px) under the base calibration -> std,
+      floored by the scale-invariant centroid bound (resolution.SCALE_INVARIANT).
+    - calibration conditioning: the solved per-pixel sensitivity at the entry reference x sigma_px.
+    Returns the three std's (boards), the dominant source, and the base entry board. Seeded (reproducible).
+    """
+    from .resolution import SCALE_INVARIANT
+    names, world, image = landmark_set.correspondences(geometry)
+    if len(names) < 4:
+        return dict(ok=False, error=f"need >=4 verified anchors; have {len(names)}")
+    try:
+        H_iw, _, diag = homography_from_landmarks(landmark_set, geometry)
+    except CalibrationError as e:
+        return dict(ok=False, error=str(e))
+    base = reconstruct_from_homography(H_iw, centers_img, geometry)
+    if not base.get("ok") or base.get("entry_board") is None:
+        return dict(ok=False, error="base reconstruction has no entry board (insufficient coverage)")
+    base_entry = base["entry_board"]
+    rng = np.random.default_rng(seed)
+
+    def _solve(img_pts):
+        Hwi, _ = cv2_findhom(world, img_pts)
+        if Hwi is None:
+            return None
+        try:
+            return np.linalg.inv(Hwi)
+        except np.linalg.LinAlgError:
+            return None
+
+    # 1. landmark placement
+    lm_entries = []
+    for _ in range(n_mc):
+        H = _solve(image + rng.normal(0, sigma_px, image.shape))
+        if H is None:
+            continue
+        r = reconstruct_from_homography(H, centers_img, geometry)
+        if r.get("ok") and r.get("entry_board") is not None:
+            lm_entries.append(r["entry_board"])
+    sigma_landmark = float(np.std(lm_entries)) if len(lm_entries) > 5 else None
+
+    # 2. ball-center localization (under the base calibration)
+    C = np.asarray([[c[0], c[1], c[2]] for c in centers_img], float)
+    bc_entries = []
+    for _ in range(n_mc):
+        jitter = C.copy()
+        jitter[:, 1:] += rng.normal(0, sigma_px, (len(C), 2))
+        r = reconstruct_from_homography(H_iw, [tuple(row) for row in jitter], geometry)
+        if r.get("ok") and r.get("entry_board") is not None:
+            bc_entries.append(r["entry_board"])
+    sigma_ball_mc = float(np.std(bc_entries)) if len(bc_entries) > 5 else None
+    sigma_ball = max(sigma_ball_mc or 0.0, SCALE_INVARIANT["board_err_clean"])   # floored by the physical bound
+
+    # 3. calibration conditioning (per-pixel sensitivity at entry x sigma_px)
+    s_entry = diag["sensitivity_per_px"]["entry_59ft"]["d_board_per_px"]
+    sigma_calib = float(s_entry * sigma_px)
+
+    contribs = {"landmark_placement": sigma_landmark, "ball_center": sigma_ball,
+                "calibration_conditioning": sigma_calib}
+    ranked = sorted(((k, v) for k, v in contribs.items() if v is not None), key=lambda kv: -kv[1])
+    return dict(ok=True, base_entry_board=round(base_entry, 2), sigma_px=sigma_px, n_mc=n_mc,
+                sigma_boards={k: (round(v, 3) if v is not None else None) for k, v in contribs.items()},
+                dominant=ranked[0][0] if ranked else None,
+                note="ball_center is floored by the scale-invariant centroid bound; "
+                     "if it dominates, the limit is resolution/capture, not labeling or calibration.")
+
+
+def cv2_findhom(world, image):
+    """world->image homography (threshold-in-pixels); plain LS for small clean sets. Returns (H_wi, mask)."""
+    import cv2
+    method = 0 if len(world) <= 8 else getattr(cv2, "USAC_MAGSAC", cv2.RANSAC)
+    return cv2.findHomography(np.asarray(world, float), np.asarray(image, float), method, 3.0)
+
+
 def _load_centers(path):
     """Centers JSON: [[t, cx, cy], ...] or {"centers": [...]}."""
     with open(path) as fh:

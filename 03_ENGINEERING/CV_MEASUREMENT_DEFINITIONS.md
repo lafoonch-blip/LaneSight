@@ -1,7 +1,8 @@
 # CV Measurement Definitions — canonical conventions (DEC-062 Phase 1)
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-10-25
-Status: Proposed canonical reference for judging ablation accuracy. Grounds every metric in the real code
+Status: Direction APPROVED (Shayne 2026-10-25); specific D-1/2/3 values pending ratification; D-5 implemented
+(USBC 2026 ranges). Canonical reference for judging ablation accuracy. Grounds every metric in the real code
 (`lanesight_core/cv/metrics.py`, `cv/calib/lane_geometry.py`) and the Ruby fields
 (`validation/IMG_875x_ruby.json`). Flags the conflicts that can make a *perfectly calibrated* clip still
 disagree with ground truth — resolve these BEFORE reading ablation errors (handoff §4; response §3).
@@ -66,11 +67,13 @@ Production speeds:
 Ruby provides `speed_mph` (e.g. IMG_8753 = 17.8). **Its exact location/time definition is unconfirmed**
 (release-point? a fixed sensor location?). Most optical sensors report a near-release/early-lane speed.
 
-**Decision D-4 (needs Shayne / Ruby docs — open #5):** confirm whether Ruby `speed_mph` is release/early or
-full-lane average. Then compare **like to like**: if Ruby = release → compare to `speed_release` (and
-correct the known ~9% bias); if full-lane → compare to `ball_speed`. **Do not** compare Ruby release to our
-60 ft average — that alone is a multi-% phantom error. Also distinguish downlane `dZ/dt` from planar
-`sqrt(dX² + dZ²)` speed (handoff §4); for a nearly-straight line they're within rounding, but name it.
+**Decision D-3/D-4 (Shayne, 2026-10-25):** **Retain full-lane average AND early/late segment speeds as
+separate measurements** — do not collapse them. For Ruby: its public docs confirm speed/rev tracking but do
+**not** establish the exact measurement location/averaging, so **do NOT assume Ruby = full-lane average.**
+Until the definition is obtained, treat Ruby as a **secondary reference only** and **flag the measurement
+mismatch** in any comparison (never present a Ruby-vs-LaneSight delta as accuracy). Also distinguish downlane
+`dZ/dt` from planar `sqrt(dX² + dZ²)` speed (handoff §4); for a nearly-straight line they're within rounding,
+but name it.
 
 ## 5. Breakpoint, laydown, arrows
 
@@ -83,27 +86,40 @@ correct the known ~9% bias); if full-lane → compare to `ball_speed`. **Do not*
   turn — do not assert an exact point from an unobserved region (handoff §8). Note: our breakpoint is
   **geometric** (DEC-022); Ruby's `breakpoint_ft` is **rotational** (skid→hook) — NOT comparable.
 
-## 6. Lane landmark coordinates (the geometry template)
+## 6. Lane landmark coordinates (the geometry template) — USBC 2026 RANGES, not universal points
 
-Single source: `cv/calib/lane_geometry.py` (`CANONICAL`). Known exactly: foul corners (Z=0), lane width
-41.5", 39 boards, pin spots on 12" centers (head pin board-20 @ 60 ft). **TBD pending the USBC edition
-(open #4):** arrow longitudinal stagger (X known, Z null), guide-dot Z (small positive), approach-dot Z
-(negative, ~12–15 ft behind foul — first-class here per the framing finding). No fabricated coordinate ships;
-a landmark we don't know is `None`/`tbd` with a reason.
+Single source: `cv/calib/lane_geometry.py` (`CANONICAL`). **Exact anchors** (the only features that
+calibrate): foul corners (Z=0), lane width 41.5", 39 boards, pin spots on 12" centers (head pin board-20 @
+60 ft). Citation: **USBC Equipment Specifications Manual (2026-03-26)**.
 
-**Decision D-5 (needs citation):** fill arrow/dot Z from the governing USBC spec edition, then lift their
-`source` from `tbd` to `spec`. Until then the solver simply doesn't consume them.
+**D-5 resolved (Shayne, 2026-10-25):** the USBC manual permits **ranges**, not one universal marking
+position — so arrows/dots/targets are encoded as **intervals**, never exact points, and are **consistency
+constraints**, not anchors (`geometry.interval_landmarks()`, `solve.interval_consistency`):
+
+| Landmark | USBC 2026 permitted Z | encoded as |
+|---|---|---|
+| Lane guide dots | **6–8 ft** past foul | `dot_*` interval |
+| Target arrows | **12–16 ft** past foul (staggered) | `arrow_*` interval |
+| Downlane targets | **33–44 ft** past foul | `downlane_target_*` interval |
+| Approach guides | several permitted distances **behind** foul | `approach_dot_*` interval (negative Z) |
+
+**Do not encode a single exact arrow/dot distance as universal ground truth.** Where a center's actual
+positions are measured (e.g. from a verified calibration on these clips), override with exact (x,z) and
+`source='measured'`. Otherwise the interval is used only to **check** a calibration solved from the exact
+anchors (does a verified arrow map into its 12–16 ft band?).
 
 ---
 
 ## Summary — the four that can fake an error
 
-| # | Thing | Current state | Canonical (proposed) |
+| # | Thing | Current state | Direction (Shayne approved 2026-10-25) |
 |---|-------|---------------|----------------------|
-| D-2 | Entry board reference | `entry_board@59.44ft` vs angle `@52-55ft` | `entry_board@60.0ft` (fixed plane) |
-| D-3 | Entry angle window | floating last-1.5-ft headline | `entry_angle@52-55ft` (fixed) |
-| D-4 | Speed vs Ruby | headline = 60 ft avg; Ruby def unconfirmed | match definitions; never Ruby-release vs 60 ft avg |
-| D-5 | Arrow/dot coordinates | nominal/ambiguous | cite USBC edition; stagger encoded |
+| D-1 | Entry board | two conflicting references | **one explicitly-defined** longitudinal reference is canonical; keep the others as **separately named** metrics |
+| D-2 | Entry angle | floating last-1.5-ft window | **fixed** reference distance/window (not dynamic) |
+| D-3 | Speed | headline 60 ft avg | **retain full-lane average + early/late segments as separate** measurements |
+| D-4 | Ruby speed | assumed comparable | **do not assume full-lane average**; secondary reference only, **flag the mismatch** |
+| D-5 | Arrow/dot coords | nominal/ambiguous | **USBC 2026 ranges** (6–8 / 12–16 / 33–44 ft; approach behind foul); center-specific where measured — **done** in `lane_geometry` |
 
-D-1/D-2/D-3 are ours to ratify now; D-4/D-5 need the Ruby docs + USBC edition. Resolve all five before the
+Direction is approved; the **specific D-1/D-2/D-3 reference values** (e.g. 60.0 ft, the 52–55 ft window) are
+still to be ratified against the local doc. D-5 is implemented. Resolve the specific values before the
 ablation's B/C columns are read as accuracy.

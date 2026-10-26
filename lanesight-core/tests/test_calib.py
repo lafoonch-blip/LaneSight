@@ -30,20 +30,26 @@ def test_geometry_constants_and_conventions():
 
 
 def test_provenance_no_uncited_or_fabricated_values():
-    """Handoff §4 / CLAUDE.md: spec constants must be cited; unknown coords are tbd+None, never invented."""
+    """Handoff §4 / CLAUDE.md: constants are cited; unknown Z is an interval or None, never a fabricated point."""
     for name, lm in CANONICAL.landmarks.items():
-        if lm.source == "spec":
-            assert lm.citation, f"{name} is 'spec' but has no citation"
+        if lm.source in ("spec", "usbc-range"):
+            assert lm.citation, f"{name} is '{lm.source}' but has no citation"
         if lm.source == "tbd":
-            # a tbd landmark must NOT carry a fabricated world coordinate
             assert lm.z_ft is None or lm.x_in is None, f"{name} is tbd but has a full coordinate"
-    # arrows: X known, Z staggered-but-not-yet-filled (must not be a single Z=15 placeholder)
+    # arrows (USBC 2026): X known, Z is a permitted INTERVAL 12-16 ft (not a single Z=15 point), no fixed z_ft
     for b in (5, 10, 15, 20, 25, 30, 35):
         lm = CANONICAL.landmarks[f"arrow_{b}"]
-        assert lm.x_in is not None and lm.z_ft is None and lm.source == "tbd"
-    # pin spots are known (12-in centers); head pin centered at 60 ft
-    p1 = CANONICAL.world_point("pin_1")
-    assert p1 == (pytest.approx(41.5 / 2), pytest.approx(60.0))
+        assert lm.x_in is not None and lm.z_ft is None
+        assert lm.source == "usbc-range" and lm.has_z_interval
+        assert (lm.z_min, lm.z_max) == (12.0, 16.0)
+        assert CANONICAL.world_point(f"arrow_{b}") is None     # interval landmark is NOT a calibration anchor
+    # interval landmarks exist for arrows/dots/downlane/approach; exact anchors are foul + pins only
+    intervals = CANONICAL.interval_landmarks()
+    assert all(any(n.startswith(p) for p in ("arrow_", "dot_", "downlane_target_", "approach_dot_"))
+               for n in intervals)
+    assert CANONICAL.world_point("foul_l") is not None and CANONICAL.world_point("pin_1") is not None
+    # pin spots are exact (12-in centers); head pin centered at 60 ft
+    assert CANONICAL.world_point("pin_1") == (pytest.approx(41.5 / 2), pytest.approx(60.0))
     assert len([n for n in CANONICAL.landmarks if n.startswith("pin_")]) == 10
 
 
@@ -170,6 +176,50 @@ def test_merge_never_clobbers_verified():
         vx, vy = image_to_view(ix, iy, view)
         rx, ry = view_to_image(vx, vy, view)
         assert abs(rx - ix) < 1e-6 and abs(ry - iy) < 1e-6
+
+
+def _verified_anchor_set():
+    """A landmark set with foul + pins VERIFIED, projected through the known true homography."""
+    H_iw_true, H_wi_true = _true_homographies()
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    for name in ("foul_l", "foul_r", "pin_1", "pin_7", "pin_10"):
+        w = CANONICAL.world_point(name)
+        x, y = _project(H_wi_true, w[0], w[1])
+        ls.set_point(name, float(x), float(y))        # verified
+    return ls, H_iw_true, H_wi_true
+
+
+def test_interval_consistency_checks_arrows_not_anchors():
+    from lanesight_core.cv.calib.solve import homography_from_landmarks, interval_consistency
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    # label an arrow INSIDE its 12-16 ft band, and one OUTSIDE (at 20 ft)
+    xa = CANONICAL.landmarks["arrow_20"].x_in
+    ls.set_point("arrow_20", *(_project(H_wi_true, xa, 14.0)))      # within
+    xa15 = CANONICAL.landmarks["arrow_15"].x_in
+    ls.set_point("arrow_15", *(_project(H_wi_true, xa15, 20.0)))    # outside (too far)
+    H_iw, _, _ = homography_from_landmarks(ls)        # arrows are NOT used as anchors (interval -> world None)
+    checks = {c["name"]: c for c in interval_consistency(H_iw, ls)}
+    assert checks["arrow_20"]["within"] is True
+    assert checks["arrow_15"]["within"] is False and checks["arrow_15"]["margin_ft"] > 3
+    # confirm arrows did not enter the solve: still solvable from the 5 exact anchors alone
+    names, _, _ = ls.correspondences()
+    assert "arrow_20" not in names and "foul_l" in names
+
+
+def test_uncertainty_attribution_runs_and_ranks():
+    from lanesight_core.cv.calib.ablation import uncertainty_attribution
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    centers = []
+    for z in np.arange(0.5, 58.5, 1.0):
+        x, y = _project(H_wi_true, LANE_IN / 2, float(z))
+        centers.append((0.5 + z / 25.0, float(x), float(y)))
+    r = uncertainty_attribution(ls, centers, n_mc=40, seed=0)
+    assert r["ok"], r.get("error")
+    assert r["base_entry_board"] == pytest.approx(20.0, abs=0.6)
+    sb = r["sigma_boards"]
+    assert sb["ball_center"] is not None and sb["ball_center"] >= 0.9     # floored by scale-invariant bound
+    assert sb["calibration_conditioning"] is not None
+    assert r["dominant"] in ("landmark_placement", "ball_center", "calibration_conditioning")
 
 
 def test_resolution_scale_invariant_bounds():

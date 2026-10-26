@@ -30,11 +30,15 @@ from .landmarks import (LandmarkSet, LandmarkObservation, STATUS_VERIFIED, STATU
                         STATUS_REJECTED, STATUS_AMBIGUOUS, STATUS_NOT_VISIBLE)
 from .lane_geometry import CANONICAL
 
-# landmark cycle order: the ones that actually calibrate here, most useful first
+# landmark cycle order: exact anchors first (foul + pins — what actually calibrates), then the USBC-interval
+# landmarks (consistency checks). GUIDANCE (Shayne): do NOT force a barely-visible landmark — select it and
+# press 'b' (ambiguous) or 'v' (not-visible). We want to find out whether the video HAS the information, not
+# to manufacture a calibration. Interval landmarks (arrows/dots/targets) never become exact anchors.
 ARM_ORDER = (["foul_l", "foul_r"]
              + [f"pin_{i}" for i in range(1, 11)]
              + [f"approach_dot_{b}" for b in (5, 10, 15, 20, 25, 30, 35)]
              + [f"arrow_{b}" for b in (5, 10, 15, 20, 25, 30, 35)]
+             + [f"downlane_target_{b}" for b in (5, 10, 15, 20, 25, 30, 35)]
              + [f"dot_{b}" for b in (5, 10, 15, 20, 25, 30, 35)])
 
 

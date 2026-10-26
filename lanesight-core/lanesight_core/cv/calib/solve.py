@@ -58,6 +58,26 @@ def _apply(H, pts):
     return h[:, :2] / h[:, 2:3]
 
 
+def interval_consistency(H_iw, landmark_set, geometry: LaneGeometry = CANONICAL):
+    """Validate a calibration (solved from exact anchors) against the USBC interval landmarks (arrows/dots).
+    For each interval landmark that the human VERIFIED in the image, map it to the lane plane and check the
+    mapped Z falls within its permitted band. These are consistency CHECKS, never calibration anchors.
+    Returns a list of {name, z_mapped, z_min, z_max, within, margin_ft}."""
+    intervals = geometry.interval_landmarks()
+    out = []
+    for name, ob in landmark_set.observations.items():
+        if not ob.usable or name not in intervals:
+            continue
+        x_in, z_min, z_max = intervals[name]
+        w = _apply(H_iw, [[ob.x, ob.y]])[0]
+        z = float(w[1])
+        within = bool(z_min <= z <= z_max)
+        margin = 0.0 if within else float(min(abs(z - z_min), abs(z - z_max)))
+        out.append(dict(name=name, z_mapped=round(z, 2), z_min=z_min, z_max=z_max,
+                        within=within, margin_ft=round(margin, 2)))
+    return out
+
+
 def calibration_diagnostics(H_iw, world, image, names, geometry: LaneGeometry = CANONICAL, inlier_mask=None):
     """Residuals + spread + a per-region board/feet sensitivity to a 1-px landmark perturbation (handoff §5.3).
 
