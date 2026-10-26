@@ -684,6 +684,24 @@ class PgStore(MemoryStore):
                                 'lane_pair': data.get('lane_pair'), 'oil_pattern_id': data.get('oil_pattern_id')})
         return s
 
+    # Sessions are DB-backed (not just the in-memory mirror), so past sessions survive a cold Cloud Run
+    # instance — needed for SessionReview, GET /sessions, and the 'vs your typical' comparison (MVP-07).
+    def get_session(self, user_id, sid):
+        rows = self._get('sessions', f'id=eq.{sid}&user_id=eq.{user_id}&select=*')
+        return rows[0] if rows else None
+
+    def list_sessions(self, user_id):
+        return self._get('sessions', f'user_id=eq.{user_id}&select=*&order=started_at.desc')
+
+    def end_session(self, user_id, sid):
+        s = self.get_session(user_id, sid)
+        if not s:
+            return None
+        from datetime import datetime, timezone
+        ended = datetime.now(timezone.utc).isoformat()
+        self._req(f'sessions?id=eq.{sid}', 'PATCH', {'ended_at': ended})
+        return dict(session_id=sid, shots=len(self.session_shots(user_id, sid)), ended_at=ended)
+
     _FEEDBACK_COLS = ('id', 'source', 'app_phase', 'app_version', 'core_version', 'rules_version',
                       'formula_version', 'user_id', 'user_ref', 'session_id', 'shot_id',
                       'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
