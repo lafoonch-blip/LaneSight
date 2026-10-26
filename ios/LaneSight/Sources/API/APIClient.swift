@@ -296,6 +296,55 @@ struct APIClient {
         }
     }
 
+    // MARK: storage-backed analysis (large clips bypass the API request-size cap)
+
+    /// Ask the API for a signed, one-shot Supabase Storage upload target. POST /uploads/signed-url.
+    func signedUploadURL() async throws -> UploadTarget {
+        try await send(makeRequest("uploads/signed-url", method: "POST"), as: UploadTarget.self)
+    }
+
+    /// PUT the clip bytes straight to Supabase Storage. The signed URL carries its own token, so this does
+    /// NOT go through the API (no API base URL, no Authorization header) and has no request-size cap.
+    func putClipToStorage(uploadURL: String, fileURL: URL,
+                          progress: @escaping @MainActor (Double) -> Void) async throws {
+        guard let url = URL(string: uploadURL) else {
+            throw APIError.transport("The upload URL from the server was invalid.")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.setValue("video/quicktime", forHTTPHeaderField: "Content-Type")
+        req.setValue("true", forHTTPHeaderField: "x-upsert")
+        req.timeoutInterval = 600               // large clip over a slow bowling-center connection
+        let delegate = UploadProgressDelegate { fraction in
+            Task { @MainActor in progress(fraction) }
+        }
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.upload(for: req, fromFile: fileURL, delegate: delegate)
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.http(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+    }
+
+    /// Analyze a clip already uploaded to Storage. POST /shots/analyze. `sessionId` nil → standalone upload;
+    /// set → a shot in that live session. Phase-1 backend runs the CV INLINE, so this request blocks for the
+    /// whole analysis — hence the long client timeout (treat as async in the UI regardless).
+    func analyzeFromStorage(storagePath: String, sessionId: String?,
+                            metadata: ShotMetadata) async throws -> CreateShotResponse {
+        var req = makeRequest("shots/analyze", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 600
+        let metaObj = (try? JSONSerialization.jsonObject(
+            with: Data(metadata.jsonString().utf8))) ?? [:]
+        var body: [String: Any] = ["storage_path": storagePath, "metadata": metaObj]
+        if let sessionId { body["session_id"] = sessionId }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await send(req, as: CreateShotResponse.self)
+    }
+
     // MARK: shots
 
     /// Records the sensor answer for a shot (No / Yes + the user's sensor). PATCH /shots/{id}.

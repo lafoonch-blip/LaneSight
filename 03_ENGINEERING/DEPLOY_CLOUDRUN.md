@@ -1,8 +1,9 @@
 # Deploy the LaneSight backend to Google Cloud Run (remove the Mac dependency)
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-10-26
-Status: Runbook. Phase 1 = synchronous Cloud Run service (get it public + validate processing, fewest
-changes). Phase 2 = Cloud Run Jobs (async, same OpenCV engine). Decision: Shayne, 2026-10-26.
+Status: DEPLOYED. Phase 1 synchronous service LIVE at `https://lanesight-api-665597641318.us-east1.run.app`
+(rev 00003, `--cpu 4 --memory 4Gi --timeout 600 --concurrency 1 --max-instances 1`, scale-to-zero). Storage
+upload path + iOS repoint done 2026-10-26. Phase 2 = Cloud Run Jobs (async, same OpenCV engine), later.
 
 Goal: the app works from anywhere (bowling center, friends) with no Mac tethered. Supabase stays as-is
 (auth + DB + results). Artifacts: `lanesight-core/Dockerfile` (shared), this runbook.
@@ -51,8 +52,8 @@ gcloud run deploy lanesight-api \
   --source . \                              # Cloud Build builds the Dockerfile remotely (no local Docker)
   --region <near-supabase> \                # match the Supabase project region (many DB round-trips)
   --allow-unauthenticated \                 # app does its own Supabase JWT auth; Cloud Run IAM stays open
-  --cpu 2 --memory 4Gi \                    # Shayne's initial spec; benchmark then trim
-  --timeout 300 \                           # 5-min request cap (a 2-min analysis fits)
+  --cpu 4 --memory 4Gi \                    # deployed config: 4 vCPU (a full 26 s clip is ~328 s wall)
+  --timeout 600 \                           # 10-min request cap (full synchronous analysis fits w/ margin)
   --concurrency 1 --max-instances 1 \       # one analysis at a time; scales to zero (min-instances 0 default)
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest
@@ -66,13 +67,34 @@ curl https://<service-url>/health          # status ok, mode live, supabase_reac
 From the phone (OFF the tailnet): Settings → API URL → the Cloud Run URL → Check connection → upload a clip →
 real Shot card. (First request after idle: ~15–30 s cold start, then ~1–2 min analysis.)
 
-## Repoint the app (when the new designs land — iOS is on hold)
-- `ios/LaneSight/Sources/AppModel.swift`: default API URL → the Cloud Run HTTPS URL.
-- `ios/LaneSight/Info.plist`: drop the plain-HTTP ATS exception (HTTPS needs none).
-- **iOS contract (keep from day one):** treat analysis as ASYNC — show a processing state, let the user leave,
-  and recover the result by polling the durable record — even though Phase-1's backend blocks in one request.
-  Set the upload request's client timeout ≥ 5 min so a synchronous analysis doesn't time out. This keeps the
-  UX independent of Phase 1 vs Phase 2.
+## Storage upload path (DONE 2026-10-26 — bypasses Cloud Run's ~32 MiB request cap)
+A raw multipart upload of a full clip 413'd at Cloud Run's request-size limit. Clips now go through Supabase
+Storage instead (bucket `shot-clips`, private, 512 MB limit):
+```
+app --POST /uploads/signed-url--> API (returns {path, upload_url})
+app --PUT clip bytes--> Supabase Storage (direct; no API size cap)
+app --POST /shots/analyze {storage_path, session_id?, metadata}--> API
+      API downloads the clip, runs the SAME serial/sync analyze path, writes the shot, DELETES the clip.
+```
+- `session_id` present → a shot in that live session; absent → standalone upload (DEC-055 content-hash dedupe
+  preserved — a re-sent duplicate returns the existing shot and the Storage object is deleted).
+- The clip is never retained server-side (download → analyze → delete, and deleted on dedupe hit).
+- **Verified end-to-end on Cloud Run (rev 00003):** full 43 MB IMG_8902 → signed URL → PUT (HTTP 200) →
+  `/shots/analyze` (HTTP 200, 328 s synchronous) → 19 real metrics. The 32 MiB cap no longer applies.
+- Backend: `store.storage_signed_upload_url / storage_download / storage_delete` (PgStore → real Supabase
+  Storage via service role; MemoryStore → local-dir sim), endpoints in `app.py`. Commit `0d5e6ed`.
+
+## Repoint the app (DONE 2026-10-26 — iOS code written; Shayne builds in Xcode)
+- `ios/LaneSight/Sources/AppModel.swift`: default API URL → the Cloud Run HTTPS URL **+ auto-migrates** an
+  existing install still pinned to the old tailnet / `:8787` / plain-HTTP dev URL (ATS now blocks HTTP).
+- `ios/LaneSight/Info.plist`: plain-HTTP ATS exception removed (HTTPS needs none).
+- `APIClient`: `signedUploadURL()`, `putClipToStorage()`, `analyzeFromStorage()` + `UploadTarget` model;
+  `AppModel.runPipeline` now uses the Storage flow with a 600 s client timeout on the PUT + analyze calls.
+- **iOS contract (kept):** analysis is treated as ASYNC in the UI (processing state) even though Phase-1's
+  backend blocks in one request; the 600 s client timeout covers a full synchronous analysis. Full async
+  recovery of a dropped connection is the durable-jobs follow-up below.
+- **Needs Shayne:** build/install from Xcode. An already-installed app auto-migrates its saved URL on next
+  launch; no manual Dev-Panel change needed.
 
 ## Follow-ups (not needed to validate processing)
 - **Avatars → Supabase Storage.** Cloud Run has no persistent disk (`/tmp` is ephemeral), so disk-based

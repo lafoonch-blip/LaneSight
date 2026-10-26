@@ -18,7 +18,7 @@ struct DevPanelView: View {
     var body: some View {
         Form {
             Section {
-                TextField("http://<mac>.<tailnet>.ts.net:8787", text: $model.apiBaseURL)
+                TextField("https://lanesight-api-....run.app", text: $model.apiBaseURL)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                 Button {
                     Task { await test() }

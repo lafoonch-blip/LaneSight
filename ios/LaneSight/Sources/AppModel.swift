@@ -161,8 +161,16 @@ final class AppModel: ObservableObject {
     }
 
     init() {
-        // Default to this Mac's tailnet API (dev build). Edit in Settings; HTTP over the tailnet (see TEST_ON_PHONE.md).
-        apiBaseURL = defaults.string(forKey: Keys.baseURL) ?? "http://shaynes-macbook-pro.tail7fa640.ts.net:8787"
+        // Cloud Run HTTPS backend (no Mac dependency). Override in the Dev Panel.
+        let cloudDefault = "https://lanesight-api-665597641318.us-east1.run.app"
+        let savedURL = defaults.string(forKey: Keys.baseURL)
+        // Migrate installs still pinned to the old on-Mac dev URL (tailnet / :8787 / plain HTTP — ATS now blocks it).
+        if let savedURL, savedURL.contains("ts.net") || savedURL.contains(":8787") || savedURL.hasPrefix("http://") {
+            apiBaseURL = cloudDefault
+            defaults.set(cloudDefault, forKey: Keys.baseURL)
+        } else {
+            apiBaseURL = savedURL ?? cloudDefault
+        }
         devUser = defaults.string(forKey: Keys.devUser) ?? "dev-shayne"
         useDevUser = defaults.bool(forKey: Keys.useDevUser)
         handed = defaults.string(forKey: Keys.handed) ?? "R"
@@ -451,30 +459,28 @@ final class AppModel: ObservableObject {
                 ballConfigurationId: ball?.ball_configuration_id,
                 userBallId: ball?.id
             )
-            let created: CreateShotResponse
-            if source == "upload" {
-                created = try await client.uploadClip(fileURL: uploadURL, metadata: metadata) { [weak self] frac in
-                    self?.pipeline = .uploading(frac)
-                }
-            } else {
-                created = try await client.uploadShot(sessionId: sid!, fileURL: uploadURL, metadata: metadata) { [weak self] frac in
-                    self?.pipeline = .uploading(frac)
-                }
+            // Upload the clip straight to Supabase Storage (no API request-size cap), then analyze from there.
+            let target = try await client.signedUploadURL()
+            try await client.putClipToStorage(uploadURL: target.upload_url, fileURL: uploadURL) { [weak self] frac in
+                self?.pipeline = .uploading(frac)
             }
 
-            // 4. Poll the analysis job until done/failed.
-            var last = JobResponse(id: created.job_id, kind: nil, state: "queued", reason: nil, timings: nil, result: nil)
-            pipeline = .analyzing(state: last.state, timings: [:])
-            while true {
-                last = try await client.job(created.job_id)
-                pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
-                if last.state == "done" { break }
-                if last.state == "failed" {
-                    pipeline = .failed("Analysis failed: \(last.reason ?? "unknown reason")")
-                    return
-                }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+            // 4. Analyze. The Phase-1 backend runs the CV INLINE, so this one request blocks for the whole
+            //    analysis — we show the processing state for its full duration (treated as async in the UI;
+            //    the result is durable in Supabase). `sessionId` nil → standalone upload; set → live shot.
+            pipeline = .analyzing(state: "running", timings: [:])
+            let created = try await client.analyzeFromStorage(
+                storagePath: target.path,
+                sessionId: (source == "upload" ? nil : sid),
+                metadata: metadata)
+
+            // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
+            let last = try await client.job(created.job_id)
+            if last.state == "failed" {
+                pipeline = .failed("Analysis failed: \(last.reason ?? "unknown reason")")
+                return
             }
+            pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
 
             // 5. Fetch the shot record + score; carry the analyze-job footer onto the card.
             pipeline = .fetching

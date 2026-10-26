@@ -31,6 +31,13 @@ struct CreateShotResponse: Codable {
     let job_id: String
 }
 
+/// Target for a direct-to-Storage clip upload (POST /uploads/signed-url). The app PUTs the clip bytes to
+/// `upload_url` (bypassing the API's request-size cap), then calls /shots/analyze with `path`.
+struct UploadTarget: Codable {
+    let path: String
+    let upload_url: String
+}
+
 struct JobResponse: Codable {
     let id: String
     let kind: String?
