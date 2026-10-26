@@ -11,10 +11,12 @@ ENV PYTHONUNBUFFERED=1 \
     MPLBACKEND=Agg \
     LANESIGHT_DATA=/data
 
-# opencv-python-headless needs libglib2.0-0 (libgthread); mediapipe (Form pose) needs libgl1 (libGL.so.1);
+# opencv-python-headless needs libglib2.0-0 (libgthread); mediapipe (Form pose) initializes an EGL/GLES
+# context even on CPU, so it needs libgl1 (libGL.so.1) + libegl1 (libEGL.so.1) + libgles2 (libGLESv2.so.2);
 # ffmpeg ensures robust .mov/h264 decode; curl + ca-certificates fetch the pose model below.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 ffmpeg curl ca-certificates \
+ && apt-get install -y --no-install-recommends \
+      libglib2.0-0 libgl1 libegl1 libgles2 ffmpeg curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
