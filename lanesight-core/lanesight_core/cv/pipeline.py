@@ -28,6 +28,12 @@ def far_lane_quality(M, zboard):
     between neighbouring samples, means the depth scale is corrupt (the close/off-axis camera the SHOT_REVIEW
     clip exposed). Returns (limited, reason). reason is a short, user-facing camera-spot nudge."""
     spot = " Set the camera behind the lane, square to it, with the whole lane from the foul line to the pins in frame."
+    # Off-lane geometry: a board is 1 (right gutter) .. 39 (left gutter). An entry or breakpoint well off the
+    # lane means the lane homography is broken (wrong VP / edges from an awkward framing) — the whole far-lane
+    # read is then meaningless, so flag it rather than surface an impossible board as a move.
+    for nm, v in (('entry board', M.get('entry_board')), ('breakpoint', M.get('breakpoint_board'))):
+        if v is not None and not (0.0 <= v <= 40.0):
+            return True, (f"The measured {nm} ({v:.0f}) is off the lane, so the lane geometry read is unreliable.{spot}")
     e, l = M.get('speed_early_mph'), M.get('speed_late_mph')
     if e and l and l > e + max(0.5, 0.03 * abs(e)):
         return True, (f"Late speed ({l:.1f} mph) reads faster than early speed ({e:.1f} mph); a ball can't speed "

@@ -19,45 +19,62 @@ def _fit(P, it=8):
     return p, float(r[keep].std()), int(keep.sum())
 
 def find_lanes(bg, log=print, min_run=40, min_rows=120):
-    h, w = bg.shape[:2]; m = lane_mask(bg)
-    # 1. runs per row, linked into tracks by overlap
-    tracks = []      # each: list of (y, a, b)
-    active = []
-    for y in range(h - 1, 0, -2):
-        row = m[y]; d = np.diff(np.r_[0, row, 0].astype(int))
-        st = np.where(d == 1)[0]; en = np.where(d == -1)[0] - 1
-        runs = [(a, b) for a, b in zip(st, en) if b - a >= min_run * (0.3 + 0.7 * y / h)]
-        new_active = []
-        for a, b in runs:
-            hit = None
-            for t in active:
-                _, pa, pb = t[-1]
-                if min(b, pb) - max(a, pa) > 0.5 * min(b - a, pb - pa): hit = t; break
-            if hit is None: hit = []; tracks.append(hit)
-            hit.append((y, a, b)); new_active.append(hit)
-        active = new_active
-    tracks = [t for t in tracks if len(t) * 2 >= min_rows]
-    lanes = []
-    for t in tracks:
-        T = np.array(t, float)
-        L = T[T[:, 1] > 2][:, [1, 0]]; R = T[T[:, 2] < w - 3][:, [2, 0]]
-        if len(L) < 30 or len(R) < 30: continue
-        pl, sl, nl = _fit(L); pr, sr, nr = _fit(R)
-        # foul line: near (bottom) boundary of the lane surface, measured across the lane
-        y_near = T[:, 0].max()
-        lanes.append(dict(left=pl, right=pr, res=(sl, sr), y_rng=(T[:, 0].min(), y_near), npts=len(T), track=T))
-    # 2. common vanishing point from all edges (each edge is a line x = a*y + b)
-    good = []
-    if lanes:
-        E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
-        A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
-        vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
-        # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
-        for l in lanes:
-            dl = abs(vp[0] - np.polyval(l['left'], vp[1])); dr = abs(vp[0] - np.polyval(l['right'], vp[1]))
-            width_near = np.polyval(l['right'], l['y_rng'][1]) - np.polyval(l['left'], l['y_rng'][1])
-            l['vp_miss'] = (dl, dr)
-            if max(dl, dr) < 0.08 * w and width_near > 60: good.append(l)
+    h, w = bg.shape[:2]
+
+    def _detect(m):
+        # 1. runs per row, linked into tracks by overlap
+        tracks = []      # each: list of (y, a, b)
+        active = []
+        for y in range(h - 1, 0, -2):
+            row = m[y]; d = np.diff(np.r_[0, row, 0].astype(int))
+            st = np.where(d == 1)[0]; en = np.where(d == -1)[0] - 1
+            runs = [(a, b) for a, b in zip(st, en) if b - a >= min_run * (0.3 + 0.7 * y / h)]
+            new_active = []
+            for a, b in runs:
+                hit = None
+                for t in active:
+                    _, pa, pb = t[-1]
+                    if min(b, pb) - max(a, pa) > 0.5 * min(b - a, pb - pa): hit = t; break
+                if hit is None: hit = []; tracks.append(hit)
+                hit.append((y, a, b)); new_active.append(hit)
+            active = new_active
+        tracks = [t for t in tracks if len(t) * 2 >= min_rows]
+        lanes = []
+        for t in tracks:
+            T = np.array(t, float)
+            L = T[T[:, 1] > 2][:, [1, 0]]; R = T[T[:, 2] < w - 3][:, [2, 0]]
+            if len(L) < 30 or len(R) < 30: continue
+            pl, sl, nl = _fit(L); pr, sr, nr = _fit(R)
+            # foul line: near (bottom) boundary of the lane surface, measured across the lane
+            y_near = T[:, 0].max()
+            lanes.append(dict(left=pl, right=pr, res=(sl, sr), y_rng=(T[:, 0].min(), y_near), npts=len(T), track=T))
+        # 2. common vanishing point from all edges (each edge is a line x = a*y + b)
+        good = []; vp = None
+        if lanes:
+            E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
+            A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
+            vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
+            # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
+            for l in lanes:
+                dl = abs(vp[0] - np.polyval(l['left'], vp[1])); dr = abs(vp[0] - np.polyval(l['right'], vp[1]))
+                width_near = np.polyval(l['right'], l['y_rng'][1]) - np.polyval(l['left'], l['y_rng'][1])
+                l['vp_miss'] = (dl, dr)
+                if max(dl, dr) < 0.08 * w and width_near > 60: good.append(l)
+        return lanes, good, vp
+
+    # Lanes are saturated wood, but pale / blonde maple reads low-saturation (this center ~S60 vs the S105
+    # floor). Retry the strict pass at lower saturation floors before the gutter-edge fallback. s_min=105 runs
+    # first, so well-saturated lanes detect exactly as before (same mask, same result); only a pass that finds
+    # nothing drops to a looser floor.
+    m = None; lanes = []; good = []; vp = None; used_s = 105
+    for s_min in (105, 70, 50):
+        mm = lane_mask(bg, s_min=s_min)
+        ln, gd, v = _detect(mm)
+        if m is None:
+            m, lanes = mm, ln                       # keep the strict mask/lanes for the error path + foul default
+        if gd:
+            m, lanes, good, vp, used_s = mm, ln, gd, v, s_min
+            break
     # Pale / low-contrast lanes: the wood is too desaturated for the saturation mask to seed a full track
     # (see the s_min gate in lane_mask). Fall back to edges from the dark gutter->wood boundary, which is
     # saturation-independent. This runs ONLY when the strict pass finds nothing, so well-saturated lanes
@@ -74,7 +91,9 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
                                "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
         raise RuntimeError(f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges "
                            "meeting at a common vanishing point. Check framing: camera behind the approach, whole lane in view")
-    loose = lane_mask(bg, s_min=60)
+    if used_s != 105 and not any(l.get('fallback') for l in good):
+        log(f"pale lane: detected at saturation floor s_min={used_s} (wood below the default 105)")
+    loose = lane_mask(bg, s_min=min(60, used_s))
     for l in good:
         if l.get('fallback'): continue       # gutter-seeded edges + foul are already set and colour-independent
         _foul(l, foul_mask); _refine_edges(l, loose)
