@@ -15,6 +15,21 @@ import CoreGraphics
 ///
 /// Everything runs off the main actor (the entry point is `nonisolated async`).
 enum VideoTrimmer {
+    /// Supabase's free tier rejects Storage uploads over ~50 MB per file, so keep the uploaded clip under this.
+    static let maxUploadBytes = 48_000_000
+
+    /// Prepare ANY clip (live capture or Photos upload) for upload: trim to the shot window (lossless), then
+    /// guarantee it fits under `maxBytes`. The lossless window trim handles the common case with no quality
+    /// loss; only if the trimmed clip is still too large (e.g. a long 120 fps delivery) do we re-encode to fit,
+    /// and that reduces bitrate only — frame rate and resolution are preserved so rev/loft stay measurable. The
+    /// server re-trims precisely; this just has to contain the shot and fit the cap.
+    nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes) async -> URL {
+        let trimmed = await trimToShotWindow(sourceURL)
+        if fileSize(trimmed) <= maxBytes { return trimmed }
+        if let fitted = await reencodeToFit(trimmed, maxBytes: maxBytes) { return fitted }
+        return trimmed   // best effort — if even this is over, the upload surfaces the error to the user
+    }
+
     nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4) async -> URL {
         let asset = AVURLAsset(url: sourceURL)
         guard let duration = try? await asset.load(.duration) else { return sourceURL }
@@ -114,6 +129,31 @@ enum VideoTrimmer {
         do {
             try await session.export(to: out, as: .mov)
             return out
+        } catch {
+            return nil
+        }
+    }
+
+    private nonisolated static func fileSize(_ url: URL) -> Int {
+        let n = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
+        return (n ?? nil) ?? Int.max   // unknown size → treat as "too big" so the size guard still runs
+    }
+
+    /// Last resort when a lossless-trimmed clip is still over the upload cap: re-encode to fit `maxBytes`.
+    /// `fileLengthLimit` reduces BITRATE to hit the size; the 1080p preset preserves resolution and the source
+    /// frame rate (incl. 120 fps), so only compression detail is lost — not the temporal resolution rev/loft need.
+    private nonisolated static func reencodeToFit(_ url: URL, maxBytes: Int) async -> URL? {
+        let asset = AVURLAsset(url: url)
+        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1920x1080) else {
+            return nil
+        }
+        let out = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lanesight-fit-\(UUID().uuidString).mov")
+        try? FileManager.default.removeItem(at: out)
+        session.fileLengthLimit = Int64(maxBytes)
+        do {
+            try await session.export(to: out, as: .mov)
+            return fileSize(out) <= maxBytes ? out : nil
         } catch {
             return nil
         }

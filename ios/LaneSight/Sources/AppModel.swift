@@ -427,16 +427,13 @@ final class AppModel: ObservableObject {
                 sid = nil
             }
 
-            // 2. For a live capture, trim the clip to the shot window ON-DEVICE before uploading.
-            // Original fps + resolution are preserved (passthrough export) — we only cut dead time
-            // at the head/tail so the upload is smaller. Photos uploads are sent as-is.
-            let uploadURL: URL
-            if source == "live" {
-                pipeline = .trimming
-                uploadURL = await VideoTrimmer.trimToShotWindow(fileURL)
-            } else {
-                uploadURL = fileURL
-            }
+            // 2. Trim the clip to the shot window ON-DEVICE and fit it under the upload size cap. Both live
+            // captures and Photos uploads go through this: the window trim is lossless (original fps +
+            // resolution preserved, dead time at head/tail cut); only a clip still over the cap is re-encoded
+            // to fit (bitrate only). This keeps uploads under Supabase's ~50 MB free-tier limit; the server
+            // re-trims precisely afterwards.
+            pipeline = .trimming
+            let uploadURL = await VideoTrimmer.trimForUpload(fileURL)
 
             // 3. Upload the clip (multipart) with progress.
             pipeline = .uploading(0)
