@@ -24,7 +24,7 @@ private struct WelcomeStep: View {
                 .frame(maxWidth: 240)
                 .accessibilityLabel("LaneSight")
 
-            Text("SEE MORE. BOWL SMARTER.")
+            Text("UNDERSTAND EVERY SHOT. IMPROVE EVERY GAME.")
                 .font(.lsSubheadline).tracking(3)
                 .foregroundStyle(LS.textSecondary)
 
@@ -52,7 +52,7 @@ private struct WelcomeStep: View {
             NavigationLink { SignInStep() } label: { Text("Sign In") }
                 .buttonStyle(SecondaryButtonStyle())
 
-            Text("Track your stats · Improve your game · Coaching insights")
+            Text("Track your shots · Improve your game · AI Coaching")
                 .font(.lsFootnote).foregroundStyle(LS.textSecondary)
                 .multilineTextAlignment(.center)
         }
