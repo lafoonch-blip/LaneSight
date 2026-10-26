@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.25  
+Version: 1.27  
 Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.24
+Supersedes: v1.26
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -637,6 +637,32 @@ Other rules:
 **Date:** 2026-10-25
 **Status:** ACCEPTED FOR ROADMAP (MVP+); not in MVP or the dev build; biometric-privacy legal review required before launch
 **Supersedes:** —
+
+### DEC-061 — Recommendation guardrails and one metric-status rule
+**Decision:**
+- A next-shot move is given only when the shot is trustworthy. Otherwise the Shot card shows one of the 3.7 states (`NextShotStates.dc.html`): strike → repeat; missed target → repeat and hit your mark; pins not read → ask the bowler for the leave, then advise; not enough reliable data → no move plus a camera tip; low confidence → "Maybe…" with a secondary "Apply anyway".
+- Moves are in boards, at most 2 (feet) and 1 (eyes) per shot; bigger moves need 2+ agreeing shots. All boards clamp to 1–39.
+- A plausibility gate runs before insights: if speed rises downlane, the far-lane track jumps, or calibration residuals are high, far-lane metrics (breakpoint, entry board/angle, late speed) drop to best effort or unavailable and no move is given.
+- Metric status chips: `ok`/`measured` → MEASURED; `best_effort`/`low_confidence`/`calibrated_estimate` → BEST EFFORT; anything else → UNAVAILABLE, which never shows a number.
+- Uploaded clips are de-duplicated by content hash and never show score or achievement blocks (DEC-055).
+
+**Why:** Shot 14b234c8 (2026-10-25) was a strike, but a far-lane calibration error made it read 7 boards light, and the engine told Shayne to move 8 boards right with breakpoint 0 (`02_RESEARCH/SHOT_REVIEW_2026-10-25_14b234c8.md`). Wrong confident advice is worse than no advice.
+**Date:** 2026-10-25
+**Status:** ACCEPTED (dev build onward)
+**Supersedes:** —
+
+### DEC-062 — Geometry-first CV re-architecture (staged, ablation-gated)
+**Decision:**
+- Adopt the outside CV review's spine (`03_ENGINEERING/CV_REARCHITECTURE_RESPONSE_2026-10-25.md`, responding to the ChatGPT handoff): **geometry-first camera calibration decoupled from the ball**, metric-level (not shot-level) gating with propagated uncertainty, learned detection/calibration only where justified, and known geometry + physics for physical quantities.
+- The far-lane calibration no longer anchors to the ball's extrapolated impact position (today's synthetic far line in `cv/metrics.lane_homography`); it will solve from real, stationary downlane fiducials (foul line, arrows, dots, pin spots, gutters). This subsumes and supersedes the old GUARDRAILS workstream **A** (far-lane calibration).
+- **Mandatory Phase-1 gate before any ML investment:** the A/B/C/D ablation on the 17-clip benchmark. If Run C (manual geometry + manual ball centers) can't reach the accuracy target on near-level clips, the limit is resolution/identifiability — change capture guidance / metric eligibility, not models.
+- The production CV path is **frozen** until the ablation reports; `accuracy over coverage` stays the tie-breaker. All Phase-1 harness code (`cv/calib/`) is additive and off the production path.
+- Canonical lane geometry lives in one cited module (`cv/calib/lane_geometry.py`); no nominal sports-geometry magic constants in algorithm code, and any coordinate we don't actually know is `unavailable` with a reason, never fabricated.
+
+**Why:** The 17 pale-lane training clips (3/17 analysable) exposed that metrics are only reliable from a narrow framing. Root cause is a 4-point homography whose far anchor is the ball itself (circular), zero real downlane depth anchors, and difference-based detection that loses the back-half ball — not a tuning problem. An honest geometry-proof ablation is the cheapest way to know whether correct geometry alone fixes it before spending on annotation/training.
+**Date:** 2026-10-25
+**Status:** ACCEPTED (supersedes GUARDRAILS workstream A). Phase-1 harness landed; ablation pending ground-truth labeling.
+**Supersedes:** GUARDRAILS 3.7 workstream A (far-lane calibration)
 
 ## Superseded decisions
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
