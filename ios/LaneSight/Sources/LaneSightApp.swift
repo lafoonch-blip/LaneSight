@@ -60,6 +60,9 @@ struct PreviewHarness: View {
                 case "setup": NavigationStack { SetupView() }
                 case "stats": StatsView()
                 case "lab":   LabView()
+                case "shotcard":
+                    if let r = model.result { NavigationStack { ShotCardView(result: r) } }
+                    else { Text("no shot result (set LS_PREVIEW_ID)").foregroundStyle(LS.textPrimary) }
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
                 }
             }
@@ -69,6 +72,9 @@ struct PreviewHarness: View {
             if let e = env["LS_PREVIEW_EMAIL"], let p = env["LS_PREVIEW_PW"], !model.isAuthenticated {
                 do { try await model.signIn(email: e, password: p) }
                 catch { note = "auto-login failed: \(error)" }
+            }
+            if screen.lowercased() == "shotcard", let id = env["LS_PREVIEW_ID"] {
+                _ = await model.loadShotResult(shotId: id, captureModeHint: "shot")
             }
             ready = true
         }
