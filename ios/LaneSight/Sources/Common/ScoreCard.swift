@@ -8,14 +8,16 @@ struct ScoreCard: View {
     var history: [ScoreResponse] = []
     var showBreakdown = true
 
-    private struct Part { let name: String; let desc: String; let value: Double? }
+    private struct Part {
+        let name: String; let value: Double?; let icon: String; let color: Color; let weight: Int
+    }
 
     private var parts: [Part] {
-        [
-            Part(name: "Performance", desc: "pocket", value: score.s_perf),
-            Part(name: "Accuracy", desc: "to target", value: score.a_acc),
-            Part(name: "Consistency", desc: "repeat", value: score.c_cons),
-            Part(name: "Power", desc: "ball data", value: score.p_power),
+        [   // DEC-048 weights; S/A/C/P are each 0–100 (shown raw here, not the ×10 headline-scale)
+            Part(name: "Performance", value: score.s_perf, icon: "chart.bar.fill", color: LS.dataPurple, weight: 40),
+            Part(name: "Accuracy", value: score.a_acc, icon: "scope", color: LS.action, weight: 25),
+            Part(name: "Consistency", value: score.c_cons, icon: "arrow.triangle.2.circlepath", color: LS.success, weight: 25),
+            Part(name: "Power", value: score.p_power, icon: "bolt.fill", color: LS.dataYellow, weight: 10),
         ]
     }
 
@@ -70,23 +72,10 @@ struct ScoreCard: View {
             if showBreakdown {
                 Divider().overlay(LS.cardStroke)
                 Text("SCORE BREAKDOWN").lsEyebrow()
-                ForEach(parts, id: \.name) { part in
-                    HStack {
-                        Text(Fmt.part(part.value))
-                            .font(.lsTitle3.bold().monospacedDigit())
-                            .foregroundStyle(part.value == nil ? LS.textFaint : LS.textPrimary)
-                            .frame(width: 44, alignment: .leading)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(part.name).font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                            Text(part.desc).font(.lsCaption2).foregroundStyle(LS.textSecondary)
-                        }
-                        Spacer()
-                        if part.value == nil {
-                            Text("building").font(.lsCaption2).foregroundStyle(LS.textFaint)
-                        }
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(parts, id: \.name) { part in
+                        breakdownColumn(part)
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(part.name) \(part.value == nil ? "building" : Fmt.part(part.value))")
                 }
                 if let fv = score.formula_version {
                     Text(fv).font(.lsCaption2).foregroundStyle(LS.textFaint)
@@ -115,5 +104,30 @@ struct ScoreCard: View {
                 .padding(.top, 4)
             }
         }
+    }
+
+    private func breakdownColumn(_ part: Part) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Image(systemName: part.icon).font(.lsCaption).foregroundStyle(part.color)
+            Text(part.value == nil ? "—" : String(Int(part.value!.rounded())))
+                .font(.lsTitle3.bold().monospacedDigit())
+                .foregroundStyle(part.value == nil ? LS.textFaint : LS.textPrimary)
+            Text(part.name).font(.lsCaption2).foregroundStyle(LS.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.75)
+            Text("\(part.weight)% of score").font(.lsCaption2).foregroundStyle(LS.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.75)
+            ZStack(alignment: .leading) {
+                Capsule().fill(LS.border).frame(height: 3)
+                GeometryReader { geo in
+                    Capsule().fill(part.color)
+                        .frame(width: max(0, geo.size.width * CGFloat((part.value ?? 0) / 100)), height: 3)
+                }
+                .frame(height: 3)
+            }
+            .frame(height: 3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(part.name) \(part.value == nil ? "building" : String(Int(part.value!.rounded()))) of 100, \(part.weight) percent of score")
     }
 }
