@@ -26,6 +26,56 @@ FAR_BALL_MIN_PX = 6.0          # far ball must be this big to be detectable/cent
 GREEN, YELLOW, RED = "full", "partial", "reposition"
 TIER_EMOJI = {GREEN: "🟢", YELLOW: "🟡", RED: "🔴"}
 
+# --- near-field (partial-results) calibration gate ---
+NEAR_REPROJ_BOARD_MAX = 0.75   # near homography must fit its coplanar fiducials this tightly
+NEAR_SENS_MAX = 1.5            # near conditioning at the arrows (boards of error per pixel)
+NEAR_BRACKET_MIN_FT = 12.0     # deepest labeled near fiducial must reach ~the arrows so 0-15 ft is
+                              # INTERPOLATED (trustworthy), not extrapolated beyond the fiducials (biased)
+NEAR_SHALLOW_MAX_FT = 2.0      # shallowest fiducial must reach ~the foul so laydown (0 ft) is bracketed too
+TRACK_REQS = ("near_track", "mid_track", "far_track")   # per-shot gates, separate from the geometry gate
+
+
+def near_calibration_ok(near_diag):
+    """Geometry gate for the NEAR lane (0-15 ft) from solve.near_field_homography's diagnostics. Valid only
+    when the near homography (a) fits its coplanar fiducials tightly, (b) is well-conditioned at the arrows,
+    AND (c) the fiducials bracket the near region so 0-15 ft is interpolated not extrapolated. Returns
+    (ok: bool, reason: str). Fails closed on a missing diag."""
+    if not near_diag:
+        return (False, "near calibration failed / not computed")
+    resid = near_diag.get("reproj_board_rmse")
+    s15 = near_diag.get("sensitivity_per_px", {}).get("arrows_15ft", {}).get("d_board_per_px")
+    deepest = near_diag.get("deepest_fiducial_z_ft")
+    shallowest = near_diag.get("shallowest_fiducial_z_ft")
+    why = []
+    if resid is None or resid > NEAR_REPROJ_BOARD_MAX:
+        why.append(f"near reproj {resid} > {NEAR_REPROJ_BOARD_MAX} board" if resid is not None else "no near residual")
+    if s15 is None or s15 > NEAR_SENS_MAX:
+        why.append(f"near conditioning {s15} > {NEAR_SENS_MAX} board/px" if s15 is not None else "no near conditioning")
+    if deepest is None or deepest < NEAR_BRACKET_MIN_FT:
+        why.append(f"fiducials reach only {deepest} ft (< {NEAR_BRACKET_MIN_FT}); 0-15 ft would be extrapolated")
+    if shallowest is None or shallowest > NEAR_SHALLOW_MAX_FT:
+        why.append(f"shallowest fiducial at {shallowest} ft (> {NEAR_SHALLOW_MAX_FT}); laydown (0 ft) unbracketed "
+                   "(label the foul line)")
+    return (not why, "ok" if not why else "; ".join(why))
+
+
+def calibration_readiness(near_calib_valid, far_calib_valid, far_conditioning_ok):
+    """Per-metric GEOMETRY readiness, ignoring the per-shot ball-track gate — for the Phase-1 calibration
+    study where no ball track is re-run. A metric is 'geometry_ready' when its calibration requirements
+    (near_calib / far_calib / far_conditioning) are met; the track requirements are reported separately and
+    are NOT asserted here. Returns {geometry_tier, emoji, metrics:{name:{geometry_ready, needs}}}."""
+    cal = {"near_calib": bool(near_calib_valid), "far_calib": bool(far_calib_valid),
+           "far_conditioning": bool(far_conditioning_ok), "calib_valid": bool(far_calib_valid)}
+    metrics = {}
+    for name, reqs in METRIC_REQUIREMENTS.items():
+        cal_reqs = [r for r in reqs if r not in TRACK_REQS]
+        failed = [r for r in cal_reqs if not cal.get(r, False)]
+        metrics[name] = {"geometry_ready": not failed, "needs": failed,
+                         "track_gated": [r for r in reqs if r in TRACK_REQS]}
+    geom_tier = GREEN if (far_calib_valid and far_conditioning_ok) else (YELLOW if near_calib_valid else RED)
+    return {"geometry_tier": geom_tier, "emoji": TIER_EMOJI[geom_tier], "metrics": metrics,
+            "geometry_ready_count": sum(1 for m in metrics.values() if m["geometry_ready"])}
+
 # metric -> the conditions it requires. Conditions are keys into the computed `checks` dict. Near-lane
 # metrics need only the NEAR-field calibration (foul + on-plane dots/arrows) — recoverable even when the far
 # lane is not (the partial-results path). Far-lane metrics need the far calibration + far conditioning + track.

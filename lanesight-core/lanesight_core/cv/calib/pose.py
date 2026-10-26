@@ -92,6 +92,71 @@ def fit_pin_height(landmark_set, focal_px=None):
     return best
 
 
+def fit_focal(landmark_set, lo=900.0, hi=3200.0, coarse=50.0):
+    """Jointly fit the focal length and pin height that MINIMIZE PnP reprojection over the verified foul+pins.
+    The phone's effective focal after on-device stabilization/trim is unknown (open decision #2); here we
+    treat it as a free parameter and recover the value that best explains the labels. Returns
+    dict(focal_px, pin_height_in, reproj_px, rvec, tvec) or None if <4 anchors / solve fails.
+
+    IMPORTANT: this is a per-clip FIT, not an independent calibration. Its value is only trustworthy if the
+    fitted focal is CONSISTENT across clips of the same camera (a real lens constant) and is cross-validated
+    against held-out fiducials (`interval_backprojection`). A good cross-clip agreement is evidence the focal
+    is calibratable; it is NOT a substitute for a one-time intrinsics calibration."""
+    names, _, image = landmark_set.correspondences()
+    names = list(names)
+    if sum(1 for n in names if n.startswith("pin_")) < 4 or not any(n.startswith("foul_") for n in names):
+        return None
+    w, h = landmark_set.image_size
+    best = None
+    f = lo
+    while f <= hi:
+        K = nominal_K(w, h, f)
+        ph = fit_pin_height(landmark_set, f)[0] or 0.0
+        obj = _object_points(names, ph)
+        r = _pnp(obj, image, K)
+        if r is not None and (best is None or r[2] < best[2]):
+            best = (f, ph, r[2], r[0], r[1])
+        f += coarse
+    if best is None:
+        return None
+    # fine search ±coarse around the coarse minimum
+    f0 = best[0]
+    f = max(lo, f0 - coarse)
+    while f <= min(hi, f0 + coarse):
+        K = nominal_K(w, h, f)
+        ph = fit_pin_height(landmark_set, f)[0] or 0.0
+        obj = _object_points(names, ph)
+        r = _pnp(obj, image, K)
+        if r is not None and r[2] < best[2]:
+            best = (f, ph, r[2], r[0], r[1])
+        f += coarse / 10.0
+    return dict(focal_px=round(float(best[0]), 1), pin_height_in=round(float(best[1]), 2),
+                reproj_px=round(float(best[2]), 2), rvec=best[3], tvec=best[4])
+
+
+def interval_backprojection(landmark_set, rvec, tvec, K, geometry=CANONICAL):
+    """Back-project every verified USBC-interval fiducial (arrow/dot/approach_dot/downlane_target) to the lane
+    plane Y=0 and report its recovered Z (ft) and whether it lands in that landmark's permitted band. The
+    interval fiducials are HELD OUT of the pose solve (which uses only foul+pins), so this is an independent
+    cross-check of the recovered geometry. Returns {family: {'in_band': k, 'n': m, 'z': [..]}}."""
+    intervals = geometry.interval_landmarks()
+    out = {}
+    for name, ob in landmark_set.observations.items():
+        if not ob.usable or name not in intervals:
+            continue
+        x_in, z_min, z_max = intervals[name]
+        bp = _ray_plane_board(rvec, tvec, K, (ob.x, ob.y), Y=0.0)
+        if bp is None:
+            continue
+        fam = name.rsplit("_", 1)[0]
+        d = out.setdefault(fam, {"in_band": 0, "n": 0, "z": [], "band": [z_min, z_max]})
+        d["n"] += 1
+        d["z"].append(round(bp[1], 1))
+        if z_min <= bp[1] <= z_max:
+            d["in_band"] += 1
+    return out
+
+
 def pose_report(landmark_set, focal_px=None, pin_height_in=None):
     """Solve pose from foul+pins, report reprojection + far-lane board sensitivity under PnP, and camera
     height/standoff. Compares the far sensitivity against the eligibility threshold."""

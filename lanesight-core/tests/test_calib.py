@@ -302,6 +302,39 @@ def test_pnp_recovers_known_pose_and_good_position_is_well_conditioned():
     assert sens < 1.5                                         # good position is well-conditioned
 
 
+def test_fit_focal_recovers_focal_and_cross_validates_arrows():
+    """fit_focal recovers the focal that best explains foul+pins, and the independently-labeled arrows (held
+    out of the solve) then back-project into their USBC band — the cross-check that makes a fitted focal
+    trustworthy. Synthetic: a known pose at a known focal, so there is a right answer."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL as G, x_in_for_board
+    w, h, f_true = 1080, 1920, 1600.0
+    K = P.nominal_K(w, h, f_true)
+    pitch = np.radians(22)
+    Cw = np.array([G.landmarks["foul_r"].x_in / 2, 72.0, -300.0])      # 6 ft high, 25 ft back (ball-return-ish)
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    R = np.vstack([xc, yc, zc]); tvec = (-R @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(R)
+
+    def proj(x_in, y_in, z_ft):
+        uv, _ = cv2.projectPoints(np.array([[x_in, y_in, z_ft * P.IN_PER_FT]], float), rvec, tvec, K, None)
+        return uv.reshape(2)
+
+    ls = LandmarkSet.template("SYNTH_POSE", (w, h))
+    for n in ("foul_l", "foul_r"):
+        lm = G.landmarks[n]; ls.set_point(n, *proj(lm.x_in, 0.0, 0.0))
+    for i in (1, 2, 3, 4, 6, 7, 10):
+        lm = G.landmarks[f"pin_{i}"]; ls.set_point(f"pin_{i}", *proj(lm.x_in, 0.0, lm.z_ft))
+    for b in (5, 15, 25, 35):                       # arrows at a true 14 ft (in the 12-16 band), held out
+        ls.set_point(f"arrow_{b}", *proj(x_in_for_board(b), 0.0, 14.0))
+
+    fit = P.fit_focal(ls)
+    assert fit is not None and abs(fit["focal_px"] - f_true) < 80      # recovers the focal
+    assert fit["reproj_px"] < 1.0
+    xcheck = P.interval_backprojection(ls, fit["rvec"], fit["tvec"], P.nominal_K(w, h, fit["focal_px"]))
+    assert xcheck["arrow"]["in_band"] == xcheck["arrow"]["n"] == 4      # all held-out arrows land in band
+
+
 def test_near_field_homography_from_on_plane_fiducials():
     """Near-field calibration from foul + on-plane dots/arrows (coplanar, unlike pins). Recovers the near
     lane with low residual; this is the partial-results path."""
@@ -332,6 +365,61 @@ def test_eligibility_partial_path_near_valid_far_degenerate():
     assert r["metrics"]["speed_early"]["eligible"] is True
     assert r["metrics"]["entry_board"]["eligible"] is False
     assert r["metrics"]["breakpoint_board"]["eligible"] is False
+
+
+def test_near_calibration_gate_requires_tight_fit_and_bracket():
+    """near_calibration_ok must REJECT a near homography that fits loosely (the real ball-return clips: low
+    sensitivity but tens-to-hundreds of boards reprojection) and one whose fiducials don't bracket 0-15 ft."""
+    from lanesight_core.cv.calib import eligibility as E
+    good = {"reproj_board_rmse": 0.2, "deepest_fiducial_z_ft": 14.0, "shallowest_fiducial_z_ft": 0.0,
+            "sensitivity_per_px": {"arrows_15ft": {"d_board_per_px": 0.4}}}
+    assert E.near_calibration_ok(good)[0] is True
+    # looks well-conditioned (0.41 b/px) but the fit is garbage (16 board reproj) -> INVALID (the §3.5 trap)
+    loose = dict(good, reproj_board_rmse=16.3)
+    ok, why = E.near_calibration_ok(loose)
+    assert ok is False and "reproj" in why
+    # no foul labeled -> shallowest fiducial at 7 ft -> laydown (0 ft) unbracketed -> INVALID
+    nofloor = dict(good, shallowest_fiducial_z_ft=7.0)
+    ok2, why2 = E.near_calibration_ok(nofloor)
+    assert ok2 is False and "laydown" in why2
+    assert E.near_calibration_ok(None)[0] is False
+
+
+def test_calibration_readiness_splits_near_and_far():
+    """Geometry-only readiness (no ball track): valid near + degenerate far -> near metrics geometry-ready,
+    far metrics not, geometry_tier = partial. The per-shot track gate is reported, not asserted."""
+    from lanesight_core.cv.calib import eligibility as E
+    g = E.calibration_readiness(near_calib_valid=True, far_calib_valid=False, far_conditioning_ok=False)
+    assert g["geometry_tier"] == E.YELLOW and g["emoji"] == "🟡"
+    assert g["metrics"]["laydown_board"]["geometry_ready"] is True
+    assert g["metrics"]["launch_angle"]["geometry_ready"] is True
+    assert g["metrics"]["entry_board"]["geometry_ready"] is False
+    assert "near_track" in g["metrics"]["laydown_board"]["track_gated"]   # track still gates it at runtime
+    allfail = E.calibration_readiness(False, False, False)
+    assert allfail["geometry_tier"] == E.RED and allfail["geometry_ready_count"] == 0
+    full = E.calibration_readiness(True, True, True)
+    assert full["geometry_tier"] == E.GREEN and full["metrics"]["entry_board"]["geometry_ready"] is True
+
+
+def test_score_clip_reports_near_path_when_far_degenerate(tmp_path):
+    """score_clip must compute the NEAR calibration independently, so a clip whose FAR calibration is
+    degenerate still reports its near-field result (the wiring fix) rather than bailing out."""
+    from lanesight_core.cv.calib.phase2 import score_clip
+    from lanesight_core.cv.calib.solve import NEAR_Z_DEFAULTS
+    from lanesight_core.cv.calib.lane_geometry import x_in_for_board
+    _, H_wi = _true_homographies()
+    ls = LandmarkSet.template("SYNTH_NEAR", (400, 600))
+    for n in ("foul_l", "foul_r"):
+        w = CANONICAL.world_point(n); ls.set_point(n, *(_project(H_wi, w[0], w[1])))
+    for b in (5, 15, 25, 35):
+        ls.set_point(f"dot_{b}", *(_project(H_wi, x_in_for_board(b), NEAR_Z_DEFAULTS["dot"])))
+        ls.set_point(f"arrow_{b}", *(_project(H_wi, x_in_for_board(b), NEAR_Z_DEFAULTS["arrow"])))
+    p = tmp_path / "SYNTH_NEAR.landmarks.json"
+    ls.to_json(str(p))
+    r = score_clip(str(p))                         # no pins -> far calibration can't be solved
+    assert r["calibrated"] is False                # far degenerate
+    assert r["near_calib"]["valid"] is True        # but the near path is still computed and valid
+    assert r["geometry"]["geometry_tier"] == "partial"
 
 
 def test_resolution_scale_invariant_bounds():

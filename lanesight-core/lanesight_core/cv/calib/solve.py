@@ -95,6 +95,12 @@ def near_field_homography(landmark_set, z_overrides=None, geometry: LaneGeometry
         raise CalibrationError("near-field: findHomography failed (degenerate)")
     H_iw = np.linalg.inv(Hwi)
     diag = calibration_diagnostics(H_iw, world, image, names, geometry)
+    # Which depths the near fiducials actually bracket — the near lane is only INTERPOLATED (trustworthy)
+    # up to the deepest labeled fiducial; past it the same homography extrapolates (biased). The eligibility
+    # gate uses this so we never call an extrapolated region "recovered".
+    diag["deepest_fiducial_z_ft"] = float(world[:, 1].max())
+    diag["shallowest_fiducial_z_ft"] = float(world[:, 1].min())
+    diag["fiducial_z_span_ft"] = [float(world[:, 1].min()), float(world[:, 1].max())]
     return H_iw, Hwi, diag
 
 

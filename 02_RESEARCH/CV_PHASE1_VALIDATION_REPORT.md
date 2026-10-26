@@ -1,10 +1,14 @@
 # CV Phase-1 Validation Report (geometry proof) — DEC-062
-Version: 1.0 (VERDICT REACHED — geometry proof run on Shayne's verified labels)
+Version: 1.1 (VERDICT + §3.6 corrections pending Shayne — fixed near-field run & calibrated-focal pose)
 Last Updated: 2026-10-26
-Status: Phase-1 gate CLEARED. Verdict: far-lane measurement is NOT recoverable from the elevated
-ball-return camera position these clips used — a physical limit, so the answer is a capture-position
-recommendation, not ML (handoff §10 stop/go). Evidence in §3; answers to the three questions in §4.1;
-gate verdict in §4. Production CV frozen (DEC-062).
+Status: Phase-1 gate CLEARED. FAR-lane verdict (§3.1–3.3) stands: far-lane measurement is NOT recoverable
+from the elevated ball-return camera position these clips used. **But §3.6 (2026-10-26) corrects §3.4 and
+§3.5 and needs Shayne's sign-off:** the near_field_homography partial-results path FAILS on the real labels
+(0/17 valid, reproj 16–2,600 boards — §3.5 over-read sensitivity-without-reprojection), while a
+calibrated-focal 3D pose DOES recover the near-to-mid (0–16 ft) lane (foul+pins <1.7 px; held-out arrows
+7/7 in band on 11/12 clips at a cohort-consistent ~1640 px focal — qualifying §3.4's "positional, not
+method"). Far-lane (40–60 ft) remains unproven either way. Capture-position recommendation unchanged; ML
+still frozen (DEC-062). Evidence §3; three-question answers §4.1; gate verdict §4.
 
 Related: `03_ENGINEERING/CV_REARCHITECTURE_RESPONSE_2026-10-25.md` (plan), `CV_MEASUREMENT_DEFINITIONS.md`
 (score against these), `TRAINING_CLIPS_2026-10-25_pale_lanes.md` (the Run-A baseline narrative).
@@ -219,6 +223,55 @@ Report columns (filled above/below as runs complete): A entry (auto geom+track),
 foul+pins geom + auto track), calibration sensitivity @entry, dominant uncertainty source. Per
 `CV_MEASUREMENT_DEFINITIONS.md` there is **no Ruby ground truth for this cohort**, so B is read for
 plausibility/conditioning, not against a truth value (D-4).
+
+### 3.6 Fixed near-field run + calibrated-focal pose — CORRECTIONS to §3.4/§3.5 (2026-10-26, pending Shayne)
+
+> **Status: these two findings revise §3.4 and §3.5 and need Shayne's sign-off before the §4 verdict text is
+> amended. §3.4/§3.5 above are left intact for history. The near-field-recovery product promise and DEC-062's
+> "physical limit" framing both depend on which of these stands.**
+
+Running the near-field path end-to-end on the 17 verified clips (the "fixed" run — `phase2.py --flat`, which
+now computes `near_field_homography` and gates it, instead of only scoring the far homography) and
+re-examining the PnP pose with the focal treated as a free parameter produced two results that **do not match
+§3.4/§3.5**:
+
+**(a) §3.5's near-field homography does NOT hold on the real labels (confirmed, decisive).** The near
+homography (foul + dots/arrows at USBC band-midpoint Z) reprojects its own fiducials at **16–2,600 boards**
+RMSE on every clip; **near-field calibration is VALID on 0/17** under an honest gate (reproj ≤ 0.75 board +
+conditioning + the fiducials must bracket 0–15 ft). §3.5's "0.25–0.41 board/px, precise + accurate" reported
+only the *sensitivity* (a local derivative of a globally-wrong fit) and omitted the *reprojection residual*
+that exposes the fit as invalid. Residual structure shows why: `approach_dot`s fit at d_ft≈0 while the
+guide-dots land ~5 ft shallow (they are foul-line locator dots at Z≈0, not the 6–8 ft guide dots the geometry
+assumes) and arrows land 8–11 ft deep — a systematic Z-model mismatch, not label noise, amplified by this
+oblique view into ±50-board lateral errors. **So the near_field_homography partial-results path, as written,
+yields nothing trustworthy on this cohort.** `eligibility.classify`/`calibration_readiness` now fail it
+closed; the runner reports 0/17 🟡 honestly.
+
+**(b) §3.4's "pose doesn't help — positional limit" is too strong for the near-to-mid lane.** §3.4 ran PnP at
+the *nominal* focal (2304 px) and read off physically-impossible poses. Treating the focal as a free parameter
+(`pose.fit_focal`, reproj-minimizing) changes the picture: the focal that best explains foul+pins is **tightly
+consistent across clips — median 1640 px, range 1505–1675, std 45 (n=12)** — i.e. a single calibratable lens
+constant, *not* the nominal. At that focal the pose reprojects foul+pins at **<1.7 px**, and the
+**independently-labeled arrows (held out of the solve) land in their USBC 12–16 ft band on 11/12 clips (7/7
+each)** — genuine cross-validation (`pose.interval_backprojection`). So the 0–16 ft lane **is** geometrically
+recoverable from this elevated ball-return position with the correct intrinsics; a better model + the right
+focal does rescue the near-to-mid lane.
+
+**Unresolved caveats on (b) — why this is "re-examine", not "reversed":** the focal is *fitted per clip*, not
+independently calibrated (the tight cross-clip agreement is strong evidence it is a real constant, but a
+one-time checkerboard/known-object calibration on the same phone+capture settings would confirm it); the
+recovered camera height resolves *negative* (the planar-PnP chirality / coplanar ambiguity §3.4 flagged — it
+reproduces correct lane coordinates but the sign needs resolving); and **there is still no independent
+held-out fiducial past 16 ft**, so the pins (the only far anchor) cannot validate themselves and **far-lane
+recovery (entry/breakpoint at 40–60 ft) remains unproven** — §3.1–§3.3's far-lane verdict is untouched by this.
+
+**Net for the decision:** the honest partial-results path on this cohort is **form metrics (no calibration) +
+the calibrated-focal pose for the near-to-mid lane**, pending a one-time intrinsics calibration — **not** the
+near_field_homography, which this run shows fails here. Options for Shayne: (1) accept a one-time phone
+intrinsics calibration and make the pose the near/partial path (and run the far-lane test with a mid-lane tape
+reference to settle 40–60 ft); (2) keep the capture-reposition recommendation and drop the near_field_homography
+promise; (3) both. All reproducible: `python -m lanesight_core.cv.calib.phase2 "<clips>" --flat --no-video`
+and `pose.fit_focal` / `pose.interval_backprojection` (tests in `test_calib.py`).
 
 ## 4. Phase-1 decision gate (Shayne, 2026-10-25)
 

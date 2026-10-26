@@ -19,7 +19,7 @@ import json
 import numpy as np
 
 from .landmarks import LandmarkSet
-from .solve import homography_from_landmarks, interval_consistency, CalibrationError
+from .solve import homography_from_landmarks, near_field_homography, interval_consistency, CalibrationError
 from .ablation import reconstruct_from_homography
 from . import eligibility as elig
 
@@ -33,17 +33,43 @@ def score_calibration(landmark_set):
     return H_iw, diag, interval_consistency(H_iw, landmark_set)
 
 
+def score_near_calibration(landmark_set):
+    """Independent NEAR-field calibration (foul + on-plane dots/arrows). Returns (near_diag, ok, reason).
+    Computed even when the far/full calibration is degenerate — that is the partial-results path."""
+    try:
+        _, _, near_diag = near_field_homography(landmark_set)
+    except CalibrationError as e:
+        return None, False, str(e)
+    ok, reason = elig.near_calibration_ok(near_diag)
+    return near_diag, ok, reason
+
+
 def score_clip(landmarks_path, centers=None, video=None, out_prefix=None, handed="R"):
-    """Score one clip: calibration + (optional) reconstruction/coverage + eligibility tier.
+    """Score one clip: far + near calibration, (optional) reconstruction/coverage, and eligibility tier.
+
+    The near-field calibration is run INDEPENDENTLY of the far one, so a clip whose far/full calibration is
+    degenerate (the elevated ball-return cohort) still reports its recoverable near-lane metrics — the 🟡
+    partial-results path, never a blanket reject.
 
     centers: optional [(t,cx,cy)] auto track (stabilized-frame px). If `video` is given and centers is None,
     runs pipeline.analyze to get them (slow). Returns a result dict."""
     ls = LandmarkSet.from_json(landmarks_path)
     clip = ls.clip_id
     H_iw, diag, checks = score_calibration(ls)
+    near_diag, near_ok, near_reason = score_near_calibration(ls)
+    near_sens = (near_diag or {}).get("sensitivity_per_px", {})
+
     if H_iw is None:
-        return dict(clip=clip, calibrated=False, reason=checks,
-                    eligibility=elig.classify(diag=None))
+        # far calibration failed — still report the near-field (partial) result, which may be valid
+        return dict(clip=clip, calibrated=False, far_reason=checks,
+                    near_calib=dict(valid=near_ok, reason=near_reason,
+                                    reproj_board_rmse=round((near_diag or {}).get("reproj_board_rmse", float("nan")), 3)
+                                    if near_diag else None,
+                                    sens_0ft=near_sens.get("foul_0ft", {}).get("d_board_per_px"),
+                                    sens_15ft=near_sens.get("arrows_15ft", {}).get("d_board_per_px"),
+                                    deepest_fiducial_z_ft=(near_diag or {}).get("deepest_fiducial_z_ft")),
+                    eligibility=elig.classify(diag=None, near_calib_valid=near_ok),
+                    geometry=elig.calibration_readiness(near_ok, False, False))
 
     if centers is None and video is not None:
         from ..pipeline import analyze
@@ -59,7 +85,10 @@ def score_clip(landmarks_path, centers=None, video=None, out_prefix=None, handed
         recon = reconstruct_from_homography(H_iw, centers)
         if recon.get("ok") and recon.get("path"):
             coverage = elig.track_coverage(recon["path"]["z_ft"])
-    tier = elig.classify(diag=diag, interval_checks=checks, coverage=coverage, far_ball_px=far_ball)
+    far_cond_ok = diag["sensitivity_per_px"]["entry_59ft"]["d_board_per_px"] <= elig.SENS_ENTRY_MAX
+    tier = elig.classify(diag=diag, interval_checks=checks, coverage=coverage, far_ball_px=far_ball,
+                         near_calib_valid=near_ok)
+    far_calib_ok = tier["checks"]["far_calib"]["pass"]
     return dict(clip=clip, calibrated=True,
                 reproj_board_rmse=round(diag["reproj_board_rmse"], 3),
                 longitudinal_zones=diag["longitudinal_zones"],
@@ -67,7 +96,13 @@ def score_clip(landmarks_path, centers=None, video=None, out_prefix=None, handed
                 arrows_within=f"{sum(c['within'] for c in checks if c['name'].startswith('arrow_'))}/"
                               f"{sum(1 for c in checks if c['name'].startswith('arrow_'))}",
                 entry_board=(recon or {}).get("entry_board"),
-                coverage=coverage, eligibility=tier)
+                near_calib=dict(valid=near_ok, reason=near_reason,
+                                reproj_board_rmse=round(near_diag["reproj_board_rmse"], 3) if near_diag else None,
+                                sens_0ft=near_sens.get("foul_0ft", {}).get("d_board_per_px"),
+                                sens_15ft=near_sens.get("arrows_15ft", {}).get("d_board_per_px"),
+                                deepest_fiducial_z_ft=(near_diag or {}).get("deepest_fiducial_z_ft")),
+                coverage=coverage, eligibility=tier,
+                geometry=elig.calibration_readiness(near_ok, far_calib_ok, far_cond_ok))
 
 
 def run(root, use_video=True):
@@ -98,11 +133,62 @@ def _print(results):
               f"sens={ms:.2f} b/px  reproj={mr:.2f} b")
 
 
+def run_flat(root, use_video=False):
+    """Score every `*.landmarks.json` directly under `root` (a flat cohort, not the POS_* layout) — the
+    Phase-1 ball-return clips in `10-25 training videos/calib_landmarks/`. Defaults to calibration/eligibility
+    only (no video): this is a GEOMETRY study of what the near vs far calibration supports; the per-shot
+    ball-track gate is reported separately (`geometry`), not asserted. Returns {clip: result}."""
+    results = {}
+    for jp in sorted(glob.glob(os.path.join(root, "*.landmarks.json"))):
+        clip = os.path.basename(jp)[:-len(".landmarks.json")]
+        video = os.path.join(root, f"{clip}.MOV")
+        if not os.path.exists(video):
+            video = os.path.join(root, f"{clip}.mov")
+        results[clip] = score_clip(jp, video=video if (use_video and os.path.exists(video)) else None,
+                                   out_prefix=os.path.join(root, clip))
+    return results
+
+
+def _fmt(v, spec="{:.2f}"):
+    return spec.format(v) if isinstance(v, (int, float)) else "-"
+
+
+def _print_flat(results):
+    """Per-clip near vs far calibration + geometry tier — the partial-results picture for the cohort."""
+    print(f"{'clip':10} {'geo':>3} {'far_calib':>9} {'sens@entry':>10} {'near_calib':>10} "
+          f"{'near_reproj':>11} {'near_sens15':>11} {'deepestZ':>8}")
+    tiers = {elig.GREEN: 0, elig.YELLOW: 0, elig.RED: 0}
+    near_valid = 0
+    for clip, r in results.items():
+        geo = r.get("geometry", {})
+        tier = geo.get("geometry_tier", elig.RED)
+        tiers[tier] = tiers.get(tier, 0) + 1
+        nc = r.get("near_calib", {}) or {}
+        if nc.get("valid"):
+            near_valid += 1
+        far_ok = "ok" if (r.get("calibrated") and r["eligibility"]["checks"]["far_calib"]["pass"]) else "FAIL"
+        print(f"{clip:10} {geo.get('emoji','?'):>3} {far_ok:>9} "
+              f"{_fmt(r.get('sensitivity_entry')):>10} {('VALID' if nc.get('valid') else 'no'):>10} "
+              f"{_fmt(nc.get('reproj_board_rmse')):>11} {_fmt(nc.get('sens_15ft')):>11} "
+              f"{_fmt(nc.get('deepest_fiducial_z_ft'), '{:.0f}'):>8}")
+    n = len(results)
+    print(f"\n{n} clips: geometry tier 🟢 {tiers[elig.GREEN]}  🟡 {tiers[elig.YELLOW]}  🔴 {tiers[elig.RED]}")
+    print(f"near-field calibration VALID on {near_valid}/{n} clips "
+          f"(these support the 🟡 partial set: laydown, board@7/arrows, early speed, launch).")
+
+
 if __name__ == "__main__":
     import sys
-    root = sys.argv[1]
-    res = run(root, use_video=("--no-video" not in sys.argv))
-    _print(res)
-    out = os.path.join(root, "phase2_results.json")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    root = args[0]
+    use_video = "--no-video" not in sys.argv
+    if "--flat" in sys.argv:
+        res = run_flat(root, use_video=("--video" in sys.argv))
+        _print_flat(res)
+        out = os.path.join(root, "phase2_nearfield_results.json")
+    else:
+        res = run(root, use_video=use_video)
+        _print(res)
+        out = os.path.join(root, "phase2_results.json")
     json.dump(res, open(out, "w"), indent=1, default=float)
     print(f"\nwrote {out}")
