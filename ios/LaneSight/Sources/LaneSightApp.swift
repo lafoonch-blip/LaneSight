@@ -14,11 +14,15 @@ struct LaneSightApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                switch model.gate {
-                case .unauthenticated: AuthFlow()
-                case .needsProfile:    ProfileSetupFlow()
-                case .ready:           RootTabs()
+                #if DEBUG
+                if let screen = ProcessInfo.processInfo.environment["LS_PREVIEW"], !screen.isEmpty {
+                    PreviewHarness(screen: screen)
+                } else {
+                    gateView
                 }
+                #else
+                gateView
+                #endif
             }
             .environmentObject(model)
             .tint(LS.action)
@@ -26,7 +30,51 @@ struct LaneSightApp: App {
             .preferredColorScheme(.dark)
         }
     }
+
+    @ViewBuilder private var gateView: some View {
+        switch model.gate {
+        case .unauthenticated: AuthFlow()
+        case .needsProfile:    ProfileSetupFlow()
+        case .ready:           RootTabs()
+        }
+    }
 }
+
+#if DEBUG
+/// DEBUG-only screen renderer for design verification against Figma. Launched with env vars
+/// (SIMCTL_CHILD_LS_PREVIEW=<screen> [+ LS_PREVIEW_EMAIL/LS_PREVIEW_PW for real data]), it auto-signs-in and
+/// renders one screen directly — no navigation (the simulator has no CLI tap). Never compiled into Release.
+struct PreviewHarness: View {
+    @EnvironmentObject var model: AppModel
+    let screen: String
+    @State private var ready = false
+    @State private var note: String?
+
+    var body: some View {
+        Group {
+            if !ready {
+                ProgressView("Loading \(screen)…").tint(LS.action)
+            } else {
+                switch screen.lowercased() {
+                case "home":  RootTabs()
+                case "setup": NavigationStack { SetupView() }
+                case "stats": StatsView()
+                case "lab":   LabView()
+                default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
+                }
+            }
+        }
+        .task {
+            let env = ProcessInfo.processInfo.environment
+            if let e = env["LS_PREVIEW_EMAIL"], let p = env["LS_PREVIEW_PW"], !model.isAuthenticated {
+                do { try await model.signIn(email: e, password: p) }
+                catch { note = "auto-login failed: \(error)" }
+            }
+            ready = true
+        }
+    }
+}
+#endif
 
 /// Bottom tabs per HANDOFF §4/§5 + DEC-055: Home · Stats · Lab · Leagues · Tourneys.
 /// Capture is reached via Lab → Start Live Session → Setup.
