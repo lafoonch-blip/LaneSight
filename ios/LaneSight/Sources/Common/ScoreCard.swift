@@ -59,6 +59,25 @@ struct ScoreCard: View {
                     }
                     Spacer()
                 }
+                if let (next, pct) = tierProgress(value) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Text("Progress to \(next)").font(.lsCaption2).foregroundStyle(LS.textSecondary)
+                            Spacer()
+                            Text("\(Int((pct * 100).rounded()))%").font(.lsCaption2.bold()).foregroundStyle(LS.textPrimary)
+                        }
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(LS.border).frame(height: 5)
+                            GeometryReader { g in
+                                Capsule().fill(LS.cyan).frame(width: max(0, g.size.width * CGFloat(pct)), height: 5)
+                            }
+                            .frame(height: 5)
+                        }
+                        .frame(height: 5)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Progress to \(next), \(Int((pct * 100).rounded())) percent")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Building your score", systemImage: "hourglass")
@@ -129,5 +148,16 @@ struct ScoreCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(part.name) \(part.value == nil ? "building" : String(Int(part.value!.rounded()))) of 100, \(part.weight) percent of score")
+    }
+
+    /// Next tier + progress toward it, from the DEC-038 tier bands. Onyx (top) returns nil (no bar).
+    private func tierProgress(_ score: Double) -> (next: String, pct: Double)? {
+        let bands: [(lo: Double, hi: Double, next: String)] = [
+            (0, 400, "Silver"), (400, 550, "Gold"), (550, 700, "Platinum"), (700, 850, "Onyx"),
+        ]
+        for b in bands where score < b.hi {
+            return (b.next, min(1, max(0, (score - b.lo) / (b.hi - b.lo))))
+        }
+        return nil
     }
 }
