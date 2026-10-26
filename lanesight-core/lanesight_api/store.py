@@ -25,7 +25,7 @@ _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion'
 # speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
 # location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
 _PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style',
-                 'approach_steps', 'form_baseline', 'location'}
+                 'approach_steps', 'form_baseline', 'location', 'is_staged', 'staged_kind'}
 
 
 def _profile_in(data: dict) -> dict:
@@ -38,7 +38,8 @@ def _profile_in(data: dict) -> dict:
         out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
     if d.get('dob'):
         out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
-    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location'):
+    for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location',
+              'is_staged', 'staged_kind'):
         if d.get(k) is not None:
             out[k] = d[k]
     return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
@@ -225,6 +226,25 @@ class MemoryStore:
     def user_shots(self, user_id):
         return [sh for sh in self.shots.values() if sh['user_id'] == user_id]
 
+    def reset_user_data(self, user_id):
+        """Clear ALL per-user data (keeps the profile row, so is_staged/staged_kind survive). Used by the
+        staged-account seed --reset; the caller guards on is_staged. Idempotent."""
+        self.sessions = {k: v for k, v in self.sessions.items() if v.get('user_id') != user_id}
+        self.shots = {k: v for k, v in self.shots.items() if v.get('user_id') != user_id}
+        self.snapshots.pop(user_id, None)
+        self.feedback_rows = [f for f in self.feedback_rows if f.get('user_id') != user_id]
+        self.arsenal = {k: v for k, v in self.arsenal.items() if v.get('user_id') != user_id}
+        self.sensors = {k: v for k, v in self.sensors.items() if v.get('user_id') != user_id}
+        self.tier_state.pop(user_id, None)
+        self.tier_events.pop(user_id, None)
+        self.ach_progress = {k: v for k, v in self.ach_progress.items() if k[0] != user_id}
+        self.ach_unlocks = {k: v for k, v in self.ach_unlocks.items() if k[0] != user_id}
+        self.ach_pins.pop(user_id, None)
+        self.activity.pop(user_id, None)
+        self.notifications.pop(user_id, None)
+        self.findings.pop(user_id, None)
+        self.baselines = {k: v for k, v in self.baselines.items() if k[0] != user_id}
+
     # score
     def save_snapshot(self, user_id, snapshot):
         self.snapshots.setdefault(user_id, []).append(dict(snapshot, computed_at=time.time()))
@@ -256,7 +276,10 @@ class MemoryStore:
             is_upload=bool(d.get('is_upload', False)), rating=d.get('rating'), thumbs=d.get('thumbs'),
             tags=list(tags) if tags else [], text=d.get('text'), context=d.get('context'),
             diagnostics=d.get('diagnostics'), triage_status='new', owner_notes=None, action_ref=None,
-            anonymized_at=None, created_at=time.time(), updated_at=time.time())
+            anonymized_at=None, created_at=time.time(), updated_at=time.time(),
+            # mirror migration 018's trigger: staged feedback is flagged from the author's profile so it is
+            # excluded from feedback review/analytics (DEC-063).
+            is_staged=bool((self.profiles.get(user_id) or {}).get('is_staged')))
         self.feedback_rows.append(row)
         return row
 
@@ -1098,6 +1121,24 @@ class PgStore(MemoryStore):
                       {'anonymized_at': now,
                        'diagnostics': self._anonymize_diagnostics(r.get('diagnostics'))})
         return len(rows)
+
+    def reset_user_data(self, user_id):
+        """Delete ALL per-user data (keeps the auth user + profile row, so is_staged survives). Used by the
+        staged-account seed --reset on live; the caller guards on is_staged. FK-safe order: shots first
+        (cascades measurements/shot_intents/pin_states), tier_event before score_snapshot (FK snapshot_id),
+        user_balls (cascades configurations/surface_events). Feedback rows for this user are removed here
+        (staged feedback is disposable, unlike real feedback which is anonymized on account deletion)."""
+        order = ['shots', 'sessions',
+                 'tier_event', 'score_snapshot', 'user_tier_state',
+                 'user_achievement_unlock', 'user_achievement_progress', 'user_achievement_pin',
+                 'activity_item', 'notification', 'finding', 'personal_baseline',
+                 'user_balls', 'sensor_devices', 'feedback']
+        for table in order:
+            try:
+                self._req(f'{table}?user_id=eq.{user_id}', 'DELETE')
+            except Exception as e:                # a table may not exist in an older schema; keep going
+                print(f'reset_user_data: {table} delete skipped ({e})')
+        return True
 
     def delete_user(self, user_id):
         self.anonymize_feedback(user_id)      # keep feedback (de-identified); must run before the auth delete
