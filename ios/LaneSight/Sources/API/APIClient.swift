@@ -224,6 +224,11 @@ struct APIClient {
         return try await send(makeRequest(path), as: StatsResponse.self)
     }
 
+    /// Per-metric detail for the Stats metric-detail screens (GET /me/stats/metric/{metric}).
+    func metricDetail(_ metric: String) async throws -> MetricDetailResponse {
+        try await send(makeRequest("me/stats/metric/\(metric)"), as: MetricDetailResponse.self)
+    }
+
     // MARK: achievements
 
     func achievements() async throws -> AchievementsResponse {

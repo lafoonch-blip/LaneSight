@@ -432,6 +432,36 @@ struct ShotRowMetrics: Codable, Equatable {
     let arrows_board: Double?
 }
 
+// MARK: - Per-metric detail (GET /me/stats/metric/{metric})
+
+struct MetricDetailResponse: Codable {
+    let metric: String?
+    let n: Int?
+    let coverage: Double?          // measured / total (0…1)
+    let status: String?            // ok | building
+    let avg: Double?
+    let spread: Double?            // robust spread (1.4826·MAD)
+    let range: [Double]?           // [lo, hi]
+    let trend: [MetricTrendPoint]?
+    let by_ball: [MetricGroupStat]?
+    let by_pattern: [MetricGroupStat]?
+    let small_sample: Bool?
+}
+
+struct MetricTrendPoint: Codable, Identifiable {
+    let session_id: String?
+    let n: Int?
+    let mean: Double?
+    var id: String { session_id ?? UUID().uuidString }
+}
+
+struct MetricGroupStat: Codable, Identifiable {
+    let key: String?
+    let n: Int?
+    let mean: Double?
+    var id: String { key ?? UUID().uuidString }
+}
+
 // MARK: - Score-parts breakdown (GET /me/score/breakdown)
 
 struct ScoreBreakdown: Codable {
