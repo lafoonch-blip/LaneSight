@@ -31,7 +31,12 @@ struct MetricRing: View {
                 }
             }
             .frame(width: 48, height: 48)
-            if let subLabel { Text(subLabel).font(.system(size: 8, weight: .medium)).foregroundStyle(LS.bestEffort) }
+            // Always reserve the sublabel line so Speed / Rev Rate / Accuracy cards are identical height
+            // (the "best effort" note no longer makes Rev Rate taller than the others).
+            Text(subLabel ?? " ")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(LS.bestEffort)
+                .opacity(subLabel == nil ? 0 : 1)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 7).padding(.bottom, 6).padding(.horizontal, 4)

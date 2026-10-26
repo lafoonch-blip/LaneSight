@@ -143,14 +143,29 @@ struct LaneRecreationView: View {
 
     // MARK: lines
 
-    /// Your measured line: laydown → arrows → breakpoint → entry (only the points that exist).
+    /// Your measured line: foul line → arrows → breakpoint → entry. The tracer always starts at the foul
+    /// line (0 ft): if the lay-down board was measured we use it, otherwise we extend the measured
+    /// pre-breakpoint path back to the foul line so the line reads as a full delivery. The back-projection
+    /// is visual only — no "Laydown" number is shown or reported when it wasn't measured.
     private func yourPoints(_ g: LaneGeometry) -> [CGPoint] {
         var pts: [CGPoint] = []
-        if let b = laydown { pts.append(g.point(dFt: 2, board: b)) }
+        if let b = foulLineBoard { pts.append(g.point(dFt: 0, board: b)) }
         if let b = actualArrows { pts.append(g.point(dFt: 15, board: b)) }
         if let b = actualBreakpoint { pts.append(g.point(dFt: g.bpDistFt, board: b)) }
         if let b = entryBoard { pts.append(g.point(dFt: 60, board: b)) }
         return pts
+    }
+
+    /// Board where the delivery crosses the foul line. Measured lay-down if we have it; otherwise the
+    /// measured arrows/breakpoint path projected straight back to 0 ft (the pre-breakpoint track is nearly
+    /// straight), so the tracer reaches the line. Nil only when there isn't even an arrows board.
+    private var foulLineBoard: Double? {
+        if let b = laydown { return b }
+        guard let a = actualArrows else { return nil }
+        guard let bp = actualBreakpoint, breakpointDistanceFt ?? 40 > 15 else { return a }
+        let bpFt = breakpointDistanceFt ?? 40
+        let slope = (bp - a) / (bpFt - 15)           // boards per foot over the measured segment
+        return max(1, min(39, a - slope * 15))       // extend back to the foul line (0 ft), clamped to the lane
     }
 
     /// Intended target line: feet (stance) → arrows → breakpoint (only the points that exist).
