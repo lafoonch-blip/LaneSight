@@ -19,8 +19,10 @@ iOS app --upload--> Cloud Run service (FastAPI) --runs CV INLINE in the request 
   one instance). A 2nd simultaneous upload waits. Fine for a few testers; raise later.
 - **Durable result:** the shot record + measurements are written to Supabase by the analysis, so a dropped
   connection can still recover the result (see "iOS contract" + the durable-jobs follow-up).
-- **Free-tier fit:** ~2 min/analysis ≈ 120 vCPU-sec; the Cloud Run free tier (180k vCPU-sec, 360k GiB-sec,
-  2M req/mo) covers ~1,000+ analyses/month — effectively $0 for this phase. (Benchmark real CPU/RAM to confirm.)
+- **Free-tier fit (MEASURED 2026-10-26, full pipeline on IMG_8902):** peak RAM **~1.8 GB** (→ use **4 GiB**;
+  2 GiB is too tight), total CPU work **~191 vCPU-sec/analysis** (26 s wall on an 8-core Mac; ≈ **90 s wall on
+  `--cpu 2`**). Cloud Run free tier (180k vCPU-sec, 360k GiB-sec, 2M req/mo) → **~900 analyses/month free** →
+  effectively **$0** for a few testers.
 
 ## One-time setup (Shayne — interactive)
 1. Install the CLI: `brew install --cask google-cloud-sdk` (or https://cloud.google.com/sdk/docs/install).
