@@ -262,7 +262,8 @@ struct Recommendation: Codable, Equatable {
     let direction: String?       // "left" | "right"
     let move_feet: Double?
     let move_target: Double?      // whole boards (backend sends a number, not a string)
-    let reason: String?
+    let reason: String?           // WHY — the evidence for the move
+    let expected: String?         // EXPECTED EFFECT — what the move should achieve (MVP-06; may be absent)
     let confidence: String?       // qualitative level: "low" | "medium" | "high" (NOT numeric)
 }
 

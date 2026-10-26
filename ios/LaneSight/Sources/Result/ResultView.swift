@@ -225,6 +225,10 @@ struct ShotCardView: View {
             if let reason = result.insightsNote ?? rec?.reason, !reason.isEmpty {
                 Text(reason).font(.lsCallout).foregroundStyle(LS.textSecondary)
             }
+            if let expected = rec?.expected, !expected.isEmpty {   // MVP-06: expected effect of the move
+                Label(expected, systemImage: "arrow.right.circle")
+                    .font(.lsCallout).foregroundStyle(LS.action)
+            }
             if let suggested, suggested.hasBoard {
                 newTargetSummary(suggested)
                 if moveApplied {
