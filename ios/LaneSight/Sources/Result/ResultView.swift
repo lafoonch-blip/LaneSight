@@ -59,6 +59,7 @@ struct ShotCardView: View {
                     if result.isUpload { uploadFooter }
                     ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
                     analyzedFooter
+                    if !result.isUpload && !result.isForm { recordNextCTA }
                     Color.clear.frame(height: 1).id("ls-bottom")
                 }
                 .padding(16)
@@ -74,10 +75,10 @@ struct ShotCardView: View {
             }
             #endif
             .background(LSBackground())
-            .navigationTitle("Shot")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss(); model.resetPipeline() }
                 }
@@ -481,6 +482,32 @@ struct ShotCardView: View {
     }
 
     // MARK: ball metrics grid
+
+    // Two-line nav title: "Shot N" (real session ordinal; falls back to "Shot" when absent) + a context
+    // subtitle. For a form clip it reads "Form Analysis".
+    private var headerTitle: some View {
+        let title = result.isForm ? "Form Analysis" : (result.shotNumber.map { "Shot \($0)" } ?? "Shot")
+        let subtitle = result.isForm ? "Form Analysis"
+            : (result.isUpload ? "Uploaded clip · Shot Analysis" : "Shot Analysis")
+        return VStack(spacing: 1) {
+            Text(title).font(.lsHeadline).foregroundStyle(LS.textPrimary)
+            Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+        }
+    }
+
+    // Live in-session CTA (Figma 413:4129 bottom): record the next shot. Dismisses back to capture.
+    private var recordNextCTA: some View {
+        Button {
+            dismiss(); model.resetPipeline()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "circle.fill").font(.system(size: 14))
+                Text(result.shotNumber.map { "Record Shot \($0 + 1)" } ?? "Record next shot")
+            }
+        }
+        .buttonStyle(PrimaryButtonStyle())
+        .padding(.top, 4)
+    }
 
     // v3.7 shot result badge (Figma 413:4143). "Change" lets the bowler report the leave when the deck
     // couldn't be read (wiring the report sheet is a follow-up).

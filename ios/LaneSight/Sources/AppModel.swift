@@ -44,6 +44,10 @@ struct ShotResult: Equatable {
     var formVersion: String?
     var formFPS: Double?
 
+    /// 1-based shot number within its session, for the "Shot N" header. Nil for an uploaded clip that
+    /// isn't part of a live session (no honest ordinal → the header falls back to "Shot").
+    var shotNumber: Int? = nil
+
     // Form fundamentals v1 (DEC-057): the after_form_analyzed footer fields carried from the shot record.
     var keyFrames: [String] = []
     var events: [String: Double] = [:]
@@ -557,13 +561,14 @@ final class AppModel: ObservableObject {
                                    insightsNote: isForm ? nil : insights?.note,
                                    captureFarLaneLimited: record?.capture_quality?.far_lane == "limited",
                                    captureReason: record?.capture_quality?.reason,
-                                   // This loader backs the Lab › Uploads row → an upload unless the record
-                                   // explicitly says it was a live shot.
-                                   isUpload: record?.source != "live",
+                                   // Prefer the shot row's top-level source (reliable); fall back to the
+                                   // record's. An upload unless either says it was a live shot.
+                                   isUpload: (shot.source ?? record?.source) != "live",
                                    isForm: isForm,
                                    formView: record?.view,
                                    formStatus: record?.status,
                                    formVersion: record?.form_version)
+            built.shotNumber = shot.sequence
             if isForm { Self.attachFormFundamentals(&built, record) }
             result = built
             return true

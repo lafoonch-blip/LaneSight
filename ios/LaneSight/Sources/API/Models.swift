@@ -80,6 +80,9 @@ struct AchievementNudge: Codable, Equatable, Identifiable {
 struct ShotResponse: Codable {
     let id: String?
     let record: ShotRecord?
+    let sequence: Int?          // 1-based shot number within its session (for the "Shot N" header)
+    let capture_mode: String?
+    let source: String?
 }
 
 struct ShotRecord: Codable {
