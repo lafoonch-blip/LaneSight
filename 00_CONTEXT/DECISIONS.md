@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.33  
+Version: 1.41  
 Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v1.32
+Supersedes: v1.40
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -756,7 +756,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** In the dev build the analysis type could be changed while a video was analyzing, which can corrupt or mislabel the result; sleep during analysis interrupts the job.
 **Date:** 2026-10-26
-**Status:** ACCEPTED (dev build and target state)
+**Status:** ACCEPTED (dev build and target state). Briefly superseded by DEC-078, reinstated by DEC-080.
 **Supersedes:** the non-blocking Analyzing screen (4b) behavior.
 
 ### DEC-069 — Lab starts with the analysis mode, then live or upload; PBA compare hidden for now
@@ -796,7 +796,142 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED (target state)
 **Supersedes:** the capture-screen target chip and Edit-target sheet (Dev Build v0 designs 2.0 / 4a) for target state.
 
+### DEC-072 — Session end: score popup, then a session-focused summary (also used for past sessions)
+**Decision (Shayne, 2026-10-26):**
+- **On End session**, a temporary popup shows the LaneSight Score and tier progress plus the change in the score parts and core metrics (up / down / no change). It closes on its own after a few seconds or with "See session summary".
+- The **Session summary** is about the session, not the score:
+  - a compact score row (score, change, tier) that opens the same popup;
+  - all core stats from the in-session view;
+  - **early vs late trends** per metric (first vs last shots of the session, with a per-shot sparkline), so the bowler sees warm-up and fatigue effects (e.g. speed up after warm-up, revs down late);
+  - lane transition, the bowler's rating, and **all shots listed at the bottom** as on the Active Session screen.
+- The **same screen opens for a past session** from history. There is no separate past-session view.
+- The session feedback sheet still appears after the session ends (DEC-053).
+- Applies to the target-state (MVP) designs. The dev build follows when its designs are next updated.
+
+**Why:** Keep the summary focused on what happened in this session and how it changed; score and tier progress get their own moment at the end.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Supersedes:** the separate Session summary (13) and Past session (6a) layouts in Dev Build v0 designs 3.7 for target state; DEC-035's "No Session Summary screen" (already superseded in practice by the dev build).
+
+### DEC-073 — Metric hierarchy per moment; Form session summary; Stats tabs Score · Shot · Form · Equipment
+**Decision (Shayne, 2026-10-26):**
+- Each screen shows the metrics that matter at that moment, per `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md`. Rules: show a metric only where it explains performance or drives a decision; show spread next to averages; end every summary with one takeaway; no invented composites (no Session Score, Form score or carry).
+- **Shot card:** result, lane picture and next move first; top rings are Speed, Rev rate and Accuracy; entry angle, breakpoint, laydown, loft and impact energy sit in the expanded metrics.
+- **Shot session summary** (DEC-072) adds a one-line takeaway at the top, averages with spread (e.g. 17.8 ± 0.4 mph), and a by-ball split when 2+ balls were used.
+- **New Form session summary:** repeatability across deliveries (approach time, release timing, ball start, swing time, spine tilt) against the Profile baseline, early vs late trends, one focus and drill, and all deliveries. It does not change the LaneSight Score, so there is no score popup for form sessions.
+- **Stats tabs:** Score · Shot (was "Throw") · Form · **Equipment** (by ball, by oil pattern). Filters: period (30 / 90 days / all time), ball and oil pattern. No session-type filter (practice only).
+- Not adopted: carry metrics, knee flexion, and drift as a primary form metric; the shot↔form "intelligence layer" is post-MVP and must be worded as association, not cause.
+- Applies to the target-state (MVP) designs. The dev build follows when its designs are next updated.
+
+**Why:** ChatGPT's metric-hierarchy review (2026-10-26), adjusted to existing decisions; keeps each screen focused while the stored data stays complete.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state); spec v0.1 is a draft for review
+**Supersedes:** the Score / Throw / Form tab set (Dev Build v0 designs 3.7) for target state.
+
+### DEC-074 — Grip (pitch, span) and PAP belong to the bowler profile, not the ball
+**Decision (Shayne, 2026-10-26):**
+- Middle pitch, span and PAP (over / up) are **bowler** measurements. They are set once in **Profile › Advanced** and used for every ball.
+- **Ball setup** (add from catalog and view / edit) has no pitch, span or PAP fields. Its drilling section is layout, surface (finish) and weight.
+- Applies to the target-state (MVP) designs. The dev build follows when its designs are next updated.
+
+**Why:** These values describe the bowler's hand and axis, not a ball; entering them per ball duplicates data and invites mismatches.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Supersedes:** the "Pitch / span · From profile" row on Ball setup (Figma, Dev Build v0 designs 20).
+
+### DEC-075 — Form key-position thumbnails and upload thumbnails come from the bowler's own clip
+**Decision (Shayne, 2026-10-26):**
+- The Key positions row on Form results (ball start, end of pushaway, top of swing, release) shows **frames taken from that delivery's video** at the detected event times. Tapping one opens that frame. No stock or illustrated poses.
+- Upload clip thumbnails are a frame from the uploaded clip.
+- Design default (not yet reviewed): if an event isn't detected, its tile shows the event name with "Not detected" instead of a frame.
+- Marketing imagery stays separate: the Shot and Form Analysis card images are LaneSight-generated and kept; the Welcome hero keeps its composition and will be replaced with an AI-generated image of Shayne (asset to come).
+
+**Why:** The thumbnails are evidence for the timing call; they must show the bowler's actual body position in that delivery.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+
+### DEC-076 — Form Analysis detects the camera view; thumbnails and metrics follow it
+**Decision (Shayne, 2026-10-26):**
+- The app detects the camera view of each Form clip (side, rear/behind, or front) from the video itself; the bowler does not pick it.
+- Form results show the detected view in the header (e.g. "rear view (detected)").
+- The Key positions thumbnails (DEC-075) are frames from that clip, so they show the bowler from the detected view.
+- The metric set follows the view (FORM_ANALYSIS_SPEC §5.1). Metrics the view can't see show UNAVAILABLE with the view they need (e.g. "Side view"), never a number.
+- Design defaults (not yet reviewed): if detection is unsure, the result shows the best guess and the bowler can correct the view on the results screen; the rear-view example screen measures drift and balance arm (best effort) and marks spine tilt and foul-line distance as needing a side view, with steps best effort.
+
+**Why:** One recording supports one view (DEC-040). Showing the wrong pose angle or a metric the camera can't see would undermine trust in the timing call.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Extends:** DEC-075.
+
+### DEC-077 — MVP LaneSight Score uses the DEC-048 formula (provisional)
+**Decision (Shayne, 2026-10-26):**
+- The MVP (target-state) LaneSight Score is **DEC-048's formula**: `L = round(10 × (0.40·S' + 0.25·A + 0.25·C + 0.10·P'))`, with S' = 0.6 × pocket% + 0.4 × entry-angle-in-4–6° share, A = DEC-031, C = DEC-032, P' = power from ball data (entry speed, rev rate when its band is in target, entry angle, ball weight; no carry).
+- Same eligibility floors (20 / 20 / 10 / 10 shots), 90-day window, snapshot per recompute, and no silent reweighting.
+- In MVP it is labeled **provisional** (not "Beta · dev formula"). Tiers use DEC-038's working thresholds.
+- Strike % is shown in Stats but is **not** part of S'.
+- DEC-038's full formula (game score, spare conversion, Power & Carry) stays the long-term target and needs pinfall data first.
+
+**Why:** DEC-066 removes game scores and spares from MVP, so DEC-038's S can't be computed; Home still needs a real, computed score.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+**Extends:** DEC-048 from dev/Beta to MVP. DEC-038 remains the post-MVP target.
+
+### DEC-078 — Analysis runs in the background with the clip's settings locked
+**Decision (Shayne, 2026-10-26):**
+- After a shot is recorded, the app confirms it ("Shot 14 received · analyzing") and the bowler can keep using the session and record the next shot. No blocking modal.
+- The clip's analysis type, target, ball and oil are **locked to that clip** when it is recorded; later changes apply only to new shots.
+- The shot row and latest-shot card show **Analyzing…** until results arrive, then update in place. Failures show on that shot with Retry (no re-recording).
+- The screen stays awake while any analysis is running (kept from DEC-068).
+
+**Why:** Analysis can take 1–2 minutes (longer after a cold start); blocking between shots stalls a session. Locking per clip keeps DEC-068's protection against mislabeled results.
+**Date:** 2026-10-26
+**Status:** WITHDRAWN 2026-10-26 — superseded by DEC-080.
+**Supersedes:** DEC-068's blocking modal. DEC-068's keep-awake rule stays.
+
+### DEC-079 — v3.7 design review changes (ChatGPT review, 2026-10-26)
+**Decision (Shayne, 2026-10-26):** Apply to the target-state designs:
+- **Active Session** leads with the latest shot (result, lane picture, next move, Record), then a compact 4-metric row (Speed, Rev rate, Accuracy, Consistency), with shot history and lane transition collapsed below.
+- **Recommendations** follow move → evidence → expected effect. Pin result, target execution, pocket entry and lane reaction are labeled separately.
+- **Home** adds a "Your next focus" card below a more compact score breakdown.
+- **Session summary** leads with What went well / What to improve / Next focus and a "vs your typical" comparison, shown only with enough comparable shots.
+- **Setup** defaults to the last-used ball, oil and target, and shows one "Ready to bowl" line above the detailed checks; the service check does not imply a warm worker.
+- **Lab** explains uploads vs sessions in plain language.
+- **Form results** lets the bowler tap a key position or checkpoint to play the video from that frame; Early / On time / Late are judged against the bowler's own baseline.
+- **Stats** metric tiles open a detail view; Shot stats add an Accuracy trend; Impact Energy is labeled as not a carry prediction (DEC-024).
+- **States** added: resume an interrupted session, retry an upload without re-recording, first-use baseline explainer, small-sample labels.
+- Not adopted: Practice / League / Tournament filters in Lab (DEC-067).
+
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+
+### DEC-080 — Shot flow: Analyzing screen, then shot details (DEC-078 withdrawn)
+**Decision (Shayne, 2026-10-26):**
+- After the bowler stops recording, the app shows the **Analyzing screen** (DEC-068: blocking, controls locked, screen stays awake) until results are ready.
+- It then opens the **shot details** (Shot card) automatically. The bowler always sees the result and analysis before moving on.
+- From shot details the bowler can **close** (back to the Active Session) or **record the next shot** directly.
+- The bowler stops each recording by tapping (DEC-035). Stop timing isn't critical: the pins have settled by the time the bowler walks back, and analysis trims the clip to the shot window.
+- Upload or analysis failures are shown on the Analyzing screen with Retry; a failed upload stays saved on the phone (DEC-079 states).
+
+**Why:** Seeing each shot's result and next move before the next shot is the core practice loop; a background flow let bowlers skip it.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state and dev build)
+**Supersedes:** DEC-078 (withdrawn). Reinstates DEC-068.
+
+### DEC-081 — Form Analysis live flow; no ball or oil for Form; first-use and detail screens
+**Decision (Shayne, 2026-10-26):**
+- **Ball and oil pattern are not used for Form Analysis**, live or upload. Form setup shows camera-view guidance instead.
+- **Form recording works from the side or from behind**; the view is detected automatically (DEC-076), and the record screen's spot check says which view it sees.
+- **Live Form flow** (mirrors DEC-080): Setup → Record delivery → Analyzing screen → Form results → **Record next delivery** or **close** to the Form session → End session → Form session summary.
+- **Metric detail screens** follow the Speed template: average, spread, range, coverage, trend by session, by ball and by oil pattern, with small samples labeled.
+- **First-use and permission screens** are part of the MVP designs.
+- Design defaults (not yet reviewed): camera access is explained before the iOS prompt, with a denied state that offers Open Settings or uploading a video; there is no Photos permission screen because the iOS video picker needs none; new users see "Building your LaneSight Score" on Home and Stats and empty Lab lists.
+
+**Why:** Ball and oil don't affect body mechanics; the live Form loop should match the Shot loop so bowlers see each delivery's result before the next.
+**Date:** 2026-10-26
+**Status:** ACCEPTED (target state)
+
 ## Superseded decisions
+- DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).
 - DEC-011 — withdrawn; replaced by DEC-054 (official Figma logo).
@@ -812,3 +947,4 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-050 — "no strike" superseded by DEC-066 (strike / not-strike per throw); no game scores, spares or leaves still stands.
 - DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
 - DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
+- DEC-035 — "No Session Summary screen" superseded by DEC-072 (score popup on end, session summary also used for past sessions).

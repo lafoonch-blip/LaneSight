@@ -1,7 +1,7 @@
 # Metric & Scoring Logic (current-state register)
 Status: CANONICAL
-Version: 1.3
-Last Updated: 2026-10-22
+Version: 1.4
+Last Updated: 2026-10-26
 Owner: Shayne
 
 **Purpose.** One page that states the **current** formula for every LaneSight metric and score, so nobody has to trace the supersession chain in `DECISIONS.md` (e.g. speed is DEC-022 → DEC-030 → DEC-036). 
@@ -28,8 +28,8 @@ Owner: Shayne
 - **Home:** badge + L + tier + qualified trend + next-tier progress; directly beneath four tiles S 40%, A 25%, C 25%, P 10%, displaying unknown values as unavailable.
 - **Standard vs Advanced:** envisioned complementary data-coverage modes, **not yet defined/calibrated score alternatives**. Do not issue Standard-only L on the advanced formula.
 
-### LaneSight Score — `L-dev-0` (0–1,000) · DEC-048 — **dev/Beta build only**
-The score **actually used in Dev Build v0 and friends Beta**, because DEC-038's `S` and `P` need pinfall and game scores the dev build doesn't collect (DEC-050). **This is not the target formula — DEC-038's `L` remains the target** and this one never substitutes for it outside dev/Beta. Always labeled **"Beta · dev formula"** in the UI.
+### LaneSight Score — `L-dev-0` (0–1,000) · DEC-048 — **dev/Beta build and MVP (DEC-077, provisional)**
+The score **actually used in Dev Build v0 and friends Beta**, because DEC-038's `S` and `P` need pinfall and game scores the dev build doesn't collect (DEC-050). **This is not the target formula — DEC-038's `L` remains the target** and this one never substitutes for it outside dev/Beta. Always labeled **"Beta · dev formula"** in the dev build. **Update 2026-10-26 (DEC-077):** MVP also uses this formula, labeled **"provisional"**, because MVP has no game scores or spares (DEC-066). Strike % is shown in Stats but is not part of S′. DEC-038's full `L` stays the post-MVP target once pinfall exists.
 `L-dev-0 = round(10 × (0.40·S' + 0.25·A + 0.25·C + 0.10·P'))`, each component 0–100.
 - **S′ (performance, no pinfall)** = `0.6 × pocket% + 0.4 × angle%`, where pocket% = share of shots whose **entry board** is in the pocket range (16–19 right-handed, mirrored for left) and angle% = share of shots with **entry angle** in 4–6°. Replaces DEC-037's game-score `S`.
 - **A** = Accuracy, DEC-031 (unchanged; see below).

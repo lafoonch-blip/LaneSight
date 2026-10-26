@@ -1,7 +1,7 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.7
-Last Updated: 2026-10-25
+Version: 3.8
+Last Updated: 2026-10-26
 
 ## Role of this folder
 - **This folder is the single source of truth for the Dev Build v0 screens.** Claude Code builds the iOS UI from these files.
@@ -24,6 +24,11 @@ Last Updated: 2026-10-25
 - **Moves (3.7):** always in **boards**, never ft. At most 2 boards with the feet and 1 with the eyes per shot; bigger moves need 2+ shots that agree. Boards are clamped to 1–39. No "Apply this move" primary button unless the move is confident.
 
 ## Changelog
+- **3.8 (2026-10-26):** shot loop and ball setup.
+  - **Shot card (DEC-080):** after analysis the shot card opens automatically. Top-left is now **Close** (✕, back to the session); a **Record shot N** button and a **Close · back to session** link sit above the footer. Frame 2410 px.
+  - **Analyzing:** copy says the screen stays on and the shot card opens when ready (analysis no longer runs on the Mac).
+  - **Ball setup (DEC-074):** the "Pitch / span · From profile" row is removed; pitch, span and PAP live only in Profile › Advanced.
+  - Target-state decisions DEC-071–079 and DEC-081 apply to the Figma MVP designs, not this build, unless a later DEC says so.
 - **3.7 (2026-10-25):** states, pickers and failures (design review + `02_RESEARCH/SHOT_REVIEW_2026-10-25_14b234c8.md`).
   - **New:** `NextShotStates` (5a: strike, missed target, pins not read, not enough reliable data, low-confidence move, camera-spot banner, upload footer, status-chip legend), `BallPicker` (3a), `OilPicker` (3b), `SensorPicker` (5b), `Failures` (4c: Mac unreachable at pre-flight / queued / mid-job, unsupported clip, duplicate upload), `SessionReview` (6a: ended session, read-only), `Under13` (18a).
   - **Changed:** Summary and Feedback drop "Lane 14"; Session drops the HIT MARK badge and links Change to the ball picker; Setup rows link to the ball and oil pickers; Shot says "boards" and "Yes · pick sensor" opens the sensor picker; Form EARLY/LATE chips use attention yellow (#F5CD31), not data colors; Analyzing says "Usually 1–3 min today".
