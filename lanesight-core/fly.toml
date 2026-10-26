@@ -1,0 +1,37 @@
+# Fly.io config for the LaneSight backend (DEPLOY_FLY.md). `fly launch` may rewrite app/primary_region —
+# keep the http_service, mounts and vm blocks below.
+app = "lanesight-api"            # becomes https://lanesight-api.fly.dev (or pick your own at `fly launch`)
+primary_region = "iad"           # pick the region CLOSEST TO YOUR SUPABASE PROJECT (lots of DB round-trips)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LANESIGHT_DATA = "/data"       # the persistent volume (avatars live here across redeploys)
+  MPLBACKEND = "Agg"
+
+[http_service]
+  internal_port = 8080
+  force_https = true             # public HTTPS — no more plain-HTTP tailnet; simpler iOS ATS
+  # CV jobs are long and the job queue is in-memory, so DO NOT scale to zero — keep one machine running.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "25s"
+
+# Persistent disk for DATA_ROOT (avatars + any retained output). CV temp files are fine to lose on restart.
+[[mounts]]
+  source = "lanesight_data"
+  destination = "/data"
+
+# Video decode + stabilization (80-frame median of 1080x1920) is memory-hungry. Start at 4 GB; drop to 2 GB
+# if the analyze path stays comfortably under, or bump if you see OOM kills in `fly logs`.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "4gb"
