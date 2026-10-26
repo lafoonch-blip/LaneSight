@@ -115,6 +115,13 @@ clips first — **8907 (34 mph), 8893 (elevated/off-lane), 8895, 8903** — then
 **8900/8908** (test the approach-dot anchor), then the **positive controls 8902/8899/8904**, then the
 no-impact group. **Exclude or re-stabilize 8901** (the "14k px" is the stabilizer diverging, not motion).
 
+> **Scope of this verdict (Shayne, 2026-10-26):** this establishes a limitation of **this specific camera
+> configuration** (elevated, off-axis, multi-lane ball-return) **under the single-plane homography method**,
+> on the available visual evidence — NOT that all elevated viewpoints or all reconstruction techniques are
+> unusable. A full 3D pose (PnP) using pins as 3D landmarks, or a lower/squarer elevated position, is untested
+> and is exactly what Phase 2 evaluates. The product goal remains: extract the maximum accurate information
+> from any ordinary phone recording, returning partial results rather than rejecting a video.
+
 ## 3. RESULTS — geometry proof on Shayne's verified labels (2026-10-26)
 
 Shayne labeled 15 clips: foul corners + 7 pin spots as exact anchors, plus arrows/dots/approach-dots as

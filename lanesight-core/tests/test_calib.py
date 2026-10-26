@@ -232,6 +232,49 @@ def test_geometry_meta_anchors_vs_intervals():
     assert len(m["arm_order"]) == len(set(m["arm_order"]))   # no dupes in the cycle order
 
 
+def _diag(reproj=0.3, zones=4, sens=0.8):
+    return {"reproj_board_rmse": reproj, "longitudinal_zones": zones,
+            "sensitivity_per_px": {"entry_59ft": {"d_board_per_px": sens}}}
+
+
+def test_eligibility_green_full_analysis():
+    from lanesight_core.cv.calib import eligibility as E
+    checks = [{"name": f"arrow_{b}", "within": True} for b in (5, 10, 15, 20, 25, 30, 35)]
+    r = E.classify(diag=_diag(), interval_checks=checks, coverage={"near_ft": 0.5, "far_ft": 59.0}, far_ball_px=10)
+    assert r["tier"] == E.GREEN and r["emoji"] == "🟢"
+    assert r["metrics"]["entry_board"]["eligible"] and r["metrics"]["speed_early"]["eligible"]
+
+
+def test_eligibility_yellow_partial_when_far_fails():
+    from lanesight_core.cv.calib import eligibility as E
+    # good near calibration + early track, but ball only reaches 30 ft and conditioning is poor
+    r = E.classify(diag=_diag(sens=9.0), interval_checks=[], coverage={"near_ft": 0.5, "far_ft": 30.0})
+    assert r["tier"] == E.YELLOW
+    assert r["metrics"]["speed_early"]["eligible"] is True        # near-lane stays available
+    assert r["metrics"]["entry_board"]["eligible"] is False       # far-lane unavailable
+    assert "far" in r["metrics"]["entry_board"]["reason"]
+
+
+def test_eligibility_red_when_uncalibrated():
+    from lanesight_core.cv.calib import eligibility as E
+    r = E.classify(diag=None)
+    assert r["tier"] == E.RED and r["eligible_count"] == 0
+    assert E.track_coverage([{"z_ft": 2.0}, {"z_ft": 40.0}]) == {"near_ft": 2.0, "far_ft": 40.0}
+    assert E.track_coverage((1.0, 58.0)) == {"near_ft": 1.0, "far_ft": 58.0}
+
+
+def test_phase2_score_clip_on_synthetic(tmp_path):
+    """score_clip end-to-end on a synthetic verified anchor set (no video)."""
+    from lanesight_core.cv.calib.phase2 import score_clip
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    p = tmp_path / "SYNTH.landmarks.json"
+    ls.to_json(str(p))
+    centers = [(0.5 + z / 25.0, *(_project(H_wi_true, LANE_IN / 2, float(z)))) for z in np.arange(0.5, 58.5, 1.0)]
+    r = score_clip(str(p), centers=centers)
+    assert r["calibrated"] is True
+    assert "tier" in r["eligibility"] and r["eligibility"]["tier"] in ("full", "partial", "reposition")
+
+
 def test_resolution_scale_invariant_bounds():
     """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
     from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT
