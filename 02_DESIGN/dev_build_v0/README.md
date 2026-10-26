@@ -1,6 +1,6 @@
 # Dev Build v0 — Screen designs (SOURCE OF TRUTH)
 Status: APPROVED · kept in sync with the build
-Version: 3.6
+Version: 3.7
 Last Updated: 2026-10-25
 
 ## Role of this folder
@@ -20,7 +20,13 @@ Last Updated: 2026-10-25
 - The welcome hero photo and ball photos are placeholders. Ball photos come from catalog URLs.
 - Font is **Roboto Condensed** (bundle it in the app); drawn icons become SF Symbols. App icon and logo images come from `02_DESIGN/brand/ios/Assets.xcassets`.
 
+- **Metric status chips (3.7, one rule everywhere):** `ok`/`measured` → **MEASURED** (value). `best_effort`, `low_confidence`, `calibrated_estimate` → **BEST EFFORT** (rounded value, ± band when known). `unavailable` or anything else → **UNAVAILABLE**: never a number, always a reason.
+- **Moves (3.7):** always in **boards**, never ft. At most 2 boards with the feet and 1 with the eyes per shot; bigger moves need 2+ shots that agree. Boards are clamped to 1–39. No "Apply this move" primary button unless the move is confident.
+
 ## Changelog
+- **3.7 (2026-10-25):** states, pickers and failures (design review + `02_RESEARCH/SHOT_REVIEW_2026-10-25_14b234c8.md`).
+  - **New:** `NextShotStates` (5a: strike, missed target, pins not read, not enough reliable data, low-confidence move, camera-spot banner, upload footer, status-chip legend), `BallPicker` (3a), `OilPicker` (3b), `SensorPicker` (5b), `Failures` (4c: Mac unreachable at pre-flight / queued / mid-job, unsupported clip, duplicate upload), `SessionReview` (6a: ended session, read-only), `Under13` (18a).
+  - **Changed:** Summary and Feedback drop "Lane 14"; Session drops the HIT MARK badge and links Change to the ball picker; Setup rows link to the ball and oil pickers; Shot says "boards" and "Yes · pick sensor" opens the sensor picker; Form EARLY/LATE chips use attention yellow (#F5CD31), not data colors; Analyzing says "Usually 1–3 min today".
 - **3.6 (2026-10-25):** Shot card › **Your notes on this shot** at the bottom (DEC-058).
   - Optional quick tags (Hit my target, Missed left/right, Pocket, Light, High, Felt good, Pulled it) plus free text; autosaves; dictation works.
   - Stored with the shot for comparison with the measured results. Frame 2290 px; canvas rows 2 and 3 moved down.
