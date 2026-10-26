@@ -12,6 +12,25 @@ import uuid
 from .config import settings
 
 
+def _ts_epoch(v):
+    """Supabase timestamptz (ISO string) -> epoch seconds, matching the session API contract (MemoryStore uses
+    time.time(); iOS SessionRow decodes started_at/ended_at as Double). Numbers/None pass through."""
+    if v is None or isinstance(v, (int, float)):
+        return v
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(str(v).replace('Z', '+00:00')).timestamp()
+    except Exception:
+        return None
+
+
+def _epoch_session(row):
+    if row is not None:
+        row['started_at'] = _ts_epoch(row.get('started_at'))
+        row['ended_at'] = _ts_epoch(row.get('ended_at'))
+    return row
+
+
 def _new_id():
     return uuid.uuid4().hex
 
@@ -704,19 +723,20 @@ class PgStore(MemoryStore):
     # instance — needed for SessionReview, GET /sessions, and the 'vs your typical' comparison (MVP-07).
     def get_session(self, user_id, sid):
         rows = self._get('sessions', f'id=eq.{sid}&user_id=eq.{user_id}&select=*')
-        return rows[0] if rows else None
+        return _epoch_session(rows[0]) if rows else None
 
     def list_sessions(self, user_id):
-        return self._get('sessions', f'user_id=eq.{user_id}&select=*&order=started_at.desc')
+        return [_epoch_session(r)
+                for r in self._get('sessions', f'user_id=eq.{user_id}&select=*&order=started_at.desc')]
 
     def end_session(self, user_id, sid):
-        s = self.get_session(user_id, sid)
-        if not s:
+        if not self.get_session(user_id, sid):
             return None
         from datetime import datetime, timezone
-        ended = datetime.now(timezone.utc).isoformat()
-        self._req(f'sessions?id=eq.{sid}', 'PATCH', {'ended_at': ended})
-        return dict(session_id=sid, shots=len(self.session_shots(user_id, sid)), ended_at=ended)
+        now = datetime.now(timezone.utc)
+        self._req(f'sessions?id=eq.{sid}', 'PATCH', {'ended_at': now.isoformat()})   # ISO for the DB column
+        return dict(session_id=sid, shots=len(self.session_shots(user_id, sid)),
+                    ended_at=now.timestamp())                                        # epoch for the API contract
 
     _FEEDBACK_COLS = ('id', 'source', 'app_phase', 'app_version', 'core_version', 'rules_version',
                       'formula_version', 'user_id', 'user_ref', 'session_id', 'shot_id',
