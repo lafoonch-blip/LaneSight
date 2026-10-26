@@ -83,6 +83,20 @@ def test_reset_is_byte_stable_in_derived_state():
     assert first == second, 'reset -> re-seed is not byte-stable in derived state'
 
 
+def test_first_tier_achievement_values_are_numeric():
+    """Regression (live-seed 400): first_tier achievements must write NUMERIC current_value/target_value,
+    not the tier name — the columns are numeric (untyped MemoryStore hid this)."""
+    from lanesight_core.achievements.engine import evaluate
+    d = {'id': 'ACH-056', 'rule_type': 'first_tier', 'params': {'tier': 'silver'}}
+    reached = evaluate(d, {'reached': True, 'tier': 'silver'})
+    assert reached['unlocked'] is True
+    assert isinstance(reached['current_value'], (int, float))
+    assert isinstance(reached['target_value'], (int, float))
+    assert reached['current_value'] == 1 and reached['target_value'] == 1
+    not_reached = evaluate(d, {'reached': False, 'tier': 'bronze'})
+    assert not_reached['current_value'] == 0 and not_reached['unlocked'] is False
+
+
 def test_staged_feedback_flagged_and_excluded_from_review():
     store = _fresh_store()
     S.seed_account(store, 'active', CFG, 'local')

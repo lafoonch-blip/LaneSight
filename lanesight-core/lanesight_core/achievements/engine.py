@@ -113,9 +113,12 @@ def _baseline_delta(params, ctx):
 
 
 def _first_tier(params, ctx):
+    # Binary "reached this tier or not". current_value/target_value MUST be numeric — they persist to numeric
+    # columns (user_achievement_progress.current_value / user_achievement_unlock.value); writing the tier NAME
+    # here 400s on Postgres (worked only in the untyped MemoryStore). The tier itself is in params/the name.
     reached = bool(ctx.get('reached'))
     return _p('unlocked' if reached else 'locked', unlocked=reached,
-              current_value=ctx.get('tier'), target_value=params['tier'])
+              current_value=int(reached), target_value=1)
 
 
 _EVALUATORS = {
