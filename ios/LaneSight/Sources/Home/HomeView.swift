@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var history: [ScoreResponse] = []
     @State private var sessions: Loadable<[SessionRow]> = .idle
     @State private var activity: Loadable<[ActivityItem]> = .idle
+    @State private var focus: FocusResponse?
 
     var body: some View {
         NavigationStack {
@@ -15,6 +16,10 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
                             ScoreCard(score: s, history: history)
+                        }
+
+                        if let f = focus, f.status == "ok", let title = f.focus {
+                            nextFocusCard(f, title: title)
                         }
 
                         NavigationLink { SetupView() } label: { Text("Start practice") }
@@ -101,11 +106,35 @@ struct HomeView: View {
         }
     }
 
+    private func nextFocusCard(_ f: FocusResponse, title: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("YOUR NEXT FOCUS").lsEyebrow()
+            Text(title).font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+            if let detail = f.detail, !detail.isEmpty {
+                Text(detail).font(.lsCallout).foregroundStyle(LS.textSecondary)
+            }
+            NavigationLink { SetupView() } label: {
+                HStack(spacing: 4) {
+                    Text("Practice this focus")
+                    Image(systemName: "chevron.right").font(.lsCaption)
+                }
+                .font(.lsSubheadline.weight(.semibold)).foregroundStyle(LS.action)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lsCard()
+    }
+
     private func loadAll() async {
         await loadScore()
+        await loadFocus()
         await loadSessions()
         await loadActivity()
         if model.avatarImage == nil { await model.refreshAvatar() }   // show the photo in the header
+    }
+
+    private func loadFocus() async {
+        focus = try? await model.makeClient().focus()
     }
 
     private func loadActivity() async {

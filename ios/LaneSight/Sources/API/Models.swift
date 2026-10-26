@@ -38,6 +38,17 @@ struct UploadTarget: Codable {
     let upload_url: String
 }
 
+/// Home "next focus" (GET /me/focus, MVP-12): the single recurring issue across recent shots, or a
+/// building / keep-repeating state. `detail`/`expected` reuse a shot's own recommendation copy.
+struct FocusResponse: Codable, Equatable {
+    let status: String?       // "ok" | "building"
+    let focus: String?        // short title
+    let state: String?
+    let detail: String?
+    let expected: String?
+    let based_on: Int?
+}
+
 struct JobResponse: Codable {
     let id: String
     let kind: String?

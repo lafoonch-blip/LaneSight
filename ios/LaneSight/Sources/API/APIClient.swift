@@ -161,6 +161,10 @@ struct APIClient {
         try await send(makeRequest("me/score"), as: ScoreResponse.self)
     }
 
+    func focus() async throws -> FocusResponse {
+        try await send(makeRequest("me/focus"), as: FocusResponse.self)
+    }
+
     func scoreHistory() async throws -> [ScoreResponse] {
         try await send(makeRequest("me/score/history"), as: [ScoreResponse].self)
     }
