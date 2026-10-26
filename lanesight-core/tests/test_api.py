@@ -126,6 +126,24 @@ def test_live_shot_dedupe_is_session_scoped():
     assert store.find_shot_by_hash('u_liveidem', h, None) is None             # no session (upload) -> not here
 
 
+def test_last_setup_prefill():
+    # MVP-09: Setup prefills from the most recent LIVE shot's ball + intent and that session's oil; a later
+    # standalone upload must not override it.
+    store = get_store()
+    sid = store.create_session('u_setup', {'mode': 'practice', 'oil_pattern_id': 'oil-42'})['id']
+    store.create_shot('u_setup', sid, {'source': 'live', 'user_ball_id': 'ball-9',
+                                       'ball_configuration_id': 'cfg-9', 'intent': {'arrows_board': 10.0}})
+    store.create_shot('u_setup', None, {'source': 'upload', 'user_ball_id': 'ball-UPLOAD'})
+    b = client.get('/me/last-setup', headers={'X-Dev-User': 'u_setup'}).json()
+    assert b['user_ball_id'] == 'ball-9' and b['oil_pattern_id'] == 'oil-42'
+    assert (b.get('intent') or {}).get('arrows_board') == 10.0
+
+
+def test_last_setup_empty_for_new_user():
+    b = client.get('/me/last-setup', headers={'X-Dev-User': 'u_brandnew'}).json()
+    assert b == {'user_ball_id': None, 'ball_configuration_id': None, 'oil_pattern_id': None, 'intent': None}
+
+
 def test_session_score_feedback_export_flow():
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
     # inject a real analyzed record (validation ShotRecord) as a stand-in for the CV job output

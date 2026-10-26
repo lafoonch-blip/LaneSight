@@ -399,6 +399,12 @@ def me_score(user=Depends(current_user)):
     snap = store.latest_score(user)
     return snap or engines.recompute_score(store, user, trigger='shot')
 
+
+@app.get('/me/last-setup')
+def me_last_setup(user=Depends(current_user)):
+    """Prefill Setup with the last-used ball, oil pattern and target (MVP-09). Nulls for a new user."""
+    return get_store().last_setup(user)
+
 @app.get('/me/score/history')
 def me_score_history(user=Depends(current_user)):
     return get_store().score_history(user)

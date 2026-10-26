@@ -120,6 +120,20 @@ class MemoryStore:
         sh = self.get_shot(user_id, shot_id)
         return (sh or {}).get('intent') or None
 
+    def last_setup(self, user_id):
+        """Last-used ball + oil + target for prefilling Setup (MVP-09): the user's most recent LIVE shot's ball
+        and intent, and that session's oil pattern. Nulls when there's no live history yet."""
+        live = [sh for sh in self.shots.values()
+                if sh.get('user_id') == user_id and (sh.get('source') or 'live') != 'upload' and sh.get('session_id')]
+        shot = max(live, key=lambda s: s.get('created_at') or 0, default=None)
+        if not shot:
+            return {'user_ball_id': None, 'ball_configuration_id': None, 'oil_pattern_id': None, 'intent': None}
+        sess = self.sessions.get(shot.get('session_id')) or {}
+        return {'user_ball_id': shot.get('user_ball_id'),
+                'ball_configuration_id': shot.get('ball_configuration_id'),
+                'oil_pattern_id': sess.get('oil_pattern_id'),
+                'intent': self.get_shot_intent(user_id, shot['id'])}
+
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
     def get_profile(self, user_id):
         return _profile_out(self.profiles.get(user_id))
@@ -894,6 +908,26 @@ class PgStore(MemoryStore):
         rows = self._get('shot_intents', f'shot_id=eq.{shot_id}'
                          '&select=feet_board,laydown_board,arrows_board,breakpoint_board,breakpoint_ft')
         return rows[0] if rows else None
+
+    def last_setup(self, user_id):
+        try:
+            rows = self._get('shots', f"user_id=eq.{user_id}&source=neq.upload&session_id=not.is.null&"
+                             "order=created_at.desc&limit=1&select=id,session_id,user_ball_id,ball_configuration_id")
+        except Exception:
+            rows = []
+        if not rows:
+            return {'user_ball_id': None, 'ball_configuration_id': None, 'oil_pattern_id': None, 'intent': None}
+        shot = rows[0]
+        oil = None
+        try:
+            srows = self._get('sessions', f"id=eq.{shot['session_id']}&select=oil_pattern_id")
+            oil = srows[0].get('oil_pattern_id') if srows else None
+        except Exception:
+            pass
+        return {'user_ball_id': shot.get('user_ball_id'),
+                'ball_configuration_id': shot.get('ball_configuration_id'),
+                'oil_pattern_id': oil,
+                'intent': self.get_shot_intent(user_id, shot['id'])}
 
     # ----------------------------------------------------------------- rules / engine config (service role)
     def achievement_defs(self, active_only=False):
