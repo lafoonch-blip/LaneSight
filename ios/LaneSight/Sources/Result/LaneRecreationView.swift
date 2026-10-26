@@ -99,6 +99,14 @@ struct LaneRecreationView: View {
         foul.addLine(to: g.point(dFt: 0, board: 39.5))
         ctx.stroke(foul, with: .color(cPin), lineWidth: 2)
 
+        // Foul-line locator dots — the row of 7 guide dots just past the foul line (boards 5…35).
+        for b in stride(from: 5.0, through: 35.0, by: 5.0) {
+            let c = g.point(dFt: 2, board: b)
+            let r: CGFloat = 1.8
+            ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
+                     with: .color(cPin.opacity(0.85)))
+        }
+
         // Arrow triangles at the arrows (15 ft).
         for b in stride(from: 5.0, through: 35.0, by: 5.0) {
             let tip = g.point(dFt: 17, board: b)
@@ -109,12 +117,12 @@ struct LaneRecreationView: View {
             ctx.fill(tri, with: .color(Color(hex: 0x3A2412)))
         }
 
-        // Pin rack (standard 10-pin triangle) just inside the pin deck.
+        // Pin rack (standard 10-pin triangle) on the pin deck — drawn as little bowling-pin silhouettes
+        // (white body + red neck stripes) standing at the end of the lane, back rows slightly smaller.
         for pin in pinBoards {
             let c = g.point(dFt: pin.ft, board: pin.board)
-            let r: CGFloat = 3.2
-            ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
-                     with: .color(cPin))
+            let depthScale = 0.82 + 0.18 * CGFloat((pin.ft - 57) / 3)   // nearer rows a touch larger
+            drawPin(ctx, base: c, h: 15 * depthScale, w: 6.6 * depthScale)
         }
 
         // Target line (dashed blue) through the intended points that exist.
@@ -138,6 +146,40 @@ struct LaneRecreationView: View {
                      with: .color(Color(hex: 0x000F17)))
             ctx.stroke(Path(ellipseIn: CGRect(x: chip.point.x - r, y: chip.point.y - r, width: r * 2, height: r * 2)),
                        with: .color(cPin), lineWidth: 2)
+        }
+    }
+
+    /// Draws one bowling pin standing on the deck: a white pin silhouette (base flare → belly → neck →
+    /// head) with two red neck stripes. `base` is the board point on the deck; the pin stands up from it.
+    private func drawPin(_ ctx: GraphicsContext, base: CGPoint, h: CGFloat, w: CGFloat) {
+        let cx = base.x
+        let bottomY = base.y + h * 0.10            // base sits just below the deck point; pin rises from it
+        let hw = w / 2
+        // Half-width as a fraction of hw, from base (t=0) to the rounded head (t=1): flare, belly, neck, head.
+        let profile: [(t: CGFloat, f: CGFloat)] = [
+            (0.00, 0.58), (0.10, 0.86), (0.25, 1.00), (0.44, 0.58),
+            (0.60, 0.38), (0.77, 0.58), (0.90, 0.64), (1.00, 0.18),
+        ]
+        var path = Path()
+        for (i, p) in profile.enumerated() {               // left edge, base → head
+            let pt = CGPoint(x: cx - p.f * hw, y: bottomY - p.t * h)
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+        }
+        for p in profile.reversed() {                      // right edge, head → base
+            path.addLine(to: CGPoint(x: cx + p.f * hw, y: bottomY - p.t * h))
+        }
+        path.closeSubpath()
+        // Soft drop so the pins read as standing on the deck, then the white body + subtle edge.
+        ctx.fill(path.offsetBy(dx: 0, dy: 0.6), with: .color(Color(hex: 0x001018).opacity(0.35)))
+        ctx.fill(path, with: .color(cPin))
+        ctx.stroke(path, with: .color(Color(hex: 0xAEB6C2)), lineWidth: 0.4)
+        // Two red neck stripes (classic pin collar).
+        for (ty, fw) in [(CGFloat(0.52), CGFloat(0.50)), (CGFloat(0.61), CGFloat(0.42))] {
+            let y = bottomY - ty * h
+            let halfw = fw * hw
+            let stripe = Path(roundedRect: CGRect(x: cx - halfw, y: y - 0.7 * (h / 15), width: halfw * 2,
+                                                  height: 1.5 * (h / 15)), cornerRadius: 0.7)
+            ctx.fill(stripe, with: .color(Color(hex: 0xD23B3B)))
         }
     }
 
@@ -290,7 +332,7 @@ private struct LaneGeometry {
 
     init(size: CGSize, handed: String, bpDistFt: Double, oilLengthFt: Double) {
         self.rect = CGRect(origin: .zero, size: size)
-        self.topY = size.height * 0.06
+        self.topY = size.height * 0.11       // headroom for the pins standing on the deck
         self.bottomY = size.height * 0.95
         self.handed = handed
         self.bpDistFt = max(10, min(bpDistFt, 58))
