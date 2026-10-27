@@ -3,7 +3,9 @@
 -- precheck verdict, decode passes/seconds, server analyze seconds, and the phone-side pre-analyze time.
 -- security_invoker so it stays owner-scoped. NOT applied to live by Claude Code — list for Shayne.
 
-create or replace view analysis_attempt_summary
+-- Drop first: the column set + order changes from the 022 view, and CREATE OR REPLACE can't reorder columns.
+drop view if exists analysis_attempt_summary;
+create view analysis_attempt_summary
 with (security_invoker = true) as
 select created_at, env, source, capture_mode, status, failure_code, failure_stage,
        round(duration_ms / 1000.0, 1)              as analyze_seconds,
