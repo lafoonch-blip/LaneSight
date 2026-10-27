@@ -363,6 +363,22 @@ struct SessionRow: Codable, Identifiable, Equatable {
     var isForm: Bool { capture_mode == "form" }
 }
 
+/// GET /me/last-setup (MVP-09): the ball / oil / target from the most recent live shot, to pre-fill Setup.
+struct LastSetup: Codable {
+    let user_ball_id: String?
+    let ball_configuration_id: String?
+    let oil_pattern_id: String?
+    let intent: LastSetupIntent?
+}
+
+struct LastSetupIntent: Codable {
+    let feet_board: Double?
+    let laydown_board: Double?
+    let arrows_board: Double?
+    let breakpoint_board: Double?
+    let breakpoint_ft: Double?
+}
+
 struct EndSessionResponse: Codable {
     let session_id: String?
     let shots: Int?

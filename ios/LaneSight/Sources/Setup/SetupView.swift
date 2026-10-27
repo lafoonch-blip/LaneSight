@@ -248,9 +248,22 @@ struct SetupView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
-    private func loadFromLastSession() {
-        // Pull the last session's target forward (already stored on the model after a session); no-op here
-        // beyond what startLiveSession carries. Placeholder for the explicit "copy last" affordance.
+    private func loadFromLastSession() { Task { await applyLastSetup() } }
+
+    /// "From your last session" (MVP-09): pull the ball / oil / target from GET /me/last-setup into Setup.
+    private func applyLastSetup() async {
+        guard let ls = try? await model.makeClient().lastSetup() else { return }
+        if let bid = ls.user_ball_id { try? await model.setCurrentBall(id: bid) }
+        if let oid = ls.oil_pattern_id {
+            model.selectedOilPatternId = oid
+            model.selectedOilPatternName = oilPatterns.first(where: { $0.id == oid })?.name
+        }
+        if let it = ls.intent {
+            func board(_ v: Double?) -> String { v.map { String(Int($0.rounded())) } ?? "" }
+            model.feetBoardText = board(it.feet_board)
+            model.arrowsBoardText = board(it.arrows_board)
+            model.breakpointBoardText = board(it.breakpoint_board)
+        }
     }
 
     // MARK: data
