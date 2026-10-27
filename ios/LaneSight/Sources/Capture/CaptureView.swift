@@ -256,7 +256,7 @@ struct CaptureView: View {
 
 /// Full-screen takeover shown while a shot uploads → analyzes → returns. Covers the camera preview
 /// and the tab bar. On success it presents the Shot card in place; on failure, an inline error.
-private struct ProcessingCover: View {
+struct ProcessingCover: View {
     @EnvironmentObject var model: AppModel
     @Binding var busy: Bool
 
@@ -294,60 +294,81 @@ private struct ProcessingCover: View {
         }
     }
 
+    /// v3.7 Analyzing modal (Figma 412:3784): one card with a Trimmed / Uploaded / Analyzing checklist
+    /// that fills in as the pipeline advances, an overall bar, and Cancel. Driven by `model.pipeline`.
+    private enum StepState { case pending, active, done }
+
     private var processing: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            switch model.pipeline {
-            case .creatingSession:
-                stage(title: "Starting session…")
-
-            case .trimming:
-                VStack(spacing: 14) {
-                    Image(systemName: "scissors")
-                        .font(.system(size: 40)).foregroundStyle(LS.cyan)
-                    Text("Trimming…").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
-                    Text("Cutting to the shot — full 120 fps and resolution are kept.")
-                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-
-            case .uploading(let frac):
-                VStack(spacing: 14) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 44)).foregroundStyle(LS.blue)
-                    Text("Uploading clip").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
-                    ProgressView(value: frac).tint(LS.blue).frame(maxWidth: 260)
-                    Text("\(Int(frac * 100))%").font(.lsHeadline.monospacedDigit()).foregroundStyle(LS.textSecondary)
-                }
-
-            case .analyzing(let state, let timings):
-                VStack(spacing: 14) {
-                    ProgressView().tint(LS.cyan).scaleEffect(1.3)
-                    Text("Analyzing…").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
-                    Text("Usually 1–3 min today")
-                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
-                    if !timings.isEmpty {
-                        Text(timings.sorted(by: { $0.key < $1.key })
-                            .map { "\($0.key) \(String(format: "%.2fs", $0.value))" }
-                            .joined(separator: " · "))
-                            .font(.lsCaption2.monospacedDigit()).foregroundStyle(LS.textFaint)
-                            .multilineTextAlignment(.center)
-                    }
-                }
-
-            case .fetching:
-                stage(title: "Fetching results…")
-
-            default:
-                EmptyView()
+        let r = pipelineRank
+        return VStack(spacing: 14) {
+            ProgressView().tint(LS.action).scaleEffect(1.2).padding(.top, 4)
+            Text("Analyzing your shot").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+            Text("Usually about a minute. The screen stays on and controls are locked. Your results open as soon as it finishes.")
+                .font(.system(size: 12)).foregroundStyle(LS.textSecondary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 8)
+            VStack(alignment: .leading, spacing: 12) {
+                stepRow("Trimmed", r > 1 ? .done : (r == 1 ? .active : .pending))
+                stepRow("Uploaded", r > 2 ? .done : (r == 2 ? .active : .pending), detail: uploadDetail)
+                stepRow("Analyzing", r >= 4 ? .done : (r == 3 ? .active : .pending))
             }
-            Spacer()
-            Text("Keep the app open — this finishes on your Mac.")
-                .font(.lsCaption2).foregroundStyle(LS.textFaint)
-                .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+            ProgressView(value: overallFrac).tint(LS.action)
+            Button("Cancel analysis") { model.resetPipeline(); busy = false }
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link).padding(.top, 2)
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+        .padding(.horizontal, 28)
+    }
+
+    private func stepRow(_ label: String, _ state: StepState, detail: String? = nil) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                switch state {
+                case .done:
+                    Circle().fill(LS.positive).frame(width: 20, height: 20)
+                    Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(LS.onAction)
+                case .active:
+                    ProgressView().controlSize(.small).tint(LS.action)
+                case .pending:
+                    Circle().strokeBorder(LS.border, lineWidth: 2).frame(width: 20, height: 20)
+                }
+            }
+            .frame(width: 20, height: 20)
+            Text(label).font(.system(size: 14, weight: .medium))
+                .foregroundStyle(state == .pending ? LS.textSecondary : LS.textPrimary)
+            Spacer()
+            if let detail, state == .active { Text(detail).font(.system(size: 12)).foregroundStyle(LS.textSecondary) }
+        }
+    }
+
+    /// 0=session 1=trim 2=upload 3=analyze/fetch 4=done. Drives which checklist steps are done/active.
+    private var pipelineRank: Int {
+        switch model.pipeline {
+        case .creatingSession: return 0
+        case .trimming: return 1
+        case .uploading: return 2
+        case .analyzing, .fetching: return 3
+        case .done: return 4
+        default: return 1
+        }
+    }
+    private var uploadDetail: String? {
+        if case .uploading(let f) = model.pipeline { return "\(Int(f * 100))%" }
+        return nil
+    }
+    private var overallFrac: Double {
+        switch model.pipeline {
+        case .creatingSession: return 0.08
+        case .trimming: return 0.25
+        case .uploading(let f): return 0.33 + f * 0.3
+        case .analyzing: return 0.78
+        case .fetching: return 0.92
+        case .done: return 1
+        default: return 0.3
+        }
     }
 
     private func stage(title: String, detail: String? = nil) -> some View {

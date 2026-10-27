@@ -79,6 +79,9 @@ struct PreviewHarness: View {
                     if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
                         NavigationStack { SessionSummaryView(sessionId: id) }
                     } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
+                case "analyzing":
+                    ProcessingCover(busy: .constant(true))
+                        .onAppear { model.pipeline = .analyzing(state: "cv", timings: [:]) }
                 case "feedback": FeedbackView(onFinish: {})
                 case "scorepopup": ScoreUpdatePopup(sessionId: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"])
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
