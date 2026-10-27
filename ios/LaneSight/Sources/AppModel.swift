@@ -666,8 +666,17 @@ final class AppModel: ObservableObject {
 
     var activeSessionId: String? { sessionId }
 
+    /// Fire-and-forget warm-up ping so the scale-to-zero Cloud Run instance is already running by the time
+    /// the first clip uploads — otherwise the first analysis of a session eats a ~15–30s cold start. Best
+    /// effort: failures are ignored (it's only an optimization).
+    func prewarm() {
+        guard let client = try? makeClient() else { return }
+        Task { _ = try? await client.health() }
+    }
+
     /// Starts a new live session from the Setup screen (mode, lane, oil pattern) and resets counters.
     func startLiveSession(mode: String, lane: String?, oilPatternId: String?) async throws {
+        prewarm()        // warm the instance while the bowler sets up for the first shot
         let client = try makeClient()
         let session = try await client.createSessionFull(mode: "practice", lanePair: lane, oilPatternId: oilPatternId)
         sessionId = session.id

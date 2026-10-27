@@ -45,7 +45,7 @@ struct CaptureView: View {
         .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
         // Keep the screen awake for the whole capture flow (recording, trimming, upload, analysis).
         // Auto-Lock otherwise sleeps the phone mid-shot.
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true; model.prewarm() }   // warm the analyzer
         .onDisappear {
             camera.stopSession()
             if !busy { UIApplication.shared.isIdleTimerDisabled = false }
