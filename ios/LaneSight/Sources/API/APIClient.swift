@@ -457,6 +457,28 @@ struct APIClient {
         return try await send(req, as: Profile.self)
     }
 
+    /// DEC-087: start an email change. The server calls Supabase Auth, which emails a confirmation link;
+    /// the address isn't changed until the user confirms. Returns the user-facing message to show.
+    func putEmail(_ email: String) async throws -> String {
+        var req = makeRequest("me/email", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        struct R: Decodable { let message: String?; let email_pending: String? }
+        return (try await send(req, as: R.self)).message ?? "Check your new email to confirm the change."
+    }
+
+    /// Pulls a {"detail":{"field","message"}} validation error (DEC-087) out of a 400 so the UI can show the
+    /// server's reason inline on the offending field. Returns nil for any other error.
+    static func fieldError(from error: Error) -> (field: String, message: String)? {
+        guard case APIError.http(let status, let body) = error, status == 400,
+              let data = body.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let detail = obj["detail"] as? [String: Any],
+              let field = detail["field"] as? String, let message = detail["message"] as? String
+        else { return nil }
+        return (field, message)
+    }
+
     // MARK: profile photo (handoff G)
 
     /// The processed 512px JPEG avatar, or nil when none is set (404). Needs auth, so it can't be an

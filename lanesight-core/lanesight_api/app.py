@@ -12,7 +12,7 @@ from pathlib import Path
 
 import shutil
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body, Header
 from fastapi.responses import FileResponse, Response
 
 from . import API_VERSION, APP_COMPAT
@@ -22,6 +22,7 @@ from .auth import current_user
 from .config import settings
 from .jobs import SerialJobQueue
 from .store import get_store, session_csv
+from .profile_validation import validate_profile_patch, ProfileValidationError
 from lanesight_core.models.shot import ALGO_VERSION
 from lanesight_core.score import SCORE_VERSION
 from lanesight_core.benchmarks import BENCHMARK_VERSION
@@ -706,7 +707,34 @@ def get_profile(user=Depends(current_user)):
 
 @app.put('/me/profile')
 def put_profile(body: dict, user=Depends(current_user)):
-    return get_store().put_profile(user, body or {})
+    store = get_store()
+    existing = store.get_profile(user) or {}
+    try:
+        # DEC-087: reject bad input (phone / grip / PAP / DOB + 13+ gate), never clamp. The 400 detail is
+        # {field, message} so the app can show the reason inline on the field and keep the user's input.
+        validate_profile_patch(body or {}, existing)
+    except ProfileValidationError as e:
+        raise HTTPException(400, {'field': e.field, 'message': e.message})
+    return store.put_profile(user, body or {})
+
+
+@app.put('/me/email')
+def put_email(body: dict, authorization: str | None = Header(default=None), user=Depends(current_user)):
+    """DEC-087: start an email change via Supabase Auth. GoTrue emails a confirmation link; the address
+    does NOT change until the user confirms, and email is never written into `profiles`."""
+    email = str((body or {}).get('email') or '').strip()
+    if '@' not in email or email.startswith('@') or email.endswith('@'):
+        raise HTTPException(400, {'field': 'email', 'message': 'Enter a valid email address.'})
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(401, 'missing bearer token')
+    try:
+        st, resp = userauth.update_email(authorization[7:], email)
+    except userauth.AuthError as e:
+        raise HTTPException(e.status if 400 <= e.status < 600 else 400, str(e.body)[:300])
+    if st >= 400:
+        raise HTTPException(st if 400 <= st < 600 else 400, str(resp)[:300])
+    return {'status': 'confirmation_sent', 'email_pending': email,
+            'message': 'Check your new email to confirm the change.'}
 
 
 # ----------------------------------------------------------------- profile photo (handoff G)

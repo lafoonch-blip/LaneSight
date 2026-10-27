@@ -14,19 +14,36 @@ struct ProfileView: View {
     @State private var avatarBusy = false
     @State private var avatarError: String?
 
-    // editable fields
-    @State private var name = ""
+    // editable fields (DEC-087: all autosave — there is no Save button)
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var phone = ""
     @State private var handedness = "right"
     @State private var delivery = "one_handed_thumb"
     @State private var steps = "5"
     @State private var location = ""
-    @State private var email = ""
-    @State private var dob = ""
-    @State private var saving = false
-    @State private var saveNote: String?
+    @State private var email = ""          // current login email (display only; change starts a confirmation)
+    @State private var dob = ""            // YYYY-MM-DD
+    // grip + PAP, inches, as text so a blank means "unset" and the server validates the number
+    @State private var midPitch = ""
+    @State private var span = ""
+    @State private var papOver = ""
+    @State private var papUp = ""
+
+    @FocusState private var focused: PField?
+    @State private var savedField: PField?            // shows a brief "Saved" on the field that just saved
+    @State private var fieldErrors: [PField: String] = [:]
+    @State private var ready = false                  // suppresses autosave while load() seeds the fields
+
+    // email change + DOB editor sheets
+    @State private var showEmailEditor = false
+    @State private var showDobEditor = false
 
     // Form baseline (swing timing the Form card compares against; PUT /me/profile `form_baseline`).
     @State private var baseline: FormBaseline?
+
+    /// Autosaveable text/number fields, keyed for focus tracking + per-field "Saved"/error state.
+    enum PField: Hashable { case first, last, phone, location, midPitch, span, papOver, papUp }
 
     var body: some View {
         ScrollView {
@@ -38,8 +55,9 @@ struct ProfileView: View {
                     locationSection
                     arsenalSection
                     advancedSection
-                    saveButton
-                    if let saveNote { Text(saveNote).font(.system(size: 12)).foregroundStyle(LS.positive) }
+                    Text("Changes save automatically.")
+                        .font(.system(size: 12)).foregroundStyle(LS.textFaint)
+                        .frame(maxWidth: .infinity).padding(.top, 2)
                 }
             }
             .padding(16)
@@ -49,6 +67,15 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await load() }
+        .onChange(of: focused) { old, _ in if let old { commit(old) } }   // save a field when it loses focus
+        .sheet(isPresented: $showEmailEditor) {
+            EmailEditorSheet(current: email).environmentObject(model)
+                .presentationDetents([.height(320)])
+        }
+        .sheet(isPresented: $showDobEditor) {
+            DOBEditorSheet(onSaved: { iso in dob = iso }).environmentObject(model)
+                .presentationDetents([.height(380)])
+        }
     }
 
     // MARK: profile photo (Profile.dc.html "Add photo (optional)")
@@ -177,18 +204,35 @@ struct ProfileView: View {
         Text(t).font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
     }
 
-    /// A row with a label and an editable trailing text field.
-    private func editRow(_ label: String, _ text: Binding<String>, placeholder: String, keyboard: UIKeyboardType = .default) -> some View {
-        HStack {
-            Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
-            Spacer(minLength: 12)
-            TextField(placeholder, text: text)
-                .keyboardType(keyboard).multilineTextAlignment(.trailing)
-                .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+    /// An autosaving text/number row (DEC-087): edits save on Return or when focus leaves. A brief "Saved"
+    /// or the server's validation error shows under the field, and the user's input is never reverted.
+    private func fieldRow(_ label: String, _ field: PField, _ text: Binding<String>,
+                          placeholder: String, keyboard: UIKeyboardType = .default,
+                          unit: String? = nil, hint: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                Spacer(minLength: 12)
+                TextField(placeholder, text: text)
+                    .keyboardType(keyboard).multilineTextAlignment(.trailing)
+                    .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                    .focused($focused, equals: field)
+                    .onSubmit { commit(field) }
+                if let unit { Text(unit).font(.system(size: 13)).foregroundStyle(LS.textSecondary) }
+            }
+            if let hint, fieldErrors[field] == nil {
+                Text(hint).font(.system(size: 11)).foregroundStyle(LS.textFaint)
+            }
+            if let err = fieldErrors[field] {
+                Text(err).font(.system(size: 11)).foregroundStyle(LS.bestEffort)
+            } else if savedField == field {
+                Text("Saved").font(.system(size: 11)).foregroundStyle(LS.positive)
+            }
         }
-        .padding(.horizontal, 16).frame(height: 54)
+        .padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 54)
     }
-    /// A read-only row with a label and a muted trailing value (for optional / not-yet-wired fields).
+
+    /// A read-only row with a label and a muted trailing value (for not-yet-wired fields).
     private func valueRow(_ label: String, _ value: String) -> some View {
         HStack {
             Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
@@ -198,15 +242,31 @@ struct ProfileView: View {
         .padding(.horizontal, 16).frame(height: 54)
     }
 
+    /// A tappable row (Email / Date of birth) that opens a sheet. Shows the current value or "Add".
+    private func tapRow(_ label: String, _ value: String, _ tap: @escaping () -> Void) -> some View {
+        Button(action: tap) {
+            HStack {
+                Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                Spacer(minLength: 12)
+                Text(value).font(.system(size: 14)).foregroundStyle(value == "Add" ? LS.link : LS.textSecondary)
+                Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(LS.textFaint)
+            }
+            .padding(.horizontal, 16).frame(height: 54)
+        }
+        .buttonStyle(.plain)
+    }
+
     private var contactCard: some View {
         card {
-            editRow("Name", $name, placeholder: "First Last")
+            fieldRow("First name", .first, $firstName, placeholder: "First")
             rowDivider
-            valueRow("Email", email.isEmpty ? "—" : email)
+            fieldRow("Last name", .last, $lastName, placeholder: "Last")
             rowDivider
-            valueRow("Phone (optional)", "Add")
+            tapRow("Email", email.isEmpty ? "Add" : email) { showEmailEditor = true }
             rowDivider
-            valueRow("Date of birth", dob.isEmpty ? "Add" : dob)
+            fieldRow("Phone (optional)", .phone, $phone, placeholder: "Add", keyboard: .phonePad)
+            rowDivider
+            tapRow("Date of birth", dob.isEmpty ? "Add" : dob) { showDobEditor = true }
         }
     }
 
@@ -214,13 +274,20 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: 10) {
             heading("Bowler Profile")
             SegToggle(options: [("Right-handed", "right"), ("Left-handed", "left")], selection: $handedness)
+                .onChange(of: handedness) { _, v in
+                    guard ready else { return }
+                    model.handed = (v == "left") ? "L" : "R"
+                    Task { await save(["handedness": v], field: nil) }
+                }
             SegToggle(options: [("Thumb", "one_handed_thumb"), ("No thumb", "one_handed_no_thumb"), ("Two-handed", "two_handed")], selection: $delivery)
+                .onChange(of: delivery) { _, v in if ready { Task { await save(["delivery_style": v], field: nil) } } }
             card {
                 HStack {
                     Text("Approach steps").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
                     Spacer()
                     Picker("", selection: $steps) { Text("4").tag("4"); Text("5").tag("5") }
                         .labelsHidden().tint(LS.textSecondary)
+                        .onChange(of: steps) { _, v in if ready, let n = Int(v) { Task { await save(["approach_steps": n], field: nil) } } }
                 }
                 .padding(.horizontal, 16).frame(height: 54)
                 rowDivider
@@ -232,7 +299,7 @@ struct ProfileView: View {
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             caption("Location (optional)")
-            card { editRow("Location", $location, placeholder: "City, State") }
+            card { fieldRow("Location", .location, $location, placeholder: "City, State") }
             caption("Home center (optional)")
             card { valueRow("Home center", "Coming later") }
             caption("USBC Member ID")
@@ -296,61 +363,222 @@ struct ProfileView: View {
             heading("Advanced (optional)")
             caption("Only needed for layout-aware ball stats. Skip it if you just want to bowl.")
             card {
-                valueRow("Grip · middle pitch", "Coming later")
+                fieldRow("Grip · middle pitch", .midPitch, $midPitch, placeholder: "—",
+                         keyboard: .numbersAndPunctuation, unit: "in",
+                         hint: "Finger pitch, signed: forward +, reverse −.")
                 rowDivider
-                valueRow("Grip · span", "Coming later")
+                fieldRow("Grip · span", .span, $span, placeholder: "—",
+                         keyboard: .decimalPad, unit: "in",
+                         hint: "Cut-to-cut, finger hole to thumb hole.")
                 rowDivider
-                valueRow("PAP · over", "Coming later")
+                fieldRow("PAP · over", .papOver, $papOver, placeholder: "—",
+                         keyboard: .decimalPad, unit: "in",
+                         hint: "Horizontal from grip center to your Positive Axis Point.")
                 rowDivider
-                valueRow("PAP · up", "Coming later")
+                fieldRow("PAP · up", .papUp, $papUp, placeholder: "—",
+                         keyboard: .numbersAndPunctuation, unit: "in",
+                         hint: "Vertical from the midline: up +, down −.")
             }
         }
-    }
-
-    private var saveButton: some View {
-        Button { Task { await save() } } label: {
-            HStack { Text("Save profile"); if saving { ProgressView().tint(LS.onAction) } }
-        }
-        .buttonStyle(PrimaryButtonStyle()).disabled(saving).padding(.top, 4)
     }
 
     // MARK: data
 
     private func load() async {
         profile = .loading
+        ready = false
         do {
             let client = try model.makeClient()
             let p = try await client.getProfile()
-            name = p.name ?? ""
+            firstName = p.first_name ?? ""
+            lastName = p.last_name ?? ""
+            phone = p.phone ?? ""
             handedness = p.handedness ?? (model.handed == "L" ? "left" : "right")
             delivery = p.delivery_style ?? "one_handed_thumb"
             steps = (p.approach_steps?.value == "4") ? "4" : "5"       // fundamentals support 4- or 5-step
             location = p.location ?? ""
             email = p.email ?? ""
             dob = p.dob ?? ""
+            midPitch = p.grip_middle_pitch_in.map(Self.inchStr) ?? ""
+            span = p.grip_span_in.map(Self.inchStr) ?? ""
+            papOver = p.pap_over_in.map(Self.inchStr) ?? ""
+            papUp = p.pap_up_in.map(Self.inchStr) ?? ""
             baseline = p.form_baseline
             score = try? await client.score()
             await model.syncArsenal()
             await model.refreshAvatar()
             profile = .loaded(p)
+            ready = true          // enable autosave only after the fields are seeded
         } catch { profile = .failed(error.localizedDescription) }
     }
 
-    private func save() async {
-        saving = true
-        saveNote = nil
-        var fields: [String: Any] = [
-            "name": name, "handedness": handedness, "delivery_style": delivery, "location": location,
-        ]
-        if let n = Int(steps) { fields["approach_steps"] = n }
-        do {
-            _ = try await model.makeClient().putProfile(fields)
-            model.handed = (handedness == "left") ? "L" : "R"
-            saveNote = "Profile saved."
-        } catch { saveNote = "Couldn't save: \(error.localizedDescription)" }
-        saving = false
+    private static func inchStr(_ v: Double) -> String {
+        v == v.rounded() ? String(Int(v)) : String(v)
     }
 
+    // MARK: autosave (DEC-087 — no Save button)
+
+    /// The PUT payload for one autosaving field. A blank numeric field returns nil (nothing to save yet).
+    private func payload(for f: PField) -> [String: Any]? {
+        switch f {
+        case .first:    return ["first_name": firstName.trimmingCharacters(in: .whitespaces)]
+        case .last:     return ["last_name": lastName.trimmingCharacters(in: .whitespaces)]
+        case .phone:    return ["phone": phone.trimmingCharacters(in: .whitespaces)]   // "" clears it
+        case .location: return ["location": location.trimmingCharacters(in: .whitespaces)]
+        case .midPitch: return numberPayload("grip_middle_pitch_in", midPitch)
+        case .span:     return numberPayload("grip_span_in", span)
+        case .papOver:  return numberPayload("pap_over_in", papOver)
+        case .papUp:    return numberPayload("pap_up_in", papUp)
+        }
+    }
+
+    /// A numeric field sends its raw trimmed text (the server validates + coerces); blank → nil (skip save).
+    private func numberPayload(_ key: String, _ text: String) -> [String: Any]? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty ? nil : [key: t]
+    }
+
+    private func commit(_ f: PField) {
+        guard ready, let p = payload(for: f) else { return }
+        Task { await save(p, field: f) }
+    }
+
+    private func save(_ fields: [String: Any], field: PField?) async {
+        do {
+            _ = try await model.makeClient().putProfile(fields)
+            if let field {
+                fieldErrors[field] = nil
+                savedField = field
+                try? await Task.sleep(nanoseconds: 1_600_000_000)
+                if savedField == field { savedField = nil }
+            }
+        } catch {
+            // Keep the user's input; show the server's reason on the field (DEC-087).
+            if let field {
+                fieldErrors[field] = APIClient.fieldError(from: error)?.message ?? "Couldn't save — try again."
+            }
+        }
+    }
+
+}
+
+/// Email change (DEC-087 §3). Sends the new address to Supabase Auth, which emails a confirmation link; the
+/// login email doesn't change until the user confirms, so we keep showing the current one and never write it
+/// to the profile. The sheet just reports that the confirmation was sent.
+private struct EmailEditorSheet: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let current: String
+    @State private var draft = ""
+    @State private var busy = false
+    @State private var note: String?
+    @State private var error: String?
+    @State private var done = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Change email").font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
+            if !current.isEmpty {
+                Text("Current: \(current)").font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+            }
+            TextField("new@email.com", text: $draft)
+                .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .foregroundStyle(LS.textPrimary).padding(12)
+                .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+            if let note { Text(note).font(.system(size: 12)).foregroundStyle(LS.positive) }
+            if let error { Text(error).font(.system(size: 12)).foregroundStyle(LS.bestEffort) }
+            Spacer(minLength: 0)
+            Button {
+                Task { await send() }
+            } label: {
+                HStack { Text(done ? "Done" : "Send confirmation"); if busy { ProgressView().tint(LS.onAction) } }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(busy || (!done && !draft.contains("@")))
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LSBackground())
+    }
+
+    private func send() async {
+        if done { dismiss(); return }
+        busy = true; error = nil; note = nil
+        do {
+            note = try await model.makeClient().putEmail(draft.trimmingCharacters(in: .whitespaces))
+            done = true
+        } catch {
+            self.error = APIClient.fieldError(from: error)?.message ?? "Couldn't start the email change."
+        }
+        busy = false
+    }
+}
+
+/// Date-of-birth entry (DEC-087): typable MM/DD/YYYY with NO pre-selected value, matching onboarding. The
+/// server enforces the real-date + 13+ gate; its message shows inline and the user's input is kept.
+private struct DOBEditorSheet: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    var onSaved: (String) -> Void
+    @State private var m = ""
+    @State private var d = ""
+    @State private var y = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    private var iso: String? {
+        guard let mi = Int(m), let di = Int(d), let yi = Int(y),
+              (1...12).contains(mi), (1...31).contains(di), yi >= 1900 else { return nil }
+        return String(format: "%04d-%02d-%02d", yi, mi, di)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Date of birth").font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
+            Text("Used for the 13+ age check.").font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+            HStack(spacing: 10) {
+                seg($m, "MM", 2); seg($d, "DD", 2); seg($y, "YYYY", 4)
+            }
+            if let error { Text(error).font(.system(size: 12)).foregroundStyle(LS.bestEffort) }
+            Spacer(minLength: 0)
+            Button { Task { await save() } } label: {
+                HStack { Text("Save"); if busy { ProgressView().tint(LS.onAction) } }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(busy || iso == nil)
+            .opacity(iso == nil ? 0.5 : 1)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LSBackground())
+    }
+
+    private func seg(_ text: Binding<String>, _ placeholder: String, _ maxLen: Int) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(.numberPad).multilineTextAlignment(.center)
+            .font(.system(size: 16)).foregroundStyle(LS.textPrimary)
+            .frame(width: maxLen == 4 ? 86 : 60, height: 52)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+            .onChange(of: text.wrappedValue) { _, v in
+                let digits = String(v.filter(\.isNumber).prefix(maxLen))
+                if digits != v { text.wrappedValue = digits }
+            }
+    }
+
+    private func save() async {
+        guard let iso else { return }
+        busy = true; error = nil
+        do {
+            let p = try await model.makeClient().putProfile(["dob": iso])
+            onSaved(p.dob ?? iso)
+            dismiss()
+        } catch {
+            self.error = APIClient.fieldError(from: error)?.message ?? "Enter a valid date of birth."
+        }
+        busy = false
+    }
 }
 
 /// Camera capture for the profile photo. PhotosPicker covers the library; this covers "Take Photo".

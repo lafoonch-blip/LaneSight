@@ -642,12 +642,11 @@ private struct ProfileSetupStep: View {
     private func saveProfile() async {
         saving = true
         saveError = nil
-        let fullName = [firstName, lastName]
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+        // DEC-087: send first/last separately; the server maintains display_name = "First Last".
         var fields: [String: Any] = [
-            "name": fullName, "handedness": handedness, "delivery_style": delivery,
+            "first_name": firstName.trimmingCharacters(in: .whitespaces),
+            "last_name": lastName.trimmingCharacters(in: .whitespaces),
+            "handedness": handedness, "delivery_style": delivery,
         ]
         if let d = dobDate { fields["dob"] = ISO8601DateFormatter().string(from: d) }
         model.handed = (handedness == "left") ? "L" : "R"

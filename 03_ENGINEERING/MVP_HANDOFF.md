@@ -1,5 +1,5 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.3 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.4 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
@@ -56,6 +56,7 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 | MVP-11 | **Analyzing screen**: keep screen awake, lock settings for the clip, auto-open results (DEC-068/080) | Idle timer restored on finish/fail/cancel |
 | MVP-12 | **Next focus** for Home from recent sessions (rules engine) | One focus at a time; template text |
 | MVP-13 | **First-use states** and camera permission pre-prompt / denied state | Matches Figma row 6 |
+| MVP-14 | **Profile fields + autosave** (DEC-087): separate editable First/Last/Email/Phone/DOB and bowler-level **grip (middle pitch, span) + PAP (over, up)** in Profile › Advanced (inches, optional). No Save button — autosave with inline Saved / server validation (reject-not-clamp). DOB has no default; real-date + 13+ gate on create and edit; missing DOB at creation rejected. Email change via Supabase Auth confirmation (never written to `profiles`). Grip/PAP stored per bowler and passed to `configured_reaction(bowler=…)` | Round-trips every field; partial update preserves others; bad phone/measurement/under-13 rejected; email change shows "check your new email"; migration `020` |
 
 ## 4. UI rules (from the accessibility pass, 2026-10-26)
 - Text ≥ 11 pt for anything a user reads (chart axes and lane-diagram labels may be smaller). Support Dynamic Type up to at least AX1: cards grow vertically, metric tiles wrap to two lines, never truncate numbers.

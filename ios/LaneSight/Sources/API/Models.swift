@@ -826,12 +826,20 @@ struct Flex: Codable, Equatable {
 struct Profile: Codable, Equatable {
     var user_id: String?
     var name: String?
+    var first_name: String?           // DEC-087: separate, editable name fields
+    var last_name: String?
     var email: String?
+    var phone: String?                // DEC-087: optional contact phone (never the login email)
     var dob: String?
     var handedness: String?           // "right" | "left"
     var delivery_style: String?       // one_handed_thumb | one_handed_no_thumb | two_handed
     var approach_steps: FlexString?
     var location: String?
+    // DEC-074/087: bowler-level grip + PAP (inches). Optional; used by layout-aware ball stats.
+    var grip_middle_pitch_in: Double?
+    var grip_span_in: Double?
+    var pap_over_in: Double?
+    var pap_up_in: Double?
     var form_baseline: FormBaseline?
     var has_avatar: Bool?             // profile photo set (served by GET /me/avatar)
     var avatar_updated_at: String?    // cache-buster for the avatar image

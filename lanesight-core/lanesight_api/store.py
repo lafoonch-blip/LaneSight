@@ -41,11 +41,20 @@ def _new_id():
 _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion', 'tier_demotion')
 
 
-# profiles has columns display_name/handed/style/units/usbc_id/dob/delivery_style/approach_steps. The app
-# speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
-# location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
-_PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style',
-                 'approach_steps', 'form_baseline', 'location', 'is_staged', 'staged_kind'}
+# profiles has columns display_name/first_name/last_name/phone/handed/style/units/usbc_id/dob/delivery_style/
+# approach_steps + grip/PAP (DEC-087). The app speaks name/handedness/location/dob(datetime); normalize
+# inbound (map aliases, drop unknowns incl. a location with no column) so a key mismatch can't 500, and echo
+# the app's aliases back on read. Email is NEVER a profile column — it lives in auth (DEC-087 §3).
+_PROFILE_COLS = {'display_name', 'first_name', 'last_name', 'phone', 'handed', 'style', 'units', 'usbc_id',
+                 'dob', 'delivery_style', 'approach_steps', 'form_baseline', 'location', 'is_staged',
+                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in'}
+
+# Bowler-level grip + PAP, stored in inches (DEC-074/087). Coerced to float on the way in.
+_PROFILE_NUMERIC = ('grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in')
+
+
+def _compose_display_name(first, last) -> str:
+    return ' '.join(p for p in (first, last) if p and str(p).strip()).strip()
 
 
 def _profile_in(data: dict) -> dict:
@@ -53,16 +62,25 @@ def _profile_in(data: dict) -> dict:
     out = {}
     if d.get('display_name') is not None or d.get('name') is not None:
         out['display_name'] = d.get('display_name', d.get('name'))
+    for k in ('first_name', 'last_name'):
+        if d.get(k) is not None:
+            out[k] = str(d[k]).strip() or None
+    if d.get('phone') is not None:
+        out['phone'] = str(d['phone']).strip() or None      # "" clears the phone
     h = d.get('handed', d.get('handedness'))
     if h is not None:
         out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
     if d.get('dob'):
         out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
+    for k in _PROFILE_NUMERIC:
+        if d.get(k) is not None:
+            out[k] = float(d[k])
     for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location',
               'is_staged', 'staged_kind'):
         if d.get(k) is not None:
             out[k] = d[k]
-    return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
+    # keep only known columns; a cleared field (phone='') is intentionally kept as None below via the store
+    return {k: v for k, v in out.items() if k in _PROFILE_COLS and (v is not None or k == 'phone')}
 
 
 def _profile_out(row: dict | None) -> dict | None:
@@ -71,6 +89,11 @@ def _profile_out(row: dict | None) -> dict | None:
     r = dict(row)
     r['handedness'] = {'R': 'right', 'L': 'left'}.get(r.get('handed'))   # alias the app reads
     r.setdefault('name', r.get('display_name'))
+    # Older rows (pre-020) may have only display_name — derive first/last the same way the migration does.
+    if r.get('first_name') is None and r.get('display_name'):
+        parts = str(r['display_name']).split(' ', 1)
+        r['first_name'] = parts[0]
+        r['last_name'] = parts[1] if len(parts) > 1 else None
     r['has_avatar'] = bool(r.get('avatar_path'))                         # the app shows the photo when set
     return r
 
@@ -158,7 +181,13 @@ class MemoryStore:
         return _profile_out(self.profiles.get(user_id))
 
     def put_profile(self, user_id, data):
-        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **_profile_in(data))
+        patch = _profile_in(data)
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **patch)
+        # Keep display_name = "First Last" for existing readers whenever either name changes (DEC-087).
+        if 'first_name' in patch or 'last_name' in patch:
+            dn = _compose_display_name(p.get('first_name'), p.get('last_name'))
+            if dn:
+                p['display_name'] = dn
         self.profiles[user_id] = p
         return _profile_out(p)
 
@@ -936,7 +965,15 @@ class PgStore(MemoryStore):
         return _profile_out(rows[0]) if rows else None
 
     def put_profile(self, user_id, data):
-        row = {'user_id': user_id, **_profile_in(data)}
+        patch = _profile_in(data)
+        row = {'user_id': user_id, **patch}
+        # Maintain display_name = "First Last" from the merged (existing + patch) names (DEC-087).
+        if 'first_name' in patch or 'last_name' in patch:
+            existing = self.get_profile(user_id) or {}
+            dn = _compose_display_name(patch.get('first_name', existing.get('first_name')),
+                                       patch.get('last_name', existing.get('last_name')))
+            if dn:
+                row['display_name'] = dn
         self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
         return self.get_profile(user_id)
 

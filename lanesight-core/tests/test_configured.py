@@ -26,6 +26,23 @@ def test_no_config_no_surface_is_box_reaction():
     assert any('no drilling' in n for n in cr.notes) and cr.surface_source == 'box_finish'
 
 
+def test_bowler_grip_pap_flows_through_without_fabricating_reaction():
+    """DEC-074/087: the bowler's grip + PAP flow into configured_reaction and surface on bowler_used, but
+    change NO reaction axis (no sourced pitch/span model; PAP is already baked into the layout)."""
+    cfg = {'layout_system': 'Dual Angle', 'layout': '50 x 4.5 x 40'}
+    bowler = {'grip_middle_pitch_in': 0.25, 'grip_span_in': 4.5, 'pap_over_in': 5.0, 'pap_up_in': 0.5}
+    base = configured_reaction(BALL, cfg)
+    with_b = configured_reaction(BALL, cfg, bowler=bowler)
+    # identical reaction numbers — grip/PAP do not fabricate an effect
+    assert (with_b.ls_hook, with_b.ls_length, with_b.ls_backend) == (base.ls_hook, base.ls_length, base.ls_backend)
+    # but the inputs are recorded + explained
+    assert with_b.bowler_used == bowler
+    assert any('PAP on file' in n for n in with_b.notes)
+    assert any('grip (pitch/span) recorded' in n for n in with_b.notes)
+    # no bowler on file → nothing added
+    assert base.bowler_used is None
+
+
 def test_reference_layout_changes_nothing():
     cr = configured_reaction(BALL, {'layout_system': 'Dual Angle', 'layout': '45 x 4 x 45'})
     assert (cr.ls_hook, cr.ls_length, cr.ls_backend) == (7.0, 5.0, 5.0)

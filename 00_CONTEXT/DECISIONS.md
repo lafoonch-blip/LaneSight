@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.47  
+Version: 1.48  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.46
+Supersedes: v1.47
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -836,7 +836,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** These values describe the bowler's hand and axis, not a ball; entering them per ball duplicates data and invites mismatches.
 **Date:** 2026-10-26
-**Status:** ACCEPTED (target state)
+**Status:** ACCEPTED (target state); **MVP + dev build scope per DEC-087** (grip/PAP are now built in Profile › Advanced, stored per bowler).
 **Supersedes:** the "Pitch / span · From profile" row on Ball setup (Figma, Dev Build v0 designs 20).
 
 ### DEC-075 — Form key-position thumbnails and upload thumbnails come from the bowler's own clip
@@ -989,6 +989,19 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-27
 **Status:** ACCEPTED (Dev Build v0). Migration `019_analysis_attempts.sql`.
 **Supersedes:** the upload de-duplication clause of DEC-055 / DEC-043 **while `LANESIGHT_UPLOAD_DEDUPE` is unset or 0** (the rest of DEC-055 — uploads are standalone, don't count, live under Lab — is unchanged).
+
+### DEC-087 — Profile: separate editable First/Last/Email/Phone/DOB, autosave, no-default DOB, grip + PAP in MVP
+**Decision (Shayne, 2026-10-27):**
+- **Contact fields are separate and editable:** First name, Last name, Email, Phone (optional), Date of birth. `profiles` stores `first_name`/`last_name` (display_name kept as "First Last" for existing readers) + `phone`.
+- **Date of birth has no default anywhere.** Onboarding and Profile start empty ("Select date"); onboarding can't continue until the user explicitly enters a date, and no date the user didn't pick is ever saved. The server enforces a real past date **and** the 13+ gate on **create and edit** (missing DOB at profile creation is rejected).
+- **Profile autosaves; the Save button is removed.** Toggles/pickers save on change; text/number fields save when editing ends (focus leaves / Return), with a brief inline "Saved" and the server's validation error shown inline on the field, keeping the user's input (never reverted).
+- **Email changes go through Supabase Auth** (`updateUser({email})` → confirmation link). The app shows "Check your new email to confirm," keeps showing the current email until confirmed, and never writes email into `profiles`.
+- **Grip (middle pitch, span) and PAP (over, up) are MVP + dev-build scope** (amends DEC-074 from target-state), stored per bowler in Profile › Advanced, in inches, optional. Values validated against cited sane ranges (reject, never clamp). They flow into the configured-reaction code (`bowler` arg) but apply **no** reaction change yet — PAP is already baked into a recorded layout, and there is no sourced pitch/span→reaction model, so they're stored and surfaced, with the plug-in point documented (`configured.py` `# PAP-DERIVE`).
+
+**Why:** Editable, separate fields match how people think of their details; a defaulted DOB silently (and wrongly) satisfies the age gate and pollutes data; autosave stops edits being lost; grip/PAP are needed for layout-aware ball stats and belong to the bowler.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (Dev Build v0). Migration `020_profile_fields.sql`.
+**Supersedes:** the combined "Name" field and read-only Email/Phone/DOB rows on Profile; the "Coming later" grip/PAP rows; the Save-profile button; and advances DEC-074 from target-state to MVP/dev-build.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
