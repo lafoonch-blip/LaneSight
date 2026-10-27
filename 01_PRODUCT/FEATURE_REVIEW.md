@@ -1,7 +1,7 @@
 # Feature Requirements Review: MVP vs MVP+
 Status: DRAFT (for Shayne's review)  
-Version: 1.0  
-Last Updated: 2026-10-14  
+Version: 1.1  
+Last Updated: 2026-10-27  
 Owner: Shayne  
 Reviews: Google Doc "Feature Details" (2026-10-14) and the untitled "Phone Only / Sensor / Center" metric list  
 Against: DEC-017–023, BUILD_PLAN v2.1, METRIC_CAPABILITIES v1.0
@@ -183,3 +183,14 @@ Against: DEC-017–023, BUILD_PLAN v2.1, METRIC_CAPABILITIES v1.0
 **In:** auth (email/Google/Apple/Face ID unlock), profile and preferences, layout presets + custom, arsenal with curated catalog, units/settings/legal/delete account, sessions (all three types, with the MVP capture flow), shot detail and replay, game stats from video, ball and oil-pattern stats, LaneSight and Session Scores, Power, primary/secondary adjustments, shot intent, capture assistant, manual correction, offline queue, sensor import + variance.
 
 **MVP+:** world rank, comparison to other bowlers, predicted strike %, video axis/PAP, tripod bowler metrics (if approved), leagues, coaching, center integration, social, streaming, pattern analyzer, USBC verification/renewal, youth accounts, Audio Coach.
+
+---
+## 7. AI coaching capability reconciliation (2026-10-27 proposal)
+This original 2026-10-14 feature review contains historical scope assumptions (including form and far-lane metric guarantees) now superseded by newer decisions. **Do not treat old tables as current eligibility promises.** DEC-040/041 add form as a distinct analysis track; DEC-061/065 gate low-confidence and far-lane measurements. Refer to `00_CONTEXT/DECISIONS.md`, `00_CONTEXT/CURRENT_STATE.md` and `01_PRODUCT/AI_COACHING_STRATEGY.md` v1.0.
+
+- **Founder MVP:** existing rule-based execution/lane advice with evidence and abstention; no implied conversational adaptive coach or generalized form-measurement guarantee.
+- **Friends Beta candidate:** explicit feedback on advice, session-level priorities, limited practice planning and outcome tracking once validated.
+- **Later:** coach portal, permissioned custom benchmarks and annotations, AI dialogue, adaptive practice, expert-feedback learning after rights and evaluation checks.
+- **Non-negotiable:** preserve Execution vs Lane Coach separation; never fill unavailable metrics with LLM estimates, add a separate improvement score or assume the user completed a drill.
+
+These are proposed classifications, not changes to approved scope or the founder-controlled launch path (DEC-047).
