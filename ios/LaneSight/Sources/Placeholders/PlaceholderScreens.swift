@@ -18,7 +18,7 @@ struct DeleteAccountView: View {
                 Text("This permanently deletes your account and everything in it. It can't be undone.")
                     .font(.lsCallout).foregroundStyle(LS.textSecondary)
                 VStack(alignment: .leading, spacing: 6) {
-                    bullet("Profile, arsenal and sensors")
+                    bullet("Profile and arsenal")
                     bullet("All sessions, shots, videos and stats")
                     bullet("LaneSight Score history, tier and achievements")
                 }
@@ -26,12 +26,19 @@ struct DeleteAccountView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
 
+                // Feedback is retained de-identified (DEC-059/063 single feedback store) — stated honestly.
+                Text("Feedback you sent is kept without your name, as our privacy policy explains.")
+                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("TYPE DELETE TO CONFIRM").lsEyebrow()
+                    Text("Type DELETE to confirm").font(.lsCaption).foregroundStyle(LS.textSecondary)
                     TextField("DELETE", text: $confirmText)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .padding(12).background(LS.card, in: RoundedRectangle(cornerRadius: 8))
+                        .padding(12).frame(minHeight: 50)
+                        .background(LS.raised, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LS.borderStrong, lineWidth: 1))
                         .foregroundStyle(LS.textPrimary)
                 }
 
@@ -40,21 +47,22 @@ struct DeleteAccountView: View {
                         .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
+                // Destructive action stays de-emphasized (outlined) until DELETE is typed — matches v3.7.
                 Button {
                     Task { await deleteAccount() }
                 } label: {
-                    HStack {
+                    HStack(spacing: 8) {
                         Text("Delete account")
-                        if deleting { ProgressView().tint(.white) }
-                    }
+                        if deleting { ProgressView().tint(LS.textPrimary) }
+                    }.frame(maxWidth: .infinity)
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .tint(.red)
+                .buttonStyle(SecondaryButtonStyle())
                 .disabled(!canDelete)
                 .opacity(canDelete ? 1 : 0.5)
 
                 Button("Cancel") { dismiss() }
-                    .buttonStyle(SecondaryButtonStyle())
+                    .font(.lsBody.weight(.semibold)).foregroundStyle(LS.link)
+                    .frame(maxWidth: .infinity).frame(minHeight: 44)
             }
             .padding(16)
         }

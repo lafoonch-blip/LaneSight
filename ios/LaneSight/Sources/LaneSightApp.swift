@@ -94,6 +94,7 @@ struct PreviewHarness: View {
                         NavigationStack { FormSessionView(sessionId: id, readOnly: true) }
                     } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
                 case "settings": NavigationStack { SettingsView() }
+                case "deleteaccount": NavigationStack { DeleteAccountView() }
                 case "profile":  NavigationStack { ProfileView() }
                 case "achievements": NavigationStack { AchievementsView() }
                 case "sessionsummary":
