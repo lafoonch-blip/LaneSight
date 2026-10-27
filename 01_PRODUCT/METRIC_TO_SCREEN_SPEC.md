@@ -1,5 +1,5 @@
 # Metric-to-Screen Spec (MVP target state)
-Status: APPROVED (Shayne, 2026-10-26) · Version: 1.0 · Last Updated: 2026-10-26 · Owner: Shayne
+Status: APPROVED (Shayne, 2026-10-26) · Version: 1.1 · Last Updated: 2026-10-27 · Owner: Shayne
 Decisions: DEC-073 (this hierarchy), DEC-061 (status chips, moves), DEC-066 (strike only), DEC-070 (no sensors), DEC-072 (session end).
 
 ## Rules
@@ -9,6 +9,9 @@ Decisions: DEC-073 (this hierarchy), DEC-061 (status chips, moves), DEC-066 (str
 4. **Status chips everywhere:** MEASURED / BEST EFFORT / UNAVAILABLE (DEC-061). UNAVAILABLE never shows a number.
 5. **No invented composites.** No Session Score, no Form score, no carry until each is defined in a DEC.
 6. **Comparable shots only** for session accuracy and consistency (same ball config and target line, DEC-032).
+
+## Shot card update (DEC-088, 2026-10-27)
+The Shot card column below is updated by DEC-088: **primary** = result, 3D lane view (target vs actual), **Your throw** rings (Speed, Rev rate, Target at the arrows; each vs the bowler's normal throw), **Lane & pins** rings (Breakpoint, Entry board, Entry angle; each vs the target line) and one **Coach** takeaway. Accuracy is shown as the Target ring; pocket %, laydown, loft and impact energy move to All metrics.
 
 ## Priority by moment
 P = primary (always visible) · S = secondary (expanded or lower on the screen) · — = not shown

@@ -1,7 +1,7 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.4 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.5 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
-Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
+Decisions: DEC-061, DEC-066–077, DEC-079–085, DEC-088 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
 ## 0. Read this first
 - This builds on Dev Build v0 (`03_ENGINEERING/dev_build_v0/HANDOFF.md`, designs `02_DESIGN/dev_build_v0/` 3.8). Reuse its API, auth, upload queue and engines; this doc lists **what the MVP designs add or change**.
@@ -11,7 +11,7 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 - Commit locally; push only when Shayne says. Ask Shayne about anything ambiguous; don't guess.
 
 ## 1. Flows (match the Figma prototype; 4 flow starts)
-1. **Shot session (DEC-080):** Lab › Shot Analysis › Live session → Setup (last-used ball, oil, target; "Ready to bowl") → Record (tap to start/stop) → **Analyzing (blocking, controls locked, screen kept awake)** → **Shot card opens automatically** → *Record shot N+1* or *Close* → Active Session → End → score popup → Session summary → feedback.
+1. **Shot session (DEC-080):** Lab › Shot Analysis › Live session → Setup (last-used ball, oil, target; "Ready to bowl") → Record (tap to start/stop) → **Analyzing (blocking, controls locked, screen kept awake)** → **Shot card opens automatically** → *Record next shot* or *Close* → Active Session → End → score popup → Session summary → feedback.
 2. **Form session (DEC-081):** Lab › Form Analysis › Live session → Setup (no ball/oil; camera-view guidance) → Record delivery (side or behind; view detected) → Analyzing → Form results → *Record next delivery* or *Close* → Form session → End → Form summary.
 3. **Uploads (DEC-069):** Lab › Shot/Form › Upload video → (Shot: ball, oil, optional target; Form: nothing) → result. Not a session; never counts toward Stats, Score, tiers or achievements.
 4. **Navigation (DEC-084):** four tabs — Home · Stats · Lab · Coaching. Coaching opens a coming-soon screen with Notify me.
@@ -26,7 +26,7 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 | Setup · Shot / Form | last-used ball, oil, target; health; camera checks | `/me/last-setup` (**NEW**), `/health` |
 | Record · Shot / Form | spot check; Form: detected view + framing | `/spot-check` (+ `view` for Form) |
 | Analyzing (Shot, Form) | job progress, failure reason, retry | `/jobs/{id}` |
-| Shot card | result (strike/not/not read), lane picture, next move with **why + expected effect**, rings, metrics with status, notes | `/shots/{id}` (+ `insights.why`, `insights.expected`) |
+| Shot card (DEC-088) | result chip; **3D lane view** from the shot data (fitted path, target band, entry + breakpoint labels); **Your throw** rings (speed, rev rate, target) vs the bowler's normal throw + verdict; **Lane & pins** rings (breakpoint, entry board, entry angle) vs target + explanation; one **Coach** takeaway; All metrics + notes collapsed; "Record next shot" | `/shots/{id}` + `baseline` (median speed/revs/arrows, n) + `insights.throw` {status, verdict}, `insights.lane` {status, explanation}, `insights.coach` {action: keep/lane_move/no_move/no_move_yet, text, move{feet,eyes}}, `path_fit` (smoothed lane points with the measured extent) |
 | Active Session · Shot | latest shot, session KPIs (4), target, history (collapsed) | `/sessions/{id}` |
 | Session summary | takeaway **(went well / improve / next focus)**, early vs late, averages ± spread, by ball, **vs your typical**, shots | `/sessions/{id}/summary` (+ `typical`) |
 | Score popup | score/tier change, core metrics vs average | `/sessions/{id}/end` |
@@ -70,3 +70,9 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 - Pose model and confidence threshold for overlays (designs used MediaPipe Pose heavy, visibility ≥ 0.5).
 - Retention of key-position JPEGs and landmarks (suggest: keep with the shot record; raw clip retention unchanged).
 - Push the repo and decide when MVP work starts relative to Dev Build v0 feedback.
+
+
+## DEC-088 Shot card — build notes
+- **Lane view:** render live (SceneKit/RealityKit or Metal) from `path_fit`; never draw raw detections point-to-point. Fit a smooth curve (e.g. the existing robust LOESS lateral path, sampled every 0.5 ft) and stop it at the last measured distance. Camera: behind and above the foul line looking down the lane; true-scale lane, arrows, pins. Reference renders and parameters: `02_DESIGN/target_state/lane_render/`.
+- **Throw vs lane classification** comes from the rules engine (M4-02). Throw = speed, revs, arrows board vs the personal baseline (median ± band, BENCHMARKS spec §3.3); lane = breakpoint, entry board, entry angle vs the target line. Coach matrix: good+good → keep; good+miss → lane move (ball change only after repeated misses with moves); off+miss explained by the throw → no move, "repeat your normal throw"; off+good → don't build on it. Until the baseline exists, show "Building your normal (n/10)" and only lane-based advice.
+- **Far lane not read (DEC-065):** Lane & pins show "—" / Not read, coach "No move yet" + camera-setup link.

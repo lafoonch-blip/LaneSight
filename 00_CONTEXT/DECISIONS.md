@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.48  
+Version: 1.49  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.47
+Supersedes: v1.48
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1003,6 +1003,22 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED (Dev Build v0). Migration `020_profile_fields.sql`.
 **Supersedes:** the combined "Name" field and read-only Email/Phone/DOB rows on Profile; the "Coming later" grip/PAP rows; the Save-profile button; and advances DEC-074 from target-state to MVP/dev-build.
 
+### DEC-088 — Shot card: 3D lane view; core metrics split into "Your throw" and "Lane & pins"; one coach takeaway from both
+**Decision (Shayne, 2026-10-27):**
+- **Lane picture = a 3D down-the-lane view rendered live from the shot's measured data** (not a photo, not AI art): true-scale lane, arrows and pins; the ball path is a **smooth curve fitted through the tracked points** (never drawn point-to-point); the **target line is always shown** as a blue band; Entry and Breakpoint labels are pinned to their spots; result chip and legend on the image. Replaces the flat perspective lane recreation.
+- **Core metrics as rings, in two groups inside one "Shot read" card:**
+  - **Your throw (execution):** Speed, Rev rate, Target (board at the arrows vs the target). Each is compared with the bowler's **normal throw** (personal baseline median, "= your avg", "↑0.9 vs avg"; "Building your normal (n/10)" until the baseline exists). Badge + one-line verdict, e.g. "Good · your normal throw", "Off · faster than usual".
+  - **Lane & pins (reaction):** Breakpoint (board @ distance), Entry board, Entry angle, each vs the target line. Badge + one-line explanation, e.g. "Lane held it · light", "Went long · light".
+  - **Coach takeaway (one action) decided by both groups:** good throw + good reaction → keep the line; good throw + miss → lane move (feet/eyes; a ball change only if it keeps happening after moves); off throw + a miss the throw explains → **no move, repeat your normal throw** (never change balls or lines for a bad throw); off throw + good result → don't build on it. Implements the execution classification in BUILD_PLAN M4-02 (EXECUTED / EXECUTION_MISS / REACTION_CHANGE).
+- **Far lane not read:** the path is drawn only where measured, the far lane is dimmed and labeled "Not visible from this camera spot"; Lane & pins rings show "—" / Not read; the coach says "No move yet" with a camera-setup link (DEC-065 fallback).
+- Everything else (laydown, launch, loft, pocket, impact energy, axis metrics) moves behind **All metrics**; notes behind **Your notes**. Axis tilt/rotation are not shown until video measures them.
+- Primary button **"Record next shot"** (was "Record shot N+1"). Upload results use the same layout with "Uploaded clip · Shot Analysis", a not-counted note and **Done**.
+
+**Why:** The old card opened with warnings and a long metric list, so the bowler couldn't tell in a second what was good or bad or what to do. Whether a shot strikes depends on two separate things: the throw (speed, revs, accuracy vs the bowler's normal) and how the lane and pins reacted. Keeping them apart stops wrong advice, e.g. moving or changing balls after a throw that was simply faster than usual.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (target state). Figma › Target state – v3.7: "Shot card · Shot Analysis · v3.7", states "off throw → no move" and "far lane not read", "Upload result · Shot Analysis · v3.7". Old card, options A–D drafts → page "archived".
+**Supersedes:** in part DEC-073 / METRIC_TO_SCREEN_SPEC v1.0 Shot-card column (lane picture form, ring set, next-move card → coach takeaway) and the DEC-080 button label.
+
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
@@ -1021,4 +1037,5 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
 - DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
 - DEC-035 — "No Session Summary screen" superseded by DEC-072 (score popup on end, session summary also used for past sessions).
+- DEC-073 (Shot-card column) / DEC-080 (button label) — partly superseded by DEC-088 (3D lane, throw vs lane groups, coach takeaway, "Record next shot").
 - DEC-055 / DEC-043 — the upload de-duplication clause is superseded by DEC-086 while `LANESIGHT_UPLOAD_DEDUPE` is off (default); the rest of DEC-055 stands.
