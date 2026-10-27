@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.50  
+Version: 1.51  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.49
+Supersedes: v1.50
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1030,6 +1030,18 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED.
 **Supersedes:** the target-state-vs-dev-build scoping language across DEC-055, DEC-067, DEC-073, DEC-074, DEC-083, DEC-084, DEC-085, DEC-088 and in CLAUDE.md / AGENTS.md / CURRENT_STATE.md / MVP_HANDOFF.md.
 
+### DEC-090 — Shot card adjustments: data labels on the lane view; Accuracy ring; Lane & pins = Entry point, Entry angle, Power
+**Decision (Shayne, 2026-10-27):**
+- The lane view carries three pinned data labels, each with a dot on the ball path: **Entry point** (board + angle), **Breakpoint** (board + distance) and **Arrows** (board + target board). Path markers are drawn on top of the path and pins so the entry point stays visible; pin glow is reduced.
+- The "Target" ring in Your throw is renamed **Accuracy** (DEC-031 score, 0–100) with the arrows board vs target underneath.
+- **Lane & pins rings = Entry point, Entry angle, Power.** Power is Impact Energy (DEC-024, joules at entry, best effort) compared with the bowler's normal. Breakpoint stays on the lane view and in All metrics. Carry (pin action) is not measured by video and is not shown.
+- Far lane not read: all three Lane & pins rings show "—" / Not read (Power needs entry speed).
+
+**Why:** The entry point was hard to see on the image; entry, angle and the energy the ball carries into the pins are what explain the pin reaction.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (target state). Figma frames updated in place.
+**Supersedes:** in part DEC-088 (ring set and Target label).
+
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
@@ -1048,5 +1060,6 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
 - DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
 - DEC-035 — "No Session Summary screen" superseded by DEC-072 (score popup on end, session summary also used for past sessions).
+- DEC-088 — ring set and "Target" label partly superseded by DEC-090 (Accuracy; Entry point, Entry angle, Power).
 - DEC-073 (Shot-card column) / DEC-080 (button label) — partly superseded by DEC-088 (3D lane, throw vs lane groups, coach takeaway, "Record next shot").
 - DEC-055 / DEC-043 — the upload de-duplication clause is superseded by DEC-086 while `LANESIGHT_UPLOAD_DEDUPE` is off (default); the rest of DEC-055 stands.
