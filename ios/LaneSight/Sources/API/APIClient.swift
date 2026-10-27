@@ -222,6 +222,10 @@ struct APIClient {
 
     /// Session aggregates for the Active Session rings + Session summary (GET /sessions/{id}/summary):
     /// per-metric mean/spread + a consistency repeatability score.
+    func formSessionSummary(_ sid: String) async throws -> FormSessionSummary {
+        try await send(makeRequest("sessions/\(sid)/form-summary"), as: FormSessionSummary.self)
+    }
+
     func sessionSummary(_ sid: String) async throws -> SessionSummary {
         try await send(makeRequest("sessions/\(sid)/summary"), as: SessionSummary.self)
     }

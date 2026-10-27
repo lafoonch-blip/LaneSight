@@ -480,6 +480,50 @@ struct EquipGroup: Codable, Identifiable {
     var identity: String { id ?? name ?? UUID().uuidString }
 }
 
+// MARK: - Form-session summary (GET /sessions/{id}/form-summary) — Active Session·Form / Form summary
+
+/// Per-session form analytics (diagnostic only; never part of the ball score). All values are server-
+/// computed from measured deliveries — a metric with too few measured deliveries comes back status "building".
+struct FormSessionSummary: Codable {
+    let view: String?
+    let n_deliveries: Int?
+    let ended_at: Double?        // epoch seconds (server returns a float), or null while in progress
+    let in_progress: Bool?
+    let repeatability: [FormRepeatRow]?
+    let early_vs_late: [String: FormEarlyLate]?
+    let takeaway: FormTakeaway?
+    let deliveries: [FormDelivery]?
+    let note: String?
+}
+
+struct FormRepeatRow: Codable, Identifiable {
+    let key: String?
+    let label: String?
+    let unit: String?
+    let status: String?      // steady | drifting | best_effort | building | varied
+    let n: Int?
+    let display: String?     // e.g. "2.41 s ± 0.05" / "Step 2 on 7 of 9" / "—"
+    let best_effort: Bool?
+    var id: String { key ?? label ?? UUID().uuidString }
+}
+
+struct FormEarlyLate: Codable {
+    let early: Double?
+    let late: Double?
+    let delta: Double?
+    let series: [Double]?
+}
+
+struct FormTakeaway: Codable { let text: String?; let drill: String? }
+
+struct FormDelivery: Codable, Identifiable {
+    let seq: Int?
+    let release_offset: Double?
+    let swing_total: Double?
+    let view: String?
+    var id: Int { seq ?? 0 }
+}
+
 // MARK: - Score-parts breakdown (GET /me/score/breakdown)
 
 struct ScoreBreakdown: Codable {

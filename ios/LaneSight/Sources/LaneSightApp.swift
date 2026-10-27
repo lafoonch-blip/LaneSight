@@ -85,6 +85,14 @@ struct PreviewHarness: View {
                 case "balledit":
                     if let b = model.arsenal.first { NavigationStack { BallSetupView(arsenalBall: b) } }
                     else { Text("no arsenal ball for this account").foregroundStyle(LS.textPrimary) }
+                case "formsession":
+                    if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
+                        NavigationStack { FormSessionView(sessionId: id, readOnly: false) }
+                    } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
+                case "formsummary":
+                    if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
+                        NavigationStack { FormSessionView(sessionId: id, readOnly: true) }
+                    } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
                 case "settings": NavigationStack { SettingsView() }
                 case "profile":  NavigationStack { ProfileView() }
                 case "achievements": NavigationStack { AchievementsView() }

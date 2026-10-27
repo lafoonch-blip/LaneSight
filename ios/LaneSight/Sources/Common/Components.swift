@@ -7,6 +7,8 @@ enum Loadable<T> {
     case loading
     case loaded(T)
     case failed(String)
+
+    var value: T? { if case .loaded(let v) = self { return v }; return nil }
 }
 
 /// Renders a Loadable: spinner while loading, the content when loaded, an honest error with Retry on failure.
