@@ -61,7 +61,9 @@ struct PreviewHarness: View {
                 case "stats": StatsView()
                 case "lab":   LabView()
                 case "shotcard":
-                    if let r = model.result { NavigationStack { ShotCardView(result: r) } }
+                    if let r = model.result {
+                        NavigationStack { if r.isForm { FormCardView(result: r) } else { ShotCardView(result: r) } }
+                    }
                     else { Text("no shot result (set LS_PREVIEW_ID)").foregroundStyle(LS.textPrimary) }
                 case "activesession":
                     if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {

@@ -36,10 +36,10 @@ struct FormCardView: View {
                 .padding(16)
             }
             .background(LSBackground())
-            .navigationTitle("Form")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss(); model.resetPipeline() }
                 }
@@ -49,24 +49,24 @@ struct FormCardView: View {
 
     // MARK: context header
 
-    /// Mirrors the design's "Form Analysis · side view · 120 fps" subtitle, plus an honest note that v1
-    /// form metrics are early. No fabricated values — fps/view are omitted when absent.
-    private var contextHeader: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Image(systemName: "figure.bowling").foregroundStyle(LS.action)
-                Text("Form Analysis").font(.lsHeadline).foregroundStyle(LS.textPrimary)
-                Spacer()
-                Text("FORM").font(.lsCaption.weight(.semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(LS.selected, in: Capsule()).foregroundStyle(LS.action)
-            }
-            Text(subtitleLine).font(.lsCaption).foregroundStyle(LS.textSecondary)
-            Text("Early form analysis (\(result.formFooter?.form_version ?? result.formVersion ?? "form-0.0.0")). Treat these as directional, not exact.")
-                .font(.lsCaption2).foregroundStyle(LS.textFaint)
+    /// Two-line nav title (v3.7): "Delivery N" (real sequence when present, else "Form Analysis") + a
+    /// "Form Analysis · {view} (detected) · {fps} fps" subtitle.
+    private var headerTitle: some View {
+        let hasNum = result.shotNumber != nil
+        let title = result.shotNumber.map { "Delivery \($0)" } ?? "Form Analysis"
+        let subtitle = hasNum ? "Form Analysis · \(subtitleLine)" : subtitleLine
+        return VStack(spacing: 1) {
+            Text(title).font(.lsRoboto(20, weight: .semibold)).foregroundStyle(LS.textPrimary)
+            Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
         }
-        .lsCard()
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Slim honest note that v1 form metrics are early (the view/fps now live in the nav subtitle).
+    private var contextHeader: some View {
+        Text("Early form analysis (\(result.formFooter?.form_version ?? result.formVersion ?? "form-0.0.0")). Treat these as directional, not exact.")
+            .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var subtitleLine: String {
@@ -110,23 +110,33 @@ struct FormCardView: View {
 
     private var focusCard: some View {
         let focus = result.formFocus
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("FOCUS FOR THIS SESSION").font(.lsCaption.weight(.semibold)).tracking(1.1).foregroundStyle(LS.action)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("FOCUS FOR THIS SESSION").font(.system(size: 11, weight: .semibold)).tracking(0.88).foregroundStyle(LS.link)
+                Spacer()
+                Text("Form").font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.positive)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(LS.positive.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            }
             if let cue = focus?.cue, !cue.isEmpty {
-                Text(cue).font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
+                Text(cue).font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let text = focus?.comparison_text, !text.isEmpty {
-                Text(text).font(.lsCallout).foregroundStyle(LS.textSecondary)
+                Text(text).font(.system(size: 12)).lineSpacing(2).foregroundStyle(Color(hex: 0xB9C6D9))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let drill = focus?.drill, let name = drill.name, !name.isEmpty {
                 Text("Drill: \(name)\(drill.how.map { " — \($0)" } ?? "")")
-                    .font(.lsCallout).foregroundStyle(LS.textSecondary)
+                    .font(.system(size: 12)).lineSpacing(2).foregroundStyle(Color(hex: 0xB9C6D9))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(16)
+        .padding(.horizontal, 14).padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LS.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(LS.action, lineWidth: 1))
+        .background(LinearGradient(colors: [Color(hex: 0x04213F), Color(hex: 0x031B35)], startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.heroStroke, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 
@@ -144,7 +154,7 @@ struct FormCardView: View {
     private var keyPositionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("KEY POSITIONS").lsEyebrow()
+                Text("Key positions").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
                 Text("tap to open the frame").font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
@@ -180,7 +190,7 @@ struct FormCardView: View {
     private var timingCheckpointsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("TIMING CHECKPOINTS").lsEyebrow()
+                Text("Timing vs your baseline").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
                 Text(viewLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
@@ -200,7 +210,7 @@ struct FormCardView: View {
         let building = st?.building ?? true
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("SWING TIMING").lsEyebrow()
+                Text("Swing timing").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
                 if building {
                     Text("BUILDING").font(.lsCaption.weight(.semibold)).foregroundStyle(LS.bestEffort)
@@ -269,7 +279,7 @@ struct FormCardView: View {
 
     private var approachSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("APPROACH & BALANCE").lsEyebrow()
+            Text("Approach & balance").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                 ForEach(approachMetrics, id: \.0) { key, metric in
                     FormTile(label: FormMetricDisplay.label(key),
@@ -302,7 +312,7 @@ struct FormCardView: View {
 
     private var positionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("POSTURE & POSITIONS").lsEyebrow()
+            Text("Posture & finish").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                 ForEach(orderedPositions, id: \.id) { pos in
                     FormTile(label: Self.positionLabels[pos.metric ?? ""] ?? MetricDisplay.humanize(pos.metric ?? "—"),
@@ -332,7 +342,7 @@ struct FormCardView: View {
 
     private func coachingCuesSection(_ cues: CoachingCues) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("COACHING CUES").lsEyebrow()
+            Text("Coaching cues").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             if let note = cues.note, !note.isEmpty {
                 Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
