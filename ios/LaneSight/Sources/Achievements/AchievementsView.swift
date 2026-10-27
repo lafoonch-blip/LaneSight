@@ -15,6 +15,10 @@ struct AchievementsView: View {
         ScrollView {
             LoadableView(state: state, retry: { Task { await load() } }) { data in
                 VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ACHIEVEMENTS").font(.system(size: 11, weight: .semibold)).tracking(1.1).foregroundStyle(LS.link)
+                        Text("Your achievements").font(.system(size: 24, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    }
                     headerCard(data)
                     showcaseSection(data)
                     closeToUnlocking(data)
@@ -29,7 +33,7 @@ struct AchievementsView: View {
             }
         }
         .background(LSBackground())
-        .navigationTitle("Achievements")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await load() }
