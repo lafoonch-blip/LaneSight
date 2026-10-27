@@ -1,5 +1,12 @@
 import Foundation
 
+/// Wraps one array element so a single malformed element decodes to nil instead of failing the whole array
+/// (used by APIClient.decodeLossyArray — DEC-086 lossy list decode).
+private struct LossyElement<U: Decodable>: Decodable {
+    let value: U?
+    init(from decoder: Decoder) throws { value = try? U(from: decoder) }
+}
+
 enum APIError: LocalizedError {
     case badBaseURL(String)
     case http(status: Int, body: String)
@@ -191,8 +198,22 @@ struct APIClient {
     }
 
     /// Standalone upload analyses for Lab › Uploads (GET /me/uploads, DEC-055). Each row opens its result.
+    /// Lossy decode (DEC-086): one malformed row — e.g. a new failure field an older build doesn't know —
+    /// must not blank the whole list, so rows decode independently and bad ones are dropped.
     func listUploads() async throws -> [UploadRow] {
-        try await send(makeRequest("me/uploads"), as: [UploadRow].self)
+        let data = try await sendRaw(makeRequest("me/uploads"))
+        return try decodeLossyArray(data, as: UploadRow.self)
+    }
+
+    /// Decodes a JSON array element-by-element, skipping any element that fails to decode. Throws only if
+    /// the payload isn't a JSON array at all (a real server/transport problem worth surfacing).
+    private func decodeLossyArray<T: Decodable>(_ data: Data, as type: T.Type) throws -> [T] {
+        do {
+            return try JSONDecoder().decode([LossyElement<T>].self, from: data).compactMap(\.value)
+        } catch {
+            let snippet = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.decoding("\(error.localizedDescription) [\(snippet.prefix(200))]")
+        }
     }
 
     /// Home Recent activity (GET /me/activity). Server-scoped to practice sessions, achievement unlocks

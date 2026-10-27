@@ -56,6 +56,22 @@ struct JobResponse: Codable {
     let reason: String?
     let timings: [String: Double]?
     var result: ShotFooter?    // analyze-job footer (score_delta + achievement_nudges + unlocked)
+    var failure: FailureInfo?  // DEC-086: server-owned friendly copy when state == "failed"
+}
+
+/// DEC-086 structured analysis failure, as the server renders it for the user (AnalysisFailure.as_dict()).
+/// The app shows `user_title` / `user_message` / `tip` — never the raw `code`.
+struct FailureInfo: Codable, Equatable {
+    let code: String?
+    let stage: String?
+    let user_title: String?
+    let user_message: String?
+    let tip: String?
+
+    /// One friendly paragraph for the processing cover: the message, plus the tip when present.
+    var display: String {
+        [user_message, tip].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
 }
 
 /// The analyze job's result footer (engines.after_shot_analyzed). All optional — present only on a
@@ -616,12 +632,20 @@ struct SessionConsistency: Codable {
 
 struct UploadRow: Codable, Identifiable, Equatable {
     let id: String
-    let state: String?            // pending | analyzed | failed
+    let state: String?            // pending | running | analyzed | failed (DEC-086)
     let created_at: Double?
     let capture_mode: String?     // shot | form (drives the SHOT/FORM badge + result routing)
     let classification: String?
     let source: String?           // always "upload"
     let metrics: ShotRowMetrics?
+    // DEC-086: when state == "failed", the server sends ready-to-show copy (never a raw error code).
+    let failure_code: String?
+    let failure_title: String?
+    let failure_message: String?
+    let tip: String?
+
+    var isAnalyzing: Bool { state == "pending" || state == "running" }
+    var isFailed: Bool { state == "failed" }
 }
 
 // MARK: - Home Recent activity (GET /me/activity, DEC-055)

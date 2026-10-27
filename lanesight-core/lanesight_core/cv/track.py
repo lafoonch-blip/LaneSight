@@ -3,6 +3,7 @@ import cv2, numpy as np
 from .stabilize import frames
 from .lanes import lane_x, foul_corners
 from ._parallel import pmap_frames
+from ..failures import AnalysisFailure
 
 BALL_IN, LANE_IN = 8.59, 41.5
 
@@ -25,8 +26,12 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
     roi = lane_roi(lane, vp, bg.shape)
     ys, xs = np.where(roi)
     if ys.size == 0:          # degenerate lane geometry (VP/foul inverted the ROI): no region to search
-        raise RuntimeError("lane geometry unusable: the detected lane produced an empty search region "
-                           "(awkward camera angle). Reshoot with the camera behind the lane, square to it.")
+        raise AnalysisFailure(
+            'LANE_GEOMETRY_UNUSABLE',
+            "lane geometry unusable: the detected lane produced an empty search region (awkward camera angle)",
+            stage='track',
+            diagnostics={'roi_pixels': int(ys.size),
+                         'vp': [round(float(vp[0]), 1), round(float(vp[1]), 1)] if vp is not None else None})
     y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     roic = roi[y0:y1, x0:x1]; bgc = bg[y0:y1, x0:x1].astype(np.int16)
     Hs = S['Hs']; ts = S['ts']

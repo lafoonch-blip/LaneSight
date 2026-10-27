@@ -20,12 +20,17 @@ class Job:
     created_at: float = field(default_factory=time.monotonic)
     started_at: float | None = None
     finished_at: float | None = None
+    # Structured failure (DEC-086): the stable code/stage + the numbers behind it, and the user-facing copy.
+    failure_code: str | None = None
+    failure_stage: str | None = None
+    diagnostics: dict | None = None
+    failure: dict | None = None     # {code, stage, user_title, user_message, tip} for the app
 
     def public(self) -> dict:
         return dict(id=self.id, kind=self.kind, state=self.state, reason=self.reason,
                     timings={k: (round(v, 3) if isinstance(v, (int, float)) else v)
                              for k, v in self.timings.items()},   # cv is a nested dict, windowed_error a str
-                    result=self.result)
+                    result=self.result, failure=self.failure)     # failure is None on success
 
 
 class SerialJobQueue:
@@ -69,8 +74,16 @@ class SerialJobQueue:
             job.result = fn(job)
             job.state = 'done'
         except Exception as e:                   # fail visibly with the reason (DEC-043), never silently
+            from lanesight_core.failures import AnalysisFailure
+            if not isinstance(e, AnalysisFailure):   # wrap anything unexpected as a stable INTERNAL_ERROR
+                import traceback
+                e = AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:500], stage='internal',
+                                    diagnostics={'exc_type': type(e).__name__,
+                                                 'traceback_tail': traceback.format_exc()[-800:]})
             job.state = 'failed'
-            job.reason = f'{type(e).__name__}: {e}'
+            job.failure_code, job.failure_stage, job.diagnostics = e.code, e.stage, e.diagnostics
+            job.failure = e.as_dict()
+            job.reason = str(e)                  # "CODE: message" — kept for back-compat
         finally:
             job.finished_at = time.monotonic()
             job.timings['total'] = job.finished_at - job.started_at

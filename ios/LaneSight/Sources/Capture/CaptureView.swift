@@ -273,6 +273,8 @@ struct CaptureView: View {
 struct ProcessingCover: View {
     @EnvironmentObject var model: AppModel
     @Binding var busy: Bool
+    /// Label for the button shown on a failure. Live capture returns to the camera; an upload just closes.
+    var failButtonLabel: String = "Back to camera"
 
     var body: some View {
         ZStack {
@@ -294,10 +296,10 @@ struct ProcessingCover: View {
                 VStack(spacing: 18) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 44)).foregroundStyle(LS.bestEffort)
-                    Text("Shot couldn't be processed").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("We couldn't analyze this clip").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text(msg).font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
-                    Button("Back to camera") { model.resetPipeline(); busy = false }
+                    Button(failButtonLabel) { model.resetPipeline(); busy = false }
                         .buttonStyle(PrimaryButtonStyle())
                 }
                 .padding(32)

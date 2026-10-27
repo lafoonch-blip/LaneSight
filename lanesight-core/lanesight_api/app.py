@@ -33,70 +33,113 @@ app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
 # ----------------------------------------------------------------- analysis job
+def _upload_dedupe_on() -> bool:
+    """DEC-086: upload de-duplication is OFF by default so the same clip can be uploaded/analyzed repeatedly
+    for testing. Turn it on with LANESIGHT_UPLOAD_DEDUPE=1. (Live-shot retry idempotency is separate and
+    always on — it's a dropped-connection guard, not upload dedupe.)"""
+    return os.environ.get('LANESIGHT_UPLOAD_DEDUPE') == '1'
+
+
+def _clip_info(probe) -> dict:
+    """Clip facts for the analysis-attempt log (best-effort; whatever the ffprobe block carried)."""
+    p = probe or {}
+    return {'fps': p.get('measured_fps') or p.get('fps'), 'width': p.get('width'), 'height': p.get('height'),
+            'duration_s': p.get('duration') or p.get('duration_s'), 'codec': p.get('codec'),
+            'hdr': bool(p.get('hdr')), 'bytes': p.get('bytes')}
+
+
 def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
-                 mode: str = 'shot', is_upload: bool = False):
+                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None):
     def run(job):
         t0 = time.monotonic()
         out_prefix = str(DATA_ROOT / 'out' / shot_id)
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
         store = get_store()
-        if mode == 'form':
-            # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
-            # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball
-            # L-dev-0 score / Accuracy — hence we skip after_shot_analyzed and return a minimal footer.
-            from lanesight_core.form import analyze_form_clip
-            from lanesight_core.form.pose import pose_backend
-            rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
+        # Every attempt is logged (success + failure) for failure-rate tracking (DEC-086). Best-effort —
+        # a logging failure must never fail the analysis.
+        attempt = {'user_id': user_id, 'shot_id': shot_id, 'session_id': session_id,
+                   'source': 'upload' if is_upload else 'live', 'capture_mode': mode,
+                   'content_hash': content_hash, 'algorithm_version': ALGO_VERSION,
+                   'api_revision': os.environ.get('K_REVISION'),
+                   'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+
+        def _log(status, failure=None, clip=None):
+            try:
+                store.log_analysis_attempt({**attempt, 'status': status,
+                                            'failure_code': getattr(failure, 'code', None),
+                                            'failure_stage': getattr(failure, 'stage', None),
+                                            'diagnostics': getattr(failure, 'diagnostics', None),
+                                            'duration_ms': int((time.monotonic() - t0) * 1000),
+                                            'step_timings': {k: v for k, v in job.timings.items()}, 'clip': clip})
+            except Exception as le:
+                print(f'analysis_attempt log skipped ({le})')
+
+        try:
+            if mode == 'form':
+                # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
+                # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball
+                # L-dev-0 score / Accuracy — hence we skip after_shot_analyzed and return a minimal footer.
+                from lanesight_core.form import analyze_form_clip
+                from lanesight_core.form.pose import pose_backend
+                rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
+                rec['shot_id'] = shot_id
+                # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
+                # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
+                for fkey in (rec.get('key_frames') or []):
+                    local = f'{out_prefix}_form_{fkey}.jpg'
+                    if os.path.exists(local):
+                        try:
+                            with open(local, 'rb') as fh:
+                                store.storage_upload(_IMAGE_BUCKET, f'frames/{shot_id}_form_{fkey}.jpg',
+                                                     fh.read(), 'image/jpeg')
+                        except Exception as e:
+                            print(f'key-frame upload {fkey} skipped ({e})')
+                job.timings['analyze'] = time.monotonic() - t0
+                form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
+                                                          analyze_seconds=job.timings['analyze'],
+                                                          persist=not is_upload)
+                store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'}, algo_version=ALGO_VERSION)
+                _log('analyzed', clip={'fps': rec.get('fps')})
+                return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
+                            focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
+                            footer=form_footer.get('footer'))
+            from lanesight_runner.core import analyze_clip
+            rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
             rec['shot_id'] = shot_id
-            # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
-            # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
-            for fkey in (rec.get('key_frames') or []):
-                local = f'{out_prefix}_form_{fkey}.jpg'
-                if os.path.exists(local):
-                    try:
-                        with open(local, 'rb') as fh:
-                            store.storage_upload(_IMAGE_BUCKET, f'frames/{shot_id}_form_{fkey}.jpg',
-                                                 fh.read(), 'image/jpeg')
-                    except Exception as e:
-                        print(f'key-frame upload {fkey} skipped ({e})')
+            for k, v in (timings or {}).items():
+                job.timings[k] = v
             job.timings['analyze'] = time.monotonic() - t0
-            # Form-only engine step (baselines -> watch -> focus -> footer). Runs BEFORE save so the current
-            # delivery is counted once; never touches the ball L-dev-0 score / Accuracy.
-            # Standalone uploads (DEC-055) still render the form card (focus/footer), but persist=False
-            # keeps them out of the user's Stats baselines.
-            form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
-                                                      analyze_seconds=job.timings['analyze'],
-                                                      persist=not is_upload)
-            store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'})
-            return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
-                        focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
-                        footer=form_footer.get('footer'))
-        from lanesight_runner.core import analyze_clip
-        rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
-        rec['shot_id'] = shot_id
-        for k, v in (timings or {}).items():
-            job.timings[k] = v
-        job.timings['analyze'] = time.monotonic() - t0
-        # Recompute insights with the thrown intent + session history (SHOT_REVIEW #5 / handoff C.4): the CV
-        # pipeline computes insights with neither, so without this an upload/session target never produces an
-        # EXECUTION_MISS and the transition read never fires. Pins come from the measured read; the user can
-        # override via POST /shots/{id}/pins. suggested_target ("Apply this move") is derived inside the recompute.
-        sh = store.get_shot(user_id, shot_id)
-        if sh and (sh.get('intent') or sh.get('session_id')):
-            pr = rec.get('pins') or {}
-            if pr.get('readable'):
-                standing, unc = set(pr.get('standing') or []), set(pr.get('uncertain') or [])
-            else:
-                standing, unc = None, set()
-            _recompute_insights(store, user_id, sh, rec, standing, unc)
-        store.save_shot_result(shot_id, rec, {'ok': True})
-        # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
-        # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
-        if is_upload:
-            return dict(shot_id=shot_id)
-        # After each analyzed shot: recompute score over the 90-day window, run achievements, findings.
-        footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
-        return dict(shot_id=shot_id, **footer)
+            # Recompute insights with the thrown intent + session history (SHOT_REVIEW #5 / handoff C.4).
+            sh = store.get_shot(user_id, shot_id)
+            if sh and (sh.get('intent') or sh.get('session_id')):
+                pr = rec.get('pins') or {}
+                if pr.get('readable'):
+                    standing, unc = set(pr.get('standing') or []), set(pr.get('uncertain') or [])
+                else:
+                    standing, unc = None, set()
+                _recompute_insights(store, user_id, sh, rec, standing, unc)
+            store.save_shot_result(shot_id, rec, {'ok': True}, algo_version=ALGO_VERSION)
+            clip = _clip_info(probe)
+            # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
+            # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
+            if is_upload:
+                _log('analyzed', clip=clip)
+                return dict(shot_id=shot_id)
+            footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
+            _log('analyzed', clip=clip)
+            return dict(shot_id=shot_id, **footer)
+        except Exception as e:
+            # Persist the failure on the shot row (so Lab › Uploads can show it) + log the attempt, then
+            # re-raise so the job reports it. Unknown exceptions become a stable INTERNAL_ERROR.
+            from lanesight_core.failures import AnalysisFailure
+            fail = e if isinstance(e, AnalysisFailure) else \
+                AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:500], stage='internal')
+            try:
+                store.mark_shot_failed(shot_id, fail.code, fail.stage)
+            except Exception as me:
+                print(f'mark_shot_failed skipped ({me})')
+            _log('failed', failure=fail)
+            raise
 
     return _queue.submit('analyze', run)
 
@@ -203,7 +246,7 @@ def health():
     return {'status': status, 'supabase_reachable': reachable,
             'versions': {'api': API_VERSION, 'app_compat': APP_COMPAT,
                          'core': ALGO_VERSION, 'rules': BENCHMARK_VERSION, 'formula': SCORE_VERSION},
-            'config': s.redacted()}
+            'config': {**s.redacted(), 'upload_dedupe': _upload_dedupe_on()}}   # DEC-086 flag (default off)
 
 
 # ----------------------------------------------------------------- auth (email/password, no bearer)
@@ -809,7 +852,8 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     import hashlib
     data = await file.read()
     content_hash = hashlib.sha256(data).hexdigest()
-    dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+    dup = (store.find_upload_by_hash(user, content_hash)
+           if (_upload_dedupe_on() and hasattr(store, 'find_upload_by_hash')) else None)
     if dup:
         return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
     shot = store.create_shot(user, None, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
@@ -824,7 +868,7 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     with open(path, 'wb') as f:
         f.write(data)
     job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, None,
-                       mode=(meta.get('capture_mode') or 'shot'), is_upload=True)
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=True, content_hash=content_hash)
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
 
 
@@ -857,7 +901,8 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     import hashlib
     content_hash = hashlib.sha256(data).hexdigest()
     if is_upload:
-        dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+        dup = (store.find_upload_by_hash(user, content_hash)
+               if (_upload_dedupe_on() and hasattr(store, 'find_upload_by_hash')) else None)
         if dup:
             store.storage_delete('shot-clips', storage_path)
             return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
@@ -881,7 +926,7 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     with open(local, 'wb') as f:
         f.write(data)
     job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
-                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload)
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash)
     store.storage_delete('shot-clips', storage_path)      # clip analyzed; don't retain it
     try:
         os.remove(local)

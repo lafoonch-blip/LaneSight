@@ -131,10 +131,18 @@ struct LabView: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(rows) { row in
-                            Button {
-                                Task { if await model.loadShotResult(shotId: row.id, captureModeHint: row.capture_mode) { showUploadResult = true } }
-                            } label: { UploadRowCard(upload: row) }
-                            .buttonStyle(.plain)
+                            if row.isFailed {
+                                // No result to open; offer a fresh analyze run (the clip isn't kept server-side).
+                                NavigationLink { UploadView() } label: { UploadRowCard(upload: row) }
+                                    .buttonStyle(.plain)
+                            } else if row.isAnalyzing {
+                                UploadRowCard(upload: row)      // in-flight — nothing to open yet
+                            } else {
+                                Button {
+                                    Task { if await model.loadShotResult(shotId: row.id, captureModeHint: row.capture_mode) { showUploadResult = true } }
+                                } label: { UploadRowCard(upload: row) }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
@@ -151,7 +159,11 @@ struct LabView: View {
     private func loadUploads() async {
         uploads = .loading
         do { uploads = .loaded(try await model.makeClient().listUploads()) }
-        catch { uploads = .failed(error.localizedDescription) }
+        catch {
+            // DEC-086: a response we can't read is our problem, not a scary host/status string.
+            if case APIError.decoding = error { uploads = .failed("Couldn't load your uploads. Pull to refresh.") }
+            else { uploads = .failed(error.localizedDescription) }
+        }
     }
 }
 
@@ -217,32 +229,44 @@ struct UploadRowCard: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(LS.textPrimary)
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary).lineLimit(1)
+                Text(subtitle).font(.system(size: 11))
+                    .foregroundStyle(upload.isFailed ? LS.bestEffort : LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
+            trailing
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10).frame(minHeight: 62)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    @ViewBuilder private var trailing: some View {
+        if upload.isAnalyzing {
+            ProgressView().tint(LS.textSecondary)
+        } else if upload.isFailed {
+            Text("Retry").font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.link)
+            Text("›").font(.system(size: 18)).foregroundStyle(LS.textSecondary)
+        } else {
             Text(isForm ? "FORM" : "SHOT")
                 .font(.system(size: 10, weight: .bold)).foregroundStyle(LS.link)
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(LS.link.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
             Text("›").font(.system(size: 18)).foregroundStyle(LS.textSecondary)
         }
-        .padding(.horizontal, 14).frame(minHeight: 62)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     private var isForm: Bool { upload.capture_mode == "form" }
     private var title: String {
         let date = upload.created_at.map { " · " + Date(timeIntervalSince1970: $0).formatted(.dateTime.month().day()) } ?? ""
+        if upload.isFailed { return (upload.failure_title ?? "Couldn't analyze") + date }
         return "Upload\(date)"
     }
     private var subtitle: String {
-        switch upload.state {
-        case "pending": return "Analyzing…"
-        case "failed":  return "Analysis didn't complete"
-        default: break
-        }
+        if upload.isAnalyzing { return "Analyzing…" }
+        // DEC-086: failed rows show the server's friendly, actionable copy (never a raw code).
+        if upload.isFailed { return upload.failure_message ?? "We couldn't analyze this clip. Tap to try another." }
         if isForm { return "Form Analysis · 1 delivery" }
         var parts = ["Shot Analysis"]
         if let sp = upload.metrics?.ball_speed { parts.append(String(format: "%.1f mph", sp)) }

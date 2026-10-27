@@ -254,11 +254,34 @@ class MemoryStore:
         self.shots[sh['id']] = sh
         return sh
 
-    def save_shot_result(self, shot_id, record, result):
+    def save_shot_result(self, shot_id, record, result, algo_version=None):
         sh = self.shots.get(shot_id)
         if sh:
             sh['record'] = record
             sh['result'] = result
+            sh['analysis_status'] = 'analyzed'      # DEC-086
+            sh['failure_code'] = None
+            sh['failure_stage'] = None
+            sh['algorithm_version'] = algo_version
+            sh['analyzed_at'] = time.time()
+
+    def mark_shot_failed(self, shot_id, code, stage):
+        """DEC-086: record a failed analysis on the shot row (so Lab › Uploads can show 'Couldn't analyze')."""
+        sh = self.shots.get(shot_id)
+        if sh:
+            sh['analysis_status'] = 'failed'
+            sh['failure_code'] = code
+            sh['failure_stage'] = stage
+            sh['result'] = {'ok': False, 'failure_code': code}
+            sh['analyzed_at'] = time.time()
+
+    def log_analysis_attempt(self, row):
+        """DEC-086: append one analysis-attempt row (success or failure). Retained, never FK-cascaded."""
+        if not hasattr(self, 'analysis_attempts'):
+            self.analysis_attempts = []
+        r = dict(row); r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+        self.analysis_attempts.append(r)
+        return r
 
     def get_shot(self, user_id, shot_id):
         sh = self.shots.get(shot_id)
@@ -585,17 +608,25 @@ class MemoryStore:
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
-            if rec and metrics:
-                state = 'analyzed'
-            elif (sh.get('result') or {}).get('ok') is False:
-                state = 'failed'
-            else:
-                state = 'pending'
-            out.append(dict(id=sh['id'], state=state, created_at=sh.get('created_at'),
-                            capture_mode=sh.get('capture_mode') or 'shot',
-                            classification=(rec.get('insights') or {}).get('classification'),
-                            source='upload', metrics=key))
+            state = sh.get('analysis_status') or (                         # DEC-086; legacy fallback
+                'analyzed' if (rec and metrics)
+                else ('failed' if (sh.get('result') or {}).get('ok') is False else 'pending'))
+            out.append(self._upload_row(sh, state, key, (rec.get('insights') or {}).get('classification')))
         return out
+
+    @staticmethod
+    def _upload_row(sh, state, key, classification):
+        """Shared Lab › Uploads row shape (identical types in both stores — the ISO/epoch drift broke this)."""
+        from lanesight_core.failures import failure_block
+        row = dict(id=sh['id'], state=state, created_at=_ts_epoch(sh.get('created_at')),
+                   capture_mode=sh.get('capture_mode') or 'shot', classification=classification,
+                   source='upload', metrics=key,
+                   failure_code=sh.get('failure_code'), failure_stage=sh.get('failure_stage'),
+                   failure_title=None, failure_message=None, tip=None)
+        if state == 'failed':
+            fb = failure_block(sh.get('failure_code') or 'UNKNOWN_LEGACY', sh.get('failure_stage') or 'internal')
+            row['failure_title'], row['failure_message'], row['tip'] = fb['user_title'], fb['user_message'], fb.get('tip')
+        return row
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):
         rows = self.notifications.setdefault(user_id, [])
@@ -841,12 +872,16 @@ class PgStore(MemoryStore):
             return None
         return rows[0] if rows else None
 
-    def save_shot_result(self, shot_id, record, result):
-        MemoryStore.save_shot_result(self, shot_id, record, result)
+    def save_shot_result(self, shot_id, record, result, algo_version=None):
+        MemoryStore.save_shot_result(self, shot_id, record, result, algo_version)
         insights = record.get('insights') or {}
+        import datetime as _dt
         self._req(f'shots?id=eq.{shot_id}', 'PATCH', {
             'record': record, 'trajectory': record.get('trajectory'), 'key_points': record.get('key_points'),
-            'classification': insights.get('classification')})
+            'classification': insights.get('classification'),
+            'analysis_status': 'analyzed', 'failure_code': None, 'failure_stage': None,   # DEC-086
+            'algorithm_version': algo_version,
+            'analyzed_at': _dt.datetime.now(_dt.timezone.utc).isoformat()})
         rows = [{'shot_id': shot_id, 'metric': name, 'value': mm.get('value'), 'unit': mm.get('unit'),
                  'confidence': mm.get('confidence'), 'status': mm.get('status'),
                  'source': mm.get('source', 'lanesight_video'),
@@ -854,6 +889,21 @@ class PgStore(MemoryStore):
                 for name, mm in (record.get('metrics') or {}).items()]
         if rows:
             self._req('measurements', 'POST', rows, prefer='resolution=merge-duplicates,return=minimal')
+
+    def mark_shot_failed(self, shot_id, code, stage):
+        MemoryStore.mark_shot_failed(self, shot_id, code, stage)
+        import datetime as _dt
+        self._req(f'shots?id=eq.{shot_id}', 'PATCH', {
+            'analysis_status': 'failed', 'failure_code': code, 'failure_stage': stage,
+            'analyzed_at': _dt.datetime.now(_dt.timezone.utc).isoformat()})
+
+    def log_analysis_attempt(self, row):
+        """DEC-086: one row per analysis attempt (success + failure) in the retained analysis_attempt table.
+        Best-effort — the caller swallows errors so logging can never fail an analysis."""
+        body = {k: v for k, v in (row or {}).items() if v is not None}
+        body.setdefault('id', _new_id())
+        self._req('analysis_attempt', 'POST', body, prefer='return=minimal')
+        return body
 
     # --- reads / profile / sensors / catalog (PostgREST) ---
     def _get(self, table, query=''):
@@ -1249,7 +1299,8 @@ class PgStore(MemoryStore):
 
     def list_uploads(self, user_id):
         rows = self._get('shots', f'user_id=eq.{user_id}&source=eq.upload'
-                                  '&select=id,created_at,capture_mode,classification,source,record'
+                                  '&select=id,created_at,capture_mode,classification,source,record,'
+                                  'analysis_status,failure_code,failure_stage'
                                   '&order=created_at.desc')
         out = []
         for sh in rows:
@@ -1257,9 +1308,8 @@ class PgStore(MemoryStore):
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
-            out.append(dict(id=sh['id'], state='analyzed' if metrics else 'pending',
-                            created_at=sh.get('created_at'), capture_mode=sh.get('capture_mode') or 'shot',
-                            classification=sh.get('classification'), source='upload', metrics=key))
+            state = sh.get('analysis_status') or ('analyzed' if metrics else 'pending')   # legacy fallback
+            out.append(self._upload_row(sh, state, key, sh.get('classification')))
         return out
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):

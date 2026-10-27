@@ -31,8 +31,6 @@ struct UploadView: View {
                         .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
-                if busy { pipelineCard }
-
                 Button {
                     Task { await analyze() }
                 } label: {
@@ -54,15 +52,8 @@ struct UploadView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .videos)
         .onChange(of: pickerItem) { _, item in Task { await loadPicked(item) } }
-        .sheet(isPresented: $model.showResult) {
-            if let result = model.result {
-                if result.isForm {
-                    FormCardView(result: result).environmentObject(model)
-                } else {
-                    ShotCardView(result: result).environmentObject(model)
-                }
-            }
-        }
+        // The analyzing modal + the result + any failure are presented at the app root (DEC-086), so
+        // this screen owns none of them — leaving Upload mid-analysis can't orphan the result.
     }
 
     @State private var pickerItem: PhotosPickerItem?
@@ -140,28 +131,6 @@ struct UploadView: View {
         }
     }
 
-    private var pipelineCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            switch model.pipeline {
-            case .creatingSession: progressRow("Starting session…")
-            case .uploading(let frac):
-                Text("Uploading clip").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                ProgressView(value: frac).tint(LS.blue)
-                Text("\(Int(frac * 100))%").font(.lsCaption).foregroundStyle(LS.textSecondary)
-            case .analyzing(let state, _): progressRow("Analyzing on Mac — \(state)")
-            case .fetching: progressRow("Fetching results…")
-            case .failed(let msg):
-                Label(msg, systemImage: "exclamationmark.triangle.fill").font(.lsFootnote).foregroundStyle(LS.bestEffort)
-            default: EmptyView()
-            }
-        }
-        .lsCard()
-    }
-
-    private func progressRow(_ text: String) -> some View {
-        HStack(spacing: 10) { ProgressView().tint(LS.cyan); Text(text).font(.lsSubheadline).foregroundStyle(LS.textPrimary) }
-    }
-
     // MARK: actions
 
     private func loadPicked(_ item: PhotosPickerItem?) async {
@@ -187,7 +156,7 @@ struct UploadView: View {
     private func analyze() async {
         guard let url = pickedURL else { return }
         errorText = nil
+        // processUpload raises the root analyzing cover; the result/failure are shown there, not inline.
         await model.processUpload(fileURL: url)
-        if case .failed(let msg) = model.pipeline { errorText = msg }
     }
 }

@@ -152,6 +152,9 @@ final class AppModel: ObservableObject {
     @Published var pipeline: PipelineState = .idle
     @Published var result: ShotResult?
     @Published var showResult = false
+    // DEC-086: an upload analysis takes over a full-screen cover presented at the APP ROOT (not on the
+    // Upload screen), so the result can never be orphaned if the user navigates away mid-analysis.
+    @Published var uploadBusy = false
 
     // Connection check
     @Published var healthText: String?
@@ -422,7 +425,12 @@ final class AppModel: ObservableObject {
     func processShot(fileURL: URL) async { await runPipeline(fileURL: fileURL, source: "live") }
 
     /// Analyze a clip picked from Photos/Files (POST /uploads) through the same job pipeline + Shot card.
-    func processUpload(fileURL: URL) async { await runPipeline(fileURL: fileURL, source: "upload") }
+    /// Raises the root-level blocking cover (DEC-086) for the whole analysis so it's never orphaned.
+    func processUpload(fileURL: URL) async {
+        pipeline = .trimming
+        uploadBusy = true
+        await runPipeline(fileURL: fileURL, source: "upload")
+    }
 
     private func runPipeline(fileURL: URL, source: String) async {
         do {
@@ -495,7 +503,10 @@ final class AppModel: ObservableObject {
             // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
             let last = try await client.job(created.job_id)
             if last.state == "failed" {
-                pipeline = .failed("Analysis failed: \(last.reason ?? "unknown reason")")
+                // DEC-086: show the server's friendly, user-facing copy — never the raw code/reason.
+                let friendly = last.failure?.display
+                pipeline = .failed(friendly?.isEmpty == false ? friendly!
+                                   : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
                 return
             }
             pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
@@ -650,6 +661,7 @@ final class AppModel: ObservableObject {
     func resetPipeline() {
         pipeline = .idle
         showResult = false
+        uploadBusy = false
     }
 
     var activeSessionId: String? { sessionId }

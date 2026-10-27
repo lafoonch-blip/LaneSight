@@ -2,6 +2,7 @@
 Lane surface = saturated wood (approach wood is paler, so the foul line is the lane mask's near boundary).
 Edges come from per-row wood runs tracked across rows; all lanes share one vanishing point."""
 import cv2, numpy as np
+from ..failures import AnalysisFailure
 
 def lane_mask(bgr, s_min=105):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -86,11 +87,16 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
             good = fb; foul_mask = lane_mask(bg, s_min=60)
     if not good:
         if not lanes:
-            raise RuntimeError(f"lane not detected: no lane-colored wood found in the background "
-                               f"({100 * m.mean():.1f}% of pixels matched). Check that the lane is in frame and lit, "
-                               "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
-        raise RuntimeError(f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges "
-                           "meeting at a common vanishing point. Check framing: camera behind the approach, whole lane in view")
+            raise AnalysisFailure(
+                'LANE_NOT_DETECTED_NO_WOOD',
+                f"lane not detected: no lane-colored wood found in the background "
+                f"({100 * m.mean():.1f}% of pixels matched)",
+                stage='lane', diagnostics={'pct_pixels_matched': round(100 * float(m.mean()), 1)})
+        raise AnalysisFailure(
+            'LANE_NOT_DETECTED_NO_EDGES',
+            f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges meeting at a "
+            f"common vanishing point",
+            stage='lane', diagnostics={'wood_regions': len(lanes)})
     if used_s != 105 and not any(l.get('fallback') for l in good):
         log(f"pale lane: detected at saturation floor s_min={used_s} (wood below the default 105)")
     loose = lane_mask(bg, s_min=min(60, used_s))
@@ -221,8 +227,10 @@ def _foul(l, m):
         if last and last[1] < h - 3: pts.append(last)
     P = np.array(pts, float)
     if len(P) < 6:          # no foul line in view: the lane runs off the bottom of the frame (camera too low/close).
-        raise RuntimeError("lane not detected: foul line not found — the lane runs off the bottom of the frame "
-                           "(the foul line must be in view; raise or pull back the camera)")
+        raise AnalysisFailure(
+            'FOUL_LINE_NOT_IN_VIEW',
+            "foul line not found — the lane runs off the bottom of the frame",
+            stage='lane', diagnostics={'points_found': int(len(P))})
     keep = np.ones(len(P), bool)
     for _ in range(8):
         c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])

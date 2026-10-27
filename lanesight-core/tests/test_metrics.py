@@ -37,6 +37,10 @@ def test_compute_returns_speed_for_a_normal_track():
 
 
 def test_compute_raises_cleanly_on_a_sparse_track():
+    from lanesight_core.failures import AnalysisFailure
     track, lane, vp = _straight_shot()
-    with pytest.raises(RuntimeError, match='not tracked enough'):
+    with pytest.raises(AnalysisFailure) as ei:                       # subclasses RuntimeError (DEC-086)
         compute(track[:3], lane, vp, track[3]['t'], anchor_track=track[:3])
+    e = ei.value
+    assert e.code == 'TRACK_TOO_SPARSE_FOR_SPEED' and e.stage == 'metrics'
+    assert e.diagnostics.get('on_lane_pts') is not None and 'window_4_24ft' in e.diagnostics

@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.46  
+Version: 1.47  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.45
+Supersedes: v1.46
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -976,6 +976,20 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED (target state)
 **Supersedes:** DEC-073's Stats tab order (Score · Shot · Form · Equipment) and the first-use Stats cards from DEC-081.
 
+### DEC-086 — Analysis failures are first-class: structured codes, friendly copy, a retained attempt log; upload de-dup paused
+**Decision (Shayne, 2026-10-27):** When the CV/pose pipeline can't produce a result, that is a first-class, user-facing outcome — not a 500 or a silent empty row.
+- **Structured failures.** Every pipeline raise is an `AnalysisFailure` with a stable `code`, a `stage` (decode · stabilize · lane · track · impact · metrics · sanity · form_pose · storage · internal), a developer `message`, and `diagnostics` (the numbers behind the decision). Anything unexpected is wrapped as `INTERNAL_ERROR` — the raw trace never reaches the user.
+- **Server-owned copy.** `lanesight_core/failures.py` maps each code to a user `title` / `message` / `tip`. The API returns this block on the job and on the failed shot row; the app shows the copy, never the code.
+- **Shots carry analysis state.** `shots.analysis_status` (pending · running · analyzed · failed) with `failure_code` / `failure_stage` / `analyzed_at`. Lab › Uploads reads this to show Analyzing / Analyzed / Couldn't-analyze + Retry.
+- **Retained attempt log.** A new `analysis_attempt` table records one row per attempt — successes included (rates need a denominator) — with code/stage/diagnostics, `algorithm_version`, `api_revision`, `capture_mode`, `source`, `content_hash`, clip facts and `env`. Like `feedback` (DEC-059) it carries **no FK cascade** (plain uuids), so it outlives shot/account deletion and the score reset. An `analysis_failure_rates` view aggregates by day × engine version × capture mode × failure code. Owner-only read; service-role write.
+- **Upload de-duplication paused.** The DEC-055/DEC-043 "same clip → same shot" short-circuit is now behind `LANESIGHT_UPLOAD_DEDUPE` (**default OFF**) so a bowler can re-analyze the same clip while the engine is changing. Live-capture content-hash de-dup is unchanged.
+- **Upload analysis is presented at the app root.** The analyzing cover, the result and any failure are shown from the root (not the Upload screen), so navigating away mid-analysis can never orphan the result. The screen stays awake throughout (reaffirms DEC-068).
+
+**Why:** During active engine development most "bugs" are really unhandled failure modes. Making failures explicit, measurable and non-scary turns them into triage data instead of lost shots and opaque errors.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (Dev Build v0). Migration `019_analysis_attempts.sql`.
+**Supersedes:** the upload de-duplication clause of DEC-055 / DEC-043 **while `LANESIGHT_UPLOAD_DEDUPE` is unset or 0** (the rest of DEC-055 — uploads are standalone, don't count, live under Lab — is unchanged).
+
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
@@ -994,3 +1008,4 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
 - DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
 - DEC-035 — "No Session Summary screen" superseded by DEC-072 (score popup on end, session summary also used for past sessions).
+- DEC-055 / DEC-043 — the upload de-duplication clause is superseded by DEC-086 while `LANESIGHT_UPLOAD_DEDUPE` is off (default); the rest of DEC-055 stands.

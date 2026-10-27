@@ -73,11 +73,22 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
         mm = (Z >= a) & (Z < b)
         if mm.sum() < 5 or np.ptp(t[mm]) < 0.08: return None
         return np.polyfit(t[mm], Z[mm], 1)
+    def _win(a, b):                                         # diagnostics: how many points / seconds each window had
+        mm = (Z >= a) & (Z < b)
+        return {'pts': int(mm.sum()), 'span_s': round(float(np.ptp(t[mm])), 3) if mm.sum() else 0.0}
+    hi = max(32.0, float(Z.max()))
     early = seg(4, 24)                                      # widen the window if the early lane is sparse
     if early is None: early = seg(4, 30)
-    if early is None: early = seg(2, max(32.0, float(Z.max())))
+    if early is None: early = seg(2, hi)
     if early is None:
-        raise RuntimeError('ball not tracked enough to measure speed (the rolling track is too short or sparse)')
+        from ..failures import AnalysisFailure
+        raise AnalysisFailure(
+            'TRACK_TOO_SPARSE_FOR_SPEED',
+            'ball not tracked enough to measure speed (the rolling track is too short or sparse)',
+            stage='metrics',
+            diagnostics={'on_lane_pts': int(len(Z)),
+                         'window_4_24ft': _win(4, 24), 'window_4_30ft': _win(4, 30), 'window_2_maxft': _win(2, hi),
+                         'track_first_ft': round(float(Z.min()), 2), 'track_last_ft': round(float(Z.max()), 2)})
     late = seg(Z_IMPACT - 15, Z_IMPACT + 2)
     t_foul = float(-early[1] / early[0])
     prof = {}

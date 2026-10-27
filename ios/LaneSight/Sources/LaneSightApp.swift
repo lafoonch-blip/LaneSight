@@ -44,6 +44,14 @@ struct LaneSightApp: App {
             .lsAppFont()
             .preferredColorScheme(.dark)
             .installGlobalKeyboardDismiss()     // tap outside a field anywhere dismisses the keyboard
+            // DEC-086: an upload analysis blocks the whole app from the root so its result is never
+            // orphaned by navigating away from Lab › Upload mid-analysis. Screen stays awake throughout.
+            .fullScreenCover(isPresented: $model.uploadBusy) {
+                ProcessingCover(busy: $model.uploadBusy, failButtonLabel: "Close")
+                    .environmentObject(model)
+                    .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+                    .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+            }
         }
     }
 

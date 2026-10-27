@@ -94,20 +94,28 @@ def test_avatar_rejects_oversize_and_garbage():
     assert client.put('/me/avatar', files={'file': ('x.jpg', b'not-an-image', 'image/jpeg')}, headers=Hp).status_code == 415
 
 
-def test_upload_dedupe_returns_existing_shot():
+def test_upload_dedupe_flag(monkeypatch):
+    # DEC-086: upload de-duplication is behind LANESIGHT_UPLOAD_DEDUPE (default OFF) so the same clip can be
+    # uploaded and analyzed repeatedly for testing.
     import hashlib
     store = get_store()
     data = b'fake-clip-bytes-for-dedupe'
     h = hashlib.sha256(data).hexdigest()
-    # seed a prior standalone upload with this content hash
     prior = store.create_shot('u1', None, {'source': 'upload'})
     store.set_content_hash(prior['id'], h)
-    # an identical re-upload short-circuits to the existing shot (never runs analysis)
+    # Flag ON -> an identical re-upload short-circuits to the existing shot (never runs analysis).
+    monkeypatch.setenv('LANESIGHT_UPLOAD_DEDUPE', '1')
     r = client.post('/uploads', files={'file': ('clip.mov', data, 'video/quicktime')},
                     data={'metadata': '{}'}, headers=H)
     assert r.status_code == 200
     body = r.json()
     assert body.get('duplicate') is True and body['shot_id'] == prior['id'] and 'job_id' not in body
+    # Flag OFF (default) -> the identical clip makes a brand-new shot + runs a fresh analysis.
+    monkeypatch.delenv('LANESIGHT_UPLOAD_DEDUPE', raising=False)
+    r = client.post('/uploads', files={'file': ('clip.mov', data, 'video/quicktime')},
+                    data={'metadata': '{}'}, headers=H)
+    body = r.json()
+    assert body.get('duplicate') is not True and body['shot_id'] != prior['id'] and 'job_id' in body
 
 
 def test_live_shot_dedupe_is_session_scoped():

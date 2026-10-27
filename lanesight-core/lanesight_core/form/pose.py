@@ -25,6 +25,7 @@ import hashlib, os, subprocess
 from dataclasses import asdict
 import numpy as np
 from ..models.shot import Measurement
+from ..failures import AnalysisFailure
 
 POSE_BACKEND_VERSION = 'form-pose-0.1.0'
 _SRC = 'lanesight_form'
@@ -59,8 +60,12 @@ PLAUSIBLE_STEP_MAX_S = 0.85   # a single real bowling step never exceeds this; a
 SLOWMO_FACTORS = (2, 3, 4, 5, 6, 8)   # iPhone slo-mo export factors (120/240 fps over 30 fps playback)
 
 
-class PoseBackendError(RuntimeError):
-    pass
+class PoseBackendError(AnalysisFailure):
+    """Form pose backend / model / decode failure. Carries a stable code like any AnalysisFailure; defaults to
+    FORM_POSE_BACKEND_UNAVAILABLE so existing `raise PoseBackendError(msg)` calls stay structured."""
+    def __init__(self, message, code: str = 'FORM_POSE_BACKEND_UNAVAILABLE',
+                 stage: str = 'form_pose', diagnostics: dict | None = None):
+        super().__init__(code, message, stage=stage, diagnostics=diagnostics)
 
 
 # --------------------------------------------------------------------------- model / IO
@@ -107,7 +112,9 @@ def extract_landmarks(path: str, model_path: str = POSE_MODEL_PATH, log=print) -
         min_pose_detection_confidence=0.3, min_tracking_confidence=0.3)
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
-        raise PoseBackendError(f"OpenCV can't decode {path!r} (re-export as H.264 / Most Compatible).")
+        raise PoseBackendError(f"OpenCV can't decode {path!r} (re-export as H.264 / Most Compatible).",
+                               code='VIDEO_DECODE_FAILED', stage='decode',
+                               diagnostics={'path_ext': os.path.splitext(str(path))[1].lower()})
     ts: list[float] = []
     rows: list[np.ndarray] = []
     with vision.PoseLandmarker.create_from_options(opts) as lm:
@@ -129,7 +136,8 @@ def extract_landmarks(path: str, model_path: str = POSE_MODEL_PATH, log=print) -
             i += 1
     cap.release()
     if not rows:
-        raise PoseBackendError(f'no frames decoded from {path!r}')
+        raise PoseBackendError(f'no frames decoded from {path!r}', code='VIDEO_NO_FRAMES', stage='decode',
+                               diagnostics={'path_ext': os.path.splitext(str(path))[1].lower()})
     log(f'pose: {len(rows)} frames, mean bowling-side wrist visibility '
         f'{np.nanmean([r[R_WRIST, 3] for r in rows]):.2f}')
     return np.array(ts), np.array(rows)

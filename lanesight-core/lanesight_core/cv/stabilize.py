@@ -3,6 +3,7 @@ and build a clean background plate in reference coordinates. Streaming: frames a
 import cv2, numpy as np, subprocess, threading
 from concurrent.futures import ThreadPoolExecutor
 from ._parallel import workers
+from ..failures import AnalysisFailure
 
 def pts(path):
     out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time',
@@ -50,7 +51,10 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
     ts = pts(timing_path or path)
     if timing_path:
         n = len(pts(path))
-        if n != len(ts): raise RuntimeError(f'timing source has {len(ts)} frames but the video has {n}')
+        if n != len(ts):
+            raise AnalysisFailure('TIMING_FRAME_MISMATCH',
+                                  f'timing source has {len(ts)} frames but the video has {n}',
+                                  stage='stabilize', diagnostics={'timing_frames': len(ts), 'video_frames': n})
     core = (lambda i: True) if core_end_s is None else (lambda i: i >= len(ts) or ts[i] <= core_end_s)
     # pass A: reference = middle of the longest steady stretch with the lane visible (within the core, not the tail)
     prevg = None; mot = []; woodf = []

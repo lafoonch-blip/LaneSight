@@ -11,6 +11,7 @@ from .refine import refine
 from .pins import read_pins
 from .revrate import ball_crops, rev_rate
 from ..models.shot import ShotRecord, m, ALGO_VERSION
+from ..failures import AnalysisFailure
 from ..insights.adjust import strike_adjustment, no_reliable_data_insight
 from ..insights.spares import spare_plan
 
@@ -117,16 +118,24 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             T = link(candidates(B, lane, vp), vp)
         span = T[-1]['u'] - T[0]['u'] if T else 0
         if best is None or span > best[0]: best = (span, lane, T, B)
-    if best is None: raise RuntimeError('lane not detected: lane edges/foul line not found in the stabilized background')
+    if best is None:
+        raise AnalysisFailure('LANE_NOT_DETECTED',
+                              'lane not detected: lane edges/foul line not found in the stabilized background',
+                              stage='lane', diagnostics={'candidates_tried': len(G.get('lanes') or [])})
     _, lane, T, B = best
     pickle.dump(dict(G=G, lane=lane, B=B), open(bcache, 'wb'))
-    if len(T) < 10: raise RuntimeError('ball track not found')
+    if len(T) < 10:
+        raise AnalysisFailure('BALL_TRACK_NOT_FOUND', 'ball track not found', stage='track',
+                              diagnostics={'track_points': len(T), 'needed': 10})
     with _stage('extend_s'):
         T = extend_back(B, T, lane, log=log)
         T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
     with _stage('detect_impact_s'):
         t_imp, _ = detect_impact(video, S, lane, T, log=log)
-    if t_imp is None: raise RuntimeError('pin impact not detected')
+    if t_imp is None:
+        raise AnalysisFailure('PIN_IMPACT_NOT_DETECTED', 'pin impact not detected', stage='impact',
+                              diagnostics={'track_points': len(T),
+                                           'track_last_t': round(float(T[-1]['t']), 3) if T else None})
     ground = [c for c in T if not c.get('airborne_candidate')]
     with _stage('refine_s'):
         TR = refine(video, S, lane, ground, t_imp, log=log)
@@ -142,10 +151,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # rather than emit confidently-wrong speed/entry/angle numbers (accuracy beats coverage).
     v = M.get('ball_speed_mph')
     if v is not None and v > 30:
-        raise RuntimeError(f"ball not tracked to the pins (measured {v:.0f} mph is not physically possible): the "
-                           f"ball was lost in the back half of the lane, so the distance scale is unreliable. The "
-                           f"lane and early line read fine, but speed/entry can't be trusted. Reshoot with the ball "
-                           f"visible all the way to the pins (less glare / nothing crossing the back of the lane).")
+        raise AnalysisFailure(
+            'IMPOSSIBLE_SPEED_SCALE',
+            f"ball not tracked to the pins (measured {v:.0f} mph is not physically possible): the ball was lost "
+            f"in the back half of the lane, so the distance scale is unreliable.",
+            stage='sanity',
+            diagnostics={'measured_mph': round(float(v), 1), 'track_last_ft': M.get('track_last_ft')})
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]
