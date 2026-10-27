@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.45  
+Version: 1.46  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.44
+Supersedes: v1.45
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -964,6 +964,17 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-27
 **Status:** ACCEPTED (target state; the dev build keeps its current tabs until its designs are next updated)
 **Supersedes:** the disabled Leagues / Tournaments tabs (DEC-055 for the dev build designs, DEC-067 for the target state).
+
+### DEC-085 — Stats tab order Shot · Form · Score · Arsenal; Stats building states mirror the real screens
+**Decision (Shayne, 2026-10-27):**
+- **Stats tabs, in order: Shot · Form · Score · Arsenal.** "Equipment" is renamed **Arsenal**. The Stats nav button opens the **Shot** tab.
+- **Score tab while the score is building** uses the real Score screen, matching Home (DEC-083): greyed, blurred badge, "—" + BUILDING, the shots-needed hint and a "Score unlocks · N%" bar; the trend chart is dimmed with "Your trend starts with your first score"; each part shows its shot progress (e.g. 12/20) with a progress bar and "—" for inputs, and a ready part shows its value with "Ready ✓". Part weights stay on this screen (the details view).
+- **Shot and Arsenal tabs for a new bowler** show real values from the shots so far with a **small-sample** label ("Based on 12 shots from your first session…"); 30-day changes read "new" and by-session trend charts say "Trend starts at session 2". Arsenal shows the one ball and pattern used, marked as a small sample. Form keeps its empty state until the first Form delivery.
+
+**Why:** A new bowler should see the real screens filling in, not a different layout; Shot is the most-used view, so it comes first.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (target state)
+**Supersedes:** DEC-073's Stats tab order (Score · Shot · Form · Equipment) and the first-use Stats cards from DEC-081.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.

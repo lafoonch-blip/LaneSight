@@ -1,5 +1,5 @@
 # Target-state (MVP) designs — v3.7
-Status: APPROVED FOR HANDOFF · Version: 3.7.5 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: APPROVED FOR HANDOFF · Version: 3.7.6 · Last Updated: 2026-10-27 · Owner: Shayne
 
 ## Where they live
 - **Figma:** "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7**.
@@ -39,6 +39,7 @@ DEC-061, DEC-066–077, DEC-079–081 (DEC-078 withdrawn). Metric placement: `01
 Back, Edit, Form/Field, Control/Segment option, Row/List item, Tile/Stat were orphaned (main components lost). Rebuilt in Design Components › "LaneSight / Core controls (rebuilt 2026-10-26)" and all 94 instances relinked. Also new: `Sessions / Next-shot card` (6 states); Result badge gained Not a strike / Not read; Metric status row gained Best effort.
 
 ## Changelog
+- **3.7.6 (2026-10-27):** DEC-085 — Stats tabs Shot · Form · Score · Arsenal (Equipment renamed; Stats opens on Shot). New building-state screens built from the real ones: "Stats · Shot · building", "Stats · Score · building", "Stats · Arsenal · building" (small-sample labels); Form keeps its empty state.
 - **3.7.5 (2026-10-27):** DEC-084 — nav is Home · Stats · Lab · Coaching (Leagues/Tournaments removed; new "Active tab=Coaching" variant); new screen "Coaching · coming soon" with Notify me. 257 prototype links, none broken.
 - **3.7.4 (2026-10-27):** DEC-083 — Home while the score is building uses the real card (greyed, blurred badge; "—", BUILDING, hint, "Score unlocks · N%" bar). Score-part tiles show the part score and its 30-day change; weights only in score details. Frame: "Home · score building (first use)".
 - **3.7.3 (2026-10-26):** approvals recorded; Shot/Form cards equal height on Home and Lab; empty states for Stats › Form, Stats › Equipment and Achievements; notes on full-frame pattern, screen sizes and Dynamic Type; MVP engineering handoff.

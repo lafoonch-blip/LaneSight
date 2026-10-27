@@ -1,5 +1,5 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.2 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.3 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
@@ -33,10 +33,11 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 | Form results (side / rear) | detected view, focus + drill, **key-position thumbnails + landmarks + one measurement each**, timing vs baseline, metrics by view | `/shots/{id}` (form) + **NEW** `key_positions[]` |
 | Key position · full frame | full frame, landmarks (confident only), angle + vertical reference, measurements at that position | **NEW** `/shots/{id}/key_positions/{event}` |
 | Active Session · Form / Form summary | deliveries, repeatability ± spread, early vs late | `/sessions/{id}` |
-| Stats › Score | L (provisional) + parts with inputs (DEC-077) | `/me/score`, `/me/score/history` |
+| Stats › Score (3rd tab) | L (provisional) + parts with inputs (DEC-077) | `/me/score`, `/me/score/history` |
 | Stats › Shot + 9 detail screens | avg, spread, range, coverage, trend by session, by ball, by pattern, small-sample flags | **NEW** `/me/stats/metric/{metric}` |
 | Coaching · coming soon (DEC-084) | static copy; "Notify me" flag per user | **NEW** `PUT /me/notify` (`coaching_launch: true`) |
-| Stats › Form / Equipment | form trends; by ball / by pattern (≥20 shots) | `/me/stats` |
+| Stats › Form / Arsenal | form trends; by ball / by pattern (≥20 shots, smaller marked small sample) | `/me/stats` |
+| Stats tab order (DEC-085) | Shot · Form · Score · Arsenal; Stats opens on Shot. Building states reuse the real screens: Score shows part progress + unlock %; Shot/Arsenal show real values with a small-sample flag, 30-day change "new", trends from session 2 | `/me/score` (`eligibility`), `/me/stats` (`small_sample`, `sessions_count`) |
 | States board | upload failed (saved on phone, retry), analysis failed (retry), small samples | client queue + `/jobs` |
 
 ## 3. New engineering work items (not in Dev Build v0)
