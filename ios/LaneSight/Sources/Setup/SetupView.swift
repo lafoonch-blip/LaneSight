@@ -15,6 +15,8 @@ struct SetupView: View {
     @State private var starting = false
     @State private var startError: String?
     @State private var goCapture = false
+    @State private var showBallSheet = false
+    @State private var showOilSheet = false
 
     private var isShot: Bool { model.captureMode == "shot" }
 
@@ -59,6 +61,13 @@ struct SetupView: View {
         .task {
             await loadOil()
             await loadHealth()
+            #if DEBUG
+            switch ProcessInfo.processInfo.environment["LS_PREVIEW_SHEET"] {
+            case "ball": showBallSheet = true
+            case "oil":  showOilSheet = true
+            default: break
+            }
+            #endif
         }
     }
 
@@ -95,11 +104,17 @@ struct SetupView: View {
     private var ballAndOilSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeading("Ball and oil", action: "From your last session") { loadFromLastSession() }
-            NavigationLink { AddBallView() } label: {
-                rowCard(title: ballTitle, subtitle: ballSubtitle)
-            }
-            .buttonStyle(.plain)
+            Button { showBallSheet = true } label: { rowCard(title: ballTitle, subtitle: ballSubtitle) }
+                .buttonStyle(.plain)
             oilRow
+        }
+        .sheet(isPresented: $showBallSheet) {
+            NavigationStack { BallPickerSheet() }.environmentObject(model).presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showOilSheet) {
+            OilPatternSheet(patterns: oilPatterns,
+                            selectedName: $model.selectedOilPatternName, selectedId: $model.selectedOilPatternId)
+                .presentationDetents([.medium, .large])
         }
     }
 
@@ -114,16 +129,8 @@ struct SetupView: View {
         if oilPatterns.isEmpty {
             rowCard(title: "Oil pattern", subtitle: oilLoadError ?? "No patterns in the library yet", chevron: false)
         } else {
-            Menu {
-                ForEach(oilPatterns, id: \.identity) { p in
-                    Button(p.name ?? "Unnamed") {
-                        model.selectedOilPatternName = p.name
-                        model.selectedOilPatternId = p.id
-                    }
-                }
-            } label: {
-                rowCard(title: "Oil pattern · \(model.selectedOilPatternName ?? "Choose")",
-                        subtitle: oilSubtitle)
+            Button { showOilSheet = true } label: {
+                rowCard(title: "Oil pattern · \(model.selectedOilPatternName ?? "Choose")", subtitle: oilSubtitle)
             }
             .buttonStyle(.plain)
         }
