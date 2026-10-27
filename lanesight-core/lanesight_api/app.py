@@ -818,6 +818,7 @@ def me_stats_equipment(user=Depends(current_user)):
             out.append({'id': k, 'name': names.get(k), 'n': len(recs),
                         'speed': (sm.get('ball_speed') or {}).get('mean'),
                         'rev': (sm.get('rev_rate') or {}).get('mean'),
+                        'entry_angle': (sm.get('entry_angle') or {}).get('mean'),
                         'pocket_pct': perf.get('pocket_pct')})
         return sorted(out, key=lambda r: -r['n'])
 

@@ -105,15 +105,18 @@ struct AddBallView: View {
     }
 }
 
-/// Ball setup (BallSetup.dc.html): factory specs for a catalog ball, plus the bowler's own
-/// weight / layout / surface and "make current". "Add to arsenal" POSTs to /me/arsenal and re-syncs.
-/// Works for a catalog ball (`ball`) or a custom free-text ball (`customName`).
+/// Ball setup (v3.7 Figma 437:6000 add-from-catalog / 437:6083 view-edit). Three modes:
+///  • `ball`        — a catalog pick being added → "Add to arsenal" (POST /me/arsenal).
+///  • `customName`  — a free-text ball being added → "Add to arsenal".
+///  • `arsenalBall` — an existing arsenal ball being viewed/edited → "Save" (PATCH /me/arsenal/{id})
+///    plus a Performance section (per-ball rollup from GET /me/stats/equipment).
 struct BallSetupView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
     let ball: CatalogBall?
     let customName: String?
+    let arsenalBall: ArsenalBall?
 
     @State private var weight = ""
     @State private var layoutSystem = ""
@@ -122,11 +125,30 @@ struct BallSetupView: View {
     @State private var makeCurrent = true
     @State private var saving = false
     @State private var saveError: String?
+    @State private var perf: EquipGroup?
+    @State private var perfLoaded = false
 
-    init(ball: CatalogBall) { self.ball = ball; self.customName = nil }
-    init(customName: String) { self.ball = nil; self.customName = customName }
+    init(ball: CatalogBall) { self.ball = ball; self.customName = nil; self.arsenalBall = nil }
+    init(customName: String) { self.ball = nil; self.customName = customName; self.arsenalBall = nil }
+    init(arsenalBall: ArsenalBall) {
+        self.ball = nil; self.customName = nil; self.arsenalBall = arsenalBall
+        _weight = State(initialValue: arsenalBall.weight_lb.map { String(Int($0.rounded())) } ?? "")
+        _surface = State(initialValue: arsenalBall.surface ?? "")
+        _layout = State(initialValue: arsenalBall.layout ?? "")
+    }
 
-    private var title: String { ball?.name ?? customName ?? "Ball" }
+    private var isEdit: Bool { arsenalBall != nil }
+    private var title: String { arsenalBall?.displayName ?? ball?.name ?? customName ?? "Ball" }
+    private var subtitle: String {
+        if let m = arsenalBall?.manufacturer ?? ball?.manufacturer { return "\(m) · from catalog" }
+        return "Custom ball"
+    }
+    private var imageURL: URL? { (arsenalBall?.image_url ?? ball?.image_url).flatMap { URL(string: $0) } }
+    private var hasFactorySpecs: Bool { arsenalBall != nil || ball != nil }
+    private var coverstock: String? { arsenalBall?.coverstock ?? ball?.coverstock }
+    private var coreType: String? { arsenalBall?.core_type ?? ball?.core_type }
+    private var rgDiff: String? { arsenalBall?.rgDiff ?? ball?.rgDiff }
+    private var factoryFinish: String? { arsenalBall?.factory_finish ?? ball?.factory_finish }
 
     var body: some View {
         ScrollView {
@@ -134,32 +156,38 @@ struct BallSetupView: View {
                 headerRow
 
                 // Factory specs (read-only, from the catalog). Custom balls have no factory data.
-                if let ball {
+                if hasFactorySpecs {
                     cardSection(title: "Factory specs", trailing: "From catalog") {
-                        specRow("Coverstock", ball.coverstock)
-                        specRow("Core", ball.core_type)
-                        specRow("RG / Differential", ball.rgDiff)
+                        specRow("Coverstock", coverstock)
+                        specRow("Core", coreType)
+                        specRow("RG / Differential", rgDiff)
                     }
                 }
 
                 // Drilling (optional): the bowler's own weight / finish / layout for this ball.
                 cardSection(title: "Drilling (optional)", trailing: nil) {
                     weightRow
-                    inlineEditRow("Finish", text: $surface, placeholder: ball?.factory_finish ?? "e.g. 1500 grit")
+                    inlineEditRow("Finish", text: $surface, placeholder: factoryFinish ?? "e.g. 1500 grit")
                     inlineEditRow("Layout", text: $layout, placeholder: "e.g. 4.5 x 45 x 35")
                 }
+
+                // Performance (edit mode only): per-ball rollup. No pinfall in LaneSight, so there is no
+                // Strike %/Impact tile (the Figma mock shows them; see report) — only measured metrics.
+                if isEdit { performanceSection }
 
                 if let saveError {
                     Text(saveError).font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
 
-                Button {
-                    Task { await addToArsenal() }
-                } label: {
-                    LoadingLabel("Add to arsenal", busy: saving)
+                if !isEdit {
+                    Button {
+                        Task { await addToArsenal() }
+                    } label: {
+                        LoadingLabel("Add to arsenal", busy: saving)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(saving)
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(saving)
             }
             .padding(16)
         }
@@ -167,6 +195,69 @@ struct BallSetupView: View {
         .navigationTitle("Ball setup")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            if isEdit {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") { Task { await saveEdits() } }
+                        .disabled(saving).foregroundStyle(LS.action)
+                }
+            }
+        }
+        .task {
+            guard isEdit, !perfLoaded else { return }
+            perfLoaded = true
+            if let stats = try? await model.makeClient().equipmentStats() {
+                let match = Set([arsenalBall?.ball_configuration_id, arsenalBall?.id].compactMap { $0 })
+                perf = stats.by_ball?.first { g in (g.id.map(match.contains) ?? false) }
+            }
+        }
+    }
+
+    // Performance · N shots (Figma 437:6083). Measured-metric tiles only; honest-empty until shots exist.
+    private var performanceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Performance\(perf?.n.map { " · \($0) shots" } ?? "")")
+                .font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+            Text("Video-measured. Metrics appear once this ball has measured shots tagged to it.")
+                .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let g = perf, (g.n ?? 0) > 0 {
+                let tiles: [(String, String, String)] = [
+                    (g.pocket_pct.map { "\(Int(($0 * (($0 <= 1) ? 100 : 1)).rounded()))%" } ?? "—", "POCKET %", ""),
+                    (g.entry_angle.map { String(format: "%.1f°", $0) } ?? "—", "ENTRY ANGLE", ""),
+                    (g.speed.map { String(format: "%.1f", $0) } ?? "—", "SPEED (MPH)", ""),
+                    (g.rev.map { String(Int($0.rounded())) } ?? "—", "REV RATE", "Best effort"),
+                ]
+                let cols = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+                LazyVGrid(columns: cols, spacing: 8) {
+                    ForEach(Array(tiles.enumerated()), id: \.offset) { _, t in metricTile(t.0, t.1, t.2) }
+                }
+            } else {
+                Text("No measured shots for this ball yet. Tag this ball when you record a shot and its stats roll up here.")
+                    .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+            }
+        }
+    }
+
+    private func metricTile(_ value: String, _ label: String, _ tag: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value).font(.system(size: 22, weight: .bold)).foregroundStyle(LS.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(label).font(.system(size: 10, weight: .medium)).tracking(0.3).foregroundStyle(LS.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            if !tag.isEmpty {
+                Text(tag).font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.dataYellow)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
+        .padding(10)
+        .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
     }
 
     // Header: round ball thumbnail + name + "{mfr} · from catalog" (Figma 437:6000).
@@ -175,7 +266,7 @@ struct BallSetupView: View {
             ballThumbnail
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.system(size: 22, weight: .bold)).foregroundStyle(LS.textPrimary)
-                Text(ball?.manufacturer.map { "\($0) · from catalog" } ?? "Custom ball")
+                Text(subtitle)
                     .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
             }
             Spacer()
@@ -183,10 +274,9 @@ struct BallSetupView: View {
     }
 
     @ViewBuilder private var ballThumbnail: some View {
-        let url = ball?.image_url.flatMap { URL(string: $0) }
         ZStack {
             Circle().fill(LS.raised).frame(width: 54, height: 54)
-            if let url {
+            if let url = imageURL {
                 AsyncImage(url: url) { img in
                     img.resizable().scaledToFill()
                 } placeholder: {
@@ -275,6 +365,26 @@ struct BallSetupView: View {
             dismiss()
         } catch {
             saveError = "Couldn't add ball: \(error.localizedDescription)"
+            saving = false
+        }
+    }
+
+    /// Edit mode: PATCH the existing arsenal ball's drilling (weight / surface / layout).
+    private func saveEdits() async {
+        guard let id = arsenalBall?.id else { return }
+        saving = true; saveError = nil
+        func clean(_ s: String) -> String? {
+            let t = s.trimmingCharacters(in: .whitespaces); return t.isEmpty ? nil : t
+        }
+        var patch: [String: Any] = [:]
+        if let w = Double(weight.trimmingCharacters(in: .whitespaces)) { patch["weight_lb"] = w }
+        if let s = clean(surface) { patch["surface"] = s }
+        if let l = clean(layout) { patch["layout"] = l }
+        do {
+            try await model.updateBall(id: id, patch: patch)
+            dismiss()
+        } catch {
+            saveError = "Couldn't save changes: \(error.localizedDescription)"
             saving = false
         }
     }

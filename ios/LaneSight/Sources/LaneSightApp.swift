@@ -82,6 +82,9 @@ struct PreviewHarness: View {
                 case "ballsetup":
                     if let b = previewBall { NavigationStack { BallSetupView(ball: b) } }
                     else { Text("loading catalog ball…").foregroundStyle(LS.textPrimary) }
+                case "balledit":
+                    if let b = model.arsenal.first { NavigationStack { BallSetupView(arsenalBall: b) } }
+                    else { Text("no arsenal ball for this account").foregroundStyle(LS.textPrimary) }
                 case "settings": NavigationStack { SettingsView() }
                 case "profile":  NavigationStack { ProfileView() }
                 case "achievements": NavigationStack { AchievementsView() }
@@ -122,6 +125,7 @@ struct PreviewHarness: View {
                 let q = env["LS_PREVIEW_QUERY"] ?? ""
                 previewBall = (try? await model.makeClient().catalogBalls(query: q))?.first
             }
+            if screen.lowercased() == "balledit" { await model.syncArsenal() }
             ready = true
         }
     }

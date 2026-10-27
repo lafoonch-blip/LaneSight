@@ -160,12 +160,6 @@ struct ProfileView: View {
         return "Not set"
     }
 
-    private func setCurrent(_ ball: ArsenalBall) async {
-        guard ball.is_current != true else { return }
-        do { try await model.setCurrentBall(id: ball.id) }
-        catch { saveNote = "Couldn't set current ball: \(error.localizedDescription)" }
-    }
-
     // MARK: v3.7 sections (Figma 434:5981)
 
     private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
@@ -260,7 +254,8 @@ struct ProfileView: View {
                 card { valueRow("No balls yet", "Add one") }
             } else {
                 ForEach(balls) { ball in
-                    Button { Task { await setCurrent(ball) } } label: { arsenalCardRow(ball) }
+                    // Tap → Ball setup view/edit (Figma 437:6083): specs, drilling, performance, Save.
+                    NavigationLink { BallSetupView(arsenalBall: ball) } label: { arsenalCardRow(ball) }
                         .buttonStyle(.plain)
                 }
             }

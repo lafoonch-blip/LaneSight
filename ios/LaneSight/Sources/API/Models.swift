@@ -475,6 +475,7 @@ struct EquipGroup: Codable, Identifiable {
     let n: Int?
     let speed: Double?
     let rev: Double?
+    let entry_angle: Double?
     let pocket_pct: Double?
     var identity: String { id ?? name ?? UUID().uuidString }
 }
@@ -805,14 +806,28 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
     let layout_system: String?
     let layout: String?
     let surface: String?
+    // Factory specs from the embedded catalog model (Ball setup view/edit).
+    let coverstock: String?
+    let core_type: String?
+    let rg: Double?
+    let diff: Double?
+    let factory_finish: String?
 
     var displayName: String { name ?? nickname ?? model_name ?? "Ball" }
+
+    /// "2.48 / 0.053" when either is present, else nil (→ honest "—" in the UI).
+    var rgDiff: String? {
+        guard rg != nil || diff != nil else { return nil }
+        let r = rg.map { String(format: "%.2f", $0) } ?? "—"
+        let d = diff.map { String(format: "%.3f", $0) } ?? "—"
+        return "\(r) / \(d)"
+    }
 
     // Decode leniently: weight can arrive as a number or string; booleans/strings tolerate nulls.
     enum CodingKeys: String, CodingKey {
         case id, name, nickname, ball_model_id, manufacturer, model_name, image_url,
              weight_lb, color_desc, is_current, retired, ball_configuration_id,
-             layout_system, layout, surface
+             layout_system, layout, surface, coverstock, core_type, rg, diff, factory_finish
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -833,6 +848,11 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
         layout_system = try? c.decodeIfPresent(String.self, forKey: .layout_system)
         layout = try? c.decodeIfPresent(String.self, forKey: .layout)
         surface = try? c.decodeIfPresent(String.self, forKey: .surface)
+        coverstock = try? c.decodeIfPresent(String.self, forKey: .coverstock)
+        core_type = try? c.decodeIfPresent(String.self, forKey: .core_type)
+        rg = (try? c.decodeIfPresent(Double.self, forKey: .rg)) ?? nil
+        diff = (try? c.decodeIfPresent(Double.self, forKey: .diff)) ?? nil
+        factory_finish = try? c.decodeIfPresent(String.self, forKey: .factory_finish)
     }
 }
 

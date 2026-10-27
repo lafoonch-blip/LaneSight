@@ -928,12 +928,15 @@ class PgStore(MemoryStore):
         return {'id': b['id'], 'name': name, 'nickname': b.get('nickname'), 'ball_model_id': b.get('ball_model_id'),
                 'manufacturer': model.get('manufacturer'), 'model_name': model.get('name'),
                 'image_url': model.get('image_url'), 'weight_lb': b.get('weight_lb'), 'color_desc': b.get('color_desc'),
+                # Factory specs from the embedded catalog model (for the Ball setup view/edit screen).
+                'coverstock': model.get('coverstock'), 'core_type': model.get('core_type'),
+                'rg': model.get('rg'), 'diff': model.get('diff'), 'factory_finish': model.get('factory_finish'),
                 'is_current': b.get('is_current', False), 'retired': b.get('retired', False),
                 'ball_configuration_id': cfg.get('id'), 'layout_system': cfg.get('layout_system'),
                 'layout': cfg.get('layout'), 'surface': cfg.get('surface')}
 
     _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,retired,ball_model_id,created_at,'
-                       'ball_models(manufacturer,name,image_url),'
+                       'ball_models(manufacturer,name,image_url,coverstock,core_type,rg,diff,factory_finish),'
                        'ball_configurations(id,version,layout_system,layout,surface)')
 
     def list_arsenal(self, user_id):
