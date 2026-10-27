@@ -155,6 +155,7 @@ struct PreviewHarness: View {
                     else { Text("sample decode failed").foregroundStyle(LS.textPrimary) }
                 case "camprompt": CameraPermissionView(mode: .prompt)
                 case "camdenied": CameraPermissionView(mode: .denied)
+                case "coaching": CoachingView()
                 case "feedback": FeedbackView(onFinish: {})
                 case "scorepopup": ScoreUpdatePopup(sessionId: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"])
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
@@ -195,28 +196,15 @@ struct PreviewHarness: View {
 }
 #endif
 
-/// Bottom tabs per HANDOFF §4/§5 + DEC-055: Home · Stats · Lab · Leagues · Tourneys.
-/// Capture is reached via Lab → Start Live Session → Setup.
-///
-/// Leagues/Tourneys are not built yet. Per DEC-055 they are shown disabled: dimmed, not tappable, with
-/// NO "Soon" / "Coming soon" label and no sheet. A system TabView tab can't be made un-tappable, so
-/// tapping either is intercepted — selection never moves to them (the current working tab stays
-/// selected) — and because they can never become selected they always render in the muted, unselected
-/// (dimmed) state. No navigation happens and nothing is presented.
+/// Bottom tabs (DEC-084): Home · Stats · Lab · Coaching. Capture is reached via Lab → Start Live Session →
+/// Setup. The old disabled Leagues/Tourneys tabs are gone — a dimmed tab reads as broken; Coaching is a real,
+/// tappable tab that opens a "coming soon" screen (sets expectations + measures interest).
 struct RootTabs: View {
     @EnvironmentObject var model: AppModel
     @State private var tab = 0
 
-    private var selection: Binding<Int> {
-        Binding(
-            get: { tab },
-            // Taps on the disabled Leagues (3) / Tourneys (4) tabs are a no-op: selection stays put.
-            set: { newValue in if newValue < 3 { tab = newValue } }
-        )
-    }
-
     var body: some View {
-        TabView(selection: selection) {
+        TabView(selection: $tab) {
             HomeView()
                 .tag(0)
                 .tabItem { Label("Home", systemImage: "house.fill") }
@@ -226,14 +214,9 @@ struct RootTabs: View {
             LabView()
                 .tag(2)
                 .tabItem { Label("Lab", systemImage: "flask.fill") }
-            // Disabled tabs (DEC-055): dimmed + not tappable, no label. Content is never shown because
-            // selection can never move here. No "Soon" badge, no coming-soon sheet.
-            Color.clear
+            CoachingView()
                 .tag(3)
-                .tabItem { Label("Leagues", systemImage: "person.3.fill") }
-            Color.clear
-                .tag(4)
-                .tabItem { Label("Tourneys", systemImage: "trophy.fill") }
+                .tabItem { Label("Coaching", systemImage: "graduationcap.fill") }
         }
         // Make the server the source of truth for the arsenal on authed load (also runs the one-time
         // migration of any locally-stored ball). Harmless in dev-user mode.

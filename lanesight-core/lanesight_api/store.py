@@ -191,6 +191,18 @@ class MemoryStore:
         self.profiles[user_id] = p
         return _profile_out(p)
 
+    def get_notify_prefs(self, user_id):
+        p = self.profiles.get(user_id) or {}
+        return {'coaching_launch': bool(p.get('notify_coaching_launch'))}      # DEC-084
+
+    def set_notify_pref(self, user_id, key, value):
+        if key != 'coaching_launch':
+            return self.get_notify_prefs(user_id)
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id,
+                 notify_coaching_launch=bool(value), notify_coaching_launch_at=time.time())
+        self.profiles[user_id] = p
+        return self.get_notify_prefs(user_id)
+
     def set_avatar(self, user_id, path, updated_at):
         self.profiles[user_id] = dict(self.profiles.get(user_id, {}), user_id=user_id,
                                       avatar_path=path, avatar_updated_at=updated_at)
@@ -989,6 +1001,25 @@ class PgStore(MemoryStore):
                 row['display_name'] = dn
         self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
         return self.get_profile(user_id)
+
+    def get_notify_prefs(self, user_id):                                       # DEC-084
+        try:
+            rows = self._get('profiles', f'user_id=eq.{user_id}&select=notify_coaching_launch')
+            return {'coaching_launch': bool(rows and rows[0].get('notify_coaching_launch'))}
+        except Exception:                 # column lands in migration 021; tolerate its absence
+            return {'coaching_launch': False}
+
+    def set_notify_pref(self, user_id, key, value):
+        if key == 'coaching_launch':
+            import datetime as _dt
+            try:
+                self._req('profiles', 'POST',
+                          {'user_id': user_id, 'notify_coaching_launch': bool(value),
+                           'notify_coaching_launch_at': _dt.datetime.now(_dt.timezone.utc).isoformat()},
+                          prefer='resolution=merge-duplicates,return=minimal')
+            except Exception:
+                pass
+        return self.get_notify_prefs(user_id)
 
     def set_avatar(self, user_id, path, updated_at):
         self._req('profiles', 'POST', {'user_id': user_id, 'avatar_path': path, 'avatar_updated_at': updated_at},

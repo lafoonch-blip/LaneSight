@@ -457,6 +457,20 @@ struct APIClient {
         return try await send(req, as: Profile.self)
     }
 
+    /// DEC-084: whether the user has asked to be notified when Coaching launches.
+    func getCoachingNotify() async throws -> Bool {
+        struct R: Decodable { let coaching_launch: Bool? }
+        return (try await send(makeRequest("me/notify"), as: R.self)).coaching_launch ?? false
+    }
+
+    /// DEC-084: record the "Notify me when Coaching is ready" choice (one launch notification later).
+    func setCoachingNotify() async throws {
+        var req = makeRequest("me/notify", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["coaching_launch": true])
+        _ = try await sendRaw(req)
+    }
+
     /// DEC-087: start an email change. The server calls Supabase Auth, which emails a confirmation link;
     /// the address isn't changed until the user confirms. Returns the user-facing message to show.
     func putEmail(_ email: String) async throws -> String {

@@ -962,7 +962,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** A dimmed tab reads as broken; a short screen sets expectations and measures interest. Coaching is the next planned area, while leagues and tournaments are further out.
 **Date:** 2026-10-27
-**Status:** ACCEPTED (target state; the dev build keeps its current tabs until its designs are next updated)
+**Status:** ACCEPTED + **BUILT in the dev build iOS (2026-10-27):** four-tab nav Home·Stats·Lab·Coaching (graduation-cap), the "Coaching is on the way" screen, and `GET/PUT /me/notify` for the launch-notify flag (migration 021).
 **Supersedes:** the disabled Leagues / Tournaments tabs (DEC-055 for the dev build designs, DEC-067 for the target state).
 
 ### DEC-085 — Stats tab order Shot · Form · Score · Arsenal; Stats building states mirror the real screens

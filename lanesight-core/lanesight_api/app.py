@@ -671,6 +671,21 @@ def me_score_breakdown(user=Depends(current_user)):
     }
 
 
+@app.get('/me/notify')
+def get_notify(user=Depends(current_user)):
+    """DEC-084: the user's launch-notify flags (currently just coaching_launch)."""
+    return get_store().get_notify_prefs(user)
+
+
+@app.put('/me/notify')
+def put_notify(body: dict, user=Depends(current_user)):
+    """DEC-084: record "notify me when Coaching launches". Idempotent; returns the current flags."""
+    store = get_store()
+    if (body or {}).get('coaching_launch'):
+        store.set_notify_pref(user, 'coaching_launch', True)
+    return store.get_notify_prefs(user)
+
+
 @app.get('/me/last-setup')
 def me_last_setup(user=Depends(current_user)):
     """Prefill Setup with the last-used ball, oil pattern and target (MVP-09). Nulls for a new user."""

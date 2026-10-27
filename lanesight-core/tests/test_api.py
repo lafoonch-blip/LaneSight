@@ -279,6 +279,14 @@ def test_me_score_parts_delta_30d_absent_for_new_account():
     assert client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d'] == {}
 
 
+def test_coaching_notify_flag():
+    """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
+    h = {'X-Dev-User': 'u_notify'}
+    assert client.get('/me/notify', headers=h).json()['coaching_launch'] is False
+    assert client.put('/me/notify', json={'coaching_launch': True}, headers=h).json()['coaching_launch'] is True
+    assert client.get('/me/notify', headers=h).json()['coaching_launch'] is True
+
+
 def test_sensors_crud():
     s = client.post('/me/sensors', json={'name': 'My blue sensor', 'is_default': True}, headers=H).json()
     assert s['name'] == 'My blue sensor' and s['user_id'] == 'u1'
