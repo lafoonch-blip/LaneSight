@@ -5,8 +5,8 @@
 
 | Area | Source of truth | Not a source |
 |---|---|---|
-| Newest state of everything | Repo on Shayne's Mac, `~/Developer/LaneSight`, current working branch (often ahead of GitHub) | Your memory of an earlier chat |
-| Pushed state | GitHub `lafoonch-blip/LaneSight` | — |
+| Newest state of everything | GitHub `lafoonch-blip/LaneSight`, `main` (plus open PR / feature branches). LaneSight no longer depends on Shayne's Mac (2026-10-27) | Your memory of an earlier chat; an old clone |
+| Running backend | Google Cloud Run `lanesight-api` (us-east1) + Supabase `europwryibstnmipbvam`; runbook `03_ENGINEERING/DEPLOY_CLOUDRUN.md` | The Mac launchd/Tailscale service (retired) |
 | Decisions | `00_CONTEXT/DECISIONS.md` (highest DEC number wins) | Older docs, `99_ARCHIVE/` |
 | What's being built now | `00_CONTEXT/CURRENT_STATE.md`, `03_ENGINEERING/DEV_BUILD_PLAN.md` | — |
 | Dev Build v0 screens | `02_DESIGN/dev_build_v0/` (synced from the Claude Design canvas "LaneSight Dev Build v0 Screens") | Figma screens, old mockups |
@@ -17,7 +17,7 @@
 | Mirror (read-only, may lag) | claude.ai LaneSight Project docs | Never edit it as the source. The Google Drive copies are retired (frozen 2026-10-14, labeled STALE) |
 
 ### Freshness check (do this first, every session)
-1. If you can reach the repo: `git fetch && git status && git branch --show-current && git log --oneline -5`. Work from the newest local branch, not an old clone or a pasted file.
+1. `git fetch && git status && git log --oneline -5 origin/main`. Work from `origin/main` (or the feature branch you were asked to continue), not an old clone or a pasted file.
 2. Read the last ~5 entries of `DECISIONS.md` and the top of `CURRENT_STATE.md`.
 3. Compare any doc you were handed (mirror, upload, paste) by its `Version` / `Last Updated` header against the repo copy. If the repo is newer, use the repo.
 4. Before building UI: `git diff 02_DESIGN/` and read `02_DESIGN/dev_build_v0/README.md` (changelog at the bottom).
@@ -26,7 +26,7 @@
 ### When you change something
 - Write it to this repo in the same session (doc, DEC entry, design sync or code). A change that lives only in a chat, canvas, Figma or a mirror is not done.
 - Decisions: add a new DEC; mark the old one superseded. Docs: bump `Version` / `Last Updated`.
-- Commit locally; push to GitHub only when Shayne says so. Then re-sync the claude.ai Project docs (don't update the retired Drive copies).
+- Commit on a feature branch; push to GitHub only when Shayne says so (never to `main` directly). Work that only exists in a local or cloud-session clone is not saved: say so in your report. After it lands on `main`, re-sync the claude.ai Project docs (don't update the retired Drive copies).
 - Report what you changed and anything you could not update.
 
 This repo is the **source of truth** for LaneSight product and engineering context. Read these files first, in this order:

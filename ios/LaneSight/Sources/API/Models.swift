@@ -841,6 +841,10 @@ struct CatalogBall: Codable, Identifiable, Equatable {
     let ls_length: FlexString?
     let ls_backend: FlexString?
     let image_url: String?
+    /// "current" (in the manufacturer's lineup) or "discontinued" (retired; still selectable for an arsenal).
+    let status: String?
+    /// "YYYY-MM" or "YYYY"; nil when unknown.
+    let release_date: String?
 
     /// "2.48 / 0.051" when both are present, else "—" (honest; the catalog row lacks the spec).
     var rgDiff: String? {
@@ -849,6 +853,8 @@ struct CatalogBall: Codable, Identifiable, Equatable {
         let d = diff.map { String(format: "%.3f", $0) } ?? "—"
         return "\(r) / \(d)"
     }
+    var isRetired: Bool { status == "discontinued" }
+    var releaseYear: String? { release_date.map { String($0.prefix(4)) } }
 }
 
 // MARK: - Arsenal (GET/POST /me/arsenal, PATCH /me/arsenal/{id})

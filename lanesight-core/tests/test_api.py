@@ -256,6 +256,20 @@ def test_catalog_and_oil_shape_offline():
     assert client.get('/catalog/balls', headers=H).json() == []
     assert client.get('/oil-patterns', headers=H).json() == []
 
+def test_catalog_search_query_matches_every_word():
+    from lanesight_api.store import catalog_search_query, catalog_search_tokens
+    assert catalog_search_tokens('Storm Bionic') == ['storm', 'bionic']
+    assert catalog_search_tokens('  !Q Tour 78/U ') == ['q', 'tour', '78', 'u']
+    assert catalog_search_tokens('') == [] and catalog_search_tokens(None) == []
+    qp = catalog_search_query('Storm Bionic')
+    # each word must hit name or brand (brand + model in one query used to return nothing)
+    assert ('and=(or(name.ilike.*storm*,manufacturer.ilike.*storm*),'
+            'or(name.ilike.*bionic*,manufacturer.ilike.*bionic*))') in qp
+    assert 'status' in qp.split('&')[0] and 'order=status.asc' in qp  # current lineup listed before retired
+    assert 'and=' not in catalog_search_query('  ')
+    # PostgREST reserved characters never reach the filter
+    assert all(c not in t for t in catalog_search_tokens('a,b.(c):d*') for c in ',.():*')
+
 def test_arsenal_add_list():
     b = client.post('/me/arsenal', json={'nickname': 'Phaze', 'weight_lb': 15}, headers=H).json()
     assert b['nickname'] == 'Phaze' and b['user_id'] == 'u1'

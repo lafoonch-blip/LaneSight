@@ -35,6 +35,27 @@ def _new_id():
     return uuid.uuid4().hex
 
 
+CATALOG_SELECT = ('id,manufacturer,name,coverstock,core_type,rg,diff,factory_finish,'
+                  'ls_hook,ls_length,ls_backend,image_url,status,release_date')
+
+
+def catalog_search_tokens(q):
+    """Search words: letters/digits only, lowercased ("Storm Bionic" -> ['storm', 'bionic']; "!Q Tour" -> ['q', 'tour'])."""
+    import re
+    return [t for t in re.split(r'[^0-9a-z]+', str(q or '').lower()) if t][:6]
+
+
+def catalog_search_query(q, limit=50):
+    """PostgREST query for the ball catalog search. Every word must appear in the ball's name or brand, so
+    "Storm Bionic", "bionic storm" and "Attention Star S2" all match (the old single-substring search compared the
+    whole phrase to name OR brand and found nothing). Current lineup first, then retired balls."""
+    qp = f'select={CATALOG_SELECT}&order=status.asc,manufacturer.asc,name.asc&limit={int(limit)}'
+    toks = catalog_search_tokens(q)
+    if toks:
+        qp += '&and=(' + ','.join(f'or(name.ilike.*{t}*,manufacturer.ilike.*{t}*)' for t in toks) + ')'
+    return qp
+
+
 # Home Recent activity scope (DEC-055): only completed practice sessions, achievement unlocks, and
 # LaneSight tier (rank) changes. Anything else (e.g. personal_best score milestones, and never uploads)
 # is excluded from the feed. Enforced in both stores' list_activity.
@@ -914,14 +935,7 @@ class PgStore(MemoryStore):
         return True
 
     def catalog_balls(self, q=None, limit=50):
-        qp = ('select=id,manufacturer,name,coverstock,core_type,rg,diff,factory_finish,'
-              'ls_hook,ls_length,ls_backend,image_url'
-              f'&order=manufacturer,name&limit={int(limit)}')
-        if q:
-            from urllib.parse import quote
-            qq = quote(str(q), safe='')
-            qp += f'&or=(name.ilike.*{qq}*,manufacturer.ilike.*{qq}*)'
-        return self._get('ball_models', qp)
+        return self._get('ball_models', catalog_search_query(q, limit))
 
     def oil_patterns(self):
         return self._get('oil_patterns', 'select=*&order=name')

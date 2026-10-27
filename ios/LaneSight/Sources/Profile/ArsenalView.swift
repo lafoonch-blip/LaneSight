@@ -79,7 +79,8 @@ struct AddBallView: View {
                 .frame(width: 40, height: 40).background(LS.blue.opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(ball.name ?? "Ball").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                Text([ball.manufacturer, ball.core_type, ball.coverstock].compactMap { $0 }.joined(separator: " · "))
+                Text([ball.manufacturer, ball.releaseYear, ball.isRetired ? "Retired" : nil, ball.coverstock]
+                        .compactMap { $0 }.joined(separator: " · "))
                     .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             Spacer()

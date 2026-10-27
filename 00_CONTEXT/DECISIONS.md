@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.44  
+Version: 1.45  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.43
+Supersedes: v1.44
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -954,7 +954,20 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED (target state)
 **Supersedes:** the "Building your LaneSight Score" card on the first-use Home (DEC-081 first-use design) and the "% of score" line on the Home tiles (DEC-038 presentation; weights stay in the score details).
 
+### DEC-084 — Ball catalog includes retired balls; bowwwl.com is the labelled source where the manufacturer has no page
+**Decision (Shayne, 2026-10-27):**
+- **The catalog covers retired balls, not only current lineups** (extends DEC-044). Most bowlers own balls that are no longer sold, so the arsenal search must find them. Retired balls have `status = 'discontinued'`; `discontinued_on` stays null when the retirement date isn't published.
+- **Source order:** the manufacturer's own retired-ball pages first (Brunswick, DV8, Radical, Hammer, Ebonite, Track). Storm, Roto Grip and 900 Global delete a ball's page when it's retired and Motiv blocks bulk downloads, so for those four brands specs come from **bowwwl.com** (fan-run database). Every such record says so in `notes`, links the bowwwl page as its source, and has no photo (bowwwl hosts its own copies). Only balls bowwwl itself flags "Discontinued" are added.
+- Same rules as current balls: only printed values; 15 lb RG/diff/intermediate diff only when labelled 15 lb; a value outside what a ball can be (a typo on the page) is dropped and noted; unpublished values are null and listed in `missing`. Retired balls' expected reaction is mostly a spec estimate (low confidence, labelled).
+- **Catalog search matches every word against brand or name** ("Storm Bionic", "Attention Star S2"), current lineup first, retired balls labelled "Retired" with their release year.
+
+**Why:** Shayne couldn't find his Roto Grip Attention Star S2 (retired) or the Storm Bionic (it was in the catalog, but "Storm Bionic" matched nothing because the search compared the whole phrase to brand OR name).
+**Date:** 2026-10-27
+**Status:** ACCEPTED. Branch `catalog-retired-and-search` (2,077 retired balls + search fix). Reaches Supabase on the first weekly catalog run after it merges to `main`; the search fix goes live with the next Cloud Run deploy and iOS build.
+**Supersedes:** DEC-044's "current lineups" scope (the rest of DEC-044 stands).
+
 ## Superseded decisions
+- DEC-044 — catalog scope "current lineups" extended to retired balls by DEC-084.
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).
