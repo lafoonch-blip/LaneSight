@@ -144,7 +144,7 @@ struct ShotCardView: View {
     // STATE · STRIKE (no move)
     private var strikeRepeatCard: some View {
         stateCard(fill: LS.successBg, stroke: LS.success) {
-            nextShotEyebrow(LS.success, check: true)
+            nextShotEyebrow(LS.success, check: true, chip: ("Strike", LS.success))
             Text("Strike. Repeat the shot.").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
             if let note = result.insightsNote ?? result.recommendation?.reason, !note.isEmpty {
                 Text(note).font(.lsCallout).foregroundStyle(LS.textPrimary)
@@ -155,7 +155,7 @@ struct ShotCardView: View {
     // STATE · MISSED YOUR TARGET (repeat, don't move)
     private var executionMissCard: some View {
         stateCard(fill: LS.selected, stroke: LS.borderStrong) {
-            nextShotEyebrow(LS.action)
+            nextShotEyebrow(LS.action, chip: ("Missed target", LS.bestEffort))
             Text("Same line. Hit your mark.").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
             if let note = result.insightsNote ?? result.recommendation?.reason, !note.isEmpty {
                 Text(note).font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -181,7 +181,7 @@ struct ShotCardView: View {
     // STATE · PINS NOT READ (ask the bowler)
     private var pinsUnknownCard: some View {
         stateCard(fill: LS.selected, stroke: LS.borderStrong) {
-            nextShotEyebrow(LS.action)
+            nextShotEyebrow(LS.action, chip: ("Pins not read", LS.bestEffort))
             Text("What did it leave?").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
             Text(result.insightsNote ?? "We couldn't see the pins settle. Tap the result and we'll give your next move.")
                 .font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -213,7 +213,7 @@ struct ShotCardView: View {
     // STATE · NOT ENOUGH RELIABLE DATA (no move)
     private var noReliableDataCard: some View {
         stateCard(fill: LS.card, stroke: LS.borderStrong, dashed: true) {
-            nextShotEyebrow(LS.textSecondary)
+            nextShotEyebrow(LS.textSecondary, chip: ("No move", LS.textSecondary))
             Text("No move this shot").font(.lsTitle3.weight(.semibold)).foregroundStyle(LS.textPrimary)
             Text(result.insightsNote ?? "The far end of the lane wasn't tracked reliably from this camera spot, so we won't guess at entry board or angle.")
                 .font(.lsCallout).foregroundStyle(LS.textSecondary)
