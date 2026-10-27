@@ -669,7 +669,12 @@ final class AppModel: ObservableObject {
     /// Fire-and-forget warm-up ping so the scale-to-zero Cloud Run instance is already running by the time
     /// the first clip uploads — otherwise the first analysis of a session eats a ~15–30s cold start. Best
     /// effort: failures are ignored (it's only an optimization).
+    private var lastPrewarm: Date = .distantPast
     func prewarm() {
+        // DEC-092 P0 (D2): at most once per ~5 min — enough to keep the scale-to-zero instance warm through
+        // setup + the first shot without hammering /health.
+        guard Date().timeIntervalSince(lastPrewarm) > 300 else { return }
+        lastPrewarm = Date()
         guard let client = try? makeClient() else { return }
         Task { _ = try? await client.health() }
     }

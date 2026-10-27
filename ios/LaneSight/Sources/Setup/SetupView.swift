@@ -57,7 +57,7 @@ struct SetupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationDestination(isPresented: $goCapture) { CaptureView() }
-        .onAppear { if let initialMode { model.captureMode = initialMode } }
+        .onAppear { if let initialMode { model.captureMode = initialMode }; model.prewarm() }   // warm analyzer (DEC-092 D2)
         .task {
             await loadOil()
             await loadHealth()

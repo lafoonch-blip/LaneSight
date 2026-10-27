@@ -109,6 +109,10 @@ final class CameraController: NSObject, ObservableObject {
             if let chosen {
                 try device.lockForConfiguration()
                 device.activeFormat = chosen.format
+                // DEC-092 P0 (D3): capture 8-bit SDR. bestFormat already prefers an 8-bit 420v/420f format;
+                // also pin HDR off so the server never spends ~40s on HDR→SDR conversion.
+                device.automaticallyAdjustsVideoHDREnabled = false
+                if device.activeFormat.isVideoHDRSupported { device.isVideoHDREnabled = false }
                 let dur = CMTime(value: 1, timescale: CMTimeScale(chosen.fps))
                 device.activeVideoMinFrameDuration = dur
                 device.activeVideoMaxFrameDuration = dur
@@ -134,25 +138,35 @@ final class CameraController: NSObject, ObservableObject {
     /// Picks a >=1080p (falling back to >=720p) format at the highest supported frame rate that is
     /// ≤ the user's `preferred` choice (never faster than they asked — higher fps = bigger files).
     /// Returns nil if none qualify (then we keep the device default).
+    /// True for an 8-bit 4:2:0 format ('420v' video-range / '420f' full-range). DEC-092 P0 (D3): prefer these
+    /// so capture is SDR and the server never runs the ~40s HDR→SDR conversion. 10-bit ('x420', HLG) is only
+    /// used as a last resort if a device somehow offers no 8-bit format at the wanted resolution/fps.
+    private func is8Bit(_ format: AVCaptureDevice.Format) -> Bool {
+        let st = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+        return st == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            || st == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+    }
+
     private func bestFormat(for device: AVCaptureDevice, preferred: Double) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
         // Candidate rates no higher than the user's choice, highest first.
         let targets = [120.0, 60.0, 30.0].filter { $0 <= preferred + 0.5 }.sorted(by: >)
-        var best: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
+        // Prefer 8-bit SDR formats; keep any 10-bit match only as a fallback (same resolution/fps selection).
+        var best8: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
+        var bestAny: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
         for minHeight: Int32 in [1080, 720] {
             for format in device.formats {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 guard dims.height >= minHeight else { continue }
                 let maxRate = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
                 for t in targets where maxRate + 0.5 >= t {
-                    if best == nil || t > best!.fps {
-                        best = (format, t, dims.width, dims.height)
-                    }
+                    if bestAny == nil || t > bestAny!.fps { bestAny = (format, t, dims.width, dims.height) }
+                    if is8Bit(format), best8 == nil || t > best8!.fps { best8 = (format, t, dims.width, dims.height) }
                     break
                 }
             }
-            if best != nil { break }   // prefer the higher resolution tier
+            if best8 != nil || bestAny != nil { break }   // prefer the higher resolution tier
         }
-        return best
+        return best8 ?? bestAny
     }
 
     // MARK: recording
