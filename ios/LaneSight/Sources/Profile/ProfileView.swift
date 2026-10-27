@@ -21,6 +21,8 @@ struct ProfileView: View {
     @State private var delivery = "one_handed_thumb"
     @State private var steps = "5"
     @State private var location = ""
+    @State private var email = ""
+    @State private var dob = ""
     @State private var saving = false
     @State private var saveNote: String?
 
@@ -46,12 +48,13 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 18) {
                 LoadableView(state: profile, retry: { Task { await load() } }) { _ in
                     photoSection
-                    headerCard
-                    bowlerCard
-                    baselineCard
-                    sensorsCard
-                    arsenalCard
-                    if let saveNote { Text(saveNote).font(.lsCaption).foregroundStyle(LS.measured) }
+                    contactCard
+                    bowlerSection
+                    locationSection
+                    arsenalSection
+                    advancedSection
+                    saveButton
+                    if let saveNote { Text(saveNote).font(.system(size: 12)).foregroundStyle(LS.positive) }
                 }
             }
             .padding(16)
@@ -379,6 +382,159 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: v3.7 sections (Figma 434:5981)
+
+    private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        VStack(spacing: 0) { content() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+    private var rowDivider: some View { Divider().overlay(LS.border).padding(.leading, 16) }
+
+    private func heading(_ t: String) -> some View {
+        Text(t).font(.system(size: 20, weight: .bold)).foregroundStyle(LS.textPrimary)
+    }
+    private func caption(_ t: String) -> some View {
+        Text(t).font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// A row with a label and an editable trailing text field.
+    private func editRow(_ label: String, _ text: Binding<String>, placeholder: String, keyboard: UIKeyboardType = .default) -> some View {
+        HStack {
+            Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            Spacer(minLength: 12)
+            TextField(placeholder, text: text)
+                .keyboardType(keyboard).multilineTextAlignment(.trailing)
+                .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+        }
+        .padding(.horizontal, 16).frame(height: 54)
+    }
+    /// A read-only row with a label and a muted trailing value (for optional / not-yet-wired fields).
+    private func valueRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            Spacer(minLength: 12)
+            Text(value).font(.system(size: 14)).foregroundStyle(LS.textSecondary)
+        }
+        .padding(.horizontal, 16).frame(height: 54)
+    }
+
+    private var contactCard: some View {
+        card {
+            editRow("Name", $name, placeholder: "First Last")
+            rowDivider
+            valueRow("Email", email.isEmpty ? "—" : email)
+            rowDivider
+            valueRow("Phone (optional)", "Add")
+            rowDivider
+            valueRow("Date of birth", dob.isEmpty ? "Add" : dob)
+        }
+    }
+
+    private var bowlerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            heading("Bowler Profile")
+            SegToggle(options: [("Right-handed", "right"), ("Left-handed", "left")], selection: $handedness)
+            SegToggle(options: [("Thumb", "one_handed_thumb"), ("No thumb", "one_handed_no_thumb"), ("Two-handed", "two_handed")], selection: $delivery)
+            card {
+                HStack {
+                    Text("Approach steps").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                    Spacer()
+                    Picker("", selection: $steps) { Text("4").tag("4"); Text("5").tag("5") }
+                        .labelsHidden().tint(LS.textSecondary)
+                }
+                .padding(.horizontal, 16).frame(height: 54)
+                rowDivider
+                valueRow("Form baseline", baselineSummary)
+            }
+        }
+    }
+
+    private var locationSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            caption("Location (optional)")
+            card { editRow("Location", $location, placeholder: "City, State") }
+            caption("Home center (optional)")
+            card { valueRow("Home center", "Coming later") }
+            caption("USBC Member ID")
+            card { valueRow("USBC Member ID", "Coming later") }
+        }
+    }
+
+    private var arsenalSection: some View {
+        let balls = model.arsenal.filter { $0.retired != true }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                heading("Arsenal")
+                Spacer()
+                NavigationLink { AddBallView() } label: {
+                    Text("+ Add ball").font(.system(size: 13, weight: .medium)).foregroundStyle(LS.link)
+                }
+            }
+            if balls.isEmpty {
+                card { valueRow("No balls yet", "Add one") }
+            } else {
+                ForEach(balls) { ball in
+                    Button { Task { await setCurrent(ball) } } label: { arsenalCardRow(ball) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func arsenalCardRow(_ ball: ArsenalBall) -> some View {
+        let isCurrent = ball.is_current == true
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(LS.raised).frame(width: 44, height: 44)
+                Image(systemName: "circle.circle.fill").font(.system(size: 22)).foregroundStyle(isCurrent ? LS.action : LS.textSecondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(ball.displayName).font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                    if isCurrent {
+                        Text("Current ball").font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.positive)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(LS.positive.opacity(0.14), in: Capsule())
+                    }
+                }
+                let specs = [ball.surface, ball.weight_lb.map { "\(Int($0.rounded())) lb" }].compactMap { $0 }
+                if !specs.isEmpty {
+                    Text(specs.joined(separator: " · ")).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                }
+            }
+            Spacer()
+            Text("›").font(.system(size: 18)).foregroundStyle(LS.textSecondary)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isCurrent ? LS.heroStroke : LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    private var advancedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            heading("Advanced (optional)")
+            caption("Only needed for layout-aware ball stats. Skip it if you just want to bowl.")
+            card {
+                valueRow("Grip · middle pitch", "Coming later")
+                rowDivider
+                valueRow("Grip · span", "Coming later")
+                rowDivider
+                valueRow("PAP · over", "Coming later")
+                rowDivider
+                valueRow("PAP · up", "Coming later")
+            }
+        }
+    }
+
+    private var saveButton: some View {
+        Button { Task { await save() } } label: {
+            HStack { Text("Save profile"); if saving { ProgressView().tint(LS.onAction) } }
+        }
+        .buttonStyle(PrimaryButtonStyle()).disabled(saving).padding(.top, 4)
+    }
+
     // MARK: data
 
     private func load() async {
@@ -391,6 +547,8 @@ struct ProfileView: View {
             delivery = p.delivery_style ?? "one_handed_thumb"
             steps = (p.approach_steps?.value == "4") ? "4" : "5"       // fundamentals support 4- or 5-step
             location = p.location ?? ""
+            email = p.email ?? ""
+            dob = p.dob ?? ""
             loadBaseline(p.form_baseline)
             sensors = (try? await client.listSensors()) ?? []
             score = try? await client.score()

@@ -133,8 +133,8 @@ struct SettingsView: View {
     }
 }
 
-/// A two-option segmented pill (cyan selected), used for the Settings unit toggles.
-private struct SegToggle: View {
+/// A segmented pill group (cyan selected). Shared by Settings' unit toggles and the Profile toggles.
+struct SegToggle: View {
     let options: [(label: String, value: String)]
     @Binding var selection: String
 
