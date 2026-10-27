@@ -1,9 +1,9 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.6  
-Last Updated: 2026-10-22  
+Version: 3.11  
+Last Updated: 2026-10-26  
 Owner: Shayne  
-Supersedes: v3.5; v3.4; v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
+Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
 
@@ -115,7 +115,7 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 ## Stage 5 — Profile, arsenal, oil patterns, sensor variance (back end)  (M)
 - [~] M5-01 Bowler profile: handedness, style, baseline speed/rev/axis, PAP (schema) (was P2-01)
 - [~] M5-02 Arsenal: BallModel catalog → UserBall → versioned BallConfiguration (layout, pin/PSA, PAP used, weight) → surface and maintenance events (schema) (was P2-02/03/04)
-  - **2026-10-21 (DEC-044):** ball catalog built — 211 current balls, 10 brands, photo link + 15 lb specs + published ratings + normalized reaction (`lanesight-core/data/ball_catalog/`, migration `002_ball_catalog.sql`, `seed_ball_catalog.sql`, `lanesight_core/arsenal/`). Configured reaction from layout + current surface (`configured.py`, migration `003_ball_configuration_surface.sql`). Provisional recommenders: `rank_for_condition`, `arsenal_gaps`. Tested; migrations verified on Postgres 16.
+  - **2026-10-21 (DEC-044):** ball catalog built — 211 current balls, 10 brands, photo link + 15 lb specs + published ratings + normalized reaction (`lanesight-core/data/ball_catalog/`, migration `002_ball_catalog.sql`, `seed_ball_catalog.sql`, `lanesight_core/arsenal/`). Configured reaction from layout + current surface (`configured.py`, migration `003_ball_configuration_surface.sql`). Provisional recommenders: `rank_for_condition`, `arsenal_gaps`. Tested; migrations verified on Postgres 16. **Applied to the LaneSight Supabase project (`europwryibstnmipbvam`) with `ball_models` seeded (211); 004/005 reconciled into the repo 2026-10-22 (see DV-01a).**
   - **2026-10-22:** live in Supabase project `LaneSight` (`europwryibstnmipbvam`): schema v1 + 002 + 003 + 004 (RLS hardening — the first deploy's security advisor found 14 tables without RLS and a security-definer view), 211 balls loaded and checksum-verified. Security advisor clean. Temporary `http` extension used for seeding dropped (verified 2026-10-22).
   - **2026-10-22:** weekly catalog refresh: scheduled task follows `lanesight-core/data/ball_catalog/REFRESH.md`. It syncs merged changes to Supabase, collects new and retired balls, and opens a PR for review. Retired balls are kept (`status = 'discontinued'`). Migration 005 is applied to Supabase.
   - Still to do: arsenal UI (photo, layout entry, surface log); measured-shot calibration per configuration; oil absorption / games since resurface; periodic catalog refresh.
@@ -144,13 +144,63 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 - [ ] C-04 Offline capture queue; signed uploads; privacy retention controls
 - [ ] C-05 Multi-user accounts, realtime `shot.analysis.completed`
 
+## Dev Build v0 — iPhone developer build  (L) — DEC-045…053
+*The first iOS build, for Shayne's iPhone, run live against the real pipeline on his Mac over Tailscale. Purpose: exercise every core feature end to end, collect feasibility data (coverage, failure reasons, timings) and capture session feedback. Full brief and acceptance detail: `03_ENGINEERING/dev_build_v0/HANDOFF.md`. Builds on the Stage 1–8 back end; does not replace those stages. No pinfall (DEC-050); rules are owner-only (DEC-046); no mock numbers.*
+
+- [ ] **DV-00 Record & reconcile (docs).** Add DEC-045…053 to DECISIONS.md; add this stage + `L-dev-0` to the registers; fix MVP exit (DEC-047). **Done when** docs are consistent and Shayne has reviewed the diff.
+- [x] **DV-01a Reconcile (2026-10-22).** Confirmed LaneSight = Supabase `europwryibstnmipbvam` (VendHub org). The project already has `001_core_schema_v1` (= repo `schema.sql`), `002`, `003`, **`004_rls_hardening`** and **`005_ball_catalog_refresh`** applied, with `ball_models` seeded (211). Pulled 004 + 005 into `lanesight_core/models/migrations/` verbatim; `schema.sql` stays the unnumbered 001 baseline (no `001_*.sql`). **New migrations number from 006.**
+- [x] **DV-01 Database — migrations 006–010 (2026-10-22).** Reconciled against the live schema (extended existing `recommendations`/`recommendation_outcomes`/`shot_intents`/`shots`/`profiles`/`sensor_devices`/`oil_patterns` rather than re-creating; handoff's `bowler_profile`→`profiles`, `user_sensor`→`sensor_devices`). `006` rules & benchmarks (owner-only RLS); `007` score/tiers/achievements + `L-dev-0` seed + params-free `achievement_definition_public` view; `008` dev-build fields (`dob`/`delivery_style`/`approach_steps`, sensor `name`/`is_default`, shot `capture_mode`/`bowler_in_view`/`source`/`sensor_used`/`sensor_id`, `session_feedback`); `009` oil-pattern fields + House shot/Unknown seeds; `010` invoker-view + column-level grant fix (clears advisor ERROR). Rule-content seeding (`lanesight-core/rules/*.yaml`) and the oil importer are deferred to DV-02 (owner-reviewed content; Power P′ ranges pending Shayne, HANDOFF §7).
+  - **Branch-first wasn't possible** — Supabase branching needs the Pro plan and the org is Free. Per Shayne: validated locally first (PG16 + Supabase shim, 001–010 from scratch + idempotency + RLS tests, `lanesight_core/models/tests/run_rls_tests.sh`), took a timestamped backup (`~/LaneSightData/backups/`), then applied to the (empty) LaneSight project.
+  - **Done:** migrations apply clean; advisor shows **no errors** (only the intended 8 INFO `rls_enabled_no_policy` on owner-only tables, DEC-046); RLS verified — clients can't read rules/`params` (column-level grant to `authenticated` only, no `anon`), draft/retired achievements hidden, users see only their own rows; `ball_models` checksum unchanged (211 rows, md5 `c02f62043c64cfe80d99be12e40ab2ae`).
+- [~] **DV-02 Engines in `lanesight-core` (2026-10-22).** Landed as pure, DB-free packages (params in, dicts out; runner persists): `score/` — Accuracy (DEC-031), Consistency (DEC-032), Performance S′, Power P′, `L-dev-0` composite + eligibility + snapshot, and session-end tiers with 15×2 hysteresis; `benchmarks/` — personal baseline (N=10), L3→L2→L1→L0 resolution, Within/Watch/Outside, one-primary-focus prioritizer; `achievements/` — all 10 SCORE_TIERS §5 rule types + streak break/skip rule; `insights/routing.py` — target-vs-actual + execution class (no "did you hit your mark", DEC-049) and execution-miss→form-cue routing (DEC-005/006); `owner.py` — reset plan (DEC-051). Unit tests: `test_score` (17), `test_benchmarks` (8), `test_achievements` (10), `test_routing` (5), `test_form` (5); **full suite 127 passed**. DV-02 engines don't touch `cv/`, so IMG_8751–8754 reproduce unchanged.
+  - **Blocked / deferred (reported to Shayne):** (1) **Form P1 metric values** need a pose-estimation backend (not in deps) + the 2026-10-17/20 training clips (not in repo) — `form/analyze_form_clip` ships the contract + a `pose_backend` hook and returns every P1 metric `unavailable` until then (no fabricated pose numbers). (2) **Rule/drill/achievement content** (`lanesight-core/rules/*.yaml`) is owner-reviewed and not yet authored; engines run on it but it's empty. (3) **Power P′ reference ranges** pending Shayne (HANDOFF §7), so the overall score stays "building". (4) Capture-view classifier + spot-check tips are implemented as pure logic; their **video feature extraction + threshold validation** need real captures. (5) bowler-in-view on shot clips needs the same person/pose detection as Form P1.
+- [x] **DV-03 `lanesight_api` (Mac service) — 2026-10-22.** FastAPI with a committed OpenAPI spec at `lanesight-core/lanesight_api/openapi.json` (the iOS contract); endpoints per HANDOFF §3; serial job queue (DEC-043) with states + reasons + per-step timings (OPS-01); frame-timestamp verification against decoded video; launchd plist + `tailscale serve` notes + health check + start/stop README. **Live e2e PASSED 2026-10-22** (`examples/e2e_dev_build.py`, IMG_8807 against the real project with a temp user): real clip → serial analyze (≈24 s: probe 0.09 / window 1.21 / analyze 22.7) → shot metrics → L-dev-0 recompute (building: s_perf 40, a_acc 79; c_cons/p_power null) → session end → feedback → CSV; score_snapshots + feedback written to Supabase and cascade-deleted on cleanup. **Follow-up:** persist `shots`/`measurements` to Supabase (currently in-memory in PgStore) and implement the remaining §3 endpoints (see `/_unimplemented`). **Secrets (decided 2026-10-22):** store the LaneSight DB connection string and the Supabase **service key** in the **macOS Keychain** — never in the repo or a `.env`; the Mac service reads them from the Keychain at launch. From this point, **pre-migration backups use real `pg_dump`** (schema + data) to `~/LaneSightData/backups/<timestamp>/`, replacing the DV-01 MCP logical-export fallback. **Done when** a scripted end-to-end test (real clip → job → shot result → score/achievement → summary → feedback → CSV) passes against the real Supabase project with a test user, with timings logged.
+- [ ] **DV-04 iOS app (`ios/LaneSight`).** Xcode project (bundle `com.lanesight.app`, Dev/Beta/Prod xcconfig, Swift 6 strict concurrency, `LaneSightKit` generated from the OpenAPI spec); every screen in `02_DESIGN/dev_build_v0/` (map in HANDOFF §4) to `IOS_STANDARDS.md`; AVFoundation capture (1080p120 SDR preferred, real per-frame timestamps, advisory spot check, intent entry); background upload queue; notification ordering (≤1 popup/shot, never while recording, tier > achievement); session-end feedback sheet → summary (DEC-053); Supabase auth + Keychain + 13+ DOB gate + in-app deletion; privacy (purpose strings, `PrivacyInfo.xcprivacy`, Supabase-only SDKs); dev panel. **Done when** the app installs from Xcode, every screen is reachable, a real shot shows real results/recommendation/score/achievement/sensor question, session end → feedback → summary, and nothing on screen is hardcoded sample data.
+- [ ] **DV-05 First live session.** Pre-flight the Mac service over Tailscale from cellular; Shayne bowls 2–3 games (Shot, a few Form, one upload); review feedback/coverage/failure reasons/timings/recommendation 👍👎/unlocks; write a findings note in `02_RESEARCH/`; fix, rebuild, send to TestFlight internal.
+
 ## MVP exit
-All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs real sessions (was P1-12).
+**MVP exit is Shayne's call (DEC-047).** He runs the MVP (and the Dev Build v0 that feeds it) indefinitely and decides when it's ready for the friends Beta. The Stage 1–8 gates and the DV acceptance criteria are **readiness evidence, not automatic exit criteria** — they inform the judgment; they don't trip it. (Supersedes the former automatic gate: "all Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs real sessions"; was P1-12.)
 
 ---
 
 ## Post-MVP
-- **Session/League Mode:** continuous capture, user recognition, rolling buffer (was Phase 3)
+- **Session/League Mode:** continuous capture, user recognition, rolling buffer (was Phase 3). First step: Multi-Bowler Session Tracking (below)
+- **Multi-Bowler Session Tracking (MVP+, DEC-060):** see the section below
+
+## MVP+ — Multi-Bowler Session Tracking (DEC-060; planned, not started)
+**What it does:** at session start the user picks who to track (themselves and, optionally, friends). The phone records the whole session from a tripod. LaneSight works out who is about to throw, analyzes only the tracked bowlers' deliveries, ignores everyone else, and after the session compares the tracked bowlers side by side.
+
+**Flow**
+1. **Session setup › Who are we tracking?** "Me" plus up to N friends. A friend is a LaneSight user who accepts an invite, or a guest profile under the user's account.
+2. **Enroll each tracked bowler (~30 s each):** a front photo and a back photo, handedness, and the ball(s) they'll throw (ball color and pattern is a strong signal). Optional short walk-past clip.
+3. **Record the full session** on a tripod. Rolling buffer; deliveries are segmented automatically (DEC-014).
+4. **Attribute each delivery:** at approach start, match the bowler on the approach to an enrolled bowler using clothing and body appearance, handedness, ball appearance and approach position (DEC-015 multi-signal; face may support but never drives the match).
+   - High confidence → analyzed for that bowler.
+   - Not enrolled → discarded quickly, never stored.
+   - Uncertain → held for a quick "Who threw this?" review at session end; never guessed.
+5. **Session end:** per-bowler summaries plus **Compare** (bowler 1 vs bowler 2): speed, rev, accuracy, consistency, entry, form checkpoints where measured.
+
+**Rules and privacy**
+- Friends and guests must consent before being tracked. A guest's data belongs to the inviting account unless they claim it.
+- Enrollment photos and appearance models are **session-scoped** and deleted after the session unless the bowler opts in to "remember me" (DEC-015).
+- No permanent face ID. No tracking of minors without a guardian's consent (13+ gate, DEC-047).
+- Biometric-privacy laws (e.g. Illinois BIPA) need legal review before launch.
+- Non-enrolled people's footage is discarded and never analyzed.
+
+**Tasks (draft)**
+| ID | Task | Notes |
+|---|---|---|
+| MB-01 | Enrollment capture + appearance signature | Front/back photos, handedness, ball appearance; session-scoped storage |
+| MB-02 | Continuous capture + delivery segmentation | DEC-014 rolling buffer; on-device segmentation to limit upload cost |
+| MB-03 | Bowler attribution | Person detection/tracking at approach start + re-identification; confidence + "uncertain" queue |
+| MB-04 | Per-bowler routing of Shot/Form analysis | Reuses the existing pipelines; one analysis at a time (DEC-043) |
+| MB-05 | Session-end review + per-bowler summaries | "Who threw this?" for uncertain deliveries |
+| MB-06 | Compare view (bowler 1 vs 2) | Same metric definitions; unavailable stays unavailable |
+| MB-07 | Friend invites, guest profiles, consent | Data ownership; claim a guest profile later |
+| MB-08 | Attribution validation | Target: ≥98% correct on accepted deliveries, 0 non-enrolled deliveries stored; measured on real multi-bowler sessions |
+
+**Depends on:** Dev Build v0 results, moving to cloud analysis (Stage 8), and cost review (continuous video is far heavier than tap-to-record).
+
 - **Team Lane Management** (was Phase 5)
 - **League integration:** bowler registers with leagues; league stats merged into the profile with provenance (was Phase 6)
 - **USBC membership connection:** one profile across practice, leagues and tournaments (was P6-04)
@@ -191,3 +241,19 @@ All Stage 1–8 gates pass, and a private beta of 10–25 league bowlers runs re
 - [ ] **PBA-03 (POST-MVP):** optional verified compatible speed/rev comparison; separate pro reference from personal/coach baseline and LaneSight Score.
 - [ ] **OPS-01 (MVP instrumentation):** capture-to-feedback timestamps, analysis p50/p95/p99, valid metric yield, failure reasons, job trace, upload retry and compute/storage cost per 1,000 shots. Targets in `03_ENGINEERING/PERFORMANCE_RELIABILITY_SLO_PROPOSAL.md` are **target state** (DEC-043): measured and reported in dev/beta, not enforced. Cost per 1,000 shots is reported against the DEC-043 caps. First slice: p50/p95/p99 per pipeline step from `examples/eval_session.py` over the live-session clips (no new infrastructure).
 - **Design instruction:** no Figma updates until image mockup review and approval; concept images are illustrative only.
+
+## MVP design handoff work items — 2026-10-26 (DEC-075–082)
+Detail and acceptance criteria: `03_ENGINEERING/MVP_HANDOFF.md` §3. Designs: Figma "Target state – v3.7" (`02_DESIGN/target_state/README.md`).
+- [ ] **MVP-01** key-position frame capture during Form analysis
+- [ ] **MVP-02** pose landmarks stored per key frame; client-drawn skeleton (confident joints only)
+- [ ] **MVP-03** camera-view detection (side / rear / front) and metric availability by view
+- [ ] **MVP-04** one key measurement per key position
+- [ ] **MVP-05** provisional MVP LaneSight Score (DEC-077) with eligibility progress
+- [ ] **MVP-06** recommendation `why` + `expected` text
+- [ ] **MVP-07** "vs your typical" session comparison
+- [ ] **MVP-08** per-metric detail endpoint (avg, spread, range, coverage, trend, by ball, by pattern)
+- [ ] **MVP-09** last-used setup prefill
+- [ ] **MVP-10** upload kept on phone with automatic and manual retry
+- [ ] **MVP-11** Analyzing screen: keep awake, lock clip settings, auto-open results (DEC-068/080)
+- [ ] **MVP-12** Home "next focus"
+- [ ] **MVP-13** first-use states and camera permission screens

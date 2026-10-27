@@ -2,6 +2,7 @@
 import cv2, numpy as np
 from .stabilize import frames
 from .lanes import lane_x, foul_corners
+from ._parallel import pmap_frames
 
 BALL_IN, LANE_IN = 8.59, 41.5
 
@@ -22,12 +23,18 @@ def lane_roi(lane, vp, shape, pad=0.25):
 def extract_blobs(path, S, lane, vp, thr=35, log=print):
     bg = S['bg']; h, w = bg.shape[:2]
     roi = lane_roi(lane, vp, bg.shape)
-    ys, xs = np.where(roi); y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    ys, xs = np.where(roi)
+    if ys.size == 0:          # degenerate lane geometry (VP/foul inverted the ROI): no region to search
+        raise RuntimeError("lane geometry unusable: the detected lane produced an empty search region "
+                           "(awkward camera angle). Reshoot with the camera behind the lane, square to it.")
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     roic = roi[y0:y1, x0:x1]; bgc = bg[y0:y1, x0:x1].astype(np.int16)
-    out = []; prev = None
-    for i, f in frames(path):
-        if i >= len(S['Hs']): break
-        wf = cv2.warpPerspective(f, S['Hs'][i], (w, h))[y0:y1, x0:x1]
+    Hs = S['Hs']; ts = S['ts']
+    # Each frame is processed independently (warp + background diff + connected components), so fan the per-frame
+    # work across cores with decode kept sequential and results reassembled in frame order (pure speed-up; the
+    # computation and its output are identical to the serial loop).
+    def _frame(i, f):
+        wf = cv2.warpPerspective(f, Hs[i], (w, h))[y0:y1, x0:x1]
         valid = wf.max(axis=2) > 0                                  # outside warped frame = no data
         d = np.abs(wf.astype(np.int16) - bgc).max(axis=2)
         m = ((d > thr) & roic & valid).astype(np.uint8)
@@ -35,7 +42,8 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
         n, lab, st, cen = cv2.connectedComponentsWithStats(m)
         bl = [dict(x=int(st[k, 0] + x0), y=int(st[k, 1] + y0), w=int(st[k, 2]), h=int(st[k, 3]), a=int(st[k, 4]))
               for k in range(1, n) if st[k, 4] >= 12]
-        out.append(dict(i=i, t=float(S['ts'][i]), blobs=bl))
+        return dict(i=i, t=float(ts[i]), blobs=bl)
+    out = [r for _, r in pmap_frames(frames(path), _frame, upto=len(Hs))]
     log(f'blobs extracted for {len(out)} frames')
     return out
 

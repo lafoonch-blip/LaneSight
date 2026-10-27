@@ -1,0 +1,26 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+style_templates:
+- id: one_handed_thumb
+  name: One-handed, with thumb
+  status: draft
+  metrics:
+  - metric: backswing_height_rel
+    matters: true
+    note: waist-to-shoulder typical
+- id: one_handed_no_thumb
+  name: One-handed, no thumb
+  status: draft
+  metrics:
+  - metric: backswing_height_rel
+    matters: true
+    note: often shoulder-to-above-head
+- id: two_handed
+  name: Two-handed
+  status: draft
+  metrics:
+  - metric: backswing_height_rel
+    matters: true
+    note: often above head
+  - metric: ball_start_direction
+    matters: true
+    note: both hands through the swing

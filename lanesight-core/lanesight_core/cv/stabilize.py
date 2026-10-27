@@ -1,6 +1,8 @@
 """Stage 1: register every frame to a reference frame (static tripod, handheld, or head-mounted)
 and build a clean background plate in reference coordinates. Streaming: frames are never all held."""
-import cv2, numpy as np, subprocess
+import cv2, numpy as np, subprocess, threading
+from concurrent.futures import ThreadPoolExecutor
+from ._parallel import workers
 
 def pts(path):
     out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=pts_time',
@@ -71,14 +73,40 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
     Hs = []; inl = []; kr = dr = None; prev = None
     for i, f in frames(path):
         if i == ref: kr, dr = R.feats(f); ref_img = f.copy(); break
-    for i, f in frames(path):
-        kf, df = R.feats(f)
-        H, n = R.H(kf, df, kr, dr)
-        if (H is None or n < min_inliers) and prev is not None:
-            Hp, n2 = R.H(kf, df, prev[1], prev[2])           # frame -> previous frame
-            H, n = (Hs[-1] @ Hp, -n2) if Hp is not None else (Hs[-1], -1)
-        if H is None: H, n = np.eye(3), -1
-        Hs.append(H); inl.append(n); prev = (i, kf, df)
+    # Two phases per chunk so BOTH halves use the cores. ORB feature extraction is per-frame independent (the heavy
+    # part here) and scales only when each cv2 call is single-threaded, so it is fanned across worker threads with
+    # cv2 threads forced to 1 (each worker gets its own deterministic Registrar -> bit-identical features). The
+    # homography solve (R.H: BFMatcher.knnMatch + findHomography) is instead ~10x faster at full cv2 thread count
+    # AND is sequential (chains through the previous frame + Hs[-1]), so it runs on this thread in frame order with
+    # the default thread count restored -> identical Hs and unchanged RANSAC RNG sequence. Chunking bounds memory
+    # and the per-chunk setNumThreads toggle is negligible. Net: pure speed-up, results identical to the serial loop.
+    _tl = threading.local()
+    def _feats(f):
+        R2 = getattr(_tl, 'R', None)
+        if R2 is None: R2 = _tl.R = Registrar()
+        return R2.feats(f)
+    nw = workers(); default_threads = cv2.getNumThreads(); chunk = max(nw * 4, 48); gen = frames(path)
+    try:
+        with ThreadPoolExecutor(max_workers=nw) as ex:
+            while True:
+                batch = []
+                for _ in range(chunk):
+                    nf = next(gen, None)
+                    if nf is None: break
+                    batch.append(nf)                                   # (i, frame)
+                if not batch: break
+                cv2.setNumThreads(1)                                   # phase 1: parallel ORB (per-frame independent)
+                feats = list(ex.map(lambda nf: _feats(nf[1]), batch)) # ex.map preserves input order
+                cv2.setNumThreads(default_threads)                    # phase 2: sequential solve at full threads
+                for (i, f), (kf, df) in zip(batch, feats):
+                    H, n = R.H(kf, df, kr, dr)
+                    if (H is None or n < min_inliers) and prev is not None:
+                        Hp, n2 = R.H(kf, df, prev[1], prev[2])         # frame -> previous frame
+                        H, n = (Hs[-1] @ Hp, -n2) if Hp is not None else (Hs[-1], -1)
+                    if H is None: H, n = np.eye(3), -1
+                    Hs.append(H); inl.append(n); prev = (i, kf, df)
+    finally:
+        cv2.setNumThreads(default_threads)
     Hs = np.array(Hs)
     c = np.array([540., 960., 1.]); sh = [np.linalg.norm((h @ c / (h @ c)[2])[:2] - c[:2]) for h in Hs]
     log(f'ref frame {ref} (t={ts[ref]:.2f}s); median inliers {np.median([v for v in inl if v > 0]):.0f}; '

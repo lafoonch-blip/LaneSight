@@ -1,0 +1,9 @@
+# OS / editor junk
+.DS_Store
+**/.DS_Store
+*.textClipping
+
+# Large binaries and raw design references — kept in Figma / outside git (DEC-045)
+Training Videos/
+Component Mocks/
+Login screen mocks.png

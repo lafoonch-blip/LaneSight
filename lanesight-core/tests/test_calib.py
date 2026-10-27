@@ -1,0 +1,491 @@
+"""Phase-1 geometry-harness tests (DEC-062). All synthetic/self-consistent — no real-clip pixel values are
+fabricated. Exercises: canonical geometry + provenance, landmark schema round-trip, homography solve on a
+known scene, and the B/C reconstruction core on a straight synthetic shot."""
+import json
+import numpy as np
+import pytest
+from numpy.linalg import inv
+
+from lanesight_core.cv.metrics import lane_homography, LANE_IN
+from lanesight_core.cv.calib.lane_geometry import (
+    CANONICAL, LaneGeometry, x_in_for_board, board_from_left, Z_IMPACT_FT)
+from lanesight_core.cv.calib.landmarks import LandmarkSet, LandmarkObservation
+from lanesight_core.cv.calib.solve import homography_from_landmarks, CalibrationError
+from lanesight_core.cv.calib.ablation import reconstruct_from_homography
+
+
+# ---------------------------------------------------------------- geometry
+
+def test_geometry_constants_and_conventions():
+    assert CANONICAL.boards == 39
+    assert CANONICAL.lane_width_in == pytest.approx(41.5)
+    assert Z_IMPACT_FT == pytest.approx(59.44, abs=0.01)
+    # board<->X inverse round-trip
+    for b in (1.0, 5.5, 20.0, 39.5):
+        assert board_from_left(x_in_for_board(b)) == pytest.approx(b)
+    # foul corners known exactly; center is board 20
+    assert CANONICAL.world_point("foul_l") == (0.0, 0.0)
+    assert CANONICAL.world_point("foul_r") == (pytest.approx(41.5), 0.0)
+    assert board_from_left(41.5 / 2) == pytest.approx(20.0)
+
+
+def test_provenance_no_uncited_or_fabricated_values():
+    """Handoff §4 / CLAUDE.md: constants are cited; unknown Z is an interval or None, never a fabricated point."""
+    for name, lm in CANONICAL.landmarks.items():
+        if lm.source in ("spec", "usbc-range"):
+            assert lm.citation, f"{name} is '{lm.source}' but has no citation"
+        if lm.source == "tbd":
+            assert lm.z_ft is None or lm.x_in is None, f"{name} is tbd but has a full coordinate"
+    # arrows (USBC 2026): X known, Z is a permitted INTERVAL 12-16 ft (not a single Z=15 point), no fixed z_ft
+    for b in (5, 10, 15, 20, 25, 30, 35):
+        lm = CANONICAL.landmarks[f"arrow_{b}"]
+        assert lm.x_in is not None and lm.z_ft is None
+        assert lm.source == "usbc-range" and lm.has_z_interval
+        assert (lm.z_min, lm.z_max) == (12.0, 16.0)
+        assert CANONICAL.world_point(f"arrow_{b}") is None     # interval landmark is NOT a calibration anchor
+    # interval landmarks exist for arrows/dots/downlane/approach; exact anchors are foul + pins only
+    intervals = CANONICAL.interval_landmarks()
+    assert all(any(n.startswith(p) for p in ("arrow_", "dot_", "downlane_target_", "approach_dot_"))
+               for n in intervals)
+    assert CANONICAL.world_point("foul_l") is not None and CANONICAL.world_point("pin_1") is not None
+    # pin spots are exact (12-in centers); head pin centered at 60 ft
+    assert CANONICAL.world_point("pin_1") == (pytest.approx(41.5 / 2), pytest.approx(60.0))
+    assert len([n for n in CANONICAL.landmarks if n.startswith("pin_")]) == 10
+
+
+# ---------------------------------------------------------------- landmarks
+
+def test_landmark_template_roundtrip_and_correspondences():
+    ls = LandmarkSet.template("IMG_TEST", (1080, 1920))
+    assert ls.labeled_count() == 0
+    assert "foul_l" in ls.observations and "arrow_20" in ls.observations
+    # label a few; only labeled AND world-known landmarks become correspondences
+    ls.set_point("foul_l", 300, 1500).set_point("foul_r", 780, 1500)
+    ls.set_point("pin_1", 540, 300)
+    ls.set_point("arrow_20", 540, 1100)          # labeled but world Z is tbd -> excluded
+    names, world, image = ls.correspondences()
+    assert set(names) == {"foul_l", "foul_r", "pin_1"}
+    assert "arrow_20" not in names
+    assert world.shape == (3, 2) and image.shape == (3, 2)
+    # JSON round-trip preserves points
+    rt = LandmarkSet.from_json(ls.to_json())
+    assert rt.observations["foul_l"].x == 300 and rt.observations["pin_1"].y == 300
+    assert rt.labeled_count() == 4
+
+
+# ------------------------------------------------- synthetic known scene
+
+def _true_homographies():
+    """A self-consistent perspective lane (same technique as test_metrics): returns (H_img_to_world,
+    H_world_to_img) in the canonical (X in, Z ft) frame."""
+    lane = dict(left=np.array([-0.07, 192.0]), right=np.array([0.07, 208.0]),
+                foul=np.array([0.0, 590.0]), res=(1.0, 1.0), y_rng=(20.0, 585.0),
+                vp_miss=(0.0, 0.0), track=np.empty((0, 3)))
+    vp = np.array([200.0, -150.0])
+    pi = np.array([200.0, 40.0])
+    H_iw = lane_homography(lane, vp, pi)          # image -> world (X in, Z ft)
+    return H_iw, inv(H_iw)
+
+
+def _project(H_wi, x_in, z_ft):
+    p = H_wi @ np.array([x_in, z_ft, 1.0])
+    return p[:2] / p[2]
+
+
+def test_solver_recovers_known_homography():
+    H_iw_true, H_wi_true = _true_homographies()
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    # label the known landmarks by projecting their true world coords into the image
+    for name in ("foul_l", "foul_r", "pin_1", "pin_7", "pin_10"):
+        w = CANONICAL.world_point(name)
+        x, y = _project(H_wi_true, w[0], w[1])
+        ls.set_point(name, float(x), float(y))
+    H_iw, H_wi, diag = homography_from_landmarks(ls)
+    # recovered mapping reproduces the known world coords essentially exactly
+    assert diag["reproj_board_rmse"] < 0.05
+    assert diag["reproj_ft_rmse"] < 0.05
+    assert diag["longitudinal_spread_ft"] > 55           # foul (0) to pins (~60)
+    assert diag["n_correspondences"] == 5
+    # sensitivity: a 1-px wobble hurts the far region more than the near region (depth compression)
+    s = diag["sensitivity_per_px"]
+    assert s["entry_59ft"]["d_board_per_px"] >= s["foul_0ft"]["d_board_per_px"]
+    assert all(np.isfinite(v["d_board_per_px"]) for v in s.values())
+
+
+def test_solver_rejects_too_few_points():
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    ls.set_point("foul_l", 100, 500).set_point("foul_r", 300, 500)
+    with pytest.raises(CalibrationError):
+        homography_from_landmarks(ls)
+
+
+# ------------------------------------------------- reconstruction (B/C core)
+
+def test_reconstruct_straight_shot_down_center():
+    H_iw_true, H_wi_true = _true_homographies()
+    centers = []
+    for k, z in enumerate(np.arange(0.5, 58.5, 1.0)):
+        x, y = _project(H_wi_true, LANE_IN / 2, float(z))        # straight down board 20
+        centers.append((0.5 + z / 25.0, float(x), float(y)))
+    r = reconstruct_from_homography(H_iw_true, centers)
+    assert r["ok"], r.get("error")
+    assert r["entry_board"] == pytest.approx(20.0, abs=0.5)
+    assert r["laydown_board"] == pytest.approx(20.0, abs=0.5)
+    assert r["track_last_ft"] > 56
+
+
+def test_reconstruct_needs_enough_centers():
+    H_iw_true, _ = _true_homographies()
+    r = reconstruct_from_homography(H_iw_true, [(0.0, 200.0, 500.0)] * 3)
+    assert not r["ok"] and "need" in r["error"]
+
+
+# ------------------------------------------------- verification-tool safeguards (Step 3)
+
+def test_only_verified_points_calibrate():
+    """Fail-closed: suggested/ambiguous/not-visible are excluded; only verified feed correspondences."""
+    from lanesight_core.cv.calib.landmarks import (STATUS_SUGGESTED, STATUS_VERIFIED, STATUS_AMBIGUOUS)
+    ls = LandmarkSet.template("C", (1080, 1920))
+    ls.suggest("foul_l", 300, 1500, 0.9, "auto")          # suggested -> excluded
+    ls.set_point("foul_r", 760, 1500)                      # verified   -> included
+    ls.set_point("pin_1", 540, 300, status=STATUS_AMBIGUOUS)   # ambiguous -> excluded
+    assert ls.observations["foul_l"].usable is False
+    assert ls.observations["foul_r"].usable is True
+    names, world, image = ls.correspondences()
+    assert names == ["foul_r"]
+    assert ls.verified_count() == 1 and ls.suggested_count() == 1
+    # round-trip preserves status/source/confidence
+    rt = LandmarkSet.from_json(ls.to_json())
+    assert rt.observations["foul_l"].status == STATUS_SUGGESTED and rt.observations["foul_l"].confidence == 0.9
+    assert rt.observations["foul_r"].status == STATUS_VERIFIED
+
+
+def test_merge_never_clobbers_verified():
+    from lanesight_core.cv.calib.label_tool import (merge_existing_and_suggestions,
+                                                    view_to_image, image_to_view)
+    ex = LandmarkSet.template("C", (1080, 1920)); ex.set_point("foul_l", 300, 1500)
+    sg = LandmarkSet.template("C", (1080, 1920))
+    sg.suggest("foul_l", 999, 999, 0.9, "auto")           # must NOT overwrite the verified foul_l
+    sg.suggest("foul_r", 700, 1500, 0.9, "auto")
+    m = merge_existing_and_suggestions(ex, sg)
+    assert m.observations["foul_l"].x == 300 and m.observations["foul_l"].usable
+    assert m.observations["foul_r"].status == "suggested"
+    # coordinate transform stores ORIGINAL image pixels (round-trips exactly)
+    view = dict(zoom=0.37, ox=140.0, oy=512.0)
+    for ix, iy in ((0, 0), (1080, 1920), (537.5, 999.25)):
+        vx, vy = image_to_view(ix, iy, view)
+        rx, ry = view_to_image(vx, vy, view)
+        assert abs(rx - ix) < 1e-6 and abs(ry - iy) < 1e-6
+
+
+def _verified_anchor_set():
+    """A landmark set with foul + pins VERIFIED, projected through the known true homography."""
+    H_iw_true, H_wi_true = _true_homographies()
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    for name in ("foul_l", "foul_r", "pin_1", "pin_7", "pin_10"):
+        w = CANONICAL.world_point(name)
+        x, y = _project(H_wi_true, w[0], w[1])
+        ls.set_point(name, float(x), float(y))        # verified
+    return ls, H_iw_true, H_wi_true
+
+
+def test_interval_consistency_checks_arrows_not_anchors():
+    from lanesight_core.cv.calib.solve import homography_from_landmarks, interval_consistency
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    # label an arrow INSIDE its 12-16 ft band, and one OUTSIDE (at 20 ft)
+    xa = CANONICAL.landmarks["arrow_20"].x_in
+    ls.set_point("arrow_20", *(_project(H_wi_true, xa, 14.0)))      # within
+    xa15 = CANONICAL.landmarks["arrow_15"].x_in
+    ls.set_point("arrow_15", *(_project(H_wi_true, xa15, 20.0)))    # outside (too far)
+    H_iw, _, _ = homography_from_landmarks(ls)        # arrows are NOT used as anchors (interval -> world None)
+    checks = {c["name"]: c for c in interval_consistency(H_iw, ls)}
+    assert checks["arrow_20"]["within"] is True
+    assert checks["arrow_15"]["within"] is False and checks["arrow_15"]["margin_ft"] > 3
+    # confirm arrows did not enter the solve: still solvable from the 5 exact anchors alone
+    names, _, _ = ls.correspondences()
+    assert "arrow_20" not in names and "foul_l" in names
+
+
+def test_uncertainty_attribution_runs_and_ranks():
+    from lanesight_core.cv.calib.ablation import uncertainty_attribution
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    centers = []
+    for z in np.arange(0.5, 58.5, 1.0):
+        x, y = _project(H_wi_true, LANE_IN / 2, float(z))
+        centers.append((0.5 + z / 25.0, float(x), float(y)))
+    r = uncertainty_attribution(ls, centers, n_mc=40, seed=0)
+    assert r["ok"], r.get("error")
+    assert r["base_entry_board"] == pytest.approx(20.0, abs=0.6)
+    sb = r["sigma_boards"]
+    assert sb["ball_center"] is not None and sb["ball_center"] >= 0.9     # floored by scale-invariant bound
+    assert sb["calibration_conditioning"] is not None
+    assert r["dominant"] in ("landmark_placement", "ball_center", "calibration_conditioning")
+
+
+def test_geometry_meta_anchors_vs_intervals():
+    """The browser/cv2 tools split exact anchors (foul + pins) from interval checks (arrows/dots)."""
+    from lanesight_core.cv.calib.label_server import _geometry_meta
+    m = _geometry_meta()
+    assert set(m["anchors"]) == {"foul_l", "foul_r", *(f"pin_{i}" for i in range(1, 11))}
+    assert "arrow_20" in m["intervals"] and "approach_dot_20" in m["intervals"]
+    assert "foul_l" not in m["intervals"]            # anchors are never interval checks
+    assert len(m["arm_order"]) == len(set(m["arm_order"]))   # no dupes in the cycle order
+
+
+def _diag(reproj=0.3, zones=4, sens=0.8):
+    return {"reproj_board_rmse": reproj, "longitudinal_zones": zones,
+            "sensitivity_per_px": {"entry_59ft": {"d_board_per_px": sens}}}
+
+
+def test_eligibility_green_full_analysis():
+    from lanesight_core.cv.calib import eligibility as E
+    checks = [{"name": f"arrow_{b}", "within": True} for b in (5, 10, 15, 20, 25, 30, 35)]
+    r = E.classify(diag=_diag(), interval_checks=checks, coverage={"near_ft": 0.5, "far_ft": 59.0}, far_ball_px=10)
+    assert r["tier"] == E.GREEN and r["emoji"] == "🟢"
+    assert r["metrics"]["entry_board"]["eligible"] and r["metrics"]["speed_early"]["eligible"]
+
+
+def test_eligibility_yellow_partial_when_far_fails():
+    from lanesight_core.cv.calib import eligibility as E
+    # good near calibration + early track, but ball only reaches 30 ft and conditioning is poor
+    r = E.classify(diag=_diag(sens=9.0), interval_checks=[], coverage={"near_ft": 0.5, "far_ft": 30.0})
+    assert r["tier"] == E.YELLOW
+    assert r["metrics"]["speed_early"]["eligible"] is True        # near-lane stays available
+    assert r["metrics"]["entry_board"]["eligible"] is False       # far-lane unavailable
+    assert "far" in r["metrics"]["entry_board"]["reason"]
+
+
+def test_eligibility_red_when_uncalibrated():
+    from lanesight_core.cv.calib import eligibility as E
+    r = E.classify(diag=None)
+    assert r["tier"] == E.RED and r["eligible_count"] == 0
+    assert E.track_coverage([{"z_ft": 2.0}, {"z_ft": 40.0}]) == {"near_ft": 2.0, "far_ft": 40.0}
+    assert E.track_coverage((1.0, 58.0)) == {"near_ft": 1.0, "far_ft": 58.0}
+
+
+def test_phase2_score_clip_on_synthetic(tmp_path):
+    """score_clip end-to-end on a synthetic verified anchor set (no video)."""
+    from lanesight_core.cv.calib.phase2 import score_clip
+    ls, H_iw_true, H_wi_true = _verified_anchor_set()
+    p = tmp_path / "SYNTH.landmarks.json"
+    ls.to_json(str(p))
+    centers = [(0.5 + z / 25.0, *(_project(H_wi_true, LANE_IN / 2, float(z)))) for z in np.arange(0.5, 58.5, 1.0)]
+    r = score_clip(str(p), centers=centers)
+    assert r["calibrated"] is True
+    assert "tier" in r["eligibility"] and r["eligibility"]["tier"] in ("full", "partial", "reposition")
+
+
+def test_pnp_recovers_known_pose_and_good_position_is_well_conditioned():
+    """PnP code is correct: it recovers a known synthetic camera pose exactly, and a good (low, ~10 ft
+    standoff, square) position gives far-lane sensitivity well under the eligibility threshold. This is the
+    control that makes the real-clip finding (impossible poses from the ball-return view) trustworthy."""
+    import cv2
+    from lanesight_core.cv.calib.pose import _object_points, nominal_K, _pnp, _ray_plane_board, IN_PER_FT
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL, LANE_WIDTH_IN, BOARDS
+    w, h = 1080, 1920
+    K = nominal_K(w, h)
+    names = ["foul_l", "foul_r"] + [f"pin_{i}" for i in (1, 2, 3, 4, 6, 7, 10)]
+    obj = _object_points(names, 15.0)
+    pitch = np.radians(18)
+    Cw = np.array([LANE_WIDTH_IN / 2, 48.0, -120.0])          # 48 in high, 10 ft behind foul
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    Rwc = np.vstack([xc, yc, zc]); tvec = (-Rwc @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(Rwc)
+    img = cv2.projectPoints(obj, rvec, tvec, K, None)[0].reshape(-1, 2)
+    rvec2, tvec2, rmse = _pnp(obj, img, K)
+    R2, _ = cv2.Rodrigues(rvec2); C2 = (-R2.T @ tvec2).ravel()
+    assert rmse < 0.5                                         # recovers the pose essentially exactly
+    assert abs(C2[1] - 48.0) < 2 and abs(C2[2] - (-120.0)) < 5
+    ent = np.array([[LANE_WIDTH_IN / 2, 0.0, CANONICAL.z_impact_ft * IN_PER_FT]])
+    uv = cv2.projectPoints(ent, rvec, tvec, K, None)[0].reshape(2)
+    b1 = _ray_plane_board(rvec, tvec, K, uv + [1, 0])
+    sens = abs((b1[0] - LANE_WIDTH_IN / 2) / LANE_WIDTH_IN * BOARDS)
+    assert sens < 1.5                                         # good position is well-conditioned
+
+
+def test_fit_focal_recovers_focal_and_cross_validates_arrows():
+    """fit_focal recovers the focal that best explains foul+pins, and the independently-labeled arrows (held
+    out of the solve) then back-project into their USBC band — the cross-check that makes a fitted focal
+    trustworthy. Synthetic: a known pose at a known focal, so there is a right answer."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL as G, x_in_for_board
+    w, h, f_true = 1080, 1920, 1600.0
+    K = P.nominal_K(w, h, f_true)
+    pitch = np.radians(22)
+    Cw = np.array([G.landmarks["foul_r"].x_in / 2, 72.0, -300.0])      # 6 ft high, 25 ft back (ball-return-ish)
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    R = np.vstack([xc, yc, zc]); tvec = (-R @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(R)
+
+    def proj(x_in, y_in, z_ft):
+        uv, _ = cv2.projectPoints(np.array([[x_in, y_in, z_ft * P.IN_PER_FT]], float), rvec, tvec, K, None)
+        return uv.reshape(2)
+
+    ls = LandmarkSet.template("SYNTH_POSE", (w, h))
+    for n in ("foul_l", "foul_r"):
+        lm = G.landmarks[n]; ls.set_point(n, *proj(lm.x_in, 0.0, 0.0))
+    for i in (1, 2, 3, 4, 6, 7, 10):
+        lm = G.landmarks[f"pin_{i}"]; ls.set_point(f"pin_{i}", *proj(lm.x_in, 0.0, lm.z_ft))
+    for b in (5, 15, 25, 35):                       # arrows at a true 14 ft (in the 12-16 band), held out
+        ls.set_point(f"arrow_{b}", *proj(x_in_for_board(b), 0.0, 14.0))
+
+    fit = P.fit_focal(ls)
+    assert fit is not None and abs(fit["focal_px"] - f_true) < 80      # recovers the focal
+    assert fit["reproj_px"] < 1.0
+    xcheck = P.interval_backprojection(ls, fit["rvec"], fit["tvec"], P.nominal_K(w, h, fit["focal_px"]))
+    assert xcheck["arrow"]["in_band"] == xcheck["arrow"]["n"] == 4      # all held-out arrows land in band
+
+
+def _synthetic_pose_clip(w=1080, h=1920, f_true=1600.0, pitch_deg=22.0, add_arrows=True):
+    """A verified LandmarkSet from a KNOWN camera pose+focal (foul+pins, optionally arrows), plus the pose."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    from lanesight_core.cv.calib.lane_geometry import CANONICAL as G, x_in_for_board
+    K = P.nominal_K(w, h, f_true)
+    pitch = np.radians(pitch_deg)
+    Cw = np.array([G.landmarks["foul_r"].x_in / 2, 72.0, -300.0])
+    zc = np.array([0, -np.sin(pitch), np.cos(pitch)]); xc = np.array([1.0, 0, 0]); yc = np.cross(zc, xc)
+    R = np.vstack([xc, yc, zc]); tvec = (-R @ Cw).reshape(3, 1); rvec, _ = cv2.Rodrigues(R)
+
+    def proj(x_in, y_in, z_ft):
+        return cv2.projectPoints(np.array([[x_in, y_in, z_ft * P.IN_PER_FT]], float),
+                                 rvec, tvec, K, None)[0].reshape(2)
+
+    ls = LandmarkSet.template("SYNTH_POSECAL", (w, h))
+    for n in ("foul_l", "foul_r"):
+        ls.set_point(n, *proj(G.landmarks[n].x_in, 0.0, 0.0))
+    for i in (1, 2, 3, 4, 6, 7, 10):
+        ls.set_point(f"pin_{i}", *proj(G.landmarks[f"pin_{i}"].x_in, 0.0, G.landmarks[f"pin_{i}"].z_ft))
+    if add_arrows:
+        for b in (5, 15, 25, 35):
+            ls.set_point(f"arrow_{b}", *proj(x_in_for_board(b), 0.0, 14.0))
+    return ls, rvec, tvec, K
+
+
+def test_pose_calibrate_self_calibrates_and_gates_far():
+    """calibrate() self-calibrates the focal (no focal supplied), validates the near lane with held-out arrows,
+    and keeps the far lane gated OFF until independently validated (DEC-065)."""
+    from lanesight_core.cv.calib import pose as P
+    ls, rvec, tvec, K = _synthetic_pose_clip(f_true=1600.0)
+    cal = P.calibrate(ls)                           # no focal -> fitted
+    assert cal is not None and cal.focal_source == "fitted"
+    assert abs(cal.focal_px - 1600.0) < 80
+    assert cal.near_valid is True and cal.arrows_in_band == "4/4"
+    assert cal.far_valid is False and "unavailable" in cal.far_reason
+    assert cal.sensitivity_profile[0.0] < cal.sensitivity_profile[round(CANONICAL.z_impact_ft, 1)]
+
+
+def test_pose_plane_homography_reconstructs_near_and_far_is_gated():
+    """A pose induces the same lane-plane homography the reconstruction core expects, so reconstruct_near
+    recovers a known near board path; far metrics (entry/breakpoint) are forced unavailable."""
+    import cv2
+    from lanesight_core.cv.calib import pose as P
+    ls, rvec, tvec, K = _synthetic_pose_clip(f_true=1600.0)
+    cal = P.calibrate(ls, focal_px=1600.0)          # supply the true focal -> source 'given', exact geometry
+    assert cal.focal_source == "given"
+    # synthetic straight shot down board 20 (lane center), near lane only (Z 0.5..16 ft)
+    centers = []
+    for k, z in enumerate(np.arange(0.5, 16.0, 0.5)):
+        uv = cv2.projectPoints(np.array([[LANE_IN / 2, 0.0, z * P.IN_PER_FT]], float),
+                               rvec, tvec, K, None)[0].reshape(2)
+        centers.append((0.5 + k / 30.0, float(uv[0]), float(uv[1])))
+    r = P.reconstruct_near(cal, centers)
+    assert r["ok"] is True
+    assert abs(r["laydown_board"] - (CANONICAL.boards + 1) / 2) < 1.0    # ~board 20 (center)
+    assert r["entry_board"] is None and r["breakpoint_board"] is None    # far gated off
+    assert "unavailable" in r["far_unavailable_reason"]
+
+
+def test_near_field_homography_from_on_plane_fiducials():
+    """Near-field calibration from foul + on-plane dots/arrows (coplanar, unlike pins). Recovers the near
+    lane with low residual; this is the partial-results path."""
+    from lanesight_core.cv.calib.solve import near_field_homography, NEAR_Z_DEFAULTS
+    from lanesight_core.cv.calib.lane_geometry import x_in_for_board
+    _, H_wi_true = _true_homographies()
+    ls = LandmarkSet.template("SYNTH", (400, 600))
+    for n in ("foul_l", "foul_r"):
+        w = CANONICAL.world_point(n); ls.set_point(n, *(_project(H_wi_true, w[0], w[1])))
+    for b in (5, 15, 25, 35):          # on-plane fiducials at approx band-midpoint depths
+        ls.set_point(f"dot_{b}", *(_project(H_wi_true, x_in_for_board(b), NEAR_Z_DEFAULTS["dot"])))
+        ls.set_point(f"arrow_{b}", *(_project(H_wi_true, x_in_for_board(b), NEAR_Z_DEFAULTS["arrow"])))
+    H_iw, H_wi, diag = near_field_homography(ls)
+    assert diag["reproj_board_rmse"] < 0.1 and diag["reproj_ft_rmse"] < 0.1
+    # near region (0-15 ft) is well-conditioned
+    assert diag["sensitivity_per_px"]["foul_0ft"]["d_board_per_px"] < 1.0
+
+
+def test_eligibility_partial_path_near_valid_far_degenerate():
+    """The key #2 capability: a degenerate FAR calibration (like the ball-return clips) but a VALID near
+    calibration → near-lane metrics stay eligible, far-lane don't, tier = partial."""
+    from lanesight_core.cv.calib import eligibility as E
+    bad_far = {"reproj_board_rmse": 200.0, "longitudinal_zones": 2,
+               "sensitivity_per_px": {"entry_59ft": {"d_board_per_px": 2000.0}}}
+    r = E.classify(diag=bad_far, coverage={"near_ft": 0.5, "far_ft": 30.0}, near_calib_valid=True)
+    assert r["tier"] == E.YELLOW
+    assert r["metrics"]["laydown_board"]["eligible"] is True
+    assert r["metrics"]["speed_early"]["eligible"] is True
+    assert r["metrics"]["entry_board"]["eligible"] is False
+    assert r["metrics"]["breakpoint_board"]["eligible"] is False
+
+
+def test_near_calibration_gate_requires_tight_fit_and_bracket():
+    """near_calibration_ok must REJECT a near homography that fits loosely (the real ball-return clips: low
+    sensitivity but tens-to-hundreds of boards reprojection) and one whose fiducials don't bracket 0-15 ft."""
+    from lanesight_core.cv.calib import eligibility as E
+    good = {"reproj_board_rmse": 0.2, "deepest_fiducial_z_ft": 14.0, "shallowest_fiducial_z_ft": 0.0,
+            "sensitivity_per_px": {"arrows_15ft": {"d_board_per_px": 0.4}}}
+    assert E.near_calibration_ok(good)[0] is True
+    # looks well-conditioned (0.41 b/px) but the fit is garbage (16 board reproj) -> INVALID (the §3.5 trap)
+    loose = dict(good, reproj_board_rmse=16.3)
+    ok, why = E.near_calibration_ok(loose)
+    assert ok is False and "reproj" in why
+    # no foul labeled -> shallowest fiducial at 7 ft -> laydown (0 ft) unbracketed -> INVALID
+    nofloor = dict(good, shallowest_fiducial_z_ft=7.0)
+    ok2, why2 = E.near_calibration_ok(nofloor)
+    assert ok2 is False and "laydown" in why2
+    assert E.near_calibration_ok(None)[0] is False
+
+
+def test_calibration_readiness_splits_near_and_far():
+    """Geometry-only readiness (no ball track): valid near + degenerate far -> near metrics geometry-ready,
+    far metrics not, geometry_tier = partial. The per-shot track gate is reported, not asserted."""
+    from lanesight_core.cv.calib import eligibility as E
+    g = E.calibration_readiness(near_calib_valid=True, far_calib_valid=False, far_conditioning_ok=False)
+    assert g["geometry_tier"] == E.YELLOW and g["emoji"] == "🟡"
+    assert g["metrics"]["laydown_board"]["geometry_ready"] is True
+    assert g["metrics"]["launch_angle"]["geometry_ready"] is True
+    assert g["metrics"]["entry_board"]["geometry_ready"] is False
+    assert "near_track" in g["metrics"]["laydown_board"]["track_gated"]   # track still gates it at runtime
+    allfail = E.calibration_readiness(False, False, False)
+    assert allfail["geometry_tier"] == E.RED and allfail["geometry_ready_count"] == 0
+    full = E.calibration_readiness(True, True, True)
+    assert full["geometry_tier"] == E.GREEN and full["metrics"]["entry_board"]["geometry_ready"] is True
+
+
+def test_score_clip_reports_near_path_when_far_degenerate(tmp_path):
+    """score_clip must compute the NEAR calibration independently, so a clip whose FAR calibration is
+    degenerate still reports its near-field result (the wiring fix) rather than bailing out."""
+    from lanesight_core.cv.calib.phase2 import score_clip
+    from lanesight_core.cv.calib.solve import NEAR_Z_DEFAULTS
+    from lanesight_core.cv.calib.lane_geometry import x_in_for_board
+    _, H_wi = _true_homographies()
+    ls = LandmarkSet.template("SYNTH_NEAR", (400, 600))
+    for n in ("foul_l", "foul_r"):
+        w = CANONICAL.world_point(n); ls.set_point(n, *(_project(H_wi, w[0], w[1])))
+    for b in (5, 15, 25, 35):
+        ls.set_point(f"dot_{b}", *(_project(H_wi, x_in_for_board(b), NEAR_Z_DEFAULTS["dot"])))
+        ls.set_point(f"arrow_{b}", *(_project(H_wi, x_in_for_board(b), NEAR_Z_DEFAULTS["arrow"])))
+    p = tmp_path / "SYNTH_NEAR.landmarks.json"
+    ls.to_json(str(p))
+    r = score_clip(str(p))                         # no pins -> far calibration can't be solved
+    assert r["calibrated"] is False                # far degenerate
+    assert r["near_calib"]["valid"] is True        # but the near path is still computed and valid
+    assert r["geometry"]["geometry_tier"] == "partial"
+
+
+def test_resolution_scale_invariant_bounds():
+    """The lateral board error is scale-invariant ≈ k·8.07 boards — the key physical result."""
+    from lanesight_core.cv.calib.resolution import BOARD_ERR_CLEAN, BOARD_ERR_BLUR, SCALE_INVARIANT
+    assert BOARD_ERR_CLEAN == pytest.approx(0.97, abs=0.05)
+    assert BOARD_ERR_BLUR == pytest.approx(2.42, abs=0.05)
+    assert BOARD_ERR_CLEAN < 1.0 < BOARD_ERR_BLUR          # ±1 board only with a clean ball
+    assert SCALE_INVARIANT["board_err_clean"] == BOARD_ERR_CLEAN

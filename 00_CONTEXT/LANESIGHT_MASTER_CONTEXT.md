@@ -1,9 +1,9 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.4  
-Last Updated: 2026-10-18  
+Version: 1.5  
+Last Updated: 2026-10-25  
 Owner: Shayne  
-Supersedes: v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
+Supersedes: v1.4; v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
 ## 1. What LaneSight is
 LaneSight is the digital platform for bowlers: a hardware-agnostic bowling intelligence system that combines video, optional sensor telemetry, scoring/league records, equipment history and coaching into one persistent Bowler Profile.
@@ -148,7 +148,7 @@ Growth loop: `Free Shot Analyzer → Profile → Arsenal/Sensor → League Mode 
 Do not lead with proprietary hardware, smart glasses, complicated onboarding or unverified partner promises.
 
 ## 17. Brand
-Master brand: **LaneSight**. Preferred mark: **LS Monogram** with a lane/trajectory integrated into the S. The old eye concept is no longer the preferred master mark.
+Master brand: **LaneSight**. Official logo: the Figma brand-standards logo (lane-and-arc mark + "LaneSight" wordmark, tagline "See More. Bowl Smarter."), see DEC-054. Use it on dark backgrounds; don't stretch, recolor or redraw it. App/web icons use the arc mark (`02_DESIGN/brand/`).
 
 Current color direction:
 - Midnight Navy #0B1320
@@ -215,7 +215,6 @@ Use personal bowling video as Seed Dataset v1. Collect controlled fixed-camera s
 - LaneSight is **not** primarily a Meta smart-glasses app.
 - POV is **not** the first measurement environment.
 - Sensor fusion is **not** a late partnership-only feature.
-- The eye logo is **not** the preferred master mark.
 - Full league management is **not** the MVP.
 - A missed-execution shot is **not** discarded from all coaching.
 - Capture is **not** limited to single intentional clips; League Mode records continuously on a tripod with a rolling buffer and fast discard of non-user footage (see DEC-014).

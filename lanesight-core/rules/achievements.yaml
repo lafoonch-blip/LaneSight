@@ -1,0 +1,650 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+achievements:
+- id: ACH-050
+  category: onboarding
+  name: Welcome to LaneSight
+  description: Complete your bowler profile.
+  rule_type: one_time
+  params:
+    condition: profile_complete
+  popup_priority: 40
+  status: active
+  inactive_reason: null
+- id: ACH-051
+  category: onboarding
+  name: First Analysis
+  description: Analyze your first shot.
+  rule_type: one_time
+  params:
+    condition: first_valid_shot
+  popup_priority: 40
+  status: active
+  inactive_reason: null
+- id: ACH-052
+  category: onboarding
+  name: Getting Started
+  description: Finish your first analyzed session.
+  rule_type: one_time
+  params:
+    condition: first_completed_session
+  popup_priority: 40
+  status: active
+  inactive_reason: null
+- id: ACH-053
+  category: volume
+  name: Data Driven
+  description: Analyze 100 shots.
+  rule_type: cumulative
+  params:
+    target: 100
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-054
+  category: volume
+  name: Shot Scientist
+  description: Analyze 1,000 shots.
+  rule_type: cumulative
+  params:
+    target: 1000
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-055
+  category: arsenal
+  name: Arsenal Builder
+  description: Add 5 balls to your arsenal.
+  rule_type: cumulative
+  params:
+    target: 5
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-049
+  category: volume
+  name: Dedicated Bowler
+  description: Complete 25 practice sessions.
+  rule_type: cumulative
+  params:
+    target: 25
+    unit: sessions
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-048
+  category: streak
+  name: Practice Warrior
+  description: Practice in 4 consecutive weeks.
+  rule_type: weekly_streak
+  params:
+    target_weeks: 4
+  popup_priority: 60
+  status: active
+  inactive_reason: null
+- id: ACH-010
+  category: accuracy
+  name: Dialed In
+  description: 10 shots within 1 board of your target at the arrows.
+  rule_type: count_qualifying
+  params:
+    target: 10
+    qualify: intent shot within +/-1 arrow board
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-011
+  category: accuracy
+  name: Precision Master
+  description: Within 1 arrow board on 90% of 30+ shots.
+  rule_type: window_ratio
+  params:
+    target_ratio: 0.9
+    min_sample: 30
+    qualify: within +/-1 arrow board
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-013
+  category: accuracy
+  name: Pocket Hunter
+  description: Entry board in the pocket on 80% of 30+ shots.
+  rule_type: window_ratio
+  params:
+    target_ratio: 0.8
+    min_sample: 30
+    qualify: entry board in pocket
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-014
+  category: accuracy
+  name: Breakpoint Boss
+  description: Within 2 boards of your breakpoint on 90% of 30+ shots.
+  rule_type: window_ratio
+  params:
+    target_ratio: 0.9
+    min_sample: 30
+    qualify: within +/-2 breakpoint boards
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-023
+  category: accuracy
+  name: Line Locked
+  description: 10 shots in a row within 1 arrow board.
+  rule_type: streak
+  params:
+    target: 10
+    qualify: within +/-1 arrow board
+  popup_priority: 60
+  status: active
+  inactive_reason: null
+- id: ACH-016
+  category: power
+  name: Speed Demon
+  description: Record a shot over 20 mph.
+  rule_type: best_measured
+  params:
+    threshold: 20
+    direction: above
+    metric: ball_speed
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-017
+  category: power
+  name: Rev Machine
+  description: Record a shot over 450 rpm (band fully above 450).
+  rule_type: best_measured
+  params:
+    threshold: 450
+    direction: above
+    metric: rev_rate
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-018
+  category: power
+  name: Powerhouse
+  description: 10 shots at 18+ mph and 400+ rpm.
+  rule_type: count_qualifying
+  params:
+    target: 10
+    qualify: '>=18 mph AND >=400 rpm'
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-020
+  category: accuracy
+  name: Efficiency Expert
+  description: Entry angle 4-6 deg on 80% of 30+ shots.
+  rule_type: window_ratio
+  params:
+    target_ratio: 0.8
+    min_sample: 30
+    qualify: entry angle 4-6 deg
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-021
+  category: consistency
+  name: Mr. Consistent
+  description: Ball-speed SD under 0.5 mph across 30+ shots.
+  rule_type: window_spread
+  params:
+    max_sd: 0.5
+    min_sample: 30
+    metric: ball_speed
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-022
+  category: consistency
+  name: Repeatable Release
+  description: Rev CV under 5% across 30+ shots.
+  rule_type: window_spread
+  params:
+    max_cv: 0.05
+    min_sample: 30
+    metric: rev_rate
+    spread_kind: cv
+    requires: rev band <= +/-20 (120 fps)
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-026
+  category: progress
+  name: Rising Star
+  description: Improve your LaneSight Score by 25.
+  rule_type: baseline_delta
+  params:
+    delta: 25
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-027
+  category: progress
+  name: Level Up
+  description: Improve your LaneSight Score by 50.
+  rule_type: baseline_delta
+  params:
+    delta: 50
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-028
+  category: progress
+  name: Century Climber
+  description: Improve your LaneSight Score by 100.
+  rule_type: baseline_delta
+  params:
+    delta: 100
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-056
+  category: tier
+  name: Silver Status
+  description: Reach Silver tier.
+  rule_type: first_tier
+  params:
+    tier: silver
+  popup_priority: 80
+  status: active
+  inactive_reason: null
+- id: ACH-057
+  category: tier
+  name: Gold Status
+  description: Reach Gold tier.
+  rule_type: first_tier
+  params:
+    tier: gold
+  popup_priority: 80
+  status: active
+  inactive_reason: null
+- id: ACH-058
+  category: tier
+  name: Platinum Status
+  description: Reach Platinum tier.
+  rule_type: first_tier
+  params:
+    tier: platinum
+  popup_priority: 80
+  status: active
+  inactive_reason: null
+- id: ACH-059
+  category: tier
+  name: Onyx Club
+  description: Reach Onyx tier.
+  rule_type: first_tier
+  params:
+    tier: onyx
+  popup_priority: 80
+  status: active
+  inactive_reason: null
+- id: FORM-001
+  category: form
+  name: Post It
+  description: Hold your finish 1.5s on 10 shots.
+  rule_type: count_qualifying
+  params:
+    target: 10
+    qualify: finish hold >= 1.5 s
+    metric: finish_hold
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: FORM-002
+  category: form
+  name: Metronome
+  description: Swing-time SD under 0.05s over 10 shots.
+  rule_type: window_spread
+  params:
+    max_sd: 0.05
+    min_sample: 10
+    metric: swing_time
+  status: active
+  inactive_reason: null
+  popup_priority: 50
+- id: ACH-001
+  category: scoring
+  name: Century Club
+  description: Bowl a game of 100 or more.
+  rule_type: best_measured
+  params:
+    threshold: 100
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-002
+  category: scoring
+  name: Breaking Through
+  description: Bowl a game of 150 or more.
+  rule_type: best_measured
+  params:
+    threshold: 150
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-003
+  category: scoring
+  name: 200 Club
+  description: Bowl a game of 200 or more.
+  rule_type: best_measured
+  params:
+    threshold: 200
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-004
+  category: scoring
+  name: High Roller
+  description: Bowl a game of 250 or more.
+  rule_type: best_measured
+  params:
+    threshold: 250
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-005
+  category: scoring
+  name: Perfect Game
+  description: Bowl a 300.
+  rule_type: best_measured
+  params:
+    threshold: 300
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-006
+  category: scoring
+  name: 500 Series Club
+  description: Bowl a 3-game series of 500+.
+  rule_type: best_measured
+  params:
+    threshold: 500
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-007
+  category: scoring
+  name: 600 Series Club
+  description: Bowl a 3-game series of 600+.
+  rule_type: best_measured
+  params:
+    threshold: 600
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-008
+  category: scoring
+  name: 700 Series Club
+  description: Bowl a 3-game series of 700+.
+  rule_type: best_measured
+  params:
+    threshold: 700
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-009
+  category: scoring
+  name: 800 Series Club
+  description: Bowl a 3-game series of 800+.
+  rule_type: best_measured
+  params:
+    threshold: 800
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-012
+  category: accuracy
+  name: Dead Center
+  description: Arrow error under 0.25 board.
+  rule_type: best_measured
+  params:
+    threshold: 0.25
+    direction: below
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Research — threshold not yet validated.
+- id: ACH-015
+  category: accuracy
+  name: Sniper
+  description: 10 single-pin spares converted in a row.
+  rule_type: streak
+  params:
+    target: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-019
+  category: power
+  name: Controlled Power
+  description: 10 strikes with repeatable speed/rev.
+  rule_type: count_qualifying
+  params:
+    target: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Research — threshold not yet validated.
+- id: ACH-024
+  category: consistency
+  name: Steady Hand
+  description: 3 games within 10 pins of each other.
+  rule_type: window_spread
+  params:
+    max_sd: 10
+    min_sample: 3
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-025
+  category: consistency
+  name: The Machine
+  description: 50 shots at a validated variance target.
+  rule_type: window_spread
+  params:
+    min_sample: 50
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Research — threshold not yet validated.
+- id: ACH-029
+  category: progress
+  name: Average Builder
+  description: Rolling game average up 10 pins.
+  rule_type: baseline_delta
+  params:
+    delta: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-030
+  category: progress
+  name: Spare Specialist
+  description: Spare conversion up 10 points.
+  rule_type: baseline_delta
+  params:
+    delta: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-031
+  category: progress
+  name: Strike Evolution
+  description: Strike rate up 10 points.
+  rule_type: baseline_delta
+  params:
+    delta: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-032
+  category: progress
+  name: Personal Best
+  description: A new verified best game.
+  rule_type: one_time
+  params:
+    condition: new_best_game
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-033
+  category: progress
+  name: New Heights
+  description: A new session-score high.
+  rule_type: one_time
+  params:
+    condition: new_session_high
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-034
+  category: competition
+  name: League Regular
+  description: 10 verified league nights.
+  rule_type: cumulative
+  params:
+    target: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-035
+  category: competition
+  name: League Veteran
+  description: 100 verified league nights.
+  rule_type: cumulative
+  params:
+    target: 100
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-036
+  category: competition
+  name: League Champion
+  description: Win a league title.
+  rule_type: one_time
+  params:
+    condition: league_title
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-037
+  category: competition
+  name: Tournament Debut
+  description: Your first tournament result.
+  rule_type: one_time
+  params:
+    condition: first_tournament
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-038
+  category: competition
+  name: Tournament Finalist
+  description: Reach a tournament final.
+  rule_type: one_time
+  params:
+    condition: tournament_final
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-039
+  category: competition
+  name: Tournament Champion
+  description: Win a tournament.
+  rule_type: one_time
+  params:
+    condition: tournament_win
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-040
+  category: competition
+  name: Podium Finisher
+  description: Top-three tournament finish.
+  rule_type: one_time
+  params:
+    condition: tournament_top3
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-041
+  category: competition
+  name: Giant Slayer
+  description: Beat a higher-ranked opponent.
+  rule_type: one_time
+  params:
+    condition: giant_slayer
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Competition tracking — post-MVP (DEC-035).
+- id: ACH-042
+  category: streak
+  name: Turkey
+  description: 3 strikes in a row.
+  rule_type: streak
+  params:
+    target: 3
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-043
+  category: streak
+  name: Four Bagger
+  description: 4 strikes in a row.
+  rule_type: streak
+  params:
+    target: 4
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-044
+  category: streak
+  name: Six Pack
+  description: 6 strikes in a row.
+  rule_type: streak
+  params:
+    target: 6
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-045
+  category: streak
+  name: Front Nine
+  description: Strikes in frames 1-9.
+  rule_type: one_time
+  params:
+    condition: front_nine
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-046
+  category: streak
+  name: Clean Game
+  description: No open frames in a game.
+  rule_type: one_time
+  params:
+    condition: clean_game
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-047
+  category: streak
+  name: Spare Streak
+  description: 10 spares converted in a row.
+  rule_type: streak
+  params:
+    target: 10
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Needs game scores (pinfall capture) — coming later.
+- id: ACH-060
+  category: platform
+  name: Hall of Fame
+  description: 100 distinct achievement unlocks.
+  rule_type: cumulative
+  params:
+    target: 100
+  status: coming_later
+  popup_priority: 50
+  inactive_reason: Unlocks once enough achievements exist.

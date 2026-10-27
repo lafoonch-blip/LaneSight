@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Current ball</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 56px; display: flex; flex-direction: column; gap: 12px; opacity: 0.2">
+<div style="font-size: 24px; font-weight: 600">New practice session</div>
+<div style="height: 140px; border-radius: 12px; background: #031B29"></div>
+</div>
+<div role="dialog" aria-modal="true" aria-labelledby="sheet-title" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 24px 24px 0 0; background: #031B29; border-top: 1px solid #153B51; padding: 20px 20px 34px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #153B51"></span>
+<span id="sheet-title" style="font-size: 24px; font-weight: 600">Current ball</span>
+<span style="font-size: 14px; color: #BFCBDD; margin-top: -8px">Used for this shot and the next until you change it.</span>
+<div role="radiogroup" aria-label="Your arsenal" style="display: flex; flex-direction: column; gap: 8px">
+<button role="radio" aria-checked="true" style="min-height: 60px; border-radius: 8px; background: #0C2B40; border: 2px solid #00A8F5; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 50%; background: #0C2B40; border: 2px solid #153B51; flex-shrink: 0"></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Ball 1 from arsenal]</span><span style="font-size: 13px; color: #BFCBDD">Pin up · 2000 Abralon · 15 lb</span></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button>
+<button role="radio" aria-checked="false" style="min-height: 60px; border-radius: 8px; background: #001018; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 50%; background: #0C2B40; border: 2px solid #153B51; flex-shrink: 0"></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Ball 2 from arsenal]</span><span style="font-size: 13px; color: #BFCBDD">Pin down · 1500 Abralon · 15 lb</span></span></button>
+<button role="radio" aria-checked="false" style="min-height: 60px; border-radius: 8px; background: #001018; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 50%; background: #0C2B40; border: 2px solid #153B51; flex-shrink: 0"></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Ball 3 from arsenal]</span><span style="font-size: 13px; color: #BFCBDD">Polished · 15 lb</span></span></button>
+</div>
+<a href="BallSetup.dc.html" style="font-size: 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center">Change surface on this ball ›</a>
+<a href="AddBall.dc.html" style="text-decoration: none; height: 48px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">Add a ball from the catalog</a>
+<a href="Setup.dc.html" style="text-decoration: none; height: 52px; border-radius: 8px; background: #00A8F5; color: #001018; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">Use this ball</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

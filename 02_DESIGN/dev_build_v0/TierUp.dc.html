@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New tier</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div role="dialog" aria-modal="true" aria-labelledby="tier-title" style="width: 390px; height: 844px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 80px 24px 40px; display: flex; flex-direction: column; align-items: center; gap: 18px; position: relative; overflow: hidden">
+<svg width="390" height="420" viewBox="0 0 390 420" aria-hidden="true" style="position: absolute; left: 0; top: 40px"><g stroke="#00A8F5" stroke-width="2" opacity="0.35"><line x1="195" y1="210" x2="195" y2="10"></line><line x1="195" y1="210" x2="345" y2="60"></line><line x1="195" y1="210" x2="45" y2="60"></line><line x1="195" y1="210" x2="385" y2="210"></line><line x1="195" y1="210" x2="5" y2="210"></line><line x1="195" y1="210" x2="330" y2="360"></line><line x1="195" y1="210" x2="60" y2="360"></line></g><g fill="#00A8F5"><circle cx="70" cy="90" r="3"></circle><circle cx="320" cy="110" r="4"></circle><circle cx="300" cy="330" r="3"></circle><circle cx="90" cy="320" r="4"></circle><circle cx="195" cy="20" r="3"></circle></g></svg>
+<span style="font-size: 14px; font-weight: 600; letter-spacing: 2px; color: #00A8F5; position: relative">NEW TIER REACHED</span>
+<svg width="190" height="206" viewBox="0 0 104 112" role="img" aria-label="Platinum badge" style="position: relative"><path d="M52 4 L96 22 L96 70 Q96 94 52 108 Q8 94 8 70 L8 22 Z" fill="#0C2B40" stroke="#F5F6FA" stroke-width="3"></path><path d="M52 16 L84 29 L84 68 Q84 86 52 96 Q20 86 20 68 L20 29 Z" fill="#062132" stroke="#153B51" stroke-width="1.5"></path><ellipse cx="52" cy="56" rx="11" ry="20" fill="#F5F6FA"></ellipse><rect x="45" y="44" width="14" height="3" fill="#FF4D5E"></rect><rect x="45" y="50" width="14" height="3" fill="#FF4D5E"></rect></svg>
+<span id="tier-title" style="font-size: 36px; font-weight: 600; letter-spacing: 1px; color: #F5F6FA; position: relative">PLATINUM</span>
+<span style="font-size: 16px; color: #BFCBDD; text-align: center; line-height: 1.45; position: relative">Your LaneSight Score reached <span style="font-weight: 600; color: #F5F6FA">706</span> at the end of tonight's session.</span>
+<div style="align-self: stretch; border-radius: 12px; background: #031B29; border: 1px solid #153B51; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; position: relative">
+<div style="display: flex; justify-content: space-between; font-size: 14px"><span style="color: #BFCBDD">Next: Onyx</span><span style="font-weight: 600">144 points to go</span></div>
+<div role="progressbar" aria-label="Progress to Onyx" aria-valuenow="4" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: #0C2B40"><div style="width: 4%; height: 6px; border-radius: 3px; background: #00A8F5"></div></div>
+<div style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span style="width: 28px; height: 28px; border-radius: 8px; border: 2px solid #BFCBDD; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="#BFCBDD" aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.4 7L12 17.6 5.8 21l1.4-7L2 9.3l7-.8z"></path></svg></span><span>Achievement unlocked: <span style="font-weight: 600">Platinum Status</span></span></div>
+</div>
+<div style="margin-top: auto; align-self: stretch; display: flex; flex-direction: column; gap: 8px; position: relative">
+<a href="Main.dc.html" style="text-decoration: none; height: 54px; border-radius: 8px; background: #00A8F5; color: #001018; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center">Continue</a>
+<a href="Stats.dc.html" style="text-decoration: none; height: 44px; font-size: 14px; font-weight: 600; color: #BFCBDD; display: flex; align-items: center; justify-content: center">See what moved your score</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

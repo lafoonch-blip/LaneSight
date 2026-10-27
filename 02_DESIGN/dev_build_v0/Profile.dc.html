@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Profile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 1630px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<a href="Main.dc.html" aria-label="Back" style="width: 44px; height: 44px; color: #BFCBDD; display: flex; align-items: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></a>
+<span style="font-size: 19px; font-weight: 600">Profile</span>
+<a href="Settings.dc.html" aria-label="Settings" style="width: 44px; height: 44px; color: #BFCBDD; display: flex; align-items: center; justify-content: flex-end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="M4.9 4.9l2.1 2.1"></path><path d="M17 17l2.1 2.1"></path><path d="M4.9 19.1L7 17"></path><path d="M17 7l2.1-2.1"></path></svg></a>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<button aria-label="Add photo" style="width: 84px; height: 84px; border-radius: 50%; background: transparent; border: 2px solid #00A8F5; color: #00A8F5; font-size: 30px; font-family: inherit">+</button>
+<span style="font-size: 13px; color: #00A8F5">Add photo (optional)</span>
+</div>
+<a href="Achievements.dc.html" style="text-decoration: none; color: #F5F6FA; border-radius: 8px; background: #062132; border: 1px solid #153B51; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<svg width="40" height="44" viewBox="0 0 104 112" aria-hidden="true"><path d="M52 4 L96 22 L96 70 Q96 94 52 108 Q8 94 8 70 L8 22 Z" fill="#0C2B40" stroke="#BFCBDD" stroke-width="4"></path><ellipse cx="52" cy="56" rx="11" ry="20" fill="#F5F6FA"></ellipse></svg>
+<span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">Platinum · 782</span><span style="font-size: 13px; color: #BFCBDD">9 achievements · see all</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>First / last name</span><span style="color: #BFCBDD">[First] [Last] ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Email</span><span style="color: #BFCBDD">[your email] ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Phone <span style="color: #BFCBDD">(optional)</span></span><span style="color: #BFCBDD">Add ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Date of birth</span><span style="color: #BFCBDD">Mar 14, 1988 ›</span></button>
+</div>
+<span style="font-size: 16px; font-weight: 600">Bowler profile</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button aria-pressed="true" style="height: 44px; border-radius: 8px; background: #00A8F5; border: 0; color: #001018; font-family: inherit; font-size: 14px; font-weight: 600">Right-handed</button>
+<button aria-pressed="false" style="height: 44px; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Left-handed</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button aria-pressed="true" style="min-height: 48px; border-radius: 8px; background: #00A8F5; border: 0; color: #001018; font-family: inherit; font-size: 13px; font-weight: 600; padding: 6px">One-handed, thumb</button>
+<button aria-pressed="false" style="min-height: 48px; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600; padding: 6px">One-handed, no thumb</button>
+<button aria-pressed="false" style="min-height: 48px; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 13px; font-weight: 600; padding: 6px">Two-handed</button>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Approach steps</span><span style="color: #BFCBDD">5 ›</span></button>
+<button style="padding: 10px 14px; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: transparent; border: 0; color: #F5F6FA; font-family: inherit; font-size: 14px; text-align: left"><span style="display: flex; flex-direction: column; gap: 2px"><span>Form baseline</span><span style="font-size: 13px; color: #BFCBDD">Swing timing to compare against · enter it or use your average</span></span><span style="color: #BFCBDD; white-space: nowrap">1.44 s ›</span></button>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; display: flex; flex-direction: column">
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Location <span style="color: #BFCBDD">(optional)</span></span><span style="color: #BFCBDD">Richmond, VA ›</span></button>
+<button style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: transparent; border: 0; border-bottom: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; font-size: 14px"><span>Home center <span style="color: #BFCBDD">(optional)</span></span><span style="color: #BFCBDD">Search ›</span></button>
+<div style="padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #BFCBDD"><span>USBC member ID</span><span style="font-size: 13px; font-weight: 600; color: #FA923C">COMING SOON</span></div>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Sensors</span><button style="background: transparent; border: 0; color: #00A8F5; font-family: inherit; font-size: 14px; font-weight: 600; min-height: 44px">+ Add sensor</button></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 0 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-size: 14px"><span>[Sensor name you enter]</span><span style="color: #BFCBDD">Default ›</span></div>
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Arsenal</span><a href="AddBall.dc.html" style="font-size: 14px; font-weight: 600; min-height: 44px; display: flex; align-items: center">+ Add ball</a></div>
+<a href="BallSetup.dc.html" style="text-decoration: none; color: #F5F6FA; border-radius: 8px; background: #031B29; border: 1.5px solid #00A8F5; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 50%; background: #0C2B40; border: 2px solid #153B51; flex-shrink: 0"></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Ball 1] <span style="font-size: 13px; font-weight: 600; padding: 2px 6px; border-radius: 5px; background: #003D28; color: #00EB92">CURRENT</span></span><span style="font-size: 13px; color: #BFCBDD">15 lb · 2000 Abralon · 24 games since resurface</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<a href="BallSetup.dc.html" style="text-decoration: none; color: #F5F6FA; border-radius: 8px; background: #031B29; border: 1px solid #0C2B40; padding: 12px 14px; display: flex; align-items: center; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 50%; background: #0C2B40; border: 2px solid #A55ED0; flex-shrink: 0"></span>
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Ball 2]</span><span style="font-size: 13px; color: #BFCBDD">15 lb · Polished · 61 games</span></span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+</a>
+<span style="font-size: 16px; font-weight: 600">Advanced <span style="font-size: 13px; font-weight: 500; color: #BFCBDD">(optional)</span></span>
+<span style="font-size: 13px; color: #BFCBDD; margin-top: -8px">Only needed for layout-aware ball reaction. Skip it if you just want to bowl.</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-pitch" style="font-size: 13px; color: #BFCBDD">Middle pitch</label><input id="pf-pitch" value="¼&quot; forward" style="height: 46px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-span" style="font-size: 13px; color: #BFCBDD">Span</label><input id="pf-span" value="4⅜&quot;" style="height: 46px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-over" style="font-size: 13px; color: #BFCBDD">PAP over</label><input id="pf-over" value="5¼&quot;" style="height: 46px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pf-up" style="font-size: 13px; color: #BFCBDD">PAP up</label><input id="pf-up" value="½&quot;" style="height: 46px; box-sizing: border-box; border-radius: 8px; background: #031B29; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 14px; min-width: 0"></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1630}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

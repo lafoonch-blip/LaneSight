@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edit target</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; inset: 0; background: #001018; opacity: 0.6"></div>
+<div role="dialog" aria-modal="true" aria-labelledby="ts-title" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 24px 24px 0 0; background: #031B29; border-top: 1px solid #153B51; padding: 20px 20px 34px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #153B51"></span>
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span id="ts-title" style="font-size: 19px; font-weight: 600">Target for next shot</span>
+<a href="Capture.dc.html" style="font-size: 16px; font-weight: 600; text-decoration: none; min-height: 44px; display: flex; align-items: center">Done</a>
+</div>
+<span style="font-size: 14px; color: #BFCBDD; line-height: 1.45">Change your target between shots. It carries forward until you change it again or apply a move from a shot card.</span>
+<div style="border-radius: 12px; background: #001018; border: 1px solid #0C2B40; display: flex; flex-direction: column">
+<div style="padding: 10px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #0C2B40">
+<span style="flex-grow: 1; font-size: 16px; font-weight: 600">Feet</span>
+<button aria-label="Feet one board left" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">−</button>
+<span style="font-size: 19px; font-weight: 600; min-width: 32px; text-align: center">23</span>
+<button aria-label="Feet one board right" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">+</button>
+<button style="background: transparent; border: 0; color: #BFCBDD; font-family: inherit; font-size: 14px; min-height: 40px">Clear</button>
+</div>
+<div style="padding: 10px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #0C2B40">
+<span style="flex-grow: 1; font-size: 16px; font-weight: 600">Arrows</span>
+<button aria-label="Arrows one board left" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">−</button>
+<span style="font-size: 19px; font-weight: 600; min-width: 32px; text-align: center">11</span>
+<button aria-label="Arrows one board right" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">+</button>
+<button style="background: transparent; border: 0; color: #BFCBDD; font-family: inherit; font-size: 14px; min-height: 40px">Clear</button>
+</div>
+<div style="padding: 10px 14px; display: flex; align-items: center; gap: 12px">
+<span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">Breakpoint</span><span style="font-size: 13px; font-weight: 600; letter-spacing: 0.5px; color: #00A8F5">SUGGESTED</span></span>
+<button aria-label="Breakpoint one board left" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">−</button>
+<span style="font-size: 19px; font-weight: 600; min-width: 32px; text-align: center; color: #00A8F5">6</span>
+<button aria-label="Breakpoint one board right" style="width: 40px; height: 40px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 19px; font-family: inherit">+</button>
+<button style="background: transparent; border: 0; color: #BFCBDD; font-family: inherit; font-size: 14px; min-height: 40px">Clear</button>
+</div>
+</div>
+<span style="font-size: 13px; color: #BFCBDD; line-height: 1.4">The breakpoint was projected from your new feet and arrows line. Editing it saves your value; the suggestion is kept too so we can compare.</span>
+<span style="font-size: 13px; color: #BFCBDD">A cleared field shows "Off" and skips that part of Accuracy.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

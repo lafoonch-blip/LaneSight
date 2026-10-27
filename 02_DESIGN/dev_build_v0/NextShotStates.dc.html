@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Next-shot states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 2700px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; padding: 56px 16px 32px; display: flex; flex-direction: column; gap: 14px">
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">STATE · STRIKE (no move)</span>
+<div style="border-radius: 12px; background: #003D28; border: 1px solid #00EB92; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #00EB92"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>NEXT SHOT</div>
+<div style="font-size: 24px; font-weight: 600; line-height: 1.2">Strike. Repeat the shot.</div>
+<div style="font-size: 14px; color: #F5F6FA; line-height: 1.45">Entered on 17.6 at 5.2°. Same feet, same target.</div>
+<div style="font-size: 13px; color: #BFCBDD; line-height: 1.4">Watch: if it starts leaving 10 pins, move right 2 boards with your feet and 1 with your eyes.</div>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">STATE · MISSED YOUR TARGET (repeat, don't move)</span>
+<div style="border-radius: 12px; background: #0C2B40; border: 1px solid #153B51; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #00A8F5">NEXT SHOT</div>
+<div style="font-size: 24px; font-weight: 600; line-height: 1.2">Same line. Hit your mark.</div>
+<div style="font-size: 14px; color: #BFCBDD; line-height: 1.45">You crossed the arrows on 8.3, not your target of 10 (1.7 boards right). That changed the result, not the lane, so no move yet.</div>
+<div style="border-radius: 8px; background: #062132; border: 1px solid #153B51; padding: 10px 12px; font-size: 14px; color: #BFCBDD">Target stays · F 20 · A 10 · B 10</div>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">STATE · PINS NOT READ (ask the bowler)</span>
+<div style="border-radius: 12px; background: #0C2B40; border: 1px solid #153B51; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #00A8F5">NEXT SHOT</div>
+<div style="font-size: 24px; font-weight: 600; line-height: 1.2">What did it leave?</div>
+<div style="font-size: 14px; color: #BFCBDD; line-height: 1.45">We couldn't see the pins settle. Tap the result and we'll give your next move.</div>
+<div role="group" aria-label="Pin result" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Strike</button>
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">10 pin</button>
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">4 / 7 pin</button>
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Split</button>
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Other leave</button>
+<button style="height: 44px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-family: inherit; font-size: 14px; font-weight: 600">Pick pins</button>
+</div>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">STATE · NOT ENOUGH RELIABLE DATA (no move)</span>
+<div style="border-radius: 12px; background: #031B29; border: 1px dashed #153B51; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">NEXT SHOT</div>
+<div style="font-size: 24px; font-weight: 600; line-height: 1.2">No move this shot</div>
+<div style="font-size: 14px; color: #BFCBDD; line-height: 1.45">The far end of the lane wasn't tracked reliably from this camera spot, so we won't guess at entry board or angle. Laydown, arrows and speed were measured.</div>
+<div style="font-size: 14px; color: #F5F6FA; line-height: 1.4">Tip: put the camera behind the approach, centered on your lane, about 5 ft up.</div>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">STATE · LOW-CONFIDENCE MOVE</span>
+<div style="border-radius: 12px; background: #0C2B40; border: 1px solid #153B51; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #00A8F5">NEXT SHOT</span><span style="font-size: 13px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: #062132; color: #F5CD31">◐ LOW CONFIDENCE</span></div>
+<div style="font-size: 24px; font-weight: 600; line-height: 1.2">Maybe: feet 2 boards right, eyes 1 board right</div>
+<div style="font-size: 14px; color: #BFCBDD; line-height: 1.45">Looked light (entry about 15), but the entry was hard to read and you had no target set. One more shot on the same line will confirm it.</div>
+<a href="Capture.dc.html" style="text-decoration: none; height: 48px; border-radius: 8px; background: #062132; border: 1px solid #153B51; color: #F5F6FA; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">Apply anyway</a>
+<span style="font-size: 13px; color: #BFCBDD">Moves are at most 2 and 1 boards per shot. Bigger changes need 2 or more shots that agree.</span>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">BANNER · CAMERA SPOT (above Target vs actual)</span>
+<div style="border-radius: 12px; background: #062132; border: 1px solid #153B51; padding: 12px 14px; display: flex; gap: 12px; align-items: flex-start">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5CD31" stroke-width="2" aria-hidden="true" style="flex-shrink: 0; margin-top: 2px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+<div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1"><span style="font-size: 14px; font-weight: 600">This camera spot limits far-lane numbers</span><span style="font-size: 13px; color: #BFCBDD; line-height: 1.4">Close behind you and off-center. Breakpoint, entry and late speed are marked best effort or unavailable.</span><a href="Capture.dc.html" style="font-size: 13px; font-weight: 600">Better camera spot ›</a></div>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">UPLOADED CLIP · bottom of the card (no score or achievement block)</span>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px 14px; display: flex; gap: 10px; align-items: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BFCBDD" stroke-width="2" aria-hidden="true"><path d="M12 16V4"></path><path d="M7 9l5-5 5 5"></path><path d="M4 20h16"></path></svg>
+<span style="font-size: 14px; color: #BFCBDD; line-height: 1.4">Uploaded clip · analyzed on its own. Doesn't count toward Stats, your LaneSight Score or achievements.</span>
+</div>
+
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD; margin-top: 8px">METRIC STATUS · the only three chips</span>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #BFCBDD">Speed</span><span style="font-size: 19px; font-weight: 600">16.6<span style="font-size: 13px; color: #BFCBDD"> mph</span></span><span style="font-size: 13px; font-weight: 600; color: #00EB92">● MEASURED</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #BFCBDD">Rev rate</span><span style="font-size: 19px; font-weight: 600">359<span style="font-size: 13px; color: #BFCBDD"> ±16</span></span><span style="font-size: 13px; font-weight: 600; color: #F5CD31">◐ BEST EFFORT</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px dashed #153B51; padding: 12px; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #BFCBDD">Speed late</span><span style="font-size: 19px; font-weight: 600; color: #BFCBDD">—</span><span style="font-size: 13px; font-weight: 600; color: #BFCBDD">○ UNAVAILABLE</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #BFCBDD; line-height: 1.4">
+<span><span style="color: #00EB92; font-weight: 600">MEASURED</span> · ok, measured</span>
+<span><span style="color: #F5CD31; font-weight: 600">BEST EFFORT</span> · best_effort, low_confidence, calibrated_estimate. Value shown rounded, with ± band when known</span>
+<span><span style="color: #F5F6FA; font-weight: 600">UNAVAILABLE</span> · unavailable or anything else. Never shows a number; shows the reason</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2700}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

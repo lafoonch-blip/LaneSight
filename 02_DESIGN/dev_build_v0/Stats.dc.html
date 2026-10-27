@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stats</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 1400px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; display: flex; flex-direction: column">
+<div style="flex-grow: 1; padding: 52px 16px 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<a href="Settings.dc.html" aria-label="Settings" style="width: 44px; height: 44px; border-radius: 8px; border: 1px solid #0C2B40; background: #031B29; color: #BFCBDD; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3"></path><path d="M12 19v3"></path><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="M4.9 4.9l2.1 2.1"></path><path d="M17 17l2.1 2.1"></path><path d="M4.9 19.1L7 17"></path><path d="M17 7l2.1-2.1"></path></svg></a>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600; line-height: 30px">Stats</h1>
+<a href="Profile.dc.html" aria-label="Profile" style="text-decoration: none; color: #F5F6FA; width: 44px; height: 44px; border-radius: 50%; background: #0C2B40; border: 2px solid #00A8F5; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; box-sizing: border-box">SL</a>
+</div>
+<button style="align-self: flex-end; min-height: 36px; font-family: inherit; font-size: 14px; font-weight: 600; color: #F5F6FA; padding: 0 12px; border-radius: 8px; background: #031B29; border: 1px solid #153B51">Last 90 days ▾</button>
+<div role="tablist" aria-label="Stats view" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: #031B29; border: 1px solid #0C2B40">
+<button role="tab" aria-selected="{{scoreSel}}" onClick="{{showScore}}" style="height: 38px; border-radius: 8px; border: 0; font-family: inherit; font-size: 14px; font-weight: 600; background: {{scoreBg}}; color: {{scoreFg}}">Score</button>
+<button role="tab" aria-selected="{{throwSel}}" onClick="{{showThrow}}" style="height: 38px; border-radius: 8px; border: 0; font-family: inherit; font-size: 14px; font-weight: 600; background: {{throwBg}}; color: {{throwFg}}">Throw</button>
+<button role="tab" aria-selected="{{formSel}}" onClick="{{showForm}}" style="height: 38px; border-radius: 8px; border: 0; font-family: inherit; font-size: 14px; font-weight: 600; background: {{formBg}}; color: {{formFg}}">Form</button>
+</div>
+
+<sc-if value="{{isScore}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="border-radius: 12px; background: #062132; border: 1px solid #153B51; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #00A8F5">LANESIGHT SCORE</span><span style="font-size: 13px; font-weight: 600; padding: 3px 6px; border-radius: 5px; background: #0C2B40; color: #F5CD31">BETA · DEV FORMULA</span></div>
+<div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 40px; font-weight: 600">782</span><span style="font-size: 14px; font-weight: 600; color: #BFCBDD">PLATINUM</span><span style="font-size: 14px; color: #00EB92">▲ 24</span></div>
+<svg width="100%" height="110" viewBox="0 0 330 110" role="img" aria-label="LaneSight Score rose from 712 to 782 over 90 days; personal best 790">
+<g stroke="#0C2B40" stroke-width="1"><line x1="0" y1="15" x2="330" y2="15"></line><line x1="0" y1="55" x2="330" y2="55"></line><line x1="0" y1="95" x2="330" y2="95"></line></g>
+<polyline points="0,92 30,86 60,88 90,74 120,70 150,72 180,58 210,52 240,46 270,38 300,22 330,26" fill="none" stroke="#00A8F5" stroke-width="3"></polyline>
+<circle cx="300" cy="22" r="4" fill="#F5CD31"></circle>
+</svg>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #BFCBDD"><span>Jul 24</span><span style="color: #F5CD31">● Best 790 · Oct 18</span><span>Today</span></div>
+</div>
+<div style="font-size: 13px; font-weight: 600; letter-spacing: 1px; color: #BFCBDD">SCORE PARTS</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Performance <span style="font-size: 13px; color: #BFCBDD; font-weight: 500">40%</span></span><span style="font-size: 19px; font-weight: 600">80 <span style="font-size: 13px; color: #00EB92">▲ 5</span></span></span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Pocket % (entry board 16–19)</span><span style="font-weight: 600">61%</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Entry angle in 4–6°</span><span style="font-weight: 600">72%</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Accuracy <span style="font-size: 13px; color: #BFCBDD; font-weight: 500">25%</span></span><span style="font-size: 19px; font-weight: 600">79 <span style="font-size: 13px; color: #00EB92">▲ 3</span></span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Avg miss at arrows</span><span style="font-weight: 600">0.9 boards</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Avg miss at breakpoint</span><span style="font-weight: 600">1.8 boards</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Shots with intent set</span><span style="font-weight: 600">64 of 81</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Consistency <span style="font-size: 13px; color: #BFCBDD; font-weight: 500">25%</span></span><span style="font-size: 19px; font-weight: 600">76 <span style="font-size: 13px; color: #00EB92">▲ 6</span></span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Speed spread</span><span style="font-weight: 600">0.4 mph</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Arrows spread</span><span style="font-weight: 600">1.1 boards</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Breakpoint spread</span><span style="font-weight: 600">2.3 boards</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Rev spread</span><span style="color: #BFCBDD">left out (±20 band)</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Power <span style="font-size: 13px; color: #BFCBDD; font-weight: 500">10%</span></span><span style="font-size: 19px; font-weight: 600">71 <span style="font-size: 13px; color: #BFCBDD">— 0</span></span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Entry speed</span><span style="font-weight: 600">15.1 mph</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Rev rate</span><span style="font-weight: 600">405 rpm</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span style="color: #BFCBDD">Entry angle</span><span style="font-weight: 600">4.9°</span></div>
+<div style="font-size: 13px; color: #BFCBDD">Carry not included in this version</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isThrow}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Speed</span><span style="font-size: 19px; font-weight: 600">17.8</span><span style="font-size: 13px; color: #BFCBDD">mph avg</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Rev rate</span><span style="font-size: 19px; font-weight: 600">405</span><span style="font-size: 13px; color: #F5CD31">± 20 · best effort</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Pocket</span><span style="font-size: 19px; font-weight: 600">61%</span><span style="font-size: 13px; color: #BFCBDD">by entry board</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Entry angle</span><span style="font-size: 19px; font-weight: 600">4.9°</span><span style="font-size: 13px; color: #BFCBDD">avg</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Breakpoint</span><span style="font-size: 19px; font-weight: 600">7.2</span><span style="font-size: 13px; color: #BFCBDD">@ 41 ft</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Loft</span><span style="font-size: 19px; font-weight: 600">2.0</span><span style="font-size: 13px; color: #BFCBDD">ft avg</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Speed &amp; rev by session</span><span style="font-size: 13px; color: #BFCBDD">dots = best effort</span></div>
+<svg width="100%" height="120" viewBox="0 0 330 120" role="img" aria-label="Speed steady near 17.8 mph and rev rate near 405 across 8 sessions">
+<g stroke="#0C2B40" stroke-width="1"><line x1="0" y1="20" x2="330" y2="20"></line><line x1="0" y1="60" x2="330" y2="60"></line><line x1="0" y1="100" x2="330" y2="100"></line></g>
+<polyline points="10,58 55,54 100,60 145,52 190,56 235,50 280,53 320,51" fill="none" stroke="#00A8F5" stroke-width="2.5"></polyline>
+<g fill="#FA923C"><circle cx="10" cy="92" r="3.5"></circle><circle cx="55" cy="88" r="3.5"></circle><circle cx="100" cy="94" r="3.5"></circle><circle cx="145" cy="86" r="3.5"></circle><circle cx="190" cy="90" r="3.5"></circle><circle cx="235" cy="84" r="3.5"></circle><circle cx="280" cy="87" r="3.5"></circle><circle cx="320" cy="85" r="3.5"></circle></g>
+</svg>
+<div style="display: flex; gap: 16px; font-size: 13px; color: #BFCBDD"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 3px; background: #00A8F5"></span>Speed</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #FA923C"></span>Rev rate</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 16px; font-weight: 600">Entry board</span>
+<div role="img" aria-label="Most shots entered between boards 16 and 19" style="display: flex; align-items: flex-end; gap: 6px; height: 80px">
+<div style="flex: 1; height: 10%; background: #153B51; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 22%; background: #153B51; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 70%; background: #00A8F5; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 100%; background: #00A8F5; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 80%; background: #00A8F5; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 45%; background: #153B51; border-radius: 4px 4px 0 0"></div><div style="flex: 1; height: 20%; background: #153B51; border-radius: 4px 4px 0 0"></div>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 13px; color: #BFCBDD"><span>≤14</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span><span>21+</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 16px; font-weight: 600">By ball</span>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 48px 48px 48px; gap: 6px; font-size: 13px"><span style="color: #BFCBDD">Ball</span><span style="color: #BFCBDD; text-align: right">mph</span><span style="color: #BFCBDD; text-align: right">rev</span><span style="color: #BFCBDD; text-align: right">pocket</span><span>[Ball 1]</span><span style="text-align: right">17.8</span><span style="text-align: right">405</span><span style="text-align: right">61%</span><span>[Ball 2]</span><span style="text-align: right">17.5</span><span style="text-align: right">398</span><span style="text-align: right">54%</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isForm}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Swing</span><span style="font-size: 19px; font-weight: 600">1.50 s</span><span style="font-size: 13px; color: #BFCBDD">± 0.04</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Approach</span><span style="font-size: 19px; font-weight: 600">2.41 s</span><span style="font-size: 13px; color: #BFCBDD">5 steps</span></div>
+<div style="border-radius: 12px; background: #062132; border: 1px solid #153B51; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Finish hold</span><span style="font-size: 19px; font-weight: 600">1.0 s</span><span style="font-size: 13px; color: #F5CD31">▲ watch</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Tempo</span><span style="font-size: 19px; font-weight: 600">0.51</span><span style="font-size: 13px; color: #BFCBDD">down ÷ back</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Backswing</span><span style="font-size: 16px; font-weight: 600; padding-top: 3px">Shoulder</span><span style="font-size: 13px; color: #F5CD31">best effort</span></div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 12px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: #BFCBDD">Ball start</span><span style="font-size: 16px; font-weight: 600; padding-top: 3px">Step 2</span><span style="font-size: 13px; color: #BFCBDD">5-step norm</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 16px; font-weight: 600">Swing phases by session</span>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 44px; color: #BFCBDD">Oct 17</span><div style="flex-grow: 1; display: flex; height: 14px; border-radius: 4px; overflow: hidden"><div style="flex: 42; background: #00A8F5"></div><div style="flex: 68; background: #00A8F5"></div><div style="flex: 37; background: #A55ED0"></div><div style="flex: 3; background: #FA923C"></div></div></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 44px; color: #BFCBDD">Oct 20</span><div style="flex-grow: 1; display: flex; height: 14px; border-radius: 4px; overflow: hidden"><div style="flex: 40; background: #00A8F5"></div><div style="flex: 78; background: #00A8F5"></div><div style="flex: 40; background: #A55ED0"></div><div style="flex: 3; background: #FA923C"></div></div></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="width: 44px; color: #BFCBDD">Oct 22</span><div style="flex-grow: 1; display: flex; height: 14px; border-radius: 4px; overflow: hidden"><div style="flex: 40; background: #00A8F5"></div><div style="flex: 70; background: #00A8F5"></div><div style="flex: 37; background: #A55ED0"></div><div style="flex: 3; background: #FA923C"></div></div></div>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: #BFCBDD"><span style="display: flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; background: #00A8F5"></span>Pushaway</span><span style="display: flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; background: #00A8F5"></span>Backswing</span><span style="display: flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; background: #A55ED0"></span>Downswing</span><span style="display: flex; align-items: center; gap: 4px"><span style="width: 8px; height: 8px; background: #FA923C"></span>Release</span></div>
+</div>
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 16px; font-weight: 600">Focus history</span>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span>Hold your finish</span><span style="color: #F5CD31">Active · 3 of 5</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><span>Repeatable ball start</span><span style="color: #00EB92">Improved</span></div>
+</div>
+<div style="font-size: 13px; color: #BFCBDD">Form stats are diagnostic and are not part of your LaneSight Score.</div>
+</div>
+</sc-if>
+
+<div style="border-radius: 12px; background: #031B29; border: 1px solid #0C2B40; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 600">Metric coverage</span><span style="font-size: 13px; color: #BFCBDD">% of shots measured</span></div>
+<div style="display: grid; grid-template-columns: 96px minmax(0, 1fr) 40px; gap: 8px 10px; align-items: center; font-size: 13px">
+<span>Speed</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 94%; height: 8px; border-radius: 4px; background: #00EB92"></div></div><span style="text-align: right">94%</span>
+<span>Entry board</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 81%; height: 8px; border-radius: 4px; background: #00EB92"></div></div><span style="text-align: right">81%</span>
+<span>Breakpoint</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 72%; height: 8px; border-radius: 4px; background: #FA923C"></div></div><span style="text-align: right">72%</span>
+<span>Rev rate</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 63%; height: 8px; border-radius: 4px; background: #FA923C"></div></div><span style="text-align: right">63%</span>
+<span>Axis / PAP</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 0%; height: 8px; border-radius: 4px; background: #BFCBDD"></div></div><span style="text-align: right">0%</span>
+<span>Form timing</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 100%; height: 8px; border-radius: 4px; background: #00EB92"></div></div><span style="text-align: right">100%</span>
+<span>Score inputs</span><div style="height: 8px; border-radius: 4px; background: #0C2B40"><div style="width: 79%; height: 8px; border-radius: 4px; background: #00EB92"></div></div><span style="text-align: right">79%</span>
+</div>
+<div style="font-size: 13px; color: #BFCBDD">Top reasons: ball surface too plain (rev, axis), no intent set (accuracy)</div>
+</div>
+</div>
+<nav aria-label="Main" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 8px 8px 28px; border-top: 1px solid #0C2B40; background: #031B29">
+<a href="Main.dc.html" style="text-decoration: none; color: #BFCBDD; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; min-height: 44px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>Home</a>
+<a href="Stats.dc.html" style="text-decoration: none; color: #00A8F5; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 600"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20V10"></path><path d="M10 20V4"></path><path d="M16 20v-7"></path><path d="M22 20H2"></path></svg>Stats</a>
+<a href="Lab.dc.html" style="text-decoration: none; color: #BFCBDD; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 600"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 3h6"></path><path d="M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"></path></svg>Lab</a>
+<span aria-disabled="true" style="color: #BFCBDD; opacity: 0.4; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 600"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="4"></circle><path d="M2 21a7 7 0 0 1 14 0"></path><path d="M17 4a4 4 0 0 1 0 8"></path></svg>Leagues</span>
+<span aria-disabled="true" style="color: #BFCBDD; opacity: 0.4; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 600"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"></path></svg>Tourneys</span>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1400}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tab: 'score' }; }
+  renderVals() {
+    const t = this.state.tab;
+    const on = (k) => t === k;
+    const bg = (k) => on(k) ? '#00A8F5' : 'transparent';
+    const fg = (k) => on(k) ? '#001018' : '#BFCBDD';
+    return {
+      isScore: on('score'), isThrow: on('throw'), isForm: on('form'),
+      scoreSel: String(on('score')), throwSel: String(on('throw')), formSel: String(on('form')),
+      scoreBg: bg('score'), throwBg: bg('throw'), formBg: bg('form'),
+      scoreFg: fg('score'), throwFg: fg('throw'), formFg: fg('form'),
+      showScore: () => this.setState({ tab: 'score' }),
+      showThrow: () => this.setState({ tab: 'throw' }),
+      showForm: () => this.setState({ tab: 'form' })
+    };
+  }
+}
+</script>
+</body>
+</html>

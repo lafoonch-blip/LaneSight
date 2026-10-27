@@ -1,0 +1,52 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+drills:
+- id: DRILL-ball-start
+  name: Ball-start timing
+  status: draft
+  description: Start the ball later/more extended so it moves with the key step.
+  sources:
+  - NBA
+  - BTM
+- id: DRILL-get-going
+  name: Get it going
+  status: draft
+  description: Trigger the ball with the first step; avoid holding it in the setup.
+  sources:
+  - BTM
+- id: DRILL-one-step
+  name: One-step / short approach
+  status: draft
+  description: Groove a repeatable ball start from a one-step drill.
+  sources:
+  - NBA
+- id: DRILL-walk-spot
+  name: Walk to a spot
+  status: draft
+  description: Align feet to the target line; walk to a fixed finish spot to control
+    drift.
+  sources:
+  - USBC
+- id: DRILL-post
+  name: Post the shot
+  status: draft
+  description: Hold the finish position until the ball hits the pins; balance-hold.
+  sources:
+  - USBC
+- id: DRILL-slow-first
+  name: Slow first steps
+  status: draft
+  description: Start slow, accelerate into the slide (rhythm).
+  sources:
+  - BTM
+- id: DRILL-free-swing
+  name: Free swing
+  status: draft
+  description: Let the swing fall freely at a consistent ball-start height.
+  sources:
+  - NBA
+- id: DRILL-place-it
+  name: Place it here
+  status: draft
+  description: Set the ball-start direction so the swing lines up behind the target.
+  sources:
+  - NBA

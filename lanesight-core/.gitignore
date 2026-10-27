@@ -6,3 +6,4 @@ out/
 *.mov
 *.MOV
 *.mp4
+ops/staged_accounts.toml

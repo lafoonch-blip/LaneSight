@@ -7,7 +7,7 @@ delay lands within a shot-spacing of the Ruby shot time. A clip that falls in a 
 unmatched (reported), never force-matched.
 
 Usage:
-  python examples/score_vs_ruby.py --clips "~/Documents/LaneSight/Training Videos" \
+  python examples/score_vs_ruby.py --clips "~/LaneSightData/training_videos" \
       --truth validation/ruby_live_session_2026-10-15.json \
       --scorecard /path/to/eval/scorecard.json [--window 70]
 """

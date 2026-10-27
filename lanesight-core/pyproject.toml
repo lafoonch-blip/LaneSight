@@ -10,9 +10,11 @@ requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "matplotlib>=3.8"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+form = ["mediapipe>=0.10"]       # rear/bowler-side Form P1 pose backend (lanesight_core.form.pose)
 runner = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
+api = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "pyjwt[crypto]>=2.8"]
 [tool.setuptools.packages.find]
-include = ["lanesight_core*", "lanesight_runner*"]
+include = ["lanesight_core*", "lanesight_runner*", "lanesight_api*"]
 
 [tool.setuptools.package-data]
 lanesight_runner = ["static/*"]

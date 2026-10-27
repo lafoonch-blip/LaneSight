@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Oil pattern</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#00A8F5}a:hover{color:#00A8F5}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #001018; color: #F5F6FA; font-family: 'Roboto Condensed', system-ui, sans-serif; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 56px; display: flex; flex-direction: column; gap: 12px; opacity: 0.2">
+<div style="font-size: 24px; font-weight: 600">New practice session</div>
+<div style="height: 140px; border-radius: 12px; background: #031B29"></div>
+</div>
+<div role="dialog" aria-modal="true" aria-labelledby="sheet-title" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 24px 24px 0 0; background: #031B29; border-top: 1px solid #153B51; padding: 20px 20px 34px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #153B51"></span>
+<span id="sheet-title" style="font-size: 24px; font-weight: 600">Oil pattern</span>
+<label for="oil-q" style="font-size: 13px; color: #BFCBDD; margin-bottom: -8px">Search the pattern library</label>
+<input id="oil-q" placeholder="Pattern name or length" style="height: 44px; box-sizing: border-box; border-radius: 8px; background: #001018; border: 1px solid #153B51; color: #F5F6FA; padding: 0 12px; font-family: inherit; font-size: 16px">
+<div role="radiogroup" aria-label="Oil patterns" style="display: flex; flex-direction: column; gap: 8px">
+<button role="radio" aria-checked="true" style="min-height: 60px; border-radius: 8px; background: #0C2B40; border: 2px solid #00A8F5; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #062132; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">House shot</span><span style="font-size: 13px; color: #BFCBDD">~40 ft · typical house pattern · default</span></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2.5" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button>
+<button role="radio" aria-checked="false" style="min-height: 60px; border-radius: 8px; background: #001018; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #062132; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">I don't know</span><span style="font-size: 13px; color: #BFCBDD">No pattern used for advice</span></span></button>
+<button role="radio" aria-checked="false" style="min-height: 60px; border-radius: 8px; background: #001018; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #062132; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Pattern from library]</span><span style="font-size: 13px; color: #BFCBDD">[length] ft · [volume] ml · sport</span></span></button>
+<button role="radio" aria-checked="false" style="min-height: 60px; border-radius: 8px; background: #001018; border: 1px solid #0C2B40; color: #F5F6FA; font-family: inherit; text-align: left; padding: 10px 12px; display: flex; align-items: center; gap: 12px"><span style="width: 40px; height: 40px; border-radius: 12px; background: #062132; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00A8F5" stroke-width="2" aria-hidden="true"><path d="M12 2.7C9 7 6 10.3 6 14a6 6 0 0 0 12 0c0-3.7-3-7-6-11.3z"></path></svg></span><span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1"><span style="font-size: 16px; font-weight: 600">[Pattern from library]</span><span style="font-size: 13px; color: #BFCBDD">[length] ft · [volume] ml · challenge</span></span></button>
+</div>
+<span style="font-size: 13px; color: #BFCBDD; line-height: 1.4">Patterns come from published pattern sheets and refresh automatically. The pattern only shapes lane-read advice, not measurements.</span>
+<a href="Setup.dc.html" style="text-decoration: none; height: 52px; border-radius: 8px; background: #00A8F5; color: #001018; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">Use this pattern</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

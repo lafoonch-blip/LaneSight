@@ -1,7 +1,7 @@
 # Metric & Scoring Logic (current-state register)
 Status: CANONICAL
-Version: 1.2
-Last Updated: 2026-10-18
+Version: 1.4
+Last Updated: 2026-10-26
 Owner: Shayne
 
 **Purpose.** One page that states the **current** formula for every LaneSight metric and score, so nobody has to trace the supersession chain in `DECISIONS.md` (e.g. speed is DEC-022 → DEC-030 → DEC-036). 
@@ -27,6 +27,18 @@ Owner: Shayne
 - **Tiers (provisional):** Bronze 0–399; Silver 400–549; Gold 550–699; Platinum 700–849; Onyx 850–1000. No percentiles without a real sample. Tiers attach to overall qualifying L only.
 - **Home:** badge + L + tier + qualified trend + next-tier progress; directly beneath four tiles S 40%, A 25%, C 25%, P 10%, displaying unknown values as unavailable.
 - **Standard vs Advanced:** envisioned complementary data-coverage modes, **not yet defined/calibrated score alternatives**. Do not issue Standard-only L on the advanced formula.
+
+### LaneSight Score — `L-dev-0` (0–1,000) · DEC-048 — **dev/Beta build and MVP (DEC-077, provisional)**
+The score **actually used in Dev Build v0 and friends Beta**, because DEC-038's `S` and `P` need pinfall and game scores the dev build doesn't collect (DEC-050). **This is not the target formula — DEC-038's `L` remains the target** and this one never substitutes for it outside dev/Beta. Always labeled **"Beta · dev formula"** in the dev build. **Update 2026-10-26 (DEC-077):** MVP also uses this formula, labeled **"provisional"**, because MVP has no game scores or spares (DEC-066). Strike % is shown in Stats but is not part of S′. DEC-038's full `L` stays the post-MVP target once pinfall exists.
+`L-dev-0 = round(10 × (0.40·S' + 0.25·A + 0.25·C + 0.10·P'))`, each component 0–100.
+- **S′ (performance, no pinfall)** = `0.6 × pocket% + 0.4 × angle%`, where pocket% = share of shots whose **entry board** is in the pocket range (16–19 right-handed, mirrored for left) and angle% = share of shots with **entry angle** in 4–6°. Replaces DEC-037's game-score `S`.
+- **A** = Accuracy, DEC-031 (unchanged; see below).
+- **C** = Consistency, DEC-032 (unchanged; see below).
+- **P′ (power from ball data)** = average of entry speed, rev rate (**only when its DEC-028 band is within target**, else excluded — never the rail value), entry angle and ball weight, each normalized against **owner-editable reference ranges** in `engine_config`. **Carry is excluded** (no pinfall). Replaces DEC-038's undefined `P`.
+- **Eligibility floors:** 20 / 20 / 10 / 10 shots (S′ / A / C / P′). Below a floor, that component is Building/unavailable, not 0.
+- **Window:** 90-day rolling. **Snapshot on every recompute** with the formula version and inputs (auditable history).
+- **No silent reweighting** of the four weights (DEC-037/048).
+- **Status:** **Spec-only today**; implemented in `lanesight-core` under BUILD_PLAN **DV-02**. Dev/Beta only.
 
 ### Performance index — `S` (0–100) · DEC-037 subformula retained by DEC-038
 `S = 0.50 × (avg game ÷ 300 × 100) + 0.25 × strike% + 0.25 × spare-conversion%` (percentages as points, e.g. 62).
@@ -98,7 +110,7 @@ Headline hierarchy (DEC-035): **Rev Rate · Speed · Accuracy · Consistency**; 
 
 ---
 
-## 4. Validation bar (DEC-034) — none of these advertise "validated" until they pass on the locked set (Seed Dataset + Specto). Current: speed median at gate, rev median at gate, entry board + Accuracy/Consistency pending Specto; the five composite scores are spec-only. Report bias and distributions, not just averages (`examples/score_vs_ruby.py` now gives MAE / median / p90 / bias).
+## 4. Validation bar (DEC-034) — none of these advertise "validated" until they pass on the locked set (Seed Dataset + Specto). Current: speed median at gate, rev median at gate, entry board + Accuracy/Consistency pending Specto; the composite scores (including the dev-build `L-dev-0`) are spec-only. Report bias and distributions, not just averages (`examples/score_vs_ruby.py` now gives MAE / median / p90 / bias).
 
 ---
 

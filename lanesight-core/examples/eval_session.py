@@ -8,7 +8,7 @@ Clips are symlinked into the scratch out dir so every working artifact (trim/sdr
 the originals are never touched or copied into the repo.
 
 Usage:
-  python examples/eval_session.py --clips "~/Documents/LaneSight/Training Videos" --out /tmp/eval
+  python examples/eval_session.py --clips "~/LaneSightData/training_videos" --out /tmp/eval
       [--handed right] [--glob '*.MOV']
 
 Writes <out>/results.jsonl (one line per clip, flushed as each finishes) and <out>/scorecard.json,

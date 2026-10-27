@@ -1,0 +1,15 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
+tests/
+out/
+*.mov
+*.MOV
+*.mp4
+*.pkl
+ops/staged_accounts.toml
+# validation fixtures are only used by tests, not the runtime
+validation/

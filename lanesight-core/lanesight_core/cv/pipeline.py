@@ -1,48 +1,139 @@
 """End-to-end analysis: video -> ShotRecord (+ insights, spare plan, sensor variance).
 CLI: python -m lanesight_core.cv.pipeline VIDEO OUTPREFIX [--handed R|L] [--sensor sensor.json]"""
 from __future__ import annotations
-import os, json, pickle, argparse, numpy as np
+import os, json, pickle, argparse, time, numpy as np
+from contextlib import contextmanager
 from .stabilize import stabilize
-from .lanes import find_lanes
+from .lanes import find_lanes, classify_capture_view
 from .track import extract_blobs, candidates, link, detect_impact, extend_back, extend_forward, touchdown
 from .metrics import compute, lane_homography
 from .refine import refine
 from .pins import read_pins
 from .revrate import ball_crops, rev_rate
 from ..models.shot import ShotRecord, m, ALGO_VERSION
-from ..insights.adjust import strike_adjustment
+from ..insights.adjust import strike_adjustment, no_reliable_data_insight
 from ..insights.spares import spare_plan
+
+# Every shot metric, as (name, unit) — used to emit an all-`unavailable` record when the capture view can't
+# support lane metrics (side/approach view), so we never fabricate geometry (DEC-061 / side-view-misroute).
+_METRIC_CATALOG = [
+    ('ball_speed', 'mph'), ('speed_release', 'mph'), ('speed_early', 'mph'), ('speed_late', 'mph'),
+    ('loft', 'ft'), ('laydown_board', 'board'), ('board_at_7ft', 'board'), ('arrows_board', 'board'),
+    ('launch_angle', 'deg'), ('breakpoint_board', 'board'), ('breakpoint_distance', 'ft'),
+    ('entry_board', 'board'), ('entry_angle', 'deg'), ('entry_angle_52_55', 'deg'),
+    ('rev_rate_lane', 'rpm'), ('rev_rate', 'rpm'), ('axis_rotation', 'deg'), ('axis_tilt', 'deg'), ('pap', 'in'),
+]
+
+
+def _unsupported_view_record(video, S, view_info, context, out_prefix, handed):
+    """Graceful 'no reliable data' ShotRecord for a view that can't yield lane metrics (side/approach/unknown):
+    every metric `unavailable` with the camera reason, a `no_reliable_data` insight with the camera tip and no
+    move, and capture_quality naming the view. Never fabricates a lane fit or a number."""
+    tip = view_info['reason']
+    try:
+        fps = round(1 / float(np.median(np.diff(S['ts']))), 2)
+    except Exception:
+        fps = None
+    rec = ShotRecord(
+        shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)),
+        handed=handed or 'R',
+        video=dict(file=os.path.basename(video), fps=fps,
+                   camera_motion_px=round(float(S['shift'].max()), 1) if 'shift' in S else None,
+                   reference_frame=int(S['ref']) if 'ref' in S else None),
+        events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
+        measurements=[m(name, None, unit, 0, tip) for name, unit in _METRIC_CATALOG],
+        trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
+        capture_quality={'view': view_info['view'], 'supported': False, 'far_lane': 'limited',
+                         'reason': tip, 'lane_center_frac': view_info.get('lane_center_frac')})
+    rec.insights = no_reliable_data_insight(tip)
+    return rec
 
 REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot calibration; pending blind validation)
 
+# Far-lane metrics whose value depends on the downlane depth scale. When the plausibility gate flags the far
+# lane, these are the measurements that can't be trusted (handoff B / DEC-061).
+_FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
+                     'entry_board', 'entry_angle', 'entry_angle_52_55'}
+
+
+def far_lane_quality(M, zboard):
+    """Plausibility gate on the downlane depth scale (handoff B / DEC-061). A real ball LOSES speed down the
+    lane and curves smoothly; a late-speed that reads faster than early, or a lateral jump of more than 3 boards
+    between neighbouring samples, means the depth scale is corrupt (the close/off-axis camera the SHOT_REVIEW
+    clip exposed). Returns (limited, reason). reason is a short, user-facing camera-spot nudge."""
+    spot = " Set the camera behind the lane, square to it, with the whole lane from the foul line to the pins in frame."
+    # Off-lane geometry: a board is 1 (right gutter) .. 39 (left gutter). An entry or breakpoint well off the
+    # lane means the lane homography is broken (wrong VP / edges from an awkward framing) — the whole far-lane
+    # read is then meaningless, so flag it rather than surface an impossible board as a move.
+    for nm, v in (('entry board', M.get('entry_board')), ('breakpoint', M.get('breakpoint_board'))):
+        if v is not None and not (0.0 <= v <= 40.0):
+            return True, (f"The measured {nm} ({v:.0f}) is off the lane, so the lane geometry read is unreliable.{spot}")
+    e, l = M.get('speed_early_mph'), M.get('speed_late_mph')
+    if e and l and l > e + max(0.5, 0.03 * abs(e)):
+        return True, (f"Late speed ({l:.1f} mph) reads faster than early speed ({e:.1f} mph); a ball can't speed "
+                      f"up down the lane, so the far-lane read (entry board/angle, breakpoint, late speed) is "
+                      f"unreliable.{spot}")
+    jump = 0.0
+    for (za, ba), (zb, bb) in zip(zboard, zboard[1:]):
+        if ba is not None and bb is not None:
+            jump = max(jump, abs(bb - ba))
+    if jump > 3.0:
+        return True, (f"The tracked path jumps {jump:.1f} boards between neighbouring points downlane, so the "
+                      f"far-lane read is unreliable.{spot}")
+    return False, None
+
 def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
-            timing_video=None, core_end_s=None):
+            timing_video=None, core_end_s=None, timings=None):
+    # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
+    _T = timings if timings is not None else {}
+    @contextmanager
+    def _stage(name):
+        t = time.perf_counter()
+        try: yield
+        finally: _T[name] = round(_T.get(name, 0.0) + time.perf_counter() - t, 3)
     cache = out_prefix + '_stab.pkl'
-    if os.path.exists(cache): S = pickle.load(open(cache, 'rb'))
-    else: S = stabilize(video, log=log, timing_path=timing_video, core_end_s=core_end_s); pickle.dump(S, open(cache, 'wb'))
+    with _stage('stabilize_s'):
+        if os.path.exists(cache): S = pickle.load(open(cache, 'rb'))
+        else: S = stabilize(video, log=log, timing_path=timing_video, core_end_s=core_end_s); pickle.dump(S, open(cache, 'wb'))
     S['vp_y'] = None
-    G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+    with _stage('find_lanes_s'):
+        G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+    # Capture-view gate (side-view-misroute handoff / DEC-061): refuse a view no lane metric can come from —
+    # a side/approach clip fits a lane high in the frame and would otherwise fabricate confident-wrong geometry
+    # (IMG_8905). Classify from the lane geometry BEFORE any ball extraction; if no candidate lane is a valid
+    # rear/down-lane view, return an honest no_reliable_data record + camera tip with zero shot metrics.
+    views = [classify_capture_view(l, vp, S['bg'].shape) for l in G['lanes']]
+    if views and not any(v['supported'] for v in views):
+        vinfo = max(views, key=lambda v: (v.get('lane_center_frac') or 0.0))
+        log(f"capture view unsupported ({vinfo['view']}, lane center {vinfo['lane_center_frac']}): refusing")
+        return _unsupported_view_record(video, S, vinfo, context, out_prefix, handed)
     bcache = out_prefix + '_blobs.pkl'
     best = None
     for lane in G['lanes']:
-        if os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
-        else: B = extract_blobs(video, S, lane, vp, log=log)
-        T = link(candidates(B, lane, vp), vp)
+        with _stage('extract_blobs_s'):
+            if os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
+            else: B = extract_blobs(video, S, lane, vp, log=log)
+        with _stage('link_s'):
+            T = link(candidates(B, lane, vp), vp)
         span = T[-1]['u'] - T[0]['u'] if T else 0
         if best is None or span > best[0]: best = (span, lane, T, B)
     if best is None: raise RuntimeError('lane not detected: lane edges/foul line not found in the stabilized background')
     _, lane, T, B = best
     pickle.dump(dict(G=G, lane=lane, B=B), open(bcache, 'wb'))
     if len(T) < 10: raise RuntimeError('ball track not found')
-    T = extend_back(B, T, lane, log=log)
-    T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
-    t_imp, _ = detect_impact(video, S, lane, T, log=log)
+    with _stage('extend_s'):
+        T = extend_back(B, T, lane, log=log)
+        T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
+    with _stage('detect_impact_s'):
+        t_imp, _ = detect_impact(video, S, lane, T, log=log)
     if t_imp is None: raise RuntimeError('pin impact not detected')
     ground = [c for c in T if not c.get('airborne_candidate')]
-    TR = refine(video, S, lane, ground, t_imp, log=log)
+    with _stage('refine_s'):
+        TR = refine(video, S, lane, ground, t_imp, log=log)
     byf = {c['i']: c for c in T if c['t'] <= t_imp + 0.02}
     for c in TR: byf[c['i']] = c
-    M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
+    with _stage('compute_s'):
+        M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
     ser = M.pop('_series')
     # Distance scale sanity: the impact anchor (the 60 ft reference) is the ball's position extrapolated to the
     # impact. If the ball was lost before the pins (occlusion or low contrast in the back half, or pin-deck
@@ -61,13 +152,15 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     from .metrics import impact_anchor
     pi = impact_anchor(Tp, t_imp, vp_y=vp[1])
     H = lane_homography(lane, vp, np.array(pi))
-    PR = read_pins(video, S, H, t_imp, log=log)
+    with _stage('read_pins_s'):
+        PR = read_pins(video, S, H, t_imp, log=log)
     # rev rate
     big = [c for c in ground if c['D'] > 32 and c['t'] <= t_imp]
     rpm, rconf, rev_note = None, 0.0, 'surface-pattern periodicity'
     rev_sigma, rev_fps = None, None                 # honest resolution band (lane rpm) + capture fps
     if len(big) >= 24:
-        rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
+        with _stage('rev_rate_s'):
+            rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
         sc = np.sort(info['score']); rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1))
         if info['at_rail']:          # no clear spin period found; 60/P is the search-band edge, not a reading
             rpm, rconf, rev_note = None, 0.0, "couldn't read the ball's spin pattern (no clear repeat)"
@@ -83,7 +176,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     speed_c = 0.9 if M['release_source'] == 'first_free_ball_detection' else 0.6
     meas = [
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, '60 ft foul→pins average (Ruby-comparable); ball tracked to the pins via far-lane recovery'),
-        m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)'),
+        m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),
@@ -102,6 +195,15 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('axis_rotation', None, 'deg', 0, 'not yet measured from video'), m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
         m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)'),
     ]
+    # Plausibility gate (DEC-061): if the downlane depth scale is corrupt, keep the far-lane measurements but
+    # mark them low_confidence with the reason, and flag capture_quality.far_lane = "limited" for the camera-spot
+    # banner. Accuracy over coverage: a mis-calibrated entry board drives a wrong move, so it must not read 'ok'.
+    cq_limited, cq_reason = far_lane_quality(M, list(zip(ser['Z'], ser['board'])))
+    if cq_limited:
+        for x in meas:
+            if x.metric in _FAR_LANE_METRICS and x.value is not None and x.status not in ('unavailable',):
+                x.status = 'low_confidence'
+                x.note = (x.note + ' ' if x.note else '') + 'Far-lane read limited by camera position.'
     traj = dict(lane=[dict(t=round(a, 4), z_ft=round(z, 2), board=round(b, 2)) for a, z, b in zip(ser['t'], ser['Z'], ser['board'])],
                 smoothed=[dict(z_ft=round(z, 2), board=round(b, 2)) for z, b in zip(ser['curve']['Z'], ser['curve']['board'])],
                 pixel=[dict(t=round(a, 4), x=round(p[0], 1), y=round(p[1], 1)) for a, p in zip(ser['t'], ser['px'])])
@@ -118,8 +220,14 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                 camera_motion_px=round(float(S['shift'].max()), 1), reference_frame=int(S['ref'])),
                      events=dict(t_release=M['t_release'], t_touchdown=M.get('t_touchdown'), t_impact=t_imp,
                                  release_source=M['release_source']),
-                     measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {})
+                     measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {},
+                     capture_quality={'far_lane': 'limited' if cq_limited else 'ok',
+                                      **({'reason': cq_reason} if cq_reason else {})})
     shot_view = {x.metric: x.value for x in meas}
+    shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence
+    shot_view['far_lane_limited'] = cq_limited      # the gate's verdict drives the insights state (single source)
+    if cq_reason:
+        shot_view['far_lane_reason'] = cq_reason
     pins_read = pins and pins.get('readable', True)   # None standing (unread) -> leave classification stays 'unknown'
     shot_view.update(board_at_15ft=M.get('board_at_15ft'), board_at_0ft=M.get('board_at_0ft'), entry_angle_deg=M['entry_angle_deg'],
                      pins_standing=set(pins['standing']) if pins_read else None,

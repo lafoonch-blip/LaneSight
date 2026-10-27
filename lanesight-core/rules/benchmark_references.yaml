@@ -1,0 +1,59 @@
+# GENERATED from lanesight_api/rules_seed.py — published copy for history (BENCHMARKS §8).
+benchmark_references:
+- metric: ball_start_step
+  reference: step 1 (4-step) / step 2 (5-step), in time with the slide-foot step
+  source: NBA
+  source_quality: medium
+  shown_to_user: true
+  status: draft
+- metric: backswing_peak
+  reference: peaks during pivot-step compression
+  source: NBA
+  source_quality: medium
+  shown_to_user: true
+  status: draft
+- metric: drift_boards
+  range_low: -2
+  range_high: 2
+  units: board
+  reference: <=1-2 boards, repeatable direction
+  source: USBC
+  source_quality: high
+  shown_to_user: true
+  status: draft
+- metric: finish_hold
+  reference: hold at the line until the ball reaches the pins
+  source: USBC
+  source_quality: high
+  shown_to_user: true
+  status: draft
+- metric: step_rhythm
+  reference: early steps slower, last three quicker
+  source: BTM
+  source_quality: medium
+  shown_to_user: true
+  status: draft
+- metric: entry_angle_deg
+  range_low: 3
+  range_high: 4
+  units: deg
+  reference: ~3-4 deg typical for 180-200 avg (shot-reading context)
+  source: USBC
+  source_quality: medium
+  shown_to_user: true
+  status: draft
+- metric: slide_to_release_ms
+  range_low: 545
+  range_high: 735
+  units: ms
+  reference: elite 640 +/- 95 ms
+  source: Seiferheld 2023
+  source_quality: high
+  shown_to_user: false
+  status: draft
+- metric: foul_line_distance_m
+  reference: elite men 0.35 m, women 0.16 m
+  source: Chu 2002
+  source_quality: high
+  shown_to_user: false
+  status: draft

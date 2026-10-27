@@ -1,0 +1,24 @@
+# Staged test accounts (DEC-063) — COPY to `staged_accounts.toml` (git-ignored) and fill real values.
+#
+# Emails use PLUS-ADDRESSING on the owner's address so every staged account lands in one inbox and none
+# needs a separate mailbox. Passwords are NOT stored here — the seed tool generates a strong password per
+# account and stores it in the macOS Keychain (service "com.lanesight.staged", account = the email), the
+# same pattern as the API credentials. Never print, log or commit passwords.
+#
+# `email` may be given per account, or omit it and set `base_email` to have the tool derive
+# `<local>+ls_<kind>@<domain>` automatically.
+
+base_email = "you+changeme@example.com"      # e.g. "lafoonch@gmail.com" -> lafoonch+ls_active@gmail.com
+
+# Optional explicit overrides (otherwise derived from base_email):
+[accounts.new_user]
+# email = "you+ls_new@example.com"
+
+[accounts.active]
+# email = "you+ls_active@example.com"
+
+[accounts.improving]
+[accounts.struggling]
+[accounts.edge_cases]
+[accounts.heavy]
+[accounts.under_13]

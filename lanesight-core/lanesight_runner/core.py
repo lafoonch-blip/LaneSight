@@ -8,10 +8,12 @@ from .trim import detect_window, trim_clip, METRIC_TAIL_S
 from .oil import find as oil_find, oil_field
 from . import card as cardmod
 
-def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None, core_end_s=None):
-    """Real analysis: lanesight-core pipeline. Returns the JSON-safe ShotRecord dict."""
+def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=None, core_end_s=None, cv_timings=None):
+    """Real analysis: lanesight-core pipeline. Returns the JSON-safe ShotRecord dict.
+    cv_timings: optional dict that receives CV sub-stage wall times (profiling only; no effect on results)."""
     from lanesight_core.cv.pipeline import analyze, _json_default
-    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s)
+    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s,
+                  timings=cv_timings)
     return json.loads(json.dumps(rec.to_dict(), default=_json_default))
 
 
@@ -49,6 +51,13 @@ def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer,
     win = p.get('window') or {}
     if win.get('trimmed') and win.get('burst'):   # exclude the pin-settle tail from the stabiliser (metric stability)
         kw['core_end_s'] = round(win['burst'][1] - win['window'][0] + METRIC_TAIL_S, 2)
+    # profiling only: hand the analyzer a dict to record CV sub-stage times, if it accepts one (no result impact)
+    try:
+        import inspect
+        if 'cv_timings' in inspect.signature(analyzer).parameters:
+            kw['cv_timings'] = timings.setdefault('cv', {})
+    except (TypeError, ValueError):
+        pass
     rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
     timings['analyze_s'] = round(time.time() - t, 2)
     return rec
