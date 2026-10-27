@@ -1,5 +1,5 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.1 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.2 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
@@ -14,7 +14,8 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 1. **Shot session (DEC-080):** Lab › Shot Analysis › Live session → Setup (last-used ball, oil, target; "Ready to bowl") → Record (tap to start/stop) → **Analyzing (blocking, controls locked, screen kept awake)** → **Shot card opens automatically** → *Record shot N+1* or *Close* → Active Session → End → score popup → Session summary → feedback.
 2. **Form session (DEC-081):** Lab › Form Analysis › Live session → Setup (no ball/oil; camera-view guidance) → Record delivery (side or behind; view detected) → Analyzing → Form results → *Record next delivery* or *Close* → Form session → End → Form summary.
 3. **Uploads (DEC-069):** Lab › Shot/Form › Upload video → (Shot: ball, oil, optional target; Form: nothing) → result. Not a session; never counts toward Stats, Score, tiers or achievements.
-4. **First use (DEC-081):** Welcome → Sign in / Create account → profile (2 steps) → Home (building state). Camera access is explained before the iOS prompt; denied state offers Open Settings or Upload. No Photos permission (PHPicker).
+4. **Navigation (DEC-084):** four tabs — Home · Stats · Lab · Coaching. Coaching opens a coming-soon screen with Notify me.
+5. **First use (DEC-081):** Welcome → Sign in / Create account → profile (2 steps) → Home (building state). Camera access is explained before the iOS prompt; denied state offers Open Settings or Upload. No Photos permission (PHPicker).
 
 ## 2. Screen → data map (new or changed vs Dev Build v0)
 | Figma frame (v3.7) | Data it needs | API / source |
@@ -34,6 +35,7 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 | Active Session · Form / Form summary | deliveries, repeatability ± spread, early vs late | `/sessions/{id}` |
 | Stats › Score | L (provisional) + parts with inputs (DEC-077) | `/me/score`, `/me/score/history` |
 | Stats › Shot + 9 detail screens | avg, spread, range, coverage, trend by session, by ball, by pattern, small-sample flags | **NEW** `/me/stats/metric/{metric}` |
+| Coaching · coming soon (DEC-084) | static copy; "Notify me" flag per user | **NEW** `PUT /me/notify` (`coaching_launch: true`) |
 | Stats › Form / Equipment | form trends; by ball / by pattern (≥20 shots) | `/me/stats` |
 | States board | upload failed (saved on phone, retry), analysis failed (retry), small samples | client queue + `/jobs` |
 

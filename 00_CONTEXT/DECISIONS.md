@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.44  
+Version: 1.45  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.43
+Supersedes: v1.44
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -953,6 +953,17 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-27
 **Status:** ACCEPTED (target state)
 **Supersedes:** the "Building your LaneSight Score" card on the first-use Home (DEC-081 first-use design) and the "% of score" line on the Home tiles (DEC-038 presentation; weights stay in the score details).
+
+### DEC-084 — Coaching tab replaces Leagues and Tournaments; opens a "coming soon" screen
+**Decision (Shayne, 2026-10-27):**
+- The bottom nav has **four tabs: Home · Stats · Lab · Coaching**. The disabled Leagues and Tournaments tabs are removed.
+- **Coaching is tappable** (Claude's call, delegated by Shayne) and opens a "Coaching is on the way" screen: what's coming (share with your coach, notes and drills on shots, see what helped), an "Until then" pointer to the next-shot advice and Home's next focus, and a **Notify me when it's ready** button (one notification at launch; tapped state "✓ We'll let you know").
+- The screen promises coach features only: no AI chat, consistent with DEC-046/047 and the 2026-10-27 coaching review (Coaching tab is post-MVP).
+
+**Why:** A dimmed tab reads as broken; a short screen sets expectations and measures interest. Coaching is the next planned area, while leagues and tournaments are further out.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (target state; the dev build keeps its current tabs until its designs are next updated)
+**Supersedes:** the disabled Leagues / Tournaments tabs (DEC-055 for the dev build designs, DEC-067 for the target state).
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
