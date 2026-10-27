@@ -12,8 +12,8 @@ Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; eve
 ## Catch-up: Figma changes since the canvas was last synced (2026-10-26)
 | # | Change | Decision | Status |
 |---|---|---|---|
-| 1 | Form: no video player; key-position thumbnails with skeleton overlay + full-frame view (v3.7.2) | DEC-082 | VERIFY: skeleton/key-position code exists. Check against Figma "Form results · v3.7", "Form results · side view (detected)", "Key position · full frame". |
-| 2 | Approval pass: Shot/Form cards equal height on Home and Lab; empty states for Stats › Form, Stats › Arsenal, Achievements; 11 pt minimum text; 44 pt hit areas (v3.7.3) | DEC-079/081 | VERIFY against Figma; list gaps. |
+| 1 | Form: no video player; key-position thumbnails with skeleton overlay + full-frame view (v3.7.2) | DEC-082 | VERIFIED BUILT (76a2735-era): `FormCardView` has no video player; key-position tiles fetch the bowler-cropped frame (missing → "not found" tile, never a guessed frame); `KeyPositionFullView` overlays `SkeletonOverlay` on the full frame. Matches DEC-082. |
+| 2 | Approval pass: Shot/Form cards equal height on Home and Lab; empty states for Stats › Form, Stats › Arsenal, Achievements; 11 pt minimum text; 44 pt hit areas (v3.7.3) | DEC-079/081 | BUILT (this commit): Analyze cards now equal-height with bottom-aligned CTAs (`AnalyzeCards.swift`). Stats › Form + Stats › Arsenal empty cards present; Achievements shows a populated "0/N + catalog" building state (not blank). Hit areas on the audited chooser/sheets are ≥44 pt; remaining typography is handled by the Shot-card rebuild (entry A). |
 | 3 | Home while the LaneSight Score is building; score tiles show 30-day change (v3.7.4) | DEC-083 | BUILT (0cf7c01, e6b0fb3) |
 | 4 | Coaching tab replaces Leagues/Tournaments; coming-soon screen (v3.7.5) | DEC-084 | BUILT (4fc2d80) |
 | 5 | Stats tabs Shot · Form · Score · Arsenal; building states (v3.7.6) | DEC-085 | BUILT (ce1077b) |

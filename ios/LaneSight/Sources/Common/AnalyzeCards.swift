@@ -47,14 +47,17 @@ struct AnalyzeCards: View {
                     Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(LS.textPrimary)
                     Text(desc).font(.system(size: 11)).lineSpacing(2).foregroundStyle(LS.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)    // push the CTA to the bottom so both cards' buttons align (3.7.3)
                     HStack(spacing: 4) { Text(action); Text("›") }
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.onAction)
                         .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity)
                         .background(accent, in: Capsule())
                 }
                 .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // maxHeight:.infinity makes both cards fill the HStack's (taller) height → equal-height cards (3.7.3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(LS.card)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
