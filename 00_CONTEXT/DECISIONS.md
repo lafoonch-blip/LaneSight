@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.43  
-Last Updated: 2026-10-26  
+Version: 1.44  
+Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.42
+Supersedes: v1.43
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -941,6 +941,18 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-26
 **Status:** ACCEPTED (target state)
 **Supersedes:** the Form results video player added under DEC-079.
+
+### DEC-083 — Home while the LaneSight Score is building; score-part tiles show 30-day change
+**Decision (Shayne, 2026-10-27):**
+- **Building state (Option A):** Home keeps the real score card. The tier badge is greyed and slightly blurred (no tier name shown). The score shows "—" with "BUILDING", a hint ("About 12 more shots, with a target set") and a **"Score unlocks · N%"** progress bar in place of the next-tier bar. "View Details" reads "How it works".
+- The hint shows the largest number of shots any part still needs; when that part is Accuracy it says to set a target (kept for now).
+- **Score-part tiles (Performance, Accuracy, Consistency, Power):** show the part's score and its **change over the last 30 days** (e.g. "▲ 2 · 30 days"). The weight ("40% of score") is removed from the tiles and shown only in the LaneSight Score details.
+- While building, a part that isn't ready shows a dimmed tile with its shot progress (e.g. "12/20 shots"); a ready part shows its score with "Ready ✓" (DEC-038 allows parts individually; the overall score stays unavailable until all four are ready).
+
+**Why:** The building state should look like the real Home so the switch to a real score feels natural, and the tiles should show what changed, not how the formula is weighted.
+**Date:** 2026-10-27
+**Status:** ACCEPTED (target state)
+**Supersedes:** the "Building your LaneSight Score" card on the first-use Home (DEC-081 first-use design) and the "% of score" line on the Home tiles (DEC-038 presentation; weights stay in the score details).
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.

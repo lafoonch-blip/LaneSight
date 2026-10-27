@@ -1,5 +1,5 @@
 # Target-state (MVP) designs — v3.7
-Status: APPROVED FOR HANDOFF · Version: 3.7.3 · Last Updated: 2026-10-26 · Owner: Shayne
+Status: APPROVED FOR HANDOFF · Version: 3.7.4 · Last Updated: 2026-10-27 · Owner: Shayne
 
 ## Where they live
 - **Figma:** "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7**.
@@ -39,6 +39,7 @@ DEC-061, DEC-066–077, DEC-079–081 (DEC-078 withdrawn). Metric placement: `01
 Back, Edit, Form/Field, Control/Segment option, Row/List item, Tile/Stat were orphaned (main components lost). Rebuilt in Design Components › "LaneSight / Core controls (rebuilt 2026-10-26)" and all 94 instances relinked. Also new: `Sessions / Next-shot card` (6 states); Result badge gained Not a strike / Not read; Metric status row gained Best effort.
 
 ## Changelog
+- **3.7.4 (2026-10-27):** DEC-083 — Home while the score is building uses the real card (greyed, blurred badge; "—", BUILDING, hint, "Score unlocks · N%" bar). Score-part tiles show the part score and its 30-day change; weights only in score details. Frame: "Home · score building (first use)".
 - **3.7.3 (2026-10-26):** approvals recorded; Shot/Form cards equal height on Home and Lab; empty states for Stats › Form, Stats › Equipment and Achievements; notes on full-frame pattern, screen sizes and Dynamic Type; MVP engineering handoff.
 - **3.7.2 (2026-10-26):** Form video player removed (DEC-082); key-position thumbnails get measured skeleton overlays and a key measurement; new screen "Key position · full frame (Release, side view)" (64 screens).
 - **3.7.1 (2026-10-26):** design review (DEC-079), shot flow (DEC-080), Form flow, first-use and permission screens, metric detail screens (DEC-081), rebuilt components, accessibility pass (11 pt minimum, contrast, 44 pt hit areas), file cleanup (archived page).

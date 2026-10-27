@@ -1,5 +1,5 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.0 · Last Updated: 2026-10-26 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.1 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
@@ -19,8 +19,8 @@ Decisions: DEC-061, DEC-066–077, DEC-079–082 (DEC-078 withdrawn). Metric pla
 ## 2. Screen → data map (new or changed vs Dev Build v0)
 | Figma frame (v3.7) | Data it needs | API / source |
 |---|---|---|
-| Home | score L (provisional), 4 parts, tier, 90-day delta, **next focus**, recent activity | `/me/score`, `/me/activity`, **NEW** `/me/focus` |
-| Home / Lab / Stats · first use | per-part eligibility progress (shots so far vs floor) | **NEW** fields on `/me/score` (`eligibility`) |
+| Home | score L (provisional), 4 parts each with **score + 30-day change** (no weights on Home, DEC-083), tier, 90-day delta, **next focus**, recent activity | `/me/score` (+ `parts[].delta_30d`), `/me/activity`, **NEW** `/me/focus` |
+| Home · score building (DEC-083) / Lab / Stats · first use | per-part eligibility (shots so far vs floor, ready flag), overall unlock %, shots still needed by the slowest part and whether it needs a target | **NEW** fields on `/me/score` (`eligibility`, `unlock_pct`, `shots_needed`, `needs_target`) |
 | Lab | sessions (Shot/Form), uploads | `/sessions`, `/uploads` |
 | Setup · Shot / Form | last-used ball, oil, target; health; camera checks | `/me/last-setup` (**NEW**), `/health` |
 | Record · Shot / Form | spot check; Form: detected view + framing | `/spot-check` (+ `view` for Form) |
