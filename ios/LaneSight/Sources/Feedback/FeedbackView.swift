@@ -14,34 +14,43 @@ struct FeedbackView: View {
     @State private var submitting = false
     @State private var error: String?
 
-    private let tags = ["Analysis accuracy", "Camera/framing", "Upload speed", "Advice quality", "App bug", "Other"]
+    private let tags = ["Bug", "Metric looked wrong", "Advice", "Camera / upload", "Workflow", "Idea"]
     private let ratingWords = ["", "Rough", "Meh", "OK", "Good", "Great"]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("How was this session in the app?").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("How was this session in the app?")
+                        .font(.system(size: 20, weight: .bold)).foregroundStyle(LS.textPrimary)
 
-                    HStack {
-                        Text("Rough").font(.lsCaption).foregroundStyle(LS.textSecondary)
-                        Spacer()
-                        ForEach(1...5, id: \.self) { i in
-                            Image(systemName: i <= rating ? "star.fill" : "star")
-                                .font(.lsTitle2).foregroundStyle(LS.bestEffort)
-                                .onTapGesture { rating = i }
-                                .accessibilityLabel("\(i) star")
+                    // Numbered 1–5 rating circles (v3.7), with Rough / Great anchors.
+                    VStack(spacing: 6) {
+                        HStack(spacing: 10) {
+                            ForEach(1...5, id: \.self) { i in
+                                Button { rating = i } label: {
+                                    Text("\(i)")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(i == rating ? LS.onAction : LS.textPrimary)
+                                        .frame(maxWidth: .infinity).frame(height: 56)
+                                        .background(i == rating ? LS.action : LS.card, in: RoundedRectangle(cornerRadius: 14))
+                                        .overlay(RoundedRectangle(cornerRadius: 14)
+                                            .strokeBorder(i == rating ? .clear : LS.cardStrokeBright, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("\(i) of 5\(i == rating ? ", selected" : "")")
+                            }
                         }
-                        Spacer()
-                        Text("Great").font(.lsCaption).foregroundStyle(LS.textSecondary)
-                    }
-                    if rating > 0 {
-                        Text(ratingWords[rating]).font(.lsCaption).foregroundStyle(LS.cyan)
-                            .frame(maxWidth: .infinity)
+                        HStack {
+                            Text("Rough").font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                            Spacer()
+                            Text("Great").font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("WHAT'S THIS ABOUT? (PICK ANY)").lsEyebrow()
+                        Text("What's this about? (pick any)")
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.textPrimary)
                         FlowTags(tags: tags, selected: $selectedTags)
                     }
 
