@@ -38,39 +38,36 @@ struct UnlockView: View {
 
     var body: some View {
         ZStack {
-            LS.bgAuth.ignoresSafeArea()
-            VStack(spacing: 14) {
-                Spacer()
+            Color.black.opacity(0.6).ignoresSafeArea().onTapGesture { dismiss() }
+            VStack(spacing: 12) {
                 Text("ACHIEVEMENT UNLOCKED")
-                    .font(.lsCaption.weight(.heavy)).tracking(1.5).foregroundStyle(LS.cyan)
-                AchievementBadge(category: p?.category, unlocked: true, size: 112)
-                Text(p?.name ?? "Achievement")
-                    .font(.lsRoboto(26, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    .font(.system(size: 11, weight: .semibold)).tracking(1.1).foregroundStyle(LS.link)
+                AchievementBadge(category: p?.category, unlocked: true, size: 96)
+                Text((p?.name ?? "Achievement").uppercased())
+                    .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                 if let d = p?.description {
-                    Text(d).font(.lsCallout).foregroundStyle(LS.textSecondary)
-                        .multilineTextAlignment(.center)
+                    Text(d).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 }
                 if let valueLine {
                     Text(valueLine)
-                        .font(.lsTitle3.bold().monospacedDigit()).foregroundStyle(LS.cyan)
-                        .padding(.horizontal, 18).padding(.vertical, 12)
-                        .background(LS.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+                        .font(.system(size: 17, weight: .bold).monospacedDigit()).foregroundStyle(LS.dataYellow)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
                 }
-                Spacer()
-                VStack(spacing: 8) {
-                    if let achId = p?.achievement_id {
-                        NavigationLink {
-                            AchievementDetailView(achievementId: achId)
-                        } label: { Text("View achievement") }
-                            .buttonStyle(PrimaryButtonStyle())
-                            .simultaneousGesture(TapGesture().onEnded { dismiss() })
-                    }
-                    Button("Dismiss") { dismiss() }
-                        .buttonStyle(SecondaryButtonStyle())
+                if let achId = p?.achievement_id {
+                    NavigationLink { AchievementDetailView(achievementId: achId) } label: { Text("View achievement") }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .simultaneousGesture(TapGesture().onEnded { dismiss() })
                 }
+                Button("Back to shot") { dismiss() }
+                    .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
             }
-            .padding(24)
+            .padding(20).frame(maxWidth: 340)
+            .background(LS.bg, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+            .padding(.horizontal, 24)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Achievement unlocked, \(p?.name ?? "")")
@@ -95,46 +92,49 @@ struct TierUpView: View {
 
     var body: some View {
         ZStack {
-            LS.bg.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Spacer().frame(height: 20)
+            Color.black.opacity(0.6).ignoresSafeArea()
+            VStack(spacing: 12) {
                 Text(isBanner ? "TIER REGAINED" : "NEW TIER REACHED")
-                    .font(.lsCaption.weight(.heavy)).tracking(2).foregroundStyle(LS.textSecondary)
-                TierBadge(tier: p?.to_tier, size: 180)
+                    .font(.system(size: 11, weight: .semibold)).tracking(1.1).foregroundStyle(LS.link)
+                tierBadge
                 Text(tier.isEmpty ? "NEW TIER" : tier)
-                    .font(.lsRoboto(34, weight: .bold)).tracking(1)
-                    .foregroundStyle(LS.textPrimary)
-                if let score = p?.score {
-                    (Text("Your LaneSight Score reached ")
-                        .foregroundStyle(LS.textSecondary)
-                     + Text("\(Int(score.rounded()))").bold().foregroundStyle(LS.textPrimary))
-                        .font(.lsCallout).multilineTextAlignment(.center)
-                }
-                nextTierCard
-                Spacer()
-                Button("Continue") { dismiss() }
-                    .buttonStyle(PrimaryButtonStyle())
+                    .font(.system(size: 24, weight: .bold)).foregroundStyle(.white)
+                Text(scoreLine).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    .multilineTextAlignment(.center)
+                Text("+ \((p?.to_tier ?? tier).capitalized) Status")
+                    .font(.system(size: 15, weight: .bold)).foregroundStyle(LS.dataYellow)
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                Button("Continue") { dismiss() }.buttonStyle(PrimaryButtonStyle())
+                Button("See what moved") { dismiss() }
+                    .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
             }
-            .padding(24)
+            .padding(20).frame(maxWidth: 340)
+            .background(LS.bg, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+            .padding(.horizontal, 24)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("New tier reached, \(tier)")
     }
 
-    @ViewBuilder private var nextTierCard: some View {
-        if let next = p?.next_tier, let points = p?.points, points > 0 {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Next: \(next.capitalized)").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
-                    Spacer()
-                    Text("\(Int(points.rounded())) points to go")
-                        .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                }
-            }
-            .lsCard()
-        } else if p?.next_tier == nil {
-            Text("Top tier reached.").font(.lsSubheadline).foregroundStyle(LS.textSecondary)
+    @ViewBuilder private var tierBadge: some View {
+        if (p?.to_tier ?? "").lowercased() == "platinum" {
+            Image("ScoreBadgePlatinum").resizable().scaledToFit().frame(width: 120, height: 120)
+        } else {
+            TierBadge(tier: p?.to_tier, size: 120)
         }
+    }
+
+    private var scoreLine: String {
+        var parts: [String] = []
+        if let s = p?.score { parts.append("Score \(Int(s.rounded()))") }
+        if let next = p?.next_tier, let points = p?.points, points > 0 {
+            parts.append("\(Int(points.rounded())) points to \(next.capitalized)")
+        } else if p?.next_tier == nil {
+            parts.append("Top tier reached")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func dismiss() {

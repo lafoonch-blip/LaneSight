@@ -84,6 +84,12 @@ struct PreviewHarness: View {
                 case "analyzing":
                     ProcessingCover(busy: .constant(true))
                         .onAppear { model.pipeline = .analyzing(state: "cv", timings: [:]) }
+                case "unlock":
+                    if let n = PreviewHarness.sampleNotification(unlock: true) { NavigationStack { CelebrationRouter(notification: n) } }
+                    else { Text("sample decode failed").foregroundStyle(LS.textPrimary) }
+                case "tierup":
+                    if let n = PreviewHarness.sampleNotification(unlock: false) { NavigationStack { CelebrationRouter(notification: n) } }
+                    else { Text("sample decode failed").foregroundStyle(LS.textPrimary) }
                 case "feedback": FeedbackView(onFinish: {})
                 case "scorepopup": ScoreUpdatePopup(sessionId: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"])
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
@@ -101,6 +107,14 @@ struct PreviewHarness: View {
             }
             ready = true
         }
+    }
+
+    /// Sample notification payloads for previewing the celebration surfaces (layout only — never shipped).
+    static func sampleNotification(unlock: Bool) -> AppNotification? {
+        let json = unlock
+            ? #"{"id":"s","kind":"achievement_popup","priority":1,"payload":{"category":"streak","name":"Line Locked","description":"10 shots in a row within 1 board of your target at the arrows","value":"SHOTS 32–41"}}"#
+            : #"{"id":"s","kind":"tier_celebration","priority":1,"payload":{"to_tier":"platinum","score":706,"next_tier":"onyx","points":144}}"#
+        return try? JSONDecoder().decode(AppNotification.self, from: Data(json.utf8))
     }
 }
 #endif
