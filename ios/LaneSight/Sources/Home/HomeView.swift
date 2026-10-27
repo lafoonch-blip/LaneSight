@@ -14,8 +14,14 @@ struct HomeView: View {
                 homeHeader
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        if showWelcome { welcomeStartCard }
+
                         LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-                            ScoreCard(score: s, history: history)
+                            if s.eligible == true {
+                                ScoreCard(score: s, history: history)
+                            } else {
+                                buildingScoreCard(s)
+                            }
                         }
 
                         if let f = focus, f.status == "ok", let title = f.focus {
@@ -24,7 +30,7 @@ struct HomeView: View {
 
                         performanceLab
 
-                        recentSessions
+                        if hasSessions { recentSessions }
                         recentActivity
                         Spacer(minLength: 8)
                     }
@@ -46,6 +52,77 @@ struct HomeView: View {
                 .resizable().scaledToFit()
                 .frame(maxWidth: 146, maxHeight: 48)
                 .accessibilityLabel("LaneSight")
+        }
+    }
+
+    /// True for a brand-new account (sessions loaded and empty): show the "Welcome to LaneSight" start card.
+    private var showWelcome: Bool { if case .loaded(let rows) = sessions { return rows.isEmpty }; return false }
+    /// True once there is at least one session (controls the Recent Sessions section's presence).
+    private var hasSessions: Bool { if case .loaded(let rows) = sessions { return !rows.isEmpty }; return false }
+
+    // Welcome / "Start here" card (Figma 466:4150): first-use entry point into Shot Analysis.
+    private var welcomeStartCard: some View {
+        NavigationLink { SetupView(initialMode: "shot") } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Welcome to LaneSight").font(.system(size: 18, weight: .bold)).foregroundStyle(.white)
+                Text("Record your first practice session. Every shot shows its result and your next move right away.")
+                    .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Start Shot Analysis ›").font(.system(size: 14, weight: .semibold)).foregroundStyle(LS.link)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color(hex: 0x051F3B), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(hex: 0x007DFF).opacity(0.6), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // "Building your LaneSight Score" card (Figma 466:4123): shown until the score is eligible. The four
+    // rows are driven by the real GET /me/score eligibility (have/need) — never mock counts.
+    private func buildingScoreCard(_ s: ScoreResponse) -> some View {
+        let rows: [(key: String, label: String, green: Bool)] = [
+            ("s_perf", "Performance (pocket, entry angle)", false),
+            ("a_acc",  "Accuracy (shots with a target)", false),
+            ("c_cons", "Consistency (comparable shots)", false),
+            ("p_power", "Power (ball data)", true),
+        ]
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Building your LaneSight Score").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+            Text("Your score appears once each part has enough shots. Until then you still see every shot’s results.")
+                .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(rows, id: \.key) { r in
+                let e = s.eligibility?[r.key]
+                buildingRow(label: r.label, have: e?.have ?? 0, need: e?.need ?? 0, green: r.green)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(Color(hex: 0x051F3B), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.link.opacity(0.6), lineWidth: 1))
+    }
+
+    private func buildingRow(label: String, have: Int, need: Int, green: Bool) -> some View {
+        let tint = green ? Color(hex: 0x3DEB7C) : LS.link
+        let frac = need > 0 ? min(1, Double(have) / Double(need)) : 0
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(have) of \(need) shots").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(green ? Color(hex: 0x3DEB7C) : LS.textSecondary)
+                    .fixedSize()
+            }
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.12)).frame(height: 6)
+                GeometryReader { g in
+                    RoundedRectangle(cornerRadius: 3).fill(tint)
+                        .frame(width: max(6, g.size.width * CGFloat(frac)), height: 6)
+                }
+                .frame(height: 6)
+            }
+            .frame(height: 6)
         }
     }
 
@@ -86,7 +163,7 @@ struct HomeView: View {
             Text("RECENT ACTIVITY").lsEyebrow()
             LoadableView(state: activity, retry: { Task { await loadActivity() } }) { rows in
                 if rows.isEmpty {
-                    Text("No activity yet. Finish a session or earn an achievement to see it here.")
+                    Text("Your sessions, uploads and achievements will show here.")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading).lsCard()
                 } else {

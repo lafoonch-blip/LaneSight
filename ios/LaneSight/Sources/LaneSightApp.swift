@@ -100,7 +100,10 @@ struct PreviewHarness: View {
         }
         .task {
             let env = ProcessInfo.processInfo.environment
-            if let e = env["LS_PREVIEW_EMAIL"], let p = env["LS_PREVIEW_PW"], !model.isAuthenticated {
+            if let e = env["LS_PREVIEW_EMAIL"], let p = env["LS_PREVIEW_PW"] {
+                // Force a fresh sign-in: the Simulator keychain survives `simctl uninstall`, so a stale
+                // token from a previous account would otherwise be reused and render the wrong data.
+                model.signOut()
                 do { try await model.signIn(email: e, password: p) }
                 catch { note = "auto-login failed: \(error)" }
             }
