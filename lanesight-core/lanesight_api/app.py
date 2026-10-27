@@ -315,6 +315,113 @@ def session_summary(sid: str, user=Depends(current_user)):
             'early_vs_late': early_vs_late, 'focus': focus}
 
 
+@app.get('/sessions/{sid}/form-summary')
+def form_session_summary(sid: str, user=Depends(current_user)):
+    """Form-session analytics (v3.7 Active Session·Form 464:7377 / Form session summary 430:5744):
+    repeatability (mean ± spread per form metric across the session's deliveries), early-vs-late, a takeaway,
+    and the delivery list. Form is diagnostic ONLY — never part of the LaneSight (ball) score. Every value is
+    read from each delivery's MEASURED form record (no fabrication); a metric with too few measured deliveries
+    reads 'building'."""
+    import statistics as _stats
+    from collections import Counter
+    store = get_store()
+    sess = store.get_session(user, sid)
+    if not sess:
+        raise HTTPException(404, 'session not found')
+    records = store.session_records(user, sid)      # ordered oldest→newest form records
+
+    def _metric(rec, key):                           # metrics[key].value, measured only
+        return engines._form_val(rec, key)
+    def _t4(rec):                                    # release-timing offset (s) vs ideal window
+        t = (rec.get('timing_checkpoints') or {}).get('T4') or {}
+        return t.get('offset') if t.get('status') == 'ok' else None
+    def _t2(rec):                                    # ball-start step index
+        t = (rec.get('timing_checkpoints') or {}).get('T2') or {}
+        return t.get('offset') if t.get('status') == 'ok' else None
+    def _spine(rec):                                 # spine tilt (deg), measured/best-effort
+        p = (rec.get('measured_positions') or {}).get('spine_tilt') or {}
+        return p.get('value') if p.get('status') in ('ok', 'best_effort', 'calibrated_estimate') else None
+    def _series(fn):
+        return [v for v in (fn(r) for r in records) if v is not None]
+
+    # (key, label, unit, extractor, best_effort, steady-threshold on stdev)
+    SPECS = [
+        ('approach_time',  'Approach time',  's',    lambda r: _metric(r, 'approach_time'), False, 0.12),
+        ('release_timing', 'Release timing', 's',    _t4,                                   False, 0.06),
+        ('ball_start',     'Ball start',     'step', _t2,                                    False, None),
+        ('swing_time',     'Swing time',     's',    lambda r: _metric(r, 'swing_time'),    False, 0.10),
+        ('spine_tilt',     'Spine tilt',     'deg',  _spine,                                 True,  None),
+    ]
+    repeatability, drifting = [], []
+    for key, label, unit, fn, best_effort, thr in SPECS:
+        vals = _series(fn)
+        if not vals:
+            repeatability.append({'key': key, 'label': label, 'unit': unit, 'status': 'building',
+                                  'n': 0, 'mean': None, 'spread': None, 'best_effort': best_effort, 'display': '—'})
+            continue
+        mean = round(sum(vals) / len(vals), 3)
+        spread = round(_stats.pstdev(vals), 3) if len(vals) > 1 else 0.0
+        if key == 'ball_start':
+            steps = [round(v) for v in vals]
+            mode, cnt = Counter(steps).most_common(1)[0]
+            status = 'steady' if cnt >= max(2, (len(steps) * 3) // 4) else 'varied'
+            repeatability.append({'key': key, 'label': label, 'unit': unit, 'status': status, 'n': len(vals),
+                                  'mode': mode, 'count': cnt, 'best_effort': False,
+                                  'display': f'Step {mode} on {cnt} of {len(steps)}'})
+            continue
+        status = 'best_effort' if best_effort else ('steady' if (thr is None or spread <= thr) else 'drifting')
+        if unit == 's':
+            display = f'{mean:.2f} s ± {spread:.2f}'
+        elif unit == 'deg':
+            display = f'{round(mean)}° ± {round(spread)}°'
+        else:
+            display = f'{mean} ± {spread}'
+        repeatability.append({'key': key, 'label': label, 'unit': unit, 'status': status, 'n': len(vals),
+                              'mean': mean, 'spread': spread, 'best_effort': best_effort, 'display': display})
+        if status == 'drifting':
+            drifting.append(label.lower())
+
+    def _early_late(fn, n=4):
+        vals = _series(fn)
+        if len(vals) < 4:
+            return None
+        k = min(n, len(vals) // 2)
+        early, late = vals[:k], vals[-k:]
+        em, lm = sum(early) / len(early), sum(late) / len(late)
+        return {'early': round(em, 3), 'late': round(lm, 3), 'delta': round(lm - em, 3),
+                'n_early': k, 'n_late': k, 'series': [round(v, 3) for v in vals]}
+    evl = {}
+    for key, fn in (('release_timing', _t4), ('approach_time', lambda r: _metric(r, 'approach_time'))):
+        r = _early_late(fn)
+        if r:
+            evl[key] = r
+
+    deliveries = []
+    for i, rec in enumerate(records):
+        deliveries.append({'seq': i + 1, 'release_offset': _t4(rec),
+                           'swing_total': _metric(rec, 'swing_time'), 'view': rec.get('view')})
+    deliveries.reverse()                             # newest first for the list
+
+    view = next((r.get('view') for r in records if r.get('view') and r.get('view') != 'unknown'), None)
+    rel = evl.get('release_timing')
+    takeaway = None
+    if rel and abs(rel['delta']) >= 0.03:
+        direction = 'late' if rel['delta'] > 0 else 'early'
+        rest = 'your approach time stayed steady' if 'approach time' not in drifting else 'the rest held together'
+        takeaway = {'text': f'Your release timing drifted {direction} through the session. And {rest}.',
+                    'drill': 'Drill for next practice: slide-and-release — feel the slide foot stop, then let the ball come through.'}
+    elif repeatability and all(r.get('status') in ('steady', 'best_effort', 'building') for r in repeatability) \
+            and any(r.get('n') for r in repeatability):
+        takeaway = {'text': 'Your delivery repeated well across the session — timing and positions held steady.',
+                    'drill': 'Keep grooving this rhythm; small, consistent reps build the pattern.'}
+
+    ended = sess.get('ended_at')
+    return {'session_id': sid, 'mode': 'form', 'view': view, 'n_deliveries': len(records),
+            'ended_at': ended, 'in_progress': ended is None,
+            'repeatability': repeatability, 'early_vs_late': evl, 'takeaway': takeaway, 'deliveries': deliveries,
+            'note': 'Compared with your baseline from Profile. Form stats are diagnostic and aren’t part of your LaneSight Score.'}
+
+
 # ----------------------------------------------------------------- shots
 @app.post('/sessions/{sid}/shots')
 async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Form('{}'),
