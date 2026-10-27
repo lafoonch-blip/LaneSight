@@ -1,7 +1,7 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.5  
-Last Updated: 2026-10-25  
+Version: 1.6  
+Last Updated: 2026-10-27  
 Owner: Shayne  
 Supersedes: v1.4; v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
@@ -234,3 +234,8 @@ Source of truth: GitHub `lafoonch-blip/LaneSight` (`main`); Google Drive and the
 **Positioning:** LaneSight is the comprehensive metrics/stats and improvement platform for serious bowlers. Performance Lab offers user-selected **Shot Analysis** (ball/lane/pins) OR **Form Analysis** (bowler approach/mechanics); never require two cameras. Existing Practice/League/Tournament activity types are independent of mode. Form capture supports recording/upload, baseline comparison, and eventual coach sharing, timestamped annotation, corrections and drill feedback. Prioritize trustworthy measurement, vendor-neutral optional sensors (Ruby feasibility first), scoring integration exploration, and a unified source/confidence-tagged shot record. Form and coaching are new roadmap tracks, not already-shipped capabilities.
 
 **Scoring:** One 0–1000 LaneSight Score only, with the DEC-038 four pillars and tiers; show gradual historical score improvement, no separate Improvement Score. Form measurements are diagnostic, not a fifth score pillar. Achievement unlocks do not alter score (DEC-039). Missing sensor data does not reduce ability; composite remains unavailable until DEC-038's missing Power & Carry normalization is solved. See DEC-041 and the metric register.
+
+## 24. AI Coaching differentiation (proposal — 2026-10-27)
+**Strategy, not an accepted DEC:** LaneSight's long-term advantage is a closed-loop improvement system: **Measure → Diagnose → Recommend → Practice → Re-measure → Learn → Adapt**. The foundational data moat links validated video/sensor/score/form/equipment measurements to interventions, expert coaching corrections and comparable outcomes. See `01_PRODUCT/AI_COACHING_STRATEGY.md` v1.0.
+
+Preserve separate Execution and Lane Coaches (DEC-005/006), measurement provenance, explicit abstention on unavailable signals (DEC-065), and the current guarded recommendation state machine. Introduce Practice/Spare/Equipment/Competition coaching as incremental modules under one orchestrator; do not assume additional independent LLM agents. Coach sharing, custom student benchmarks, structured expert corrections and training-use rights require permissions, consent and later scope decisions. This adds **no MVP functionality or release gate**: founder MVP → friends Beta → market remains governed by DEC-047; accepted decisions remain authoritative.
