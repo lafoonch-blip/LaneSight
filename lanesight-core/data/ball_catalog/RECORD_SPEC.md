@@ -8,6 +8,8 @@ Output: one JSON file = a JSON array of records. UTF-8, valid JSON (no comments,
 - **Never guess or invent a value.** If a field is not published by a source you actually fetched, set it to `null` and add the field name to `missing`.
 - Every numeric spec must come from a page you fetched (manufacturer page preferred; reputable retailer like bowling.com / bowlersmart / bowlerx / bowlingball.com acceptable when the manufacturer page lacks it). List every URL you used in `spec_source_urls`.
 - "Current lineup" = balls the manufacturer currently lists on its website as available (not "vault"/"discontinued"/"retired"). Include spare/plastic/urethane balls too, but mark them via `cover_type`.
+- Retired balls (DEC-084) use the same fields with `status: "discontinued"`; `discontinued_on` only when the date is known. Source: the manufacturer's retired-ball page; for Storm, Roto Grip, 900 Global and Motiv (no manufacturer page) bowwwl.com, said in `notes`, no photo.
+- A printed number outside what a ball can be (RG 2.40–2.80, diff 0–0.080, int diff 0–0.040) is a typo: leave the field null and quote the printed value in `notes`.
 - RG/differential/intermediate differential are for the **15 lb** ball. If only another weight is published, put it in `notes` and leave the 15 lb fields null.
 - Do not copy marketing prose. `reaction_description` is a short paraphrase in your own words (≤ 25 words).
 - Image: the manufacturer's official product photo URL (direct image file URL, e.g. .png/.jpg/.webp from the manufacturer's CDN). If you can only find it on a retailer, give that URL and set `image_source` accordingly. Do NOT download images.

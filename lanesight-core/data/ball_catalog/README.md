@@ -1,6 +1,8 @@
 # Ball catalog (ball-catalog-1.0)
 
-Current lineups as of 2026-10-21 for every major brand: **211 balls** across Storm (42), Roto Grip (16), 900 Global (5), Brunswick (50), DV8 (6), Radical (13), Hammer (36), Ebonite (10), Track (7), Motiv (26). Columbia 300 has no current balls (Brunswick retired the brand in 2026).
+**2,288 balls:** every major brand's current lineup (211, as of 2026-10-21) plus **2,077 retired balls** (added 2026-10-27, DEC-084), so bowlers can find the balls they actually own.
+
+Current lineups: Storm (42), Roto Grip (16), 900 Global (5), Brunswick (50), DV8 (6), Radical (13), Hammer (36), Ebonite (10), Track (7), Motiv (26). Columbia 300 has no current balls (Brunswick retired the brand in 2026).
 
 Feeds the shared `ball_models` table (DEC-007) used by the arsenal (`user_balls` → `ball_models`) and by recommendations.
 
@@ -56,6 +58,28 @@ Colorways of the same ball (same cover, core, finish, RG, diff) share published 
 
 Confidence: 34 high, 150 medium, 27 low.
 
+## Retired balls (added 2026-10-27, DEC-084)
+`status = 'discontinued'`, `discontinued_on` null (the retirement date isn't published). Collected with `backfill/` (see the scripts' docstrings); the weekly refresh carries them over like any other record and revives one if a brand re-lists it.
+
+| Brand | Retired balls | Source | 15 lb RG/diff | Photo | Release date |
+|---|---|---|---|---|---|
+| Storm | 569 | bowwwl.com | 569 | – | 569 |
+| Roto Grip | 232 | bowwwl.com | 232 | – | 232 |
+| 900 Global | 140 | bowwwl.com | 140 | – | 140 |
+| Motiv | 162 | bowwwl.com | 162 | – | 162 |
+| Brunswick | 197 | brunswickbowling.com retired pages | 171 | 197 | 26 |
+| DV8 | 122 | dv8bowling.com retired pages | 85 | 122 | 22 |
+| Radical | 118 | radicalbowling.com retired pages | 115 | 118 | 36 |
+| Hammer | 188 | hammerbowling.com `retired-balls` | 154 | 188 | 43 |
+| Ebonite | 185 | ebonite.com `retired-balls` | 135 | 185 | 25 |
+| Track | 164 | trackbowling.com `retired-balls` | 116 | 164 | 24 |
+
+- **Brunswick family:** read from the manufacturer's own retired pages (spec table, per-weight core numbers). Older pages often give RG/diff only for 16 lb: those stay null with the 16 lb numbers in `notes`. Two printed values outside what a ball can be (Raw Hammer Burn RG 0.48, Track 300T diff 0.090) were dropped and noted. 13 Brunswick polyester designs returned a server error on every try and are not included (Flame, Leopard, Medusa, Pink Zebra, Purple Cheetah, Skull, Snake, Spider, Spiral Red/Black, Spiral Yellow/Blue/Black, Sun and Moon, Sunflower, Team Brunswick).
+- **Storm, Roto Grip, 900 Global, Motiv:** Storm Products deletes a ball's page when it's retired and Motiv blocks bulk downloads, so specs come from **bowwwl.com** (fan-run database), as Shayne chose. Every record says so in `notes` and has no photo (bowwwl hosts its own copies). Only balls bowwwl flags *Discontinued* are added; unflagged ones missing from the current lineup were current balls under another name (bowwwl "Hustle M-M" = "Hustle M+M") or overseas releases that may still be sold. bowwwl "MB Diff" is stored as `int_diff_15`. 115 of Motiv's own 125 Retired Balls names matched a bowwwl record (the rest are colorway naming differences); those records say so.
+- **Not collected:** retailer ratings, motion chart and a reaction description. The expected reaction of almost every retired ball is therefore a **spec estimate (low confidence, labelled)**; 10 Rhino colorways share the current Rhino's motion chart.
+- **Verification:** an independent re-check of 40 random retired balls (4 per brand) against their source pages found 15 lb RG/diff/int diff correct on 118 of 120 values (2 misses, now fixed) and every ball marked retired. Parser fixes from that check: labels inside values ("Low RG Asymmetric", "Factory Finish Polish"), a "Weights" table header, lowercase labels. Remaining judgment calls: `cover_type` is `other` (and listed in `missing`) when no cover type is printed, and is taken from the coverstock name when that name says Pearl/Solid/Hybrid/Urethane/Polyester; core type is taken from the core name when it says Symmetric/Asymmetric; a mass bias printed without a weight stays in `notes`.
+- All 974 retired-ball photo links returned an image on 2026-10-27.
+
 ## Verification (2026-10-21)
 - Independent re-check of 24 randomly sampled balls against manufacturer pages and tech sheets: **15 lb RG, differential and intermediate differential matched on 24/24.** Three other fields were wrong and are fixed (Vengeance Returns oil, Mix Platinum oil, Danger Zone core type); one ball turned out retired (Supra Clutch, removed).
 - Lesson: `recommended_oil` and `core_type` are the weakest fields — several came from bowling.com or bowwwl.com when the manufacturer doesn't state them. Records say so in `notes`.
@@ -97,7 +121,7 @@ The catalog reaction is the ball **out of the box**. A bowler's ball usually dif
 **Next step:** once a bowler has measured shots with a given layout and surface (breakpoint and entry angle on known patterns), those measurements should override these estimates. That isn't built yet. Oil absorption and games since the last resurface aren't modeled yet either.
 
 ## Weekly refresh
-A scheduled task runs `REFRESH.md` every week:
+A scheduled task runs `REFRESH.md` every week (it also carries the retired balls over; the first sync after the backfill upserts ~2,077 rows in ~150 chunks):
 1. It loads anything merged to `main` into Supabase, upserting only rows whose `source_hash` changed.
 2. It checks every brand's current lineup and adds new balls in full, following `RECORD_SPEC.md`.
 3. Balls no longer listed are **retired, never deleted** (`status = 'discontinued'`, `discontinued_on`), because arsenals point at them.

@@ -42,6 +42,7 @@ For **each brand** (one raw file each in `data/ball_catalog/raw/`):
    - *Still listed:* carry the existing record over unchanged.
    - *New:* collect a full record per `RECORD_SPEC.md`: 15 lb specs, image URL, ratings, motion chart and source URLs. Unpublished values are null and listed in `missing`.
    - *No longer listed:* leave it out of the fresh file; merge retires it.
+   - *Already retired* (`status: discontinued`, incl. the 2026-10-27 backfill): never put in the fresh file unless the brand lists it again; merge keeps it.
    - *Release date in the past week:* re-fetch its manufacturer page. Specs are sometimes corrected right after launch.
 3. Write `fresh/<brand>.json` (current lineup only), then run `python -m lanesight_core.arsenal.refresh merge data/ball_catalog/raw/<brand>.json fresh/<brand>.json --today <YYYY-MM-DD>`.
    - Exit code 2 = **refused**: the fresh lineup is empty, fails validation, or would retire more than 30% of the brand.
