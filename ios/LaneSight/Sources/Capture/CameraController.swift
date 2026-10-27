@@ -19,7 +19,9 @@ enum CameraError: LocalizedError {
 final class CameraController: NSObject, ObservableObject {
     enum State: Equatable {
         case idle
-        case unavailable(String)
+        case needsPermission        // notDetermined — show the priming screen before the iOS prompt
+        case denied                 // user declined / restricted — show the "camera is off" screen
+        case unavailable(String)    // no camera hardware (e.g. Simulator)
         case ready
         case recording
     }
@@ -66,18 +68,20 @@ final class CameraController: NSObject, ObservableObject {
         self.preferredFPS = preferredFPS
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            break
+            configure()
         case .notDetermined:
-            let granted = await AVCaptureDevice.requestAccess(for: .video)
-            guard granted else { state = .unavailable("Camera permission denied."); return }
+            state = .needsPermission      // show the priming screen; request only when the user taps Continue
         case .denied, .restricted:
-            state = .unavailable("Camera access denied. Enable it in iOS Settings.")
-            return
+            state = .denied
         @unknown default:
             state = .unavailable("Camera access unavailable.")
-            return
         }
-        configure()
+    }
+
+    /// Called from the priming screen's "Continue": asks iOS for access, then configures or shows denied.
+    func requestAccess() async {
+        let granted = await AVCaptureDevice.requestAccess(for: .video)
+        if granted { configure() } else { state = .denied }
     }
 
     private func configure() {

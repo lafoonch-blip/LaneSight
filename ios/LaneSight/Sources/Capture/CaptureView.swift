@@ -14,20 +14,30 @@ struct CaptureView: View {
             switch camera.state {
             case .ready, .recording:
                 CameraPreview(session: camera.session).ignoresSafeArea()
+            case .needsPermission:
+                CameraPermissionView(mode: .prompt,
+                                     onPrimary: { Task { await camera.requestAccess() } },
+                                     onSecondary: { dismiss() })
+            case .denied:
+                CameraPermissionView(mode: .denied,
+                                     onPrimary: { openSettings() },
+                                     onSecondary: { dismiss() })
             case .unavailable(let reason):
                 unavailableView(reason)
             case .idle:
                 ProgressView("Starting camera…").tint(.white).foregroundStyle(.white)
             }
 
-            VStack(spacing: 0) {
-                topBar
-                Spacer()
-                chipRow.padding(.bottom, 10)
-                zoomBar.padding(.bottom, 14)
-                bottomBar
+            if camera.isRunnable {
+                VStack(spacing: 0) {
+                    topBar
+                    Spacer()
+                    chipRow.padding(.bottom, 10)
+                    zoomBar.padding(.bottom, 14)
+                    bottomBar
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
         }
         .navigationTitle("Capture")
         .navigationBarTitleDisplayMode(.inline)
@@ -226,6 +236,10 @@ struct CaptureView: View {
             }
         }
         .accessibilityLabel(camera.state == .recording ? "Stop recording" : "Start recording")
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
     }
 
     private func unavailableView(_ reason: String) -> some View {

@@ -90,6 +90,8 @@ struct PreviewHarness: View {
                 case "tierup":
                     if let n = PreviewHarness.sampleNotification(unlock: false) { NavigationStack { CelebrationRouter(notification: n) } }
                     else { Text("sample decode failed").foregroundStyle(LS.textPrimary) }
+                case "camprompt": CameraPermissionView(mode: .prompt)
+                case "camdenied": CameraPermissionView(mode: .denied)
                 case "feedback": FeedbackView(onFinish: {})
                 case "scorepopup": ScoreUpdatePopup(sessionId: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"])
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
