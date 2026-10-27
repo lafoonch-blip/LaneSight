@@ -61,12 +61,14 @@ private struct WelcomeStep: View {
 
 // MARK: - Sign in
 
-private struct SignInStep: View {
+struct SignInStep: View {
     @EnvironmentObject var model: AppModel
     @State private var email = ""
     @State private var password = ""
+    @State private var rememberMe = true
     @State private var busy = false
     @State private var errorText: String?
+    @State private var showForgot = false
     @FocusState private var focus: Field?
     private enum Field { case email, password }
 
@@ -77,32 +79,39 @@ private struct SignInStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                // Official stacked logo (DEC-054), centered.
-                Image("LaneSightLogo")
-                    .resizable().scaledToFit()
-                    .frame(maxWidth: 180)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 4)
-                    .accessibilityLabel("LaneSight")
+                // Official stacked logo (DEC-054) + brand tagline, centered.
+                VStack(spacing: 6) {
+                    Image("LaneSightLogo")
+                        .resizable().scaledToFit().frame(maxWidth: 180)
+                        .accessibilityLabel("LaneSight")
+                    Text("SEE MORE. BOWL SMARTER.").font(.lsCaption2).tracking(2).foregroundStyle(LS.textSecondary)
+                }
+                .frame(maxWidth: .infinity).padding(.bottom, 8)
 
-                Text("Welcome back").font(.lsTitle.bold()).foregroundStyle(LS.textPrimary)
+                Text("Welcome Back").font(.lsTitle.bold()).foregroundStyle(LS.textPrimary)
                 Text("Sign in to your account to continue")
                     .font(.lsSubheadline).foregroundStyle(LS.textSecondary)
 
-                // Apple / Google are disabled until the paid team is active (changelog 2.0). Shown
-                // honestly disabled, not fake-working.
+                // Apple / Google: OAuth is not wired on the Mac API — honestly disabled, not fake-working.
                 DisabledSocialButton(title: "Continue with Apple", systemImage: "apple.logo")
                 DisabledSocialButton(title: "Continue with Google", glyph: "G")
 
                 OrDivider()
 
-                AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
+                AuthIconField(icon: "envelope", placeholder: "Email address", text: $email, keyboard: .emailAddress)
                     .focused($focus, equals: .email)
-                AuthField("Password", text: $password, keyboard: .default, secure: true)
+                AuthIconField(icon: "lock", placeholder: "Password", text: $password, secure: true)
                     .focused($focus, equals: .password)
 
+                HStack {
+                    AuthCheckbox(checked: $rememberMe, label: "Remember me")
+                    Spacer()
+                    Button("Forgot password?") { showForgot = true }
+                        .font(.system(size: 13, weight: .medium)).foregroundStyle(LS.action)
+                }
+                .padding(.top, 2)
+
                 if let errorText {
-                    // No error color in v1 — neutral surface + plain text (3.0).
                     Label(errorText, systemImage: "exclamationmark.circle")
                         .font(.lsFootnote).foregroundStyle(LS.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -136,39 +145,70 @@ private struct SignInStep: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .sheet(isPresented: $showForgot) { ForgotPasswordSheet(email: email) }
         .onAppear { focus = .email }
     }
 
     private func submit() async {
         busy = true; errorText = nil
+        // "Remember me" controls refresh-token persistence: on → stay signed in; off → session only.
+        model.persistSession = rememberMe
         do { try await model.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password) }
         catch { errorText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription }
         busy = false
     }
 }
 
+/// Honest password-reset notice. The Mac API has no reset endpoint yet (email/password + refresh only),
+/// so rather than a fake "email sent" we explain how to recover access in this dev build.
+private struct ForgotPasswordSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let email: String
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Password reset").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Self-serve password reset isn't available in this development build yet. If you're locked out of \(email.isEmpty ? "your account" : email), message the LaneSight team and we'll reset it for you.")
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(LSBackground(auth: true))
+            .navigationTitle("Forgot password").navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
 // MARK: - Create account
 
-private struct CreateAccountStep: View {
+struct CreateAccountStep: View {
     @EnvironmentObject var model: AppModel
     @State private var email = ""
     @State private var password = ""
+    @State private var confirm = ""
     @State private var agree = false
     @State private var busy = false
     @State private var errorText: String?
     @State private var showLegal = false
     @FocusState private var focus: Field?
-    private enum Field { case email, password }
+    private enum Field { case email, password, confirm }
 
     private var emailOK: Bool {
         let e = email.trimmingCharacters(in: .whitespaces)
         return e.contains("@") && e.contains(".") && e.count >= 5
     }
-    private var canSubmit: Bool { emailOK && password.count >= 6 && agree && !busy }
+    private var passwordsMatch: Bool { !confirm.isEmpty && password == confirm }
+    private var canSubmit: Bool { emailOK && password.count >= 6 && passwordsMatch && agree && !busy }
 
     private var hintText: String {
         if !emailOK { return "Enter a valid email address." }
         if password.count < 6 { return "Password must be at least 6 characters." }
+        if !passwordsMatch { return "Passwords don't match." }
         if !agree { return "Accept the Terms of Service and Privacy Policy to continue." }
         return ""
     }
@@ -176,24 +216,36 @@ private struct CreateAccountStep: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Create your account").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
-                Text("Use a real email and a password of at least 6 characters.")
-                    .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                // Logo + brand tagline, centered (Figma 434:5758).
+                VStack(spacing: 6) {
+                    Image("LaneSightLogo")
+                        .resizable().scaledToFit().frame(maxWidth: 160)
+                        .accessibilityLabel("LaneSight")
+                    Text("SEE MORE. BOWL SMARTER.").font(.lsCaption2).tracking(2).foregroundStyle(LS.textSecondary)
+                }
+                .frame(maxWidth: .infinity).padding(.bottom, 4)
 
-                AuthField("Email address", text: $email, keyboard: .emailAddress, secure: false)
+                Text("Create Your Account").font(.lsTitle.bold()).foregroundStyle(LS.textPrimary)
+                Text("Get started with LaneSight. Your name and bowler details come next.")
+                    .font(.lsSubheadline).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // OAuth isn't wired on the Mac API — honestly disabled, not fake-working.
+                DisabledSocialButton(title: "Continue with Apple", systemImage: "apple.logo")
+                DisabledSocialButton(title: "Continue with Google", glyph: "G")
+
+                OrDivider()
+
+                AuthIconField(icon: "envelope", placeholder: "Email address", text: $email, keyboard: .emailAddress)
                     .focused($focus, equals: .email)
-                AuthField("Password (min 6 characters)", text: $password, keyboard: .default, secure: true)
+                AuthIconField(icon: "lock", placeholder: "Password", text: $password, secure: true)
                     .focused($focus, equals: .password)
+                AuthIconField(icon: "lock", placeholder: "Confirm password", text: $confirm, secure: true)
+                    .focused($focus, equals: .confirm)
 
-                Toggle(isOn: $agree) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("I agree to the Terms of Service and Privacy Policy")
-                            .font(.lsCaption).foregroundStyle(LS.textPrimary)
-                        Button("Read the Terms of Service & Privacy Policy") { showLegal = true }
-                            .font(.lsCaption2).tint(LS.cyan)
-                    }
-                }.tint(LS.blue)
-                .accessibilityHint("Required before you can create an account")
+                AuthCheckbox(checked: $agree, label: "I agree to the Terms of Service and Privacy Policy")
+                Button("Read the Terms of Service & Privacy Policy") { showLegal = true }
+                    .font(.lsCaption2).tint(LS.cyan).padding(.leading, 32)
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -217,12 +269,13 @@ private struct CreateAccountStep: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
-            .padding(20)
+            .padding(.top, 20).padding(.horizontal, 24).padding(.bottom, 40)
         }
         .sheet(isPresented: $showLegal) { LegalNoticeSheet() }
         .background(LSBackground(auth: true))
-        .navigationTitle("Create account")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .onAppear { focus = .email }
     }
 
@@ -234,42 +287,48 @@ private struct CreateAccountStep: View {
     }
 }
 
-/// Shared labeled auth text field (44pt target, Dynamic Type, no autocorrect/autocap on email).
-private struct AuthField: View {
-    let label: String
+/// Shared v3.7 auth text field (Figma 442:6465 / 434:5758): a raised-surface pill with a leading icon,
+/// the label as placeholder, and an eye toggle for secure fields. 48pt target, no autocorrect on email.
+private struct AuthIconField: View {
+    let icon: String
+    let placeholder: String
     @Binding var text: String
-    let keyboard: UIKeyboardType
-    let secure: Bool
-
-    init(_ label: String, text: Binding<String>, keyboard: UIKeyboardType, secure: Bool) {
-        self.label = label; self._text = text; self.keyboard = keyboard; self.secure = secure
-    }
+    var keyboard: UIKeyboardType = .default
+    var secure: Bool = false
+    @State private var reveal = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.lsCaption).foregroundStyle(LS.textSecondary)
+        HStack(spacing: 10) {
+            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(LS.textSecondary).frame(width: 18)
             Group {
-                if secure {
-                    SecureField("", text: $text).textContentType(.password)
+                if secure && !reveal {
+                    SecureField(placeholder, text: $text).textContentType(.password)
                 } else {
-                    TextField("", text: $text)
+                    TextField(placeholder, text: $text)
                         .keyboardType(keyboard)
-                        .textInputAutocapitalization(keyboard == .emailAddress ? .never : .words)
+                        .textInputAutocapitalization(keyboard == .emailAddress ? .never : .sentences)
                         .textContentType(keyboard == .emailAddress ? .emailAddress : .none)
                 }
             }
-            .foregroundStyle(LS.textPrimary)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 48)
-            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(LS.borderStrong, lineWidth: 1))
+            .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
             .autocorrectionDisabled()
+            if secure {
+                Button { reveal.toggle() } label: {
+                    Image(systemName: reveal ? "eye.slash" : "eye").font(.system(size: 15)).foregroundStyle(LS.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(reveal ? "Hide password" : "Show password")
+            }
         }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 50)
+        .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
     }
 }
 
-/// A disabled social sign-in button (Apple / Google). Honestly non-interactive until the paid team
-/// is active — matches SignIn.dc.html's dimmed buttons.
+/// Apple / Google button styled to the v3.7 design (white pill + brand glyph). OAuth is not wired on the
+/// Mac API (only email/password), so these stay honestly disabled — not fake-working (DEC, changelog 2.0).
 private struct DisabledSocialButton: View {
     let title: String
     var systemImage: String? = nil
@@ -277,17 +336,43 @@ private struct DisabledSocialButton: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            if let systemImage { Image(systemName: systemImage) }
-            if let glyph { Text(glyph).fontWeight(.bold) }
-            Text(title).fontWeight(.semibold)
+            if let systemImage { Image(systemName: systemImage).foregroundStyle(.black) }
+            if let glyph {
+                Text(glyph).fontWeight(.bold)
+                    .foregroundStyle(LinearGradient(colors: [Color(hex: 0x4285F4), Color(hex: 0xEA4335)], startPoint: .leading, endPoint: .trailing))
+            }
+            Text(title).fontWeight(.semibold).foregroundStyle(.black)
         }
-        .font(.lsBody)
-        .foregroundStyle(LS.onAction)
-        .frame(maxWidth: .infinity, minHeight: 48)
-        .background(LS.textPrimary, in: RoundedRectangle(cornerRadius: 8))
-        .opacity(0.45)
+        .font(.system(size: 15))
+        .frame(maxWidth: .infinity, minHeight: 50)
+        .background(LS.textPrimary, in: RoundedRectangle(cornerRadius: 12))
+        .opacity(0.5)
         .accessibilityLabel("\(title) (not available in this build)")
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A square checkbox + label (v3.7 auth screens): cyan fill + white check when on.
+private struct AuthCheckbox: View {
+    @Binding var checked: Bool
+    let label: String
+    var body: some View {
+        Button { checked.toggle() } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(checked ? LS.action : Color.clear)
+                        .frame(width: 22, height: 22)
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(checked ? LS.action : LS.borderStrong, lineWidth: 1.5)
+                        .frame(width: 22, height: 22)
+                    if checked { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(LS.onAction) }
+                }
+                Text(label).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -359,60 +444,55 @@ private struct ProfileSetupStep: View {
     }
     private var ageOK: Bool { age >= 13 }
 
+    // Short labels per the v3.7 design — the section header already says "one-handed: thumb or no thumb".
     private let deliveryOptions: [(String, String)] = [
-        ("one_handed_thumb", "One-handed, thumb"),
-        ("one_handed_no_thumb", "One-handed, no thumb"),
+        ("one_handed_thumb", "Thumb"),
+        ("one_handed_no_thumb", "No thumb"),
         ("two_handed", "Two-handed"),
     ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Step 1 of 2").font(.lsCaption).foregroundStyle(LS.cyan)
-                Text("Set up your bowler profile").font(.lsTitle2.bold()).foregroundStyle(LS.textPrimary)
+            VStack(alignment: .leading, spacing: 16) {
+                Text("STEP 1 OF 2").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundStyle(LS.action)
 
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("First name").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                        TextField("First", text: $firstName)
-                            .textContentType(.givenName)
-                            .foregroundStyle(LS.textPrimary)
-                            .padding(12).frame(minHeight: 44)
-                            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Last name").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                        TextField("Last", text: $lastName)
-                            .textContentType(.familyName)
-                            .foregroundStyle(LS.textPrimary)
-                            .padding(12).frame(minHeight: 44)
-                            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
-                    }
-                }
+                fieldLabel("First name")
+                profileField("[First]", text: $firstName, content: .givenName)
+                fieldLabel("Last name")
+                profileField("[Last]", text: $lastName, content: .familyName)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Date of birth").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
+                fieldLabel("Date of birth")
+                HStack {
                     DatePicker("", selection: $dob, in: ...Date(), displayedComponents: .date)
-                        .datePickerStyle(.compact).labelsHidden().tint(LS.cyan)
-                    if !ageOK {
-                        Label("You must be 13 or older to use LaneSight.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.lsCaption).foregroundStyle(LS.bestEffort)
+                        .datePickerStyle(.compact).labelsHidden().tint(LS.action)
+                    Spacer()
+                }
+                .padding(.horizontal, 14).frame(minHeight: 50)
+                .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+                if !ageOK {
+                    Label("You must be 13 or older to use LaneSight.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.lsCaption).foregroundStyle(LS.bestEffort)
+                }
+
+                Text("Bowling hand").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary).padding(.top, 2)
+                HStack(spacing: 10) {
+                    selectPill("Right-handed", selected: handedness == "right") { handedness = "right" }
+                    selectPill("Left-handed", selected: handedness == "left") { handedness = "left" }
+                }
+
+                Text("Delivery style (one-handed: thumb or no thumb)")
+                    .font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 2)
+                HStack(spacing: 10) {
+                    ForEach(deliveryOptions, id: \.0) { opt in
+                        selectPill(opt.1, selected: delivery == opt.0) { delivery = opt.0 }
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Which hand do you bowl with?").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                    Picker("Handedness", selection: $handedness) {
-                        Text("Right").tag("right"); Text("Left").tag("left")
-                    }.pickerStyle(.segmented)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Delivery style").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                    Picker("Delivery", selection: $delivery) {
-                        ForEach(deliveryOptions, id: \.0) { Text($0.1).tag($0.0) }
-                    }.pickerStyle(.menu).tint(LS.cyan)
-                }
+                Text("Date of birth is used for the 13+ age check. Hand and style pick your form templates.")
+                    .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let saveError {
                     Label(saveError, systemImage: "exclamationmark.triangle.fill")
@@ -426,26 +506,53 @@ private struct ProfileSetupStep: View {
                     NavigationLink {
                         AddBallStep()
                     } label: {
-                        LoadingLabel("Next: add your ball", busy: saving)
+                        HStack(spacing: 8) { Text(saving ? "Saving…" : "Continue"); if !saving { Image(systemName: "arrow.right") } }
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(saving)
                     .simultaneousGesture(TapGesture().onEnded { Task { await saveProfile() } })
                 } else {
                     Button { showUnder13 = true } label: {
-                        Text("Next: add your ball").frame(maxWidth: .infinity)
+                        HStack(spacing: 8) { Text("Continue"); Image(systemName: "arrow.right") }.frame(maxWidth: .infinity)
                     }
                     .buttonStyle(PrimaryButtonStyle())
                 }
             }
-            .padding(20)
+            .padding(.top, 16).padding(.horizontal, 20).padding(.bottom, 40)
         }
         .background(LSBackground(auth: true))
-        .navigationTitle("Bowler profile")
+        .navigationTitle("Your bowler profile")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .fullScreenCover(isPresented: $showUnder13) {
             Under13View().environmentObject(model)
         }
+    }
+
+    private func fieldLabel(_ s: String) -> some View {
+        Text(s).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+    }
+
+    private func profileField(_ placeholder: String, text: Binding<String>, content: UITextContentType) -> some View {
+        TextField(placeholder, text: text)
+            .textContentType(content).foregroundStyle(LS.textPrimary).font(.system(size: 15))
+            .padding(.horizontal, 14).frame(minHeight: 50)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
+    /// A selectable pill (Bowling hand / Delivery style): cyan fill when chosen, raised surface otherwise.
+    private func selectPill(_ title: String, selected: Bool, _ tap: @escaping () -> Void) -> some View {
+        Button(action: tap) {
+            Text(title).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(selected ? LS.onAction : LS.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity).frame(height: 50)
+                .background(selected ? LS.action : LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? LS.action : LS.borderStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func saveProfile() async {
@@ -466,7 +573,7 @@ private struct ProfileSetupStep: View {
     }
 }
 
-private struct AddBallStep: View {
+struct AddBallStep: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {

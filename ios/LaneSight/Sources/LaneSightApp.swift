@@ -49,6 +49,7 @@ struct PreviewHarness: View {
     let screen: String
     @State private var ready = false
     @State private var note: String?
+    @State private var previewBall: CatalogBall?
 
     var body: some View {
         Group {
@@ -74,6 +75,13 @@ struct PreviewHarness: View {
                         MetricDetailView(metric: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] ?? "ball_speed")
                     }
                 case "welcome": AuthFlow()
+                case "signin": NavigationStack { SignInStep() }
+                case "createaccount": NavigationStack { CreateAccountStep() }
+                case "profilesetup": ProfileSetupFlow()
+                case "addball": NavigationStack { AddBallStep() }
+                case "ballsetup":
+                    if let b = previewBall { NavigationStack { BallSetupView(ball: b) } }
+                    else { Text("loading catalog ball…").foregroundStyle(LS.textPrimary) }
                 case "settings": NavigationStack { SettingsView() }
                 case "profile":  NavigationStack { ProfileView() }
                 case "achievements": NavigationStack { AchievementsView() }
@@ -109,6 +117,10 @@ struct PreviewHarness: View {
             }
             if screen.lowercased() == "shotcard", let id = env["LS_PREVIEW_ID"] {
                 _ = await model.loadShotResult(shotId: id, captureModeHint: "shot")
+            }
+            if screen.lowercased() == "ballsetup" {
+                let q = env["LS_PREVIEW_QUERY"] ?? ""
+                previewBall = (try? await model.makeClient().catalogBalls(query: q))?.first
             }
             ready = true
         }

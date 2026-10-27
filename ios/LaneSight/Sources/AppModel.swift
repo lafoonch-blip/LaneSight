@@ -256,8 +256,13 @@ final class AppModel: ObservableObject {
         Keychain.delete(Keychain.Account.userId)
     }
 
+    /// "Remember me" (Sign in): when false, keep the session only in memory — no Keychain write — so the
+    /// app forgets it on next launch. Defaults to true (stay signed in).
+    var persistSession = true
+
     private func applySession(_ s: AuthSession) {
         session = s
+        guard persistSession else { return }
         Keychain.set(s.access_token, account: Keychain.Account.accessToken)
         if let rt = s.refresh_token { Keychain.set(rt, account: Keychain.Account.refreshToken) }
         if let uid = s.user_id { Keychain.set(uid, account: Keychain.Account.userId) }
