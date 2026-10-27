@@ -71,6 +71,7 @@ struct PreviewHarness: View {
                     NavigationStack {
                         MetricDetailView(metric: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] ?? "ball_speed")
                     }
+                case "welcome": AuthFlow()
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
                 }
             }

@@ -28,18 +28,14 @@ private struct WelcomeStep: View {
                 .font(.lsSubheadline).tracking(3)
                 .foregroundStyle(LS.textSecondary)
 
-            // Hero photo placeholder — the real image comes from Figma and isn't bundled in this build.
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LS.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(LS.border, lineWidth: 1)
-                )
-                .overlay(Text("Hero photo").font(.lsFootnote).foregroundStyle(LS.textSecondary))
+            // Hero photograph (Figma 442:6462) — the real bowler image; its top/bottom fade into the
+            // canvas is baked into the export, so it blends seamlessly without an extra overlay.
+            Image("WelcomeHero")
+                .resizable().scaledToFill()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.vertical, 8)
+                .clipped()
                 .accessibilityElement()
-                .accessibilityLabel("Photo of a bowler releasing the ball (placeholder)")
+                .accessibilityLabel("A bowler releasing the ball")
 
             NavigationLink { CreateAccountStep() } label: {
                 HStack(spacing: 8) {
