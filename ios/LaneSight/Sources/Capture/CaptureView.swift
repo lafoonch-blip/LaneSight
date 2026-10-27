@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CaptureView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var camera = CameraController()
     @State private var busy = false      // a shot is uploading/analyzing — drives the full-screen cover
     @State private var showTargetEditor = false
@@ -19,13 +20,14 @@ struct CaptureView: View {
                 ProgressView("Starting camera…").tint(.white).foregroundStyle(.white)
             }
 
-            VStack {
+            VStack(spacing: 0) {
                 topBar
                 Spacer()
-                chipRow
-                controls
+                chipRow.padding(.bottom, 10)
+                zoomBar.padding(.bottom, 14)
+                bottomBar
             }
-            .padding()
+            .padding(.horizontal, 16).padding(.vertical, 12)
         }
         .navigationTitle("Capture")
         .navigationBarTitleDisplayMode(.inline)
@@ -53,21 +55,74 @@ struct CaptureView: View {
 
     // MARK: pieces
 
-    /// Read-only active fps / resolution. The value is CHANGED in Setup (capture frame rate); this
-    /// only surfaces what the camera actually locked in.
+    /// v3.7 top controls (Figma 412:3617): torch (left), the read-only resolution·fps chip (center),
+    /// a mode indicator (right). Resolution/fps are set in Setup; this surfaces what the camera locked in.
     private var topBar: some View {
         HStack {
+            Button { camera.toggleTorch() } label: {
+                Image(systemName: camera.torchOn ? "bolt.fill" : "bolt.slash.fill")
+                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(camera.torchOn ? LS.dataYellow : .white)
+                    .frame(width: 40, height: 40).background(.ultraThinMaterial, in: Circle())
+            }
+            .accessibilityLabel(camera.torchOn ? "Turn flash off" : "Turn flash on")
+            Spacer()
             if camera.activeFPS > 0 {
-                Label("\(Int(camera.activeFPS)) fps · \(camera.resolution)", systemImage: "video.fill")
-                    .font(.lsCaption).padding(6)
+                Text("\(resolutionTier) · \(Int(camera.activeFPS))")
+                    .font(.system(size: 13, weight: .bold)).foregroundStyle(LS.dataYellow)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(.ultraThinMaterial, in: Capsule())
-                    .accessibilityLabel("Recording at \(Int(camera.activeFPS)) frames per second, \(camera.resolution)")
+                    .accessibilityLabel("\(resolutionTier), \(Int(camera.activeFPS)) frames per second")
             }
             Spacer()
             Text(model.captureMode == "form" ? "FORM" : "SHOT")
-                .font(.lsCaption2.bold()).tracking(1).padding(.horizontal, 10).padding(.vertical, 6)
+                .font(.system(size: 11, weight: .bold)).tracking(1).foregroundStyle(.white)
+                .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
                 .accessibilityLabel("Mode: \(model.captureMode == "form" ? "Form" : "Shot")")
+        }
+    }
+
+    /// "4K" / "1080p" / "720p" from the locked resolution string ("WxH").
+    private var resolutionTier: String {
+        let h = camera.resolution.split(separator: "x").last.flatMap { Int($0) } ?? 0
+        if h >= 2160 { return "4K" }
+        if h >= 1080 { return "1080p" }
+        if h >= 720 { return "720p" }
+        return camera.resolution
+    }
+
+    /// Zoom presets (.5 / 1× / 2 / 5), the active one highlighted. .5 maps to 1× when the device has no
+    /// ultra-wide (we only use the wide camera), so it reads as the minimum.
+    private var zoomBar: some View {
+        HStack(spacing: 8) {
+            ForEach([(".5", 1.0), ("1×", 1.0), ("2", 2.0), ("5", 5.0)], id: \.0) { label, z in
+                Button { camera.setZoom(z) } label: {
+                    Text(label).font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(abs(camera.zoomFactor - z) < 0.05 ? LS.dataYellow : .white)
+                        .frame(width: 44, height: 36)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .opacity(camera.state == .recording ? 0 : 1)
+    }
+
+    /// Bottom bar (Figma 412:3617): last-shot thumbnail · record · Done.
+    private var bottomBar: some View {
+        HStack {
+            RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.08))
+                .frame(width: 56, height: 56)
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+                .overlay(Image(systemName: "photo").font(.system(size: 18)).foregroundStyle(.white.opacity(0.5)))
+                .accessibilityHidden(true)
+            Spacer()
+            recordButton
+                .disabled(!camera.isRunnable).opacity(camera.isRunnable ? 1 : 0.4)
+            Spacer()
+            Button("Done") { dismiss(); model.resetPipeline() }
+                .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                .frame(width: 56)
         }
     }
 

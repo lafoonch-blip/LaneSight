@@ -36,6 +36,27 @@ final class CameraController: NSObject, ObservableObject {
     private let movieOutput = AVCaptureMovieFileOutput()
     private var configured = false
     private var stopContinuation: CheckedContinuation<URL, Error>?
+    private var device: AVCaptureDevice?        // the active back camera, for torch + zoom
+
+    @Published private(set) var torchOn = false
+    @Published private(set) var zoomFactor: CGFloat = 1
+
+    /// Toggles the torch (flash) while framing/recording. No-op if the device has no torch.
+    func toggleTorch() {
+        guard let device, device.hasTorch, (try? device.lockForConfiguration()) != nil else { return }
+        torchOn.toggle()
+        device.torchMode = torchOn ? .on : .off
+        device.unlockForConfiguration()
+    }
+
+    /// Sets the optical/digital zoom factor, clamped to the device's supported range.
+    func setZoom(_ z: CGFloat) {
+        guard let device, (try? device.lockForConfiguration()) != nil else { return }
+        let clamped = max(1, min(z, min(device.activeFormat.videoMaxZoomFactor, 8)))
+        device.videoZoomFactor = clamped
+        zoomFactor = clamped
+        device.unlockForConfiguration()
+    }
 
     var isRunnable: Bool { if case .ready = state { return true }; if case .recording = state { return true }; return false }
 
@@ -96,6 +117,7 @@ final class CameraController: NSObject, ObservableObject {
                 activeFPS = device.activeFormat.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 0
             }
 
+            self.device = device
             configured = true
             state = .ready
             session.startRunning()
