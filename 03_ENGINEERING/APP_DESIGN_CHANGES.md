@@ -17,15 +17,16 @@ Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; eve
 | 3 | Home while the LaneSight Score is building; score tiles show 30-day change (v3.7.4) | DEC-083 | BUILT (0cf7c01, e6b0fb3) |
 | 4 | Coaching tab replaces Leagues/Tournaments; coming-soon screen (v3.7.5) | DEC-084 | BUILT (4fc2d80) |
 | 5 | Stats tabs Shot · Form · Score · Arsenal; building states (v3.7.6) | DEC-085 | BUILT (ce1077b) |
-| 6 | **Shot card redesign**: 3D lane view, Your throw / Lane & pins, Coach (v3.7.7–3.7.9) | DEC-088, DEC-090 | **NOT BUILT**: see entry 2026-10-27-A |
-| 7 | **Shot card states**: off throw → no move; far lane not read | DEC-088, DEC-090 | **NOT BUILT**: entry 2026-10-27-B |
-| 8 | **Upload result (Shot)** on the same layout | DEC-088 | **NOT BUILT**: entry 2026-10-27-C |
-| 9 | Primary button "Record next shot" (app still shows "Record Shot N", `Result/ResultView.swift:505`) | DEC-088 | **NOT BUILT**: part of 2026-10-27-A |
+| 6 | **Shot card redesign**: 3D lane view, Your throw / Lane & pins, Coach (v3.7.7–3.7.9) | DEC-088, DEC-090 | **BUILT** (shot-card commits) — see 2026-10-27-A |
+| 7 | **Shot card states**: off throw → no move; far lane not read | DEC-088, DEC-090 | **BUILT** — see 2026-10-27-B |
+| 8 | **Upload result (Shot)** on the same layout | DEC-088 | **BUILT** — see 2026-10-27-C |
+| 9 | Primary button "Record next shot" | DEC-088 | **BUILT** (ResultView now shows "Record next shot") |
 
 ---
 
 ## 2026-10-27-A · Shot card (Shot Analysis result): full redesign
-**Status:** NOT BUILT
+**Status:** BUILT (ShotLaneView.swift live SceneKit lane view; ShotReadCard.swift rings + coach; ResultView ball-shot layout swapped; backend coach engine + path_fit/impact_energy_j/baseline on /shots/{id}).
+**DIFFERS:** (1) the pinned glass labels are projected from the live 3D scene and styled as glass cards, but leader lines to the dots are not drawn yet (label sits just above its dot). (2) The Accuracy ring shows the arrows-board-vs-target (the executable signal) rather than a per-shot DEC-031 0–100 score — that per-shot score isn't computed server-side yet; shown honestly rather than fabricated. (3) "All metrics" and "Your notes" are a DisclosureGroup + the existing notes view rather than the exact Figma rows. Ring arc/colors follow the 68 pt / 270°-from-135° spec.
 **Decisions:** DEC-088, DEC-090 (+ README 3.7.9). **Replaces** the current result screen layout (old lane recreation, analysis card, metric list).
 **Figma:** "Shot card · Shot Analysis · v3.7" (node `564:360`) · PNG `02_DESIGN/target_state/screens/2026-10-27/shot_card.png`
 **Opens:** automatically after Analyzing (DEC-080). **Close (✕)** → Active Session. **Record next shot** → Record.
@@ -85,7 +86,7 @@ Layout top to bottom (390 pt screen, 16 pt side padding, 12 pt between blocks, b
 - The button reads "Record next shot".
 
 ## 2026-10-27-B · Shot card states
-**Status:** NOT BUILT
+**Status:** BUILT. Off-throw → coach `no_move` + orange throw badge (ShotReadCard). Far-lane-not-read → ShotLaneView dims the far lane + note, drops the breakpoint/entry labels, result chip "Result not read"; Lane & pins rings show "—"/Not read (no arc); coach "No move yet". **DIFFERS:** the "See camera setup ›" link isn't wired yet (camera-guide screen is out of scope / not approved).
 - **Off throw → no move:** Figma `564:66`, PNG `shot_card_state_off_throw.png`. Same layout. Throw badge orange "Off · faster than usual"; Speed ring orange "↑0.9 vs avg"; Coach "No move": "That was the throw, not the lane. Stay where you are and repeat your normal speed."
 - **Far lane not read (DEC-065):** Figma `568:4511`, PNG `shot_card_state_far_lane_not_read.png`.
   - **Lane view:** draw the path only to the last measured distance and dim the lane beyond it. Center note: "Not visible from this camera spot / Breakpoint, entry and pins need the full lane". Labels: Arrows and Laydown only. Result chip "Result not read".
@@ -94,7 +95,7 @@ Layout top to bottom (390 pt screen, 16 pt side padding, 12 pt between blocks, b
   - This replaces the current "This camera spot limits far-lane numbers" warning card and the metric list shown on top.
 
 ## 2026-10-27-C · Upload result (Shot Analysis)
-**Status:** NOT BUILT
+**Status:** BUILT. Uploads render the same ShotLaneView + ShotReadCard; subtitle "Uploaded clip · Shot Analysis", the not-counted footer note, and no "Record next shot" (Done via the nav bar returns to Lab). Throw rings use the live baseline; the upload never joins it.
 **Figma:** "Upload result · Shot Analysis · v3.7" (`568:4665`) · PNG `upload_result_shot.png`
 - **Same layout as 2026-10-27-A**, except:
   - Title "Shot", subtitle "Uploaded clip · Shot Analysis".

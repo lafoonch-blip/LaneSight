@@ -45,13 +45,24 @@ struct ShotCardView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if !result.isForm { resultBadge }
-                    if result.captureFarLaneLimited { captureBanner }
-                    laneAndTarget
-                    nextShotCard
-                    if !result.isForm {
-                        ringRow
-                        allMetricsSection
+                    if result.isForm {
+                        laneAndTarget
+                        nextShotCard
+                    } else {
+                        // DEC-088/090 shot card: live 3D lane view + the two-part Shot-read card (rings +
+                        // coach). The old result badge / capture banner / next-shot card / flat lane are
+                        // replaced; detail metrics move behind a collapsed "All metrics".
+                        ShotLaneView(result: result)
+                        ShotReadCard(result: result)
+                        DisclosureGroup {
+                            allMetricsSection.padding(.top, 8)
+                        } label: {
+                            Text("All metrics").font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                        }
+                        .tint(LS.textSecondary)
+                        .padding(14)
+                        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
                     }
                     if !formMetrics.isEmpty { formSection }
                     // v3.7 folds leave/sensor correction into the result badge's "Change" — no standalone
@@ -502,7 +513,7 @@ struct ShotCardView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "circle.fill").font(.system(size: 14))
-                Text(result.shotNumber.map { "Record Shot \($0 + 1)" } ?? "Record next shot")
+                Text("Record next shot")     // DEC-088
             }
         }
         .buttonStyle(PrimaryButtonStyle())
