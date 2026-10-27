@@ -98,6 +98,12 @@ struct PreviewHarness: View {
                 case "welcome": AuthFlow()
                 case "splash": LaunchSplash()
                 case "howitworks": HowItWorksFlow()
+                case "skeletonpreview":
+                    if let ui = UIImage(named: "LabFormPhoto") {
+                        Image(uiImage: ui).resizable().scaledToFit()
+                            .overlay { SkeletonOverlay(joints: SkeletonOverlay.debugSample, imageSize: ui.size) }
+                            .padding()
+                    } else { Text("no asset").foregroundStyle(LS.textPrimary) }
                 case "signin": NavigationStack { SignInStep() }
                 case "createaccount": NavigationStack { CreateAccountStep() }
                 case "profilesetup": ProfileSetupFlow()

@@ -50,6 +50,9 @@ struct ShotResult: Equatable {
 
     // Form fundamentals v1 (DEC-057): the after_form_analyzed footer fields carried from the shot record.
     var keyFrames: [String] = []
+    /// Display-only pose-skeleton overlay joints per key frame (visibility-gated, crop-normalized). Each
+    /// value is 33 joints, [x,y] in the cropped still or nil for a joint the pose wasn't confident about.
+    var keyFramePoses: [String: [[Double]?]] = [:]
     var events: [String: Double] = [:]
     var timingCheckpoints: [String: TimingCheckpoint] = [:]
     var measuredPositions: [String: MeasuredPosition] = [:]
@@ -597,6 +600,7 @@ final class AppModel: ObservableObject {
         guard let record else { return }
         r.formFPS = record.fps
         r.keyFrames = record.key_frames ?? []
+        r.keyFramePoses = record.key_frame_poses ?? [:]
         r.events = (record.events ?? [:]).compactMapValues { $0.value }
         r.timingCheckpoints = record.timing_checkpoints ?? [:]
         r.measuredPositions = record.measured_positions ?? [:]

@@ -49,6 +49,7 @@ L_FOOT_PTS = (L_ANKLE, L_FOOT, L_HEEL)
 
 # --- tuning constants (scale-free where possible; times in seconds) ---
 MIN_VIS = 0.3                 # landmark visibility floor to trust a point
+POSE_SKELETON_VIS = 0.65      # higher floor for the display-only skeleton overlay (DEC-057 / key-frame still)
 FINISH_HOLD_MIN_S = 0.45      # both feet stationary this long = the posted finish (E8->E9 region)
 # foot speed is in normalized frame-heights per second (gradient of the 0..1 landmark coord vs real time).
 FOOT_STATIONARY = 0.28        # below this a foot is planted (a swinging foot runs ~0.5-1.5)
@@ -562,6 +563,34 @@ def _bowler_crop(lms, idx, pad=0.22):
     return (max(0.0, x0 - px), max(0.0, y0 - py), min(1.0, x1 + px), min(1.0, y1 + py))
 
 
+def key_frame_poses(lms, t, events, crops):
+    """Per key frame, the pose joints re-normalized to the EXPORTED (cropped) still — confident joints only
+    (visibility ≥ POSE_SKELETON_VIS). Returns {key: [[x, y] | None] * 33}; display-only skeleton overlay data
+    that NEVER affects any measurement. A joint that is low-confidence, undetected, or falls outside the crop
+    becomes null so the app draws only what the pose actually saw (no guessing)."""
+    out: dict = {}
+    for key, ev in KEY_FRAME_EVENTS:
+        tv = events.get(ev)
+        if tv is None or not len(lms):
+            continue
+        idx = int(np.argmin(np.abs(t - float(tv))))
+        if idx >= len(lms):
+            continue
+        row = lms[idx]
+        bx0, by0, bx1, by1 = (crops or {}).get(key) or (0.0, 0.0, 1.0, 1.0)
+        bw, bh = max(bx1 - bx0, 1e-6), max(by1 - by0, 1e-6)
+        joints: list = []
+        for j in range(row.shape[0]):
+            x, y, vis = float(row[j, 0]), float(row[j, 1]), float(row[j, 3])
+            if np.isnan(x) or np.isnan(y) or vis < POSE_SKELETON_VIS:
+                joints.append(None); continue
+            lx, ly = (x - bx0) / bw, (y - by0) / bh
+            joints.append([round(lx, 4), round(ly, 4)] if (0.0 <= lx <= 1.0 and 0.0 <= ly <= 1.0) else None)
+        if sum(1 for p in joints if p) >= 6:        # enough confident joints to be worth drawing
+            out[key] = joints
+    return out
+
+
 def export_key_frames(video, out_prefix, events, crops=None, log=print) -> list:
     """Write a JPEG for each located key position to ``<out_prefix>_form_<key>.jpg`` and return the keys
     actually written (in canonical order). Event times come from the pose ``_extras`` block; a missing event
@@ -871,6 +900,9 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     crops = {key: _bowler_crop(lms, int(np.argmin(np.abs(t - float(extras['events'][ev])))))
              for key, ev in KEY_FRAME_EVENTS if extras['events'].get(ev) is not None}
     extras['key_frames'] = export_key_frames(video, out_prefix, extras['events'], crops=crops, log=log)
+    # Display-only skeleton overlay joints for the exported stills (visibility-gated; never affects metrics).
+    extras['key_frame_poses'] = {k: v for k, v in key_frame_poses(lms, t, extras['events'], crops).items()
+                                 if k in extras['key_frames']}
     # Form fundamentals v1 measured positions M1–M7 (DEC-057). View-agnostic geometry here; analyze_form_clip
     # applies the capture-view gating. Imported lazily to keep pose import-light and avoid an import cycle.
     from . import fundamentals as _fund

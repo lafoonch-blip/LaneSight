@@ -4,10 +4,10 @@ import SwiftUI
 /// Shows the real exported frame for the position, the metrics measured AT that position ("At this
 /// position"), and prev/next navigation between the available positions.
 ///
-/// The design also overlays the pose skeleton + a "Skeleton" toggle. That overlay needs per-frame pose
-/// keypoints, which the form pipeline doesn't yet persist on the record — so it's intentionally omitted
-/// here (no fabricated skeleton). Once `after_form_analyzed` exports key-frame keypoints, this view draws
-/// them (see the `keypoints` hook below) and the toggle appears; until then the honest frame stands alone.
+/// When the record carries per-frame pose keypoints (`key_frame_poses`, visibility-gated by the form
+/// pipeline), the pose skeleton is drawn over the still with a "Skeleton · on/off" toggle. Only confident
+/// joints are drawn — blurred/hidden limbs are omitted, never guessed — and a still with no confident pose
+/// simply shows the frame alone.
 struct KeyPositionFullView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -16,6 +16,10 @@ struct KeyPositionFullView: View {
     @State private var index: Int
     @State private var image: UIImage?
     @State private var loading = false
+    @State private var skeletonOn = true
+
+    private var joints: [[Double]?] { result.keyFramePoses[current.key] ?? [] }
+    private var hasSkeleton: Bool { joints.contains { $0 != nil } }
 
     /// The four canonical positions, filtered to those actually exported for this delivery.
     private let positions: [(key: String, event: String, label: String)]
@@ -43,7 +47,9 @@ struct KeyPositionFullView: View {
                 Text(contextLine).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
 
                 frameView
-                Text("The frame is from your clip. The pose skeleton overlay is coming — form keypoints aren’t exported yet, so it isn’t shown rather than guessed.")
+                Text(hasSkeleton
+                     ? "The skeleton shows only joints the pose detected with confidence; blurred or hidden limbs are left out, not guessed."
+                     : "The frame is from your clip. No confident pose was detected for this still, so no skeleton is drawn.")
                     .font(.system(size: 11)).foregroundStyle(LS.textFaint)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -80,6 +86,11 @@ struct KeyPositionFullView: View {
             RoundedRectangle(cornerRadius: 14).fill(LS.raised)
             if let image {
                 Image(uiImage: image).resizable().scaledToFit()
+                    .overlay {
+                        if skeletonOn && hasSkeleton {
+                            SkeletonOverlay(joints: joints, imageSize: image.size)
+                        }
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             } else if loading {
                 ProgressView().tint(LS.action)
@@ -88,6 +99,26 @@ struct KeyPositionFullView: View {
                     Image(systemName: "figure.bowling").font(.system(size: 34)).foregroundStyle(LS.borderStrong)
                     Text("Frame not available").font(.lsCaption).foregroundStyle(LS.textSecondary)
                 }
+            }
+            // "Skeleton · on/off" toggle chip (top-left), shown only when there's a skeleton to toggle.
+            if image != nil && hasSkeleton {
+                VStack {
+                    HStack {
+                        Button { withAnimation(.easeInOut(duration: 0.15)) { skeletonOn.toggle() } } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "figure.walk").font(.system(size: 11, weight: .semibold))
+                                Text("Skeleton · \(skeletonOn ? "on" : "off")").font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(skeletonOn ? LS.action : LS.textSecondary)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(.black.opacity(0.55), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(10)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 300)
@@ -201,3 +232,65 @@ struct KeyPositionFullView: View {
         "follow_through": "Follow-through", "finish_hold": "Finish hold", "foul_line_distance": "Foul line",
     ]
 }
+
+/// Draws the MediaPipe pose skeleton over the key-frame still. Joints are [x,y] normalized to the cropped
+/// image (or nil for joints the pose wasn't confident about); edges render only when both endpoints exist.
+struct SkeletonOverlay: View {
+    let joints: [[Double]?]
+    let imageSize: CGSize
+
+    // MediaPipe Pose body edges (shoulders, arms, torso, legs, feet). Face/hands omitted for a clean overlay.
+    private static let edges: [(Int, Int)] = [
+        (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),        // shoulders + arms
+        (11, 23), (12, 24), (23, 24),                            // torso
+        (23, 25), (25, 27), (24, 26), (26, 28),                  // legs
+        (27, 29), (27, 31), (29, 31), (28, 30), (28, 32), (30, 32)  // feet
+    ]
+
+    var body: some View {
+        GeometryReader { g in
+            let rect = Self.fittedRect(imageSize, in: g.size)
+            Canvas { ctx, _ in
+                func pt(_ i: Int) -> CGPoint? {
+                    guard i >= 0, i < joints.count, let j = joints[i], j.count == 2 else { return nil }
+                    return CGPoint(x: rect.minX + CGFloat(j[0]) * rect.width,
+                                   y: rect.minY + CGFloat(j[1]) * rect.height)
+                }
+                var line = Path()
+                for (a, b) in Self.edges {
+                    if let pa = pt(a), let pb = pt(b) { line.move(to: pa); line.addLine(to: pb) }
+                }
+                ctx.stroke(line, with: .color(LS.action), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                for i in joints.indices {
+                    if let p = pt(i) {
+                        ctx.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(.white))
+                    }
+                }
+            }
+        }
+    }
+
+    /// The aspect-fit rect of `size` within `container` (matches Image.scaledToFit letterboxing).
+    private static func fittedRect(_ size: CGSize, in container: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return CGRect(origin: .zero, size: container) }
+        let scale = min(container.width / size.width, container.height / size.height)
+        let w = size.width * scale, h = size.height * scale
+        return CGRect(x: (container.width - w) / 2, y: (container.height - h) / 2, width: w, height: h)
+    }
+}
+
+#if DEBUG
+extension SkeletonOverlay {
+    /// A rough standing figure (normalized) for verifying the overlay renderer against a bundled photo.
+    static let debugSample: [[Double]?] = {
+        var j = [[Double]?](repeating: nil, count: 33)
+        let set: [(Int, [Double])] = [
+            (11, [0.42, 0.34]), (12, [0.58, 0.34]), (13, [0.37, 0.50]), (14, [0.63, 0.50]),
+            (15, [0.34, 0.63]), (16, [0.66, 0.63]), (23, [0.45, 0.60]), (24, [0.55, 0.60]),
+            (25, [0.44, 0.78]), (26, [0.56, 0.78]), (27, [0.43, 0.93]), (28, [0.57, 0.93]),
+        ]
+        for (i, p) in set { j[i] = p }
+        return j
+    }()
+}
+#endif

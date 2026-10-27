@@ -85,6 +85,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
         # the located event times, the measured positions, and clip fps. The form engine step adds
         # baselines/watch/focus/timing-checkpoints/swing-timing/footer.
         key_frames=extras.get('key_frames', []),
+        key_frame_poses=extras.get('key_frame_poses', {}),   # display-only skeleton overlay joints per still
         events=extras.get('events', {}),
         measured_positions=measured_positions,
         fps=extras.get('fps'),

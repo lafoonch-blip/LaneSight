@@ -106,6 +106,8 @@ struct ShotRecord: Codable {
     // key_frames: the KEY POSITIONS stills actually exported (fetched via GET /shots/{id}/frame/{key}).
     // events: located event times (E2/E3/E4/E7 …) so a thumbnail can show its honest timestamp.
     let key_frames: [String]?
+    /// Display-only skeleton overlay joints per key frame: {key: [[x,y] | null] × 33} (crop-normalized).
+    let key_frame_poses: [String: [[Double]?]]?
     let events: [String: FlexNum]?
     let timing_checkpoints: [String: TimingCheckpoint]?
     let measured_positions: [String: MeasuredPosition]?
@@ -116,7 +118,7 @@ struct ShotRecord: Codable {
 
     enum CodingKeys: String, CodingKey {
         case shot_id, metrics, insights, form_version, view, status, fps
-        case key_frames, events, timing_checkpoints, measured_positions
+        case key_frames, key_frame_poses, events, timing_checkpoints, measured_positions
         case swing_timing, coaching_cues, focus, footer
         case capture_quality, source
     }
@@ -134,6 +136,7 @@ struct ShotRecord: Codable {
         status = (try? c?.decodeIfPresent(String.self, forKey: .status)) ?? nil
         fps = (try? c?.decodeIfPresent(Double.self, forKey: .fps)) ?? nil
         key_frames = (try? c?.decodeIfPresent([String].self, forKey: .key_frames)) ?? nil
+        key_frame_poses = (try? c?.decodeIfPresent([String: [[Double]?]].self, forKey: .key_frame_poses)) ?? nil
         events = (try? c?.decodeIfPresent([String: FlexNum].self, forKey: .events)) ?? nil
         timing_checkpoints = (try? c?.decodeIfPresent([String: TimingCheckpoint].self, forKey: .timing_checkpoints)) ?? nil
         measured_positions = (try? c?.decodeIfPresent([String: MeasuredPosition].self, forKey: .measured_positions)) ?? nil

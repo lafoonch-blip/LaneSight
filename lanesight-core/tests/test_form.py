@@ -95,3 +95,24 @@ def test_classify_view_from_pose_side_vs_rear():
     assert classify_view_from_pose(t, rear)['view'] == 'rear'
     t, still = track(0.02, 0.02)
     assert classify_view_from_pose(t, still)['view'] == 'unknown'
+
+
+def test_key_frame_poses_overlay_is_cropnormalized_and_confident_only():
+    """Display-only skeleton joints: re-normalized to the crop, low-confidence / NaN / out-of-crop → None."""
+    import numpy as np
+    lms = np.full((1, 33, 5), 0.5, np.float32)   # all joints centered, placeholder vis
+    lms[:, :, 3] = 0.9                            # visibility high by default
+    lms[0, 0, 3] = 0.5                            # joint 0: low confidence -> None
+    lms[0, 1, 0] = np.nan                         # joint 1: undetected -> None
+    lms[0, 2, 0:2] = 0.95                         # joint 2: outside the 0.2..0.8 crop -> None
+    t = np.array([1.0], np.float32)
+    events = {'E2': 1.0}
+    crops = {'ball_start': (0.2, 0.2, 0.8, 0.8)}
+    out = pose.key_frame_poses(lms, t, events, crops)
+    assert 'ball_start' in out
+    j = out['ball_start']
+    assert len(j) == 33
+    assert j[0] is None and j[1] is None and j[2] is None
+    # a centered joint maps to the crop centre (0.5 -> (0.5-0.2)/0.6 = 0.5)
+    assert j[5] == [0.5, 0.5]
+    assert sum(1 for p in j if p) >= 6
