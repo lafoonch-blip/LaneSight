@@ -9,10 +9,9 @@
 | Pushed state | GitHub `lafoonch-blip/LaneSight` | — |
 | Decisions | `00_CONTEXT/DECISIONS.md` (highest DEC number wins) | Older docs, `99_ARCHIVE/` |
 | What's being built now | `00_CONTEXT/CURRENT_STATE.md`, `03_ENGINEERING/DEV_BUILD_PLAN.md` | — |
-| Dev Build v0 screens | `02_DESIGN/dev_build_v0/` (synced from the Claude Design canvas "LaneSight Dev Build v0 Screens") | Figma screens, old mockups |
+| App screen designs (the v3.7 designs; DEC-089 — one app, no target/dev split) | `02_DESIGN/dev_build_v0/` (synced from the Claude Design canvas) | Figma screens, old mockups, a separate "target state" app |
 | Visual standards (color, type, spacing) | Figma "01 - Design Standards" page | Colors in old docs/UI Spec v1 |
 | Logo and app/web icons | Figma Design Components › "Brand standards" → exported to `02_DESIGN/brand/` (DEC-054) | **The LS monogram concept: never use it** |
-| Later-version (target-state) screens | Figma "Lanesight - Product UX - Design" | — |
 | Code | `lanesight-core/` (Python CV/API), `ios/LaneSight/` (SwiftUI) | — |
 | Mirror (read-only, may lag) | claude.ai LaneSight Project docs | Never edit it as the source. The Google Drive copies are retired (frozen 2026-10-14, labeled STALE) |
 

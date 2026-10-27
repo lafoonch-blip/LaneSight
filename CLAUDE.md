@@ -15,9 +15,9 @@ Read `AGENTS.md` first and follow its read order and rules. Short version: `DECI
 - Accuracy beats coverage when the number drives a recommendation (e.g. entry board decides pocket/light/high: a 2-board error flips the advice).
 - If something fails, show the exact error before changing code.
 
-## Design source of truth (Dev Build v0)
-- `02_DESIGN/dev_build_v0/` is the **only** source for Dev Build v0 screen design. Build the iOS UI from it; read its `README.md` first.
+## Design source of truth (DEC-089 — one app, one design set)
+- `02_DESIGN/dev_build_v0/` is the **only** source for the app's screen designs — the v3.7 designs the app is built to. Build the iOS UI from it; read its `README.md` first. (The folder keeps its `dev_build_v0` name for now; there is **no** separate "target state (later)" app — that split was retired in DEC-089.)
 - **Do not edit files in that folder.** Shayne changes designs in the claude.ai Claude Design canvas, and Claude (claude.ai) syncs the approved files here.
 - If a code change makes a screen differ from its design, list the screen and the difference in your report. Don't silently diverge.
-- When design files change (check `git diff 02_DESIGN/`), update the matching SwiftUI screens and report what changed.
-- Visual standards come from the Figma "01 - Design Standards" page (tokens are listed in the design README); logos and icons come from `02_DESIGN/brand/`. Figma screen designs are **target state** for later versions; don't build Dev Build v0 screens from them.
+- When design files change (check `git diff 02_DESIGN/`), update the matching SwiftUI screens and report what changed. A newly-synced design is built into the app now — it is never deferred to a "later version."
+- Visual standards come from the Figma "01 - Design Standards" page (tokens are listed in the design README); logos and icons come from `02_DESIGN/brand/`. `02_DESIGN/target_state/` holds forward design-system notes + `lane_render`, not a second app.

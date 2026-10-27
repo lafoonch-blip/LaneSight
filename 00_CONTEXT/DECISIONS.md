@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.49  
+Version: 1.50  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.48
+Supersedes: v1.49
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1018,6 +1018,17 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-27
 **Status:** ACCEPTED (target state). Figma › Target state – v3.7: "Shot card · Shot Analysis · v3.7", states "off throw → no move" and "far lane not read", "Upload result · Shot Analysis · v3.7". Old card, options A–D drafts → page "archived".
 **Supersedes:** in part DEC-073 / METRIC_TO_SCREEN_SPEC v1.0 Shot-card column (lane picture form, ring set, next-move card → coach takeaway) and the DEC-080 button label.
+
+### DEC-089 — One app, one design set: the "dev build vs target state" split is retired
+**Decision (Shayne, 2026-10-27):** There is a **single LaneSight app**, built to the v3.7 screen designs in `02_DESIGN/dev_build_v0/`. The two-tier model — a limited "Dev Build v0 (now)" versus a fuller "target state (later)" — is **removed**. The dev build *is* the target-state design.
+- Every accepted decision that was scoped **"(target state)"** or **"the dev build follows when its designs are next updated"** now applies to the one build, in effect immediately. This resolves the scoping clauses in DEC-055/DEC-067 (disabled tabs), DEC-073 and DEC-085 (Stats), DEC-074 (grip/PAP), DEC-083 (Home building), DEC-084 (Coaching) and DEC-088 (Shot card): no "later version" gate remains on any of them.
+- When a new design lands in `02_DESIGN/dev_build_v0/`, build it into the app directly — there is no separate target-state backlog to defer it to.
+- **Naming:** the design folder keeps the name `02_DESIGN/dev_build_v0/` for now (renaming it is an optional design-side cleanup); treat it simply as "the LaneSight screen designs." The `target_state/` folder holds forward design-system notes + `lane_render`, not a second app.
+
+**Why:** The app has caught up to the designs, so maintaining two tiers only created confusion — decisions kept getting parked as "target state, dev build later" when the intent was to build them now (e.g. the Coaching tab Shayne expected to see). One app, one design set.
+**Date:** 2026-10-27
+**Status:** ACCEPTED.
+**Supersedes:** the target-state-vs-dev-build scoping language across DEC-055, DEC-067, DEC-073, DEC-074, DEC-083, DEC-084, DEC-085, DEC-088 and in CLAUDE.md / AGENTS.md / CURRENT_STATE.md / MVP_HANDOFF.md.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
