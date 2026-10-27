@@ -355,6 +355,9 @@ struct SessionRow: Codable, Identifiable, Equatable {
     let ended_at: Double?
     let lane_pair: FlexString?
     let oil_pattern_id: String?
+    let capture_mode: String?       // "form" | "shot" | nil — derived from the session's shots (routing)
+
+    var isForm: Bool { capture_mode == "form" }
 }
 
 struct EndSessionResponse: Codable {

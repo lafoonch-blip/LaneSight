@@ -140,9 +140,14 @@ struct HomeView: View {
                             if s.ended_at == nil {
                                 SessionRowCard(session: s)      // a live session isn't opened for review here
                             } else {
-                                // Ended session → open the read-only review (design SessionReview / 6a).
+                                // Ended session → open the read-only review: the Form-session summary for a
+                                // form session (Figma 430:5744), otherwise the shot session review (6a).
                                 NavigationLink {
-                                    SessionView(reviewSessionId: s.id, readOnly: true).environmentObject(model)
+                                    if s.isForm {
+                                        FormSessionView(sessionId: s.id, readOnly: true).environmentObject(model)
+                                    } else {
+                                        SessionView(reviewSessionId: s.id, readOnly: true).environmentObject(model)
+                                    }
                                 } label: {
                                     SessionRowCard(session: s)
                                 }
@@ -299,7 +304,7 @@ struct SessionRowCard: View {
                 .frame(width: 34, height: 34)
                 .background(LS.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 2) {
-                Text((session.mode ?? "Practice").capitalized).font(.lsSubheadline.bold())
+                Text(session.isForm ? "Form session" : (session.mode ?? "Practice").capitalized).font(.lsSubheadline.bold())
                     .foregroundStyle(LS.textPrimary)
                 Text(subtitle).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }

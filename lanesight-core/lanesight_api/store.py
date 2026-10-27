@@ -726,8 +726,16 @@ class PgStore(MemoryStore):
         return _epoch_session(rows[0]) if rows else None
 
     def list_sessions(self, user_id):
-        return [_epoch_session(r)
-                for r in self._get('sessions', f'user_id=eq.{user_id}&select=*&order=started_at.desc')]
+        # Embed each session's shot capture modes so the app can route a form session to the Form-session
+        # screen (Active Session·Form / Form summary) vs the shot session review. 'form' only when the
+        # session's shots are form (and not mixed with ball shots); else 'shot'; None when it has no shots.
+        rows = self._get('sessions', f'user_id=eq.{user_id}&select=*,shots(capture_mode)&order=started_at.desc')
+        out = []
+        for r in rows:
+            modes = {s.get('capture_mode') for s in (r.pop('shots', None) or []) if s.get('capture_mode')}
+            r['capture_mode'] = ('form' if (modes and modes <= {'form'}) else ('shot' if modes else None))
+            out.append(_epoch_session(r))
+        return out
 
     def end_session(self, user_id, sid):
         if not self.get_session(user_id, sid):
