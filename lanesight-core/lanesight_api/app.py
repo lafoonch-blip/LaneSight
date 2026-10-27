@@ -785,6 +785,45 @@ def me_stats(view: str = 'throw', range: str | None = None, user=Depends(current
     return engines.user_stats(get_store(), user, view=view, range_=range)
 
 
+@app.get('/me/stats/equipment')
+def me_stats_equipment(user=Depends(current_user)):
+    """Stats · Equipment (v3.7): per-ball and per-oil-pattern rollups — shots, mean speed/rev, and pocket %
+    (the scorer's handedness-mirrored entry-board range). Reuses the tested performance()/summary() over each
+    group's shots. A ball/pattern with no measured shots simply doesn't appear; nulls stay null."""
+    from lanesight_core.score import performance
+    from lanesight_core.insights import session as si
+    store = get_store()
+    points = store.shot_points(user)
+    params = store.score_formula_params()
+    prof = store.get_profile(user) or {}
+    handed = (prof.get('handed') or 'R').upper()
+    pat_names = {p['id']: p.get('name') for p in (store.oil_patterns() or []) if p.get('id')}
+    ball_names: dict = {}
+    for b in (store.list_arsenal(user) or []):
+        label = b.get('name') or b.get('nickname') or b.get('model_name')
+        for k in (b.get('ball_configuration_id'), b.get('id')):
+            if k: ball_names[k] = label
+
+    def agg(key, names):
+        groups: dict = {}
+        for p in points:
+            k = p.get(key)
+            if not k:
+                continue
+            groups.setdefault(k, []).append(p['record'])
+        out = []
+        for k, recs in groups.items():
+            perf = performance(recs, params, handed)
+            sm = si.summary(recs)
+            out.append({'id': k, 'name': names.get(k), 'n': len(recs),
+                        'speed': (sm.get('ball_speed') or {}).get('mean'),
+                        'rev': (sm.get('rev_rate') or {}).get('mean'),
+                        'pocket_pct': perf.get('pocket_pct')})
+        return sorted(out, key=lambda r: -r['n'])
+
+    return {'by_ball': agg('ball', ball_names), 'by_pattern': agg('pattern', pat_names)}
+
+
 @app.get('/me/stats/metric/{metric}')
 def me_metric_detail(metric: str, user=Depends(current_user)):
     """Per-metric detail for a Stats detail screen (MVP-08): avg, robust spread, range, coverage, per-session
