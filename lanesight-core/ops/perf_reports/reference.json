@@ -1,0 +1,76 @@
+{
+  "results": [
+    {
+      "clip": "IMG_8751.mov",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8751.mov",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.583,
+        "entry_board": 18.085,
+        "entry_angle": 5.066,
+        "rev_rate": 423.005,
+        "breakpoint_board": 9.445,
+        "laydown_board": 17.864,
+        "breakpoint_distance": 40.056
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 64.65,
+      "cpu_s": 168.38,
+      "peak_rss_mb": 1873.8,
+      "timings": {
+        "probe_s": 0.13,
+        "window_s": 3.85,
+        "convert_s": 39.64,
+        "cv": {
+          "stabilize_s": 15.653,
+          "find_lanes_s": 0.067,
+          "extract_blobs_s": 1.227,
+          "link_s": 0.184,
+          "extend_s": 0.046,
+          "detect_impact_s": 0.544,
+          "refine_s": 0.533,
+          "compute_s": 0.013,
+          "read_pins_s": 2.304,
+          "rev_rate_s": 0.405
+        },
+        "analyze_s": 20.98,
+        "decode": {
+          "passes": 9,
+          "frames": 4001,
+          "seconds": 3.618
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8831.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8831.MOV",
+      "status": "failed",
+      "failure_code": "FOUL_LINE_NOT_IN_VIEW",
+      "error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame",
+      "wall_s": 41.14,
+      "cpu_s": 301.44,
+      "peak_rss_mb": 1876.9,
+      "timings": {
+        "probe_s": 0.12,
+        "window_s": 2.58,
+        "cv": {
+          "stabilize_s": 38.389,
+          "find_lanes_s": 0.041
+        },
+        "analyze_s": 38.43,
+        "decode": {
+          "passes": 4,
+          "frames": 11378,
+          "seconds": 7.403
+        }
+      },
+      "expected": "failed",
+      "expected_failure_code": "FOUL_LINE_NOT_IN_VIEW"
+    }
+  ],
+  "generated_wall": 1793135653.0,
+  "clips_dir": "/Users/shaynel/LaneSightData/training_videos"
+}

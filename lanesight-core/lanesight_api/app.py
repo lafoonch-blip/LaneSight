@@ -41,6 +41,10 @@ def _upload_dedupe_on() -> bool:
     return os.environ.get('LANESIGHT_UPLOAD_DEDUPE') == '1'
 
 
+_PROCESS_START = time.monotonic()      # DEC-092 P0: a job within ~20s of process start hit a cold instance
+_COLD_START_WINDOW_S = 20.0
+
+
 def _clip_info(probe) -> dict:
     """Clip facts for the analysis-attempt log (DEC-086). Captures the camera/recording characteristics we
     need to correlate framing with analysis outcomes: resolution, rotation, fps (nominal + measured), HDR and
@@ -55,6 +59,8 @@ def _clip_info(probe) -> dict:
         'duration_s': p.get('duration') or p.get('duration_s'),
         'frames': p.get('frames'),
         'codec': p.get('codec'), 'color_transfer': p.get('color_transfer'),
+        'pix_fmt': p.get('pix_fmt'),
+        'bit_depth': (10 if '10' in str(p.get('pix_fmt') or '') else (8 if p.get('pix_fmt') else None)),
         'hdr': p.get('hdr'),
         'variable_frame_rate': p.get('variable_frame_rate'),
         'max_frame_gap_ms': p.get('max_frame_gap_ms'),
@@ -114,8 +120,20 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                    'api_revision': os.environ.get('K_REVISION'),
                    'env': 'live' if os.environ.get('K_REVISION') else 'dev',
                    # Probe up front so a FAILED analysis still records the clip's camera/recording facts
-                   # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related.
-                   'clip': _probe_clip(src)}
+                   # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related. cold_start
+                   # (DEC-092 P0) rides in the clip jsonb so no schema change is needed.
+                   'clip': {**_probe_clip(src),
+                            'cold_start': (time.monotonic() - _PROCESS_START) < _COLD_START_WINDOW_S}}
+
+        # DEC-092 P0: ~2 s framing precheck. SHADOW by default — record the verdict, never block — until the
+        # benchmark shows it rejects zero clips the full pipeline passes. Set LANESIGHT_PRECHECK_ENFORCE=1 to
+        # fail fast on a reject (only after that's validated). Ball/shot clips only (form uses the pose path).
+        if mode != 'form':
+            try:
+                from lanesight_core.cv.precheck import precheck as _precheck
+                attempt['clip']['precheck'] = _precheck(src)
+            except Exception as pe:
+                attempt['clip']['precheck'] = {'error': str(pe)[:150]}
 
         def _log(status, failure=None, diagnostics=None):
             try:
@@ -130,6 +148,12 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                 print(f'analysis_attempt log skipped ({le})')
 
         try:
+            # DEC-092 P0: enforce the framing precheck only when explicitly enabled + validated (default off).
+            pc = (attempt.get('clip') or {}).get('precheck') or {}
+            if mode != 'form' and os.environ.get('LANESIGHT_PRECHECK_ENFORCE') == '1' and pc.get('ok') is False:
+                from lanesight_core.failures import AnalysisFailure as _AF
+                raise _AF(pc.get('code') or 'LANE_NOT_DETECTED', pc.get('message') or 'precheck rejected framing',
+                          stage=pc.get('stage') or 'lane', diagnostics={'precheck': True, **pc})
             if mode == 'form':
                 # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
                 # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball

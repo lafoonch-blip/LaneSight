@@ -299,6 +299,36 @@ def test_attempt_clip_and_quality_capture():
     assert _quality(None) is None and _quality({}) is None     # nothing measured → None
 
 
+def test_precheck_is_safe_on_a_bad_path():
+    """DEC-092 P0: the framing precheck never raises — an unreadable clip yields ok=None so the caller
+    falls through to the full pipeline (shadow mode must never block analysis)."""
+    from lanesight_core.cv.precheck import precheck
+    r = precheck('/no/such/clip.mov')
+    assert r['ok'] is None and 'seconds' in r
+
+
+def test_decode_stats_counts_passes():
+    """DEC-092 P0: the decode generator counts passes/frames so repeated decoding is measurable."""
+    from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats, frames
+    import numpy as np, cv2, tempfile, os
+    reset_decode_stats()
+    assert decode_stats() == {'passes': 0, 'frames': 0, 'seconds': 0.0}
+    # write a tiny 5-frame clip and decode it twice
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, 't.mp4')
+        w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 10, (32, 32))
+        for _ in range(5):
+            w.write(np.zeros((32, 32, 3), np.uint8))
+        w.release()
+        if not os.path.exists(p) or os.path.getsize(p) == 0:
+            return  # no mp4 encoder available in this env; the counter contract is still covered above
+        for _ in range(2):
+            for _ in frames(p):
+                pass
+    s = decode_stats()
+    assert s['passes'] == 2 and s['frames'] >= 2
+
+
 def test_coaching_notify_flag():
     """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
     h = {'X-Dev-User': 'u_notify'}

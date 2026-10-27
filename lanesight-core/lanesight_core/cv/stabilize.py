@@ -10,11 +10,31 @@ def pts(path):
                           '-of', 'csv=p=0', path], capture_output=True, text=True).stdout
     return np.array([float(x.strip(',')) for x in out.split() if x.strip(',')])
 
+# DEC-092 P0: count how often the clip is decoded and how long decode takes, to confirm (with the benchmark)
+# that repeated full decodes — not the metric math — are the bottleneck before committing to decode-once (P1).
+# Module-level counters; the pipeline is serial so one frames() generator is active at a time.
+import time as _time
+_DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0}
+
+
+def reset_decode_stats():
+    _DECODE.update(passes=0, frames=0, seconds=0.0)
+
+
+def decode_stats():
+    return {'passes': _DECODE['passes'], 'frames': _DECODE['frames'],
+            'seconds': round(_DECODE['seconds'], 3)}
+
+
 def frames(path):
+    _DECODE['passes'] += 1
     cap = cv2.VideoCapture(path); i = 0
     while True:
+        t = _time.perf_counter()
         ok, f = cap.read()
+        _DECODE['seconds'] += _time.perf_counter() - t
         if not ok: return
+        _DECODE['frames'] += 1
         yield i, f; i += 1
 
 def wood_mask(bgr):

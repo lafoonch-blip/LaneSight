@@ -58,8 +58,18 @@ def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer,
             kw['cv_timings'] = timings.setdefault('cv', {})
     except (TypeError, ValueError):
         pass
-    rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
-    timings['analyze_s'] = round(time.time() - t, 2)
+    # DEC-092 P0: count clip decodes across the whole analyze (confirms repeated decode is the bottleneck).
+    try:
+        from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats
+        reset_decode_stats()
+    except Exception:
+        decode_stats = None
+    try:
+        rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
+    finally:
+        timings['analyze_s'] = round(time.time() - t, 2)
+        if decode_stats:
+            timings['decode'] = decode_stats()        # {passes, frames, seconds} even on failure
     return rec
 
 

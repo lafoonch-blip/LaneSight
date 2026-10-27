@@ -1,0 +1,19 @@
+{
+  "_note": "DEC-092 benchmark manifest. Paths are clip basenames under --clips-dir (default ~/LaneSightData/training_videos). Videos are NOT committed. `expected` is the outcome the full pipeline should produce; `failure_code` is the expected AnalysisFailure code for failures. Confident entries (validation ground truth + known framing failure) drive the regression gate; the live-session cohort is listed for a broader run but marked expected=unknown until the reference run pins them.",
+  "clips": [
+    {"clip": "IMG_8751.mov", "expected": "analyzed", "note": "validation ground truth (Ruby-matched)"},
+    {"clip": "IMG_8752.MOV", "expected": "analyzed", "note": "validation ground truth"},
+    {"clip": "IMG_8753.MOV", "expected": "analyzed", "note": "validation ground truth"},
+    {"clip": "IMG_8754.mov", "expected": "analyzed", "note": "validation ground truth"},
+    {"clip": "IMG_8831.MOV", "expected": "failed", "failure_code": "FOUL_LINE_NOT_IN_VIEW", "note": "known 120fps framing failure (foul line off the bottom)"},
+
+    {"clip": "IMG_8807.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort"},
+    {"clip": "IMG_8808.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort"},
+    {"clip": "IMG_8815.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort (geometry outlier)"},
+    {"clip": "IMG_8817.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort (centered multi-lane)"},
+    {"clip": "IMG_8819.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort (geometry outlier)"},
+    {"clip": "IMG_8810.MOV", "expected": "unknown", "note": "extreme cross-lane framing"},
+
+    {"clip": "IMG_8845.MOV", "expected": "unknown", "note": "form clip (pose pipeline — run with the form analyzer, not analyze_clip)"}
+  ]
+}
