@@ -120,7 +120,10 @@ struct BallSetupView: View {
 
     @State private var weight = ""
     @State private var layoutSystem = ""
-    @State private var layout = ""
+    // Layout entered as three controlled fields: drilling angle × pin-to-PAP × VAL angle.
+    @State private var layoutA = ""
+    @State private var layoutB = ""
+    @State private var layoutC = ""
     @State private var surface = ""
     @State private var makeCurrent = true
     @State private var saving = false
@@ -128,13 +131,26 @@ struct BallSetupView: View {
     @State private var perf: EquipGroup?
     @State private var perfLoaded = false
 
-    init(ball: CatalogBall) { self.ball = ball; self.customName = nil; self.arsenalBall = nil }
+    init(ball: CatalogBall) {
+        self.ball = ball; self.customName = nil; self.arsenalBall = nil
+        _surface = State(initialValue: ball.factory_finish ?? "")      // finish defaults to the out-of-box finish
+    }
     init(customName: String) { self.ball = nil; self.customName = customName; self.arsenalBall = nil }
     init(arsenalBall: ArsenalBall) {
         self.ball = nil; self.customName = nil; self.arsenalBall = arsenalBall
         _weight = State(initialValue: arsenalBall.weight_lb.map { String(Int($0.rounded())) } ?? "")
         _surface = State(initialValue: arsenalBall.surface ?? "")
-        _layout = State(initialValue: arsenalBall.layout ?? "")
+        let parts = (arsenalBall.layout ?? "").split(whereSeparator: { $0 == "x" || $0 == "×" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        _layoutA = State(initialValue: parts.indices.contains(0) ? parts[0] : "")
+        _layoutB = State(initialValue: parts.indices.contains(1) ? parts[1] : "")
+        _layoutC = State(initialValue: parts.indices.contains(2) ? parts[2] : "")
+    }
+
+    /// The three layout fields joined as "A x B x C" — only when all three are filled.
+    private var combinedLayout: String? {
+        let p = [layoutA, layoutB, layoutC].map { $0.trimmingCharacters(in: .whitespaces) }
+        return p.allSatisfy { !$0.isEmpty } ? p.joined(separator: " x ") : nil
     }
 
     private var isEdit: Bool { arsenalBall != nil }
@@ -168,8 +184,10 @@ struct BallSetupView: View {
                 cardSection(title: "Drilling (optional)", trailing: nil) {
                     weightRow
                     inlineEditRow("Finish", text: $surface, placeholder: factoryFinish ?? "e.g. 1500 grit")
-                    inlineEditRow("Layout", text: $layout, placeholder: "e.g. 4.5 x 45 x 35")
+                    layoutRow
                 }
+                Text("Layout = drilling angle × pin-to-PAP × VAL angle.")
+                    .font(.system(size: 11)).foregroundStyle(LS.textFaint).padding(.leading, 2)
 
                 // Performance (edit mode only): per-ball rollup. No pinfall in LaneSight, so there is no
                 // Strike %/Impact tile (the Figma mock shows them; see report) — only measured metrics.
@@ -309,6 +327,29 @@ struct BallSetupView: View {
         .frame(minHeight: 30)
     }
 
+    // Layout as three controlled numeric fields (angle × pin-to-PAP × VAL angle).
+    private var layoutRow: some View {
+        HStack(spacing: 8) {
+            Text("Layout").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            Spacer(minLength: 8)
+            layoutSeg($layoutA, "∠")
+            Text("×").font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+            layoutSeg($layoutB, "in")
+            Text("×").font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+            layoutSeg($layoutC, "∠")
+        }
+        .frame(minHeight: 30)
+    }
+
+    private func layoutSeg(_ text: Binding<String>, _ placeholder: String) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(.decimalPad).multilineTextAlignment(.center)
+            .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            .frame(width: 56, height: 38)
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
     private func inlineEditRow(_ label: String, text: Binding<String>, placeholder: String) -> some View {
         HStack {
             Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
@@ -359,7 +400,7 @@ struct BallSetupView: View {
                 name: ball == nil ? customName : nil,
                 weightLb: Double(weight.trimmingCharacters(in: .whitespaces)),
                 layoutSystem: clean(layoutSystem),
-                layout: clean(layout),
+                layout: combinedLayout,
                 surface: clean(surface),
                 makeCurrent: makeCurrent)
             dismiss()
@@ -379,7 +420,7 @@ struct BallSetupView: View {
         var patch: [String: Any] = [:]
         if let w = Double(weight.trimmingCharacters(in: .whitespaces)) { patch["weight_lb"] = w }
         if let s = clean(surface) { patch["surface"] = s }
-        if let l = clean(layout) { patch["layout"] = l }
+        if let l = combinedLayout { patch["layout"] = l }
         do {
             try await model.updateBall(id: id, patch: patch)
             dismiss()
