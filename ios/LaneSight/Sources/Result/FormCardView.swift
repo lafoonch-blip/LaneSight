@@ -160,11 +160,19 @@ struct FormCardView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(Self.positions, id: \.key) { pos in
-                    KeyPositionTile(
+                    let tile = KeyPositionTile(
                         label: pos.label,
                         timeText: eventTimeText(pos.event),
                         available: result.keyFrames.contains(pos.key),
                         loader: { await fetchFrame(pos.key) })
+                    if result.keyFrames.contains(pos.key) {
+                        // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
+                        NavigationLink { KeyPositionFullView(result: result, startKey: pos.key).environmentObject(model) }
+                            label: { tile }
+                            .buttonStyle(.plain)
+                    } else {
+                        tile
+                    }
                 }
             }
         }

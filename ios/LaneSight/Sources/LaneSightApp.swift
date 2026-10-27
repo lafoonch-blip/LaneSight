@@ -70,6 +70,10 @@ struct PreviewHarness: View {
                     if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
                         NavigationStack { SessionView(reviewSessionId: id, readOnly: false) }
                     } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
+                case "keyposition":
+                    if let r = model.result {
+                        NavigationStack { KeyPositionFullView(result: r, startKey: ProcessInfo.processInfo.environment["LS_PREVIEW_KEY"] ?? "release") }
+                    } else { Text("no form result (set LS_PREVIEW_ID to a form shot)").foregroundStyle(LS.textPrimary) }
                 case "metricdetail":
                     NavigationStack {
                         MetricDetailView(metric: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] ?? "ball_speed")
@@ -135,6 +139,9 @@ struct PreviewHarness: View {
             }
             if screen.lowercased() == "shotcard", let id = env["LS_PREVIEW_ID"] {
                 _ = await model.loadShotResult(shotId: id, captureModeHint: "shot")
+            }
+            if screen.lowercased() == "keyposition", let id = env["LS_PREVIEW_ID"] {
+                _ = await model.loadShotResult(shotId: id, captureModeHint: "form")
             }
             if screen.lowercased() == "ballsetup" {
                 let q = env["LS_PREVIEW_QUERY"] ?? ""
