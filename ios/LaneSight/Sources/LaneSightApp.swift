@@ -95,6 +95,12 @@ struct PreviewHarness: View {
                     } else { Text("set LS_PREVIEW_ID").foregroundStyle(LS.textPrimary) }
                 case "settings": NavigationStack { SettingsView() }
                 case "deleteaccount": NavigationStack { DeleteAccountView() }
+                case "choosesource":
+                    LSBackground().sheet(isPresented: .constant(true)) {
+                        ChooseSourceSheet(mode: ProcessInfo.processInfo.environment["LS_PREVIEW_MODE"] ?? "shot",
+                                          onLive: {}, onUpload: {})
+                            .presentationDetents([.height(340)])
+                    }
                 case "profile":  NavigationStack { ProfileView() }
                 case "achievements": NavigationStack { AchievementsView() }
                 case "sessionsummary":

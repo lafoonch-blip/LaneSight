@@ -224,36 +224,9 @@ struct HomeView: View {
                     .background(LS.raised, in: RoundedRectangle(cornerRadius: 14))
                     .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.border, lineWidth: 1))
             }
-            HStack(alignment: .top, spacing: 8) {
-                labCard(mode: "shot", title: "Shot Analysis", desc: "Track ball motion, lane reaction and results.",
-                        photo: "LabShotPhoto", action: "Start Shot Analysis", accent: LS.action)
-                labCard(mode: "form", title: "Form Analysis", desc: "Analyze approach, timing, release and mechanics.",
-                        photo: "LabFormPhoto", action: "Start Form Analysis", accent: LS.dataPurple)
-            }
+            // Shared Analyze cards → the Choose-source sheet (Live session vs Upload video), same as Lab.
+            AnalyzeCards()
         }
-    }
-
-    private func labCard(mode: String, title: String, desc: String, photo: String, action: String, accent: Color) -> some View {
-        NavigationLink { SetupView(initialMode: mode) } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(photo).resizable().scaledToFill().frame(height: 120).frame(maxWidth: .infinity).clipped()
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(LS.textPrimary)
-                    Text(desc).font(.system(size: 11)).lineSpacing(2).foregroundStyle(LS.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 4) { Text(action); Text("›") }
-                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.onAction)
-                        .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity)
-                        .background(accent, in: Capsule())
-                }
-                .padding(.horizontal, 10).padding(.top, 8).padding(.bottom, 10)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LS.card)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
     }
 
     private func loadAll() async {
