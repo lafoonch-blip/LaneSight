@@ -46,7 +46,7 @@ for(const cx of [-PITCH,0,PITCH]){
   box(LANE+2*GUT+0.42,3.4,1.0,new THREE.MeshStandardMaterial({color:0x07101c,roughness:.6}),cx,4.9,63.4);
   box(LANE+2*GUT,0.06,0.06,new THREE.MeshStandardMaterial({color:0x6ad1ff,emissive:0x3fb8ff,emissiveIntensity:1.6}),cx,3.15,62.9);
   box(LANE+2*GUT+0.42,7,0.4,new THREE.MeshStandardMaterial({color:0x03070e}),cx,3.5,66);
-  const sl=new THREE.SpotLight(0xfff2dc,90,20,0.7,0.5,1.4);sl.position.set(cx,4.6,58);sl.target.position.set(cx,0,61.2);sl.castShadow=true;sl.shadow.mapSize.set(1024,1024);scene.add(sl,sl.target);
+  const sl=new THREE.SpotLight(0xfff2dc,55,20,0.7,0.5,1.4);sl.position.set(cx,4.6,58);sl.target.position.set(cx,0,61.2);sl.castShadow=true;sl.shadow.mapSize.set(1024,1024);scene.add(sl,sl.target);
 }
 [-1,1].forEach(s=>box(0.5,4,80,new THREE.MeshStandardMaterial({color:0x0a1626,roughness:.7}),s*(1.5*PITCH+0.4),2,30));
 scene.add(new THREE.HemisphereLight(0xa9c4ff,0x140c06,0.6));
@@ -70,11 +70,11 @@ const curve=new THREE.CatmullRomCurve3(ACT.filter((_,i)=>i%2===0).map(v3));
 scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve,400,0.07,12,false),new THREE.MeshBasicMaterial({color:0x7dffc6})));
 scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve,400,0.17,12,false),new THREE.MeshBasicMaterial({color:0x00eb92,transparent:true,opacity:0.28,depthWrite:false,blending:THREE.AdditiveBlending})));
 // markers
-const ring=(p,color)=>{const r=new THREE.Mesh(new THREE.RingGeometry(0.2,0.3,40),new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));r.rotation.x=-Math.PI/2;r.position.set(bx(p[1]),0.02,p[0]);scene.add(r);};
+const ring=(p,color)=>{for(const [a,b,c] of [[0.27,0.42,0x001018],[0.16,0.29,color],[0,0.09,color]]){const r=new THREE.Mesh(new THREE.RingGeometry(a,b,48),new THREE.MeshBasicMaterial({color:c,side:THREE.DoubleSide,depthTest:false,transparent:true,opacity:c===0x001018?0.7:1}));r.renderOrder=20;r.rotation.x=-Math.PI/2;r.position.set(bx(p[1]),0.15,p[0]);scene.add(r);}};
 for(const m of DATA.marks)ring([m.z,m.b],m.c);
 // camera
 const cam=new THREE.PerspectiveCamera(DATA.fov||30,W/H,0.3,200);cam.position.set(...(DATA.cam||[0,4.6,-7]));cam.lookAt(...(DATA.look||[0,0,36]));
-const comp=new EffectComposer(renderer);comp.addPass(new RenderPass(scene,cam));comp.addPass(new UnrealBloomPass(new THREE.Vector2(W,H),0.45,0.45,0.9));comp.addPass(new OutputPass());
+const comp=new EffectComposer(renderer);comp.addPass(new RenderPass(scene,cam));comp.addPass(new UnrealBloomPass(new THREE.Vector2(W,H),0.28,0.35,0.95));comp.addPass(new OutputPass());
 comp.render();
 const pr=(z,b,y=0)=>{const v=new THREE.Vector3(bx(b),y,z).project(cam);return[(v.x+1)/2*W,(1-v.y)/2*H];};
 window.__pts=Object.fromEntries(DATA.marks.map(m=>[m.k,pr(m.z,m.b)]));
