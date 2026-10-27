@@ -252,6 +252,33 @@ def test_profile_put_get():
     p = client.get('/me/profile', headers=H).json()
     assert p['handed'] == 'R' and p['delivery_style'] == 'one_handed_thumb' and p['user_id'] == 'u1'
 
+def test_me_score_parts_delta_30d():
+    """DEC-083: /me/score reports each part's 30-day change from history; only parts present in both the
+    current and the ~30-day-old reference snapshot get a delta — nothing is fabricated."""
+    import time as _t
+    st = get_store()
+    uid = 'u_delta'
+    now = _t.time()
+    # a reference snapshot 40 days ago, then today's — the endpoint reads the most recent >=30-day-old one
+    st.snapshots[uid] = [
+        {'eligible': True, 'score': 600, 's_perf': 60, 'a_acc': 50, 'c_cons': 70, 'p_power': None,
+         'computed_at': now - 40 * 86400},
+        {'eligible': True, 'score': 640, 's_perf': 64, 'a_acc': 48, 'c_cons': 70, 'p_power': 71,
+         'computed_at': now},
+    ]
+    d = client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d']
+    assert d['s_perf'] == 4.0 and d['a_acc'] == -2.0 and d['c_cons'] == 0.0
+    assert 'p_power' not in d          # no reference value 40 days ago → no delta (shown as "New")
+
+
+def test_me_score_parts_delta_30d_absent_for_new_account():
+    st = get_store()
+    uid = 'u_delta_new'
+    st.snapshots[uid] = [{'eligible': True, 'score': 500, 's_perf': 50, 'a_acc': 50, 'c_cons': 50,
+                          'p_power': 50, 'computed_at': __import__('time').time()}]
+    assert client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d'] == {}
+
+
 def test_sensors_crud():
     s = client.post('/me/sensors', json={'name': 'My blue sensor', 'is_default': True}, headers=H).json()
     assert s['name'] == 'My blue sensor' and s['user_id'] == 'u1'

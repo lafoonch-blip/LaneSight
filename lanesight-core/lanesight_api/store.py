@@ -842,6 +842,19 @@ class PgStore(MemoryStore):
                    'core_version': fb.get('core_version'), 'formula_version': fb.get('formula_version')})
         return row
 
+    def score_history(self, user_id):
+        # Cloud Run is stateless (the in-memory snapshots from MemoryStore don't survive a cold start), so
+        # the durable history lives in the score_snapshot table. Return it oldest→newest with computed_at as
+        # an epoch float, matching MemoryStore (used by the Score trend and the DEC-083 30-day part deltas).
+        rows = self._get('score_snapshot', f'user_id=eq.{user_id}&order=computed_at.asc'
+                         '&select=id,computed_at,eligible,score,s_perf,a_acc,c_cons,p_power,eligibility,tier')
+        return [dict(r, computed_at=_ts_epoch(r.get('computed_at'))) for r in rows]
+
+    def latest_score(self, user_id):
+        rows = self._get('score_snapshot', f'user_id=eq.{user_id}&order=computed_at.desc&limit=1'
+                         '&select=id,computed_at,eligible,score,s_perf,a_acc,c_cons,p_power,eligibility,tier')
+        return dict(rows[0], computed_at=_ts_epoch(rows[0].get('computed_at'))) if rows else None
+
     def save_snapshot(self, user_id, snapshot):
         super().save_snapshot(user_id, snapshot)
         self._post('score_snapshot', {'id': snapshot.get('id'), 'user_id': user_id,

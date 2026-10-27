@@ -333,6 +333,9 @@ struct ScoreResponse: Codable {
     let c_cons: Double?
     let p_power: Double?
     let eligibility: [String: Eligibility]?
+    // DEC-083: each part's change over the last ~30 days (s_perf/a_acc/c_cons/p_power → delta). A part
+    // without a 30-day-old reference is absent → the tile shows "New". Omitted entirely by older servers.
+    let parts_delta_30d: [String: Double]?
     let formula_version: String?
     let label: String?
 }

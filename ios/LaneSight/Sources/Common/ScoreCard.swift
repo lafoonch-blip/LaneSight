@@ -147,6 +147,20 @@ struct ScoreCard: View {
         .homeCard()
     }
 
+    /// DEC-083 per-tile 30-day change: "▲ 2 · 30 days" / "▼ 2 · 30 days" / "– · 30 days", or "New" when the
+    /// server has no 30-day-old reference for this part yet. Never a fabricated number.
+    @ViewBuilder private func partChangeLabel(_ key: String) -> some View {
+        if let d = score.parts_delta_30d?[key] {
+            let n = Int(d.rounded())
+            let arrow = n > 0 ? "▲" : (n < 0 ? "▼" : "–")
+            let color = n > 0 ? LS.positive : (n < 0 ? LS.bestEffort : LS.textSecondary)
+            Text(n == 0 ? "– · 30 days" : "\(arrow) \(abs(n)) · 30 days")
+                .font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
+        } else {
+            Text("New").font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.textSecondary)
+        }
+    }
+
     private func metricCard(_ p: Part) -> some View {
         // DEC-083: a part is shown as "ready" (its score) once its own floor is met, even while the overall
         // score is still building; a not-ready part is dimmed and shows its shot progress instead.
@@ -175,10 +189,13 @@ struct ScoreCard: View {
                     .frame(height: 5)
                 }
                 .frame(height: 5).padding(.top, 10)
-                // "Ready ✓" while the overall score is still building; nothing once the whole score is live.
-                Text(score.eligible == true ? " " : "Ready ✓")
-                    .font(.system(size: 11, weight: score.eligible == true ? .regular : .semibold))
-                    .foregroundStyle(LS.positive).lineLimit(1).padding(.top, 4)
+                // Live score → the part's 30-day change (DEC-083); still building → "Ready ✓".
+                if score.eligible == true {
+                    partChangeLabel(p.key).lineLimit(1).padding(.top, 4)
+                } else {
+                    Text("Ready ✓").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(LS.positive).lineLimit(1).padding(.top, 4)
+                }
             } else {
                 ZStack(alignment: .leading) {
                     Capsule().fill(LS.track).frame(height: 5)

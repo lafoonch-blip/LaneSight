@@ -603,11 +603,37 @@ def do_spot_check(body: dict | None = None, user=Depends(current_user)):
 
 
 # ----------------------------------------------------------------- score
+_SCORE_PART_KEYS = ('s_perf', 'a_acc', 'c_cons', 'p_power')
+
+
+def _with_part_deltas(store, user, snap, window_days=30):
+    """DEC-083: attach `parts_delta_30d` — each part's change vs the most recent snapshot at least
+    `window_days` old. Only parts with a value in BOTH the current and reference snapshot get a delta;
+    the rest are omitted (the app renders 'New'). Needs real history — nothing is fabricated."""
+    if not snap:
+        return snap
+    try:
+        hist = sorted(store.score_history(user), key=lambda s: s.get('computed_at') or 0)
+    except Exception:
+        hist = []
+    deltas = {}
+    if hist:
+        cutoff = time.time() - window_days * 86400
+        older = [s for s in hist if (s.get('computed_at') or 0) <= cutoff]
+        ref = older[-1] if older else None
+        if ref:
+            for k in _SCORE_PART_KEYS:
+                cur, old = snap.get(k), ref.get(k)
+                if cur is not None and old is not None:
+                    deltas[k] = round(cur - old, 1)
+    return {**snap, 'parts_delta_30d': deltas}
+
+
 @app.get('/me/score')
 def me_score(user=Depends(current_user)):
     store = get_store()
-    snap = store.latest_score(user)
-    return snap or engines.recompute_score(store, user, trigger='shot')
+    snap = store.latest_score(user) or engines.recompute_score(store, user, trigger='shot')
+    return _with_part_deltas(store, user, snap)
 
 
 @app.get('/me/score/breakdown')
