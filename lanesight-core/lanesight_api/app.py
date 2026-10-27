@@ -1133,7 +1133,10 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
                        mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash,
                        client_timings=body.get('client_timings'))
-    store.storage_delete('shot-clips', storage_path)      # clip analyzed; don't retain it
+    if os.environ.get('LANESIGHT_KEEP_CLIPS') == '1':     # debug: retain the clip in Storage for inspection
+        print(f'KEEP_CLIPS: retained {storage_path}')
+    else:
+        store.storage_delete('shot-clips', storage_path)  # clip analyzed; don't retain it
     try:
         os.remove(local)
     except OSError:
