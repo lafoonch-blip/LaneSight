@@ -25,22 +25,26 @@ struct ScoreCard: View {
 
     // MARK: Overview (badge + score + delta + progress)
 
+    private var isBuilding: Bool { !(score.eligible == true && score.score != nil) }
+
     private var overviewCard: some View {
-        Group {
-            if score.eligible == true, let value = score.score {
-                HStack(alignment: .center, spacing: 6) {
-                    Image(badgeName(score.tier))
-                        .resizable().scaledToFit()
-                        .frame(width: 150, height: 150)
-                        .accessibilityLabel("\(score.tier ?? "") tier badge")
-                    scoreDetails(value: value)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
+        HStack(alignment: .center, spacing: 6) {
+            Image(badgeName(score.tier)).resizable().scaledToFit()
+                .frame(width: isBuilding ? 120 : 150, height: isBuilding ? 120 : 150)
+                // DEC-083 building: the tier badge is greyed + slightly blurred, with a lock, no tier name.
+                .grayscale(isBuilding ? 1 : 0)
+                .blur(radius: isBuilding ? 4 : 0)
+                .opacity(isBuilding ? 0.55 : 1)
+                .overlay { if isBuilding { Image(systemName: "lock.fill").font(.system(size: 22)).foregroundStyle(LS.textSecondary) } }
+                .accessibilityLabel(isBuilding ? "Score building" : "\(score.tier ?? "") tier badge")
+            if let value = score.score, !isBuilding {
+                scoreDetails(value: value)
             } else {
-                buildingState.padding(14)
+                buildingDetails
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(isBuilding ? 12 : 10)
         .homeCard()
     }
 
@@ -113,13 +117,13 @@ struct ScoreCard: View {
 
     // MARK: Breakdown (4 metric cards)
 
-    private struct Part { let name: String; let value: Double?; let icon: String; let color: Color; let weight: Int }
+    private struct Part { let name: String; let value: Double?; let icon: String; let color: Color; let weight: Int; let key: String }
     private var parts: [Part] {
         [
-            Part(name: "Performance", value: score.s_perf, icon: "IconPerformance", color: LS.dataPurple, weight: 40),
-            Part(name: "Accuracy", value: score.a_acc, icon: "IconAccuracy", color: LS.action, weight: 25),
-            Part(name: "Consistency", value: score.c_cons, icon: "IconConsistency", color: LS.success, weight: 25),
-            Part(name: "Power", value: score.p_power, icon: "IconPower", color: LS.dataYellow, weight: 10),
+            Part(name: "Performance", value: score.s_perf, icon: "IconPerformance", color: LS.dataPurple, weight: 40, key: "s_perf"),
+            Part(name: "Accuracy", value: score.a_acc, icon: "IconAccuracy", color: LS.action, weight: 25, key: "a_acc"),
+            Part(name: "Consistency", value: score.c_cons, icon: "IconConsistency", color: LS.success, weight: 25, key: "c_cons"),
+            Part(name: "Power", value: score.p_power, icon: "IconPower", color: LS.dataYellow, weight: 10, key: "p_power"),
         ]
     }
 
@@ -144,73 +148,122 @@ struct ScoreCard: View {
     }
 
     private func metricCard(_ p: Part) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // DEC-083: a part is shown as "ready" (its score) once its own floor is met, even while the overall
+        // score is still building; a not-ready part is dimmed and shows its shot progress instead.
+        let e = partElig(p.key)
+        let ready = e.met || score.eligible == true
+        let frac = e.need > 0 ? min(1, Double(e.have) / Double(e.need)) : 0
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8).fill(p.color.opacity(0.22)).frame(width: 26, height: 26)
                     Image(p.icon).renderingMode(.template).resizable().scaledToFit()
                         .frame(width: 16, height: 16).foregroundStyle(p.color)
                 }
-                Text(p.value == nil ? "—" : String(Int(p.value!.rounded())))
-                    .font(.system(size: 18, weight: .bold)).foregroundStyle(p.value == nil ? LS.textFaint : LS.textPrimary)
+                Text(ready && p.value != nil ? String(Int(p.value!.rounded())) : "—")
+                    .font(.system(size: 18, weight: .bold)).foregroundStyle(ready && p.value != nil ? LS.textPrimary : LS.textFaint)
             }
             Text(p.name)
                 .font(.system(size: 11, weight: .medium)).tracking(-0.1).foregroundStyle(LS.textSecondary)
                 .lineLimit(1).minimumScaleFactor(0.8).padding(.top, 11)
-            ZStack(alignment: .leading) {
-                Capsule().fill(LS.track).frame(height: 5)
-                GeometryReader { g in
-                    Capsule().fill(p.color).frame(width: max(0, g.size.width * CGFloat((p.value ?? 0) / 100)), height: 5)
+            if ready {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(LS.track).frame(height: 5)
+                    GeometryReader { g in
+                        Capsule().fill(p.color).frame(width: max(0, g.size.width * CGFloat((p.value ?? 0) / 100)), height: 5)
+                    }
+                    .frame(height: 5)
                 }
-                .frame(height: 5)
+                .frame(height: 5).padding(.top, 10)
+                // "Ready ✓" while the overall score is still building; nothing once the whole score is live.
+                Text(score.eligible == true ? " " : "Ready ✓")
+                    .font(.system(size: 11, weight: score.eligible == true ? .regular : .semibold))
+                    .foregroundStyle(LS.positive).lineLimit(1).padding(.top, 4)
+            } else {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(LS.track).frame(height: 5)
+                    GeometryReader { g in
+                        Capsule().fill(p.color.opacity(0.7)).frame(width: max(0, g.size.width * CGFloat(frac)), height: 5)
+                    }
+                    .frame(height: 5)
+                }
+                .frame(height: 5).padding(.top, 10)
+                Text("\(e.have)/\(e.need) shots")
+                    .font(.system(size: 11).monospacedDigit()).foregroundStyle(LS.textSecondary)
+                    .lineLimit(1).minimumScaleFactor(0.75).padding(.top, 4)
             }
-            .frame(height: 5).padding(.top, 10)
-            Text("\(p.weight)% of score")
-                .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
-                .lineLimit(1).minimumScaleFactor(0.75).padding(.top, 4)
         }
         .padding(5)
         .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
         .background(LS.raised, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LS.border, lineWidth: 1))
+        .opacity(ready ? 1 : 0.6)       // DEC-083: a not-ready part is dimmed
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(p.name) \(p.value == nil ? "building" : String(Int(p.value!.rounded()))) of 100, \(p.weight) percent of score")
+        .accessibilityLabel("\(p.name) \(ready && p.value != nil ? String(Int(p.value!.rounded())) + " of 100" : "building, \(e.have) of \(e.need) shots")")
     }
 
-    // MARK: Building state
+    // MARK: Building state (DEC-083 Option A — the real score card, locked until every part is ready)
 
-    private var buildingState: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+    /// have/need/met for a part from the live eligibility (never mock counts).
+    private func partElig(_ key: String) -> (have: Int, need: Int, met: Bool) {
+        let e = score.eligibility?[key]
+        return (e?.have ?? 0, e?.need ?? 0, e?.met ?? false)
+    }
+    private static let partKeys = ["s_perf", "a_acc", "c_cons", "p_power"]
+    /// Overall unlock fraction = measured shots so far / shots required, summed across the four parts.
+    private var unlockPct: Double {
+        let have = Self.partKeys.reduce(0.0) { $0 + Double(min(partElig($1).have, partElig($1).need)) }
+        let need = Self.partKeys.reduce(0.0) { $0 + Double(partElig($1).need) }
+        return need > 0 ? min(1, have / need) : 0
+    }
+    /// DEC-083 hint: the largest number of shots any part still needs; if that part is Accuracy, say to set a target.
+    private var buildingHint: String {
+        let gaps = Self.partKeys.map { (key: $0, gap: max(partElig($0).need - partElig($0).have, 0)) }
+        guard let worst = gaps.max(by: { $0.gap < $1.gap }), worst.gap > 0 else { return "Finishing up your first score…" }
+        let target = worst.key == "a_acc" ? ", with a target set" : ""
+        return "About \(worst.gap) more shot\(worst.gap == 1 ? "" : "s")\(target)"
+    }
+
+    private var buildingDetails: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
                 Text("LANESIGHT SCORE").font(.system(size: 8, weight: .semibold)).tracking(0.2).foregroundStyle(LS.action)
-                Spacer()
-            }
-            Label("Building your score", systemImage: "hourglass")
-                .font(.headline).foregroundStyle(LS.textPrimary)
-            Text("Each part needs enough measured shots before a score appears.")
-                .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
-            if let elig = score.eligibility, !elig.isEmpty {
-                // Canonical order + human labels (not the raw a_acc/c_cons keys). Matches the Home building card.
-                let order: [(key: String, label: String)] = [
-                    ("s_perf", "Performance"), ("a_acc", "Accuracy"),
-                    ("c_cons", "Consistency"), ("p_power", "Power"),
-                ]
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(order.filter { elig[$0.key] != nil }, id: \.key) { row in
-                        let e = elig[row.key]
-                        HStack {
-                            Image(systemName: e?.met == true ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(e?.met == true ? LS.success : LS.textFaint).font(.caption)
-                            Text(row.label).font(.caption).foregroundStyle(LS.textSecondary)
-                            Spacer()
-                            Text("\(e?.have ?? 0)/\(e?.need ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
-                        }
-                    }
+                Spacer(minLength: 4)
+                HStack(spacing: 2) {
+                    Text("How it works").font(.system(size: 8, weight: .semibold))
+                    Text("›").font(.system(size: 11))
                 }
-                .padding(.top, 4)
+                .foregroundStyle(LS.textPrimary)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .overlay(Capsule().strokeBorder(LS.borderStrong, lineWidth: 1))
             }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("—").font(.system(size: 44, weight: .bold)).foregroundStyle(LS.textFaint)
+                Text("BUILDING").font(.system(size: 14, weight: .bold)).tracking(0.5).foregroundStyle(LS.textSecondary)
+            }
+            .padding(.top, 2)
+            Text(buildingHint).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+            unlockBar.padding(.top, 10)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "Score unlocks · N%" bar — replaces the next-tier progress bar while building (DEC-083).
+    private var unlockBar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Score unlocks").font(.system(size: 9)).foregroundStyle(LS.textSecondary)
+                Spacer()
+                Text("\(Int((unlockPct * 100).rounded()))%").font(.system(size: 11, weight: .bold)).foregroundStyle(LS.textPrimary)
+            }
+            ZStack(alignment: .leading) {
+                Capsule().fill(LS.track).frame(height: 8)
+                GeometryReader { g in Capsule().fill(LS.action).frame(width: max(0, g.size.width * CGFloat(unlockPct)), height: 8) }
+                    .frame(height: 8)
+            }
+            .frame(height: 8)
+        }
     }
 
     // MARK: helpers

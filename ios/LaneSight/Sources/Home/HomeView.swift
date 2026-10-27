@@ -16,12 +16,11 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         if showWelcome { welcomeStartCard }
 
+                        // DEC-083: Home keeps the real score card in both states — ScoreCard renders the
+                        // locked "BUILDING" treatment (greyed badge, "Score unlocks · N%", per-part progress)
+                        // until the score is eligible, so the switch to a live score feels seamless.
                         LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-                            if s.eligible == true {
-                                ScoreCard(score: s, history: history)
-                            } else {
-                                buildingScoreCard(s)
-                            }
+                            ScoreCard(score: s, history: history)
                         }
 
                         if let f = focus, f.status == "ok", let title = f.focus {
@@ -76,54 +75,6 @@ struct HomeView: View {
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(hex: 0x007DFF).opacity(0.6), lineWidth: 1))
         }
         .buttonStyle(.plain)
-    }
-
-    // "Building your LaneSight Score" card (Figma 466:4123): shown until the score is eligible. The four
-    // rows are driven by the real GET /me/score eligibility (have/need) — never mock counts.
-    private func buildingScoreCard(_ s: ScoreResponse) -> some View {
-        let rows: [(key: String, label: String, green: Bool)] = [
-            ("s_perf", "Performance (pocket, entry angle)", false),
-            ("a_acc",  "Accuracy (shots with a target)", false),
-            ("c_cons", "Consistency (comparable shots)", false),
-            ("p_power", "Power (ball data)", true),
-        ]
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Building your LaneSight Score").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-            Text("Your score appears once each part has enough shots. Until then you still see every shot’s results.")
-                .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(rows, id: \.key) { r in
-                let e = s.eligibility?[r.key]
-                buildingRow(label: r.label, have: e?.have ?? 0, need: e?.need ?? 0, green: r.green)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(Color(hex: 0x051F3B), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.link.opacity(0.6), lineWidth: 1))
-    }
-
-    private func buildingRow(label: String, have: Int, need: Int, green: Bool) -> some View {
-        let tint = green ? Color(hex: 0x3DEB7C) : LS.link
-        let frac = need > 0 ? min(1, Double(have) / Double(need)) : 0
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 6) {
-                Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(have) of \(need) shots").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(green ? Color(hex: 0x3DEB7C) : LS.textSecondary)
-                    .fixedSize()
-            }
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.12)).frame(height: 6)
-                GeometryReader { g in
-                    RoundedRectangle(cornerRadius: 3).fill(tint)
-                        .frame(width: max(6, g.size.width * CGFloat(frac)), height: 6)
-                }
-                .frame(height: 6)
-            }
-            .frame(height: 6)
-        }
     }
 
     private var recentSessions: some View {
