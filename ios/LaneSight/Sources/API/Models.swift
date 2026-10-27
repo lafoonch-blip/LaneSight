@@ -486,8 +486,34 @@ struct SessionSummary: Codable {
     let n_shots: Int?
     let metrics: [String: MetricAggregate]?
     let consistency: SessionConsistency?
+    let typical: SessionTypical?
+    let early_vs_late: [String: EarlyLate]?
+    let focus: SessionFocus?
 
     func mean(_ key: String) -> Double? { metrics?[key]?.mean }
+}
+
+struct SessionTypical: Codable {
+    let status: String?            // ok | building
+    let n_sessions: Int?
+    let need: Int?
+    let metrics: [String: Double]?
+}
+
+struct EarlyLate: Codable {
+    let early: Double?
+    let late: Double?
+    let delta: Double?
+    let n_early: Int?
+    let n_late: Int?
+}
+
+struct SessionFocus: Codable {
+    let status: String?            // ok | building
+    let focus: String?             // the templated focus title, or "Keep repeating" / "Mixed results"
+    let detail: String?            // the shot's own recommendation copy (no invented text)
+    let expected: String?
+    let state: String?
 }
 
 struct MetricAggregate: Codable {
