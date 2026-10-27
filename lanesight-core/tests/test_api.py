@@ -279,6 +279,26 @@ def test_me_score_parts_delta_30d_absent_for_new_account():
     assert client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d'] == {}
 
 
+def test_attempt_clip_and_quality_capture():
+    """DEC-086: the attempt log captures camera/recording facts (clip) and, on success, capture-quality +
+    geometry (so framing can be correlated with outcomes), with missing fields omitted (never fabricated)."""
+    from lanesight_api.app import _clip_info, _quality
+    probe = {'measured_fps': 59.94, 'nominal_fps': 60, 'width': 1920, 'height': 1080, 'short_side_px': 1080,
+             'rotation': 90, 'hdr': True, 'variable_frame_rate': False, 'duration_s': 7.2, 'frames': 432,
+             'codec': 'hevc', 'color_transfer': 'arib-std-b67'}
+    ci = _clip_info(probe)
+    assert ci['width'] == 1920 and ci['rotation'] == 90 and ci['hdr'] is True and ci['fps'] == 59.94
+    assert 'bytes' not in ci                                   # omitted when absent, not null/0
+
+    q = _quality({'capture_quality': {'far_lane': 'limited', 'reason': 'camera too close'},
+                  'metrics': {'ball_speed': {'value': 17.2}, 'entry_board': {'value': 18.0},
+                              'rev_rate': {'value': None}}})
+    assert q['far_lane'] == 'limited' and q['capture_reason'] == 'camera too close'
+    assert q['ball_speed'] == 17.2 and q['entry_board'] == 18.0 and q['n_measured'] == 2
+    assert 'rev_rate' not in q                                 # None metric omitted
+    assert _quality(None) is None and _quality({}) is None     # nothing measured → None
+
+
 def test_coaching_notify_flag():
     """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
     h = {'X-Dev-User': 'u_notify'}

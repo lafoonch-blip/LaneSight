@@ -42,11 +42,61 @@ def _upload_dedupe_on() -> bool:
 
 
 def _clip_info(probe) -> dict:
-    """Clip facts for the analysis-attempt log (best-effort; whatever the ffprobe block carried)."""
+    """Clip facts for the analysis-attempt log (DEC-086). Captures the camera/recording characteristics we
+    need to correlate framing with analysis outcomes: resolution, rotation, fps (nominal + measured), HDR and
+    variable-frame-rate. Best-effort — whatever the probe carried."""
     p = probe or {}
-    return {'fps': p.get('measured_fps') or p.get('fps'), 'width': p.get('width'), 'height': p.get('height'),
-            'duration_s': p.get('duration') or p.get('duration_s'), 'codec': p.get('codec'),
-            'hdr': bool(p.get('hdr')), 'bytes': p.get('bytes')}
+    return {k: v for k, v in {
+        'fps': p.get('measured_fps') or p.get('fps'),
+        'nominal_fps': p.get('nominal_fps'),
+        'width': p.get('width'), 'height': p.get('height'),
+        'short_side_px': p.get('short_side_px'),
+        'rotation': p.get('rotation'),
+        'duration_s': p.get('duration') or p.get('duration_s'),
+        'frames': p.get('frames'),
+        'codec': p.get('codec'), 'color_transfer': p.get('color_transfer'),
+        'hdr': p.get('hdr'),
+        'variable_frame_rate': p.get('variable_frame_rate'),
+        'max_frame_gap_ms': p.get('max_frame_gap_ms'),
+        'bytes': p.get('bytes'),
+    }.items() if v is not None}
+
+
+def _probe_clip(src: str) -> dict:
+    """Best-effort clip probe for the attempt log, taken BEFORE analysis so even a failed analysis records the
+    clip's camera/recording facts (most failures are framing-related). Never raises."""
+    info = {}
+    try:
+        from lanesight_runner.probe import probe as _rprobe
+        info = _clip_info(_rprobe(src, check_decoder=False))
+    except Exception as pe:
+        info = {'probe_error': str(pe)[:200]}
+    try:
+        info['bytes'] = os.path.getsize(src)
+    except Exception:
+        pass
+    return info
+
+
+def _quality(rec) -> dict | None:
+    """Capture-quality + headline-geometry signals from a successful record (DEC-086), so we can correlate
+    camera framing with what analysis could measure. Defensive: missing fields are simply omitted."""
+    if not isinstance(rec, dict):
+        return None
+    cq = rec.get('capture_quality') or {}
+    m = rec.get('metrics') or {}
+    def mv(k):
+        v = m.get(k)
+        return v.get('value') if isinstance(v, dict) else v
+    out = {'far_lane': cq.get('far_lane'), 'capture_reason': cq.get('reason'),
+           'entry_board': mv('entry_board'), 'ball_speed': mv('ball_speed'),
+           'rev_rate': mv('rev_rate'), 'entry_angle': mv('entry_angle'),
+           'n_measured': sum(1 for v in m.values()
+                             if (v.get('value') if isinstance(v, dict) else v) is not None) or None}
+    for k in ('view', 'status', 'form_version'):     # form clips
+        if rec.get(k) is not None:
+            out[k] = rec.get(k)
+    return {k: v for k, v in out.items() if v is not None} or None
 
 
 def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
@@ -62,16 +112,20 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                    'source': 'upload' if is_upload else 'live', 'capture_mode': mode,
                    'content_hash': content_hash, 'algorithm_version': ALGO_VERSION,
                    'api_revision': os.environ.get('K_REVISION'),
-                   'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+                   'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+                   # Probe up front so a FAILED analysis still records the clip's camera/recording facts
+                   # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related.
+                   'clip': _probe_clip(src)}
 
-        def _log(status, failure=None, clip=None):
+        def _log(status, failure=None, diagnostics=None):
             try:
                 store.log_analysis_attempt({**attempt, 'status': status,
                                             'failure_code': getattr(failure, 'code', None),
                                             'failure_stage': getattr(failure, 'stage', None),
-                                            'diagnostics': getattr(failure, 'diagnostics', None),
+                                            # failure numbers, or (on success) capture-quality + geometry signals
+                                            'diagnostics': getattr(failure, 'diagnostics', None) or diagnostics,
                                             'duration_ms': int((time.monotonic() - t0) * 1000),
-                                            'step_timings': {k: v for k, v in job.timings.items()}, 'clip': clip})
+                                            'step_timings': {k: v for k, v in job.timings.items()}})
             except Exception as le:
                 print(f'analysis_attempt log skipped ({le})')
 
@@ -100,7 +154,7 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                                                           analyze_seconds=job.timings['analyze'],
                                                           persist=not is_upload)
                 store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'}, algo_version=ALGO_VERSION)
-                _log('analyzed', clip={'fps': rec.get('fps')})
+                _log('analyzed', diagnostics=_quality(rec))
                 return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
                             focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
                             footer=form_footer.get('footer'))
@@ -120,14 +174,17 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                     standing, unc = None, set()
                 _recompute_insights(store, user_id, sh, rec, standing, unc)
             store.save_shot_result(shot_id, rec, {'ok': True}, algo_version=ALGO_VERSION)
-            clip = _clip_info(probe)
+            # Enrich the attempt clip with the richer, validated probe from analysis (measured fps, frames…).
+            enriched = _clip_info(probe)
+            if enriched:
+                attempt['clip'] = {**(attempt.get('clip') or {}), **enriched}
             # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
             # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
             if is_upload:
-                _log('analyzed', clip=clip)
+                _log('analyzed', diagnostics=_quality(rec))
                 return dict(shot_id=shot_id)
             footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
-            _log('analyzed', clip=clip)
+            _log('analyzed', diagnostics=_quality(rec))
             return dict(shot_id=shot_id, **footer)
         except Exception as e:
             # Persist the failure on the shot row (so Lab › Uploads can show it) + log the attempt, then

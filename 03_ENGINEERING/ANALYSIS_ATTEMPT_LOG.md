@@ -49,13 +49,20 @@ score reset. It is the long-term record of what LaneSight could and couldn't ana
 | `algorithm_version`, `api_revision`, `env` | engine version, Cloud Run revision (`K_REVISION`), `dev`/`beta`/`live` |
 | `duration_ms`, `step_timings` (jsonb) | timing |
 | `content_hash` | groups repeat uploads of the same clip |
-| `clip` (jsonb) | `{fps,width,height,duration_s,codec,hdr,bytes}` |
+| `clip` (jsonb) | camera/recording facts — `fps`, `nominal_fps`, `width`, `height`, `short_side_px`, `rotation`, `duration_s`, `frames`, `codec`, `color_transfer`, `hdr`, `variable_frame_rate`, `max_frame_gap_ms`, `bytes`. **Probed up front**, so a *failed* attempt still records them (most failures are framing-related); enriched with the validated analysis probe on success. `{probe_error}` if the clip couldn't be probed. |
+| `diagnostics` (jsonb) | on **failure**: the numbers behind the failure. On **success**: capture quality + headline geometry — `far_lane`, `capture_reason`, `entry_board`, `ball_speed`, `rev_rate`, `entry_angle`, `n_measured`, and (form) `view`/`status` — so camera framing can be correlated with what analysis could measure. |
 
 RLS: owner-only `select` (`user_id = auth.uid()`); all writes via the service role (the API). Logging is
 **best-effort** — a logging failure never breaks an analysis (`store.log_analysis_attempt` swallows errors).
 
 `analysis_failure_rates` view: `day × algorithm_version × capture_mode × failure_code` → `attempts`,
 `failures`, `failure_rate`.
+
+`analysis_attempt_summary` view (migration 022): one flattened row per attempt for reviewing a session —
+`created_at, source, capture_mode, status, failure_code, analyze_seconds, width, height, rotation_deg, fps,
+hdr, variable_frame_rate, clip_seconds, clip_mb, far_lane, capture_reason, entry_board, ball_speed, …`. Both
+views are `security_invoker` so they stay owner-scoped. Review a session with:
+`select * from analysis_attempt_summary where created_at > now() - interval '12 hours' order by created_at;`
 
 ## 4. Store API (`lanesight_api/store.py`, both Memory + Pg)
 - `save_shot_result(shot_id, record, result, algo_version=None)` → sets `analysis_status='analyzed'`, clears
