@@ -54,6 +54,7 @@ def detect_window(path, scale=0.2, step=2, lead=LEAD_S, tail=TAIL_S, log=print):
     dur = nframes / fps
     import cv2
     cap = cv2.VideoCapture(path)
+    if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"): cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)  # DEC-092 orientation
     prev = None; energy = []; idxs = []; i = 0
     while True:
         if not cap.grab(): break

@@ -1,0 +1,93 @@
+{
+  "results": [
+    {
+      "clip": "IMG_8751.mov",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8751.mov",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.583,
+        "entry_board": 18.085,
+        "entry_angle": 5.066,
+        "rev_rate": 423.005,
+        "breakpoint_board": 9.445,
+        "laydown_board": 17.864,
+        "breakpoint_distance": 40.056
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 60.95,
+      "cpu_s": 163.9,
+      "peak_rss_mb": 1899.3,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 3.61,
+        "convert_s": 37.41,
+        "cv": {
+          "stabilize_s": 14.793,
+          "find_lanes_s": 0.065,
+          "extract_blobs_s": 1.163,
+          "link_s": 0.172,
+          "extend_s": 0.045,
+          "detect_impact_s": 0.543,
+          "refine_s": 0.516,
+          "compute_s": 0.012,
+          "read_pins_s": 2.048,
+          "rev_rate_s": 0.388
+        },
+        "analyze_s": 19.75,
+        "decode": {
+          "passes": 9,
+          "frames": 4001,
+          "seconds": 3.42
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8752.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8752.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.334,
+        "entry_board": 20.813,
+        "entry_angle": 4.582,
+        "rev_rate": 435.14,
+        "breakpoint_board": 11.194,
+        "laydown_board": 17.058,
+        "breakpoint_distance": 36.492
+      },
+      "pins_read": true,
+      "far_lane": "ok",
+      "wall_s": 14.97,
+      "cpu_s": 93.1,
+      "peak_rss_mb": 1994.8,
+      "timings": {
+        "probe_s": 0.09,
+        "window_s": 1.43,
+        "cv": {
+          "stabilize_s": 8.599,
+          "find_lanes_s": 0.055,
+          "extract_blobs_s": 1.205,
+          "link_s": 0.124,
+          "extend_s": 0.032,
+          "detect_impact_s": 0.552,
+          "refine_s": 0.542,
+          "compute_s": 0.011,
+          "read_pins_s": 1.863,
+          "rev_rate_s": 0.416
+        },
+        "analyze_s": 13.4,
+        "decode": {
+          "passes": 9,
+          "frames": 3893,
+          "seconds": 2.638
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    }
+  ],
+  "generated_wall": 1793144244.0,
+  "clips_dir": "/Users/shaynel/LaneSightData/training_videos"
+}

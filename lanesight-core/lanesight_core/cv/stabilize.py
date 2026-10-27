@@ -26,9 +26,21 @@ def decode_stats():
             'seconds': round(_DECODE['seconds'], 3)}
 
 
+def open_capture(path):
+    """Open a clip and honor its rotation flag (DEC-092 orientation fix). OpenCV ignores the container's
+    rotation metadata by default, so a phone held in PORTRAIT (rotation ±90) would otherwise be decoded with
+    the lane lying sideways — which the lane/foul detector can't read. ORIENTATION_AUTO applies the rotation
+    so every clip reaches the CV upright, regardless of how the phone was held. Landscape (rotation 0) is
+    unchanged."""
+    cap = cv2.VideoCapture(path)
+    if hasattr(cv2, 'CAP_PROP_ORIENTATION_AUTO'):
+        cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+    return cap
+
+
 def frames(path):
     _DECODE['passes'] += 1
-    cap = cv2.VideoCapture(path); i = 0
+    cap = open_capture(path); i = 0
     while True:
         t = _time.perf_counter()
         ok, f = cap.read()

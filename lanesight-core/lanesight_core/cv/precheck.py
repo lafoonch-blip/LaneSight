@@ -21,9 +21,10 @@ def precheck(path: str) -> dict:
     t0 = time.perf_counter()
     import cv2
     from .lanes import find_lanes
+    from .stabilize import open_capture
     from ..failures import AnalysisFailure
     try:
-        cap = cv2.VideoCapture(path)
+        cap = open_capture(path)      # honor rotation so the precheck sees the same upright frames (DEC-092)
         n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         # Sample evenly across the clip (CAP_PROP_POS_FRAMES seeks to the enclosing keyframe → cheap).
         idxs = sorted({int(round(i)) for i in np.linspace(0, max(n - 1, 0), _MAX_FRAMES)}) if n else [0]

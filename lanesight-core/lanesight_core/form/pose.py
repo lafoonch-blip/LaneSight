@@ -111,6 +111,7 @@ def extract_landmarks(path: str, model_path: str = POSE_MODEL_PATH, log=print) -
         running_mode=vision.RunningMode.VIDEO, num_poses=1,
         min_pose_detection_confidence=0.3, min_tracking_confidence=0.3)
     cap = cv2.VideoCapture(path)
+    if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"): cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)  # DEC-092 orientation
     if not cap.isOpened():
         raise PoseBackendError(f"OpenCV can't decode {path!r} (re-export as H.264 / Most Compatible).",
                                code='VIDEO_DECODE_FAILED', stage='decode',
@@ -316,6 +317,7 @@ def _ball_track(path, t, lms, t0, t1, log=print):
         return {}
     pts = frame_times(path)
     cap = cv2.VideoCapture(path)
+    if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"): cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)  # DEC-092 orientation
     H = W = None
     frames = {}
     idx0 = int(np.searchsorted(pts, t0))
@@ -626,6 +628,7 @@ def export_key_frames(video, out_prefix, events, crops=None, log=print) -> list:
         for key, idx in targets.items():
             need.setdefault(idx, []).append(key)
         cap = cv2.VideoCapture(video)
+        if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"): cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)  # DEC-092 orientation
         if not cap.isOpened():
             log(f'key-frames: OpenCV cannot decode {video!r}; skipping')
             return []
