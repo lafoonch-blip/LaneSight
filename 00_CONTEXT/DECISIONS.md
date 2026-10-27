@@ -1,6 +1,6 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.52  
+Version: 1.53  
 Last Updated: 2026-10-27  
 Owner: Shayne  
 Supersedes: v1.51
@@ -1054,6 +1054,17 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Date:** 2026-10-27
 **Status:** ACCEPTED.
 **Supersedes:** in part DEC-089 (the `02_DESIGN/dev_build_v0/` design-source pointer) and the matching lines in CLAUDE.md, AGENTS.md, CURRENT_STATE.md and `02_DESIGN/dev_build_v0/README.md`.
+
+### DEC-092 — Analysis latency: optimize the existing pipeline first; measure before changing the CV
+**Decision (Shayne, 2026-10-27):**
+- Optimize the current server pipeline before moving more CV onto the iPhone. The phone handles framing, warm-up, trimming and hints; all metric math stays on the server (one validated implementation, DEC-062/065).
+- Order: **P0** persist per-stage timings (phone + server), ~2 s precheck, wake Cloud Run when Record opens, verify SDR capture · **P1** decode once, pass the phone's trim window · **P2** low-res detection + full-res measurement · **P3** timestamped observation interface. Plan: `03_ENGINEERING/ANALYSIS_LATENCY_SPLIT_PROPOSAL.md` §6.
+- Every optimization runs the same reproducible clip benchmark and passes a regression gate: less time, metrics within tolerance of the reference run, no new failures, cost per shot not up out of line with the gain.
+- Report analysis time (server CPU per successful shot) separately from user-perceived latency (tap-stop to shot card, successful vs failed).
+- No new speed requirement; DEC-043 unchanged. Measured results inform that later.
+
+**Why:** A phone-trimmed shot still took ~280 s of server analysis on 2026-10-27, and a framing failure took 140 s to fail. The pipeline decodes the clip ~9 times, but per-stage timings aren't persisted, so the biggest cost must be measured before the CV changes.
+**Date:** 2026-10-27 · **Status:** ACCEPTED · **Supersedes:** none
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
