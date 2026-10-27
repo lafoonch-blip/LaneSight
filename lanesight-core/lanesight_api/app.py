@@ -295,8 +295,24 @@ def session_summary(sid: str, user=Depends(current_user)):
                 agg.setdefault(metric, []).append(a['mean'])
         typical = {'status': 'ok', 'n_sessions': len(others),
                    'metrics': {m: round(sum(v) / len(v), 2) for m, v in agg.items() if v}}
+    # Early-vs-late split (first N vs last N measured shots) for the session-summary "Early vs late" block.
+    def _early_late(metric, n=8):
+        vals = si._vals(records, metric)                 # ordered, only 'ok'/'calibrated_estimate'
+        if len(vals) < 4:
+            return None
+        k = min(n, len(vals) // 2)
+        early, late = vals[:k], vals[-k:]
+        em, lm = sum(early) / len(early), sum(late) / len(late)
+        return {'early': round(em, 2), 'late': round(lm, 2), 'delta': round(lm - em, 2),
+                'n_early': len(early), 'n_late': len(late)}
+    early_vs_late = {m: _early_late(m) for m in ('ball_speed', 'rev_rate', 'entry_angle', 'breakpoint_board')}
+    early_vs_late = {k: v for k, v in early_vs_late.items() if v}
+    # Session focus (the recurring issue across the session's shots) — reuses each shot's own rec copy.
+    focus = si.next_focus([{'record': r} for r in records], lookback=len(records) or 1)
+
     return {'session_id': sid, 'n_shots': len(records), 'oil_pattern_id': pattern,
-            'metrics': si.summary(records), 'consistency': si.consistency(records), 'typical': typical}
+            'metrics': si.summary(records), 'consistency': si.consistency(records), 'typical': typical,
+            'early_vs_late': early_vs_late, 'focus': focus}
 
 
 # ----------------------------------------------------------------- shots
