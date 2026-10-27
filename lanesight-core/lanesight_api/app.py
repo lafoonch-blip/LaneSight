@@ -344,16 +344,25 @@ def form_session_summary(sid: str, user=Depends(current_user)):
     def _series(fn):
         return [v for v in (fn(r) for r in records) if v is not None]
 
-    # (key, label, unit, extractor, best_effort, steady-threshold on stdev)
+    # A metric is "drifting" when the first-half → second-half mean shifts by more than `trend_min`
+    # (a directional trend across the session), not merely when within-session scatter is high.
+    def _first_last(vals, n=4):
+        if len(vals) < 4:
+            return None
+        k = min(n, len(vals) // 2)
+        early, late = vals[:k], vals[-k:]
+        return sum(early) / len(early), sum(late) / len(late)
+
+    # (key, label, unit, extractor, best_effort, trend_min for 'drifting' | None)
     SPECS = [
-        ('approach_time',  'Approach time',  's',    lambda r: _metric(r, 'approach_time'), False, 0.12),
-        ('release_timing', 'Release timing', 's',    _t4,                                   False, 0.06),
+        ('approach_time',  'Approach time',  's',    lambda r: _metric(r, 'approach_time'), False, 0.08),
+        ('release_timing', 'Release timing', 's',    _t4,                                   False, 0.03),
         ('ball_start',     'Ball start',     'step', _t2,                                    False, None),
-        ('swing_time',     'Swing time',     's',    lambda r: _metric(r, 'swing_time'),    False, 0.10),
+        ('swing_time',     'Swing time',     's',    lambda r: _metric(r, 'swing_time'),    False, 0.05),
         ('spine_tilt',     'Spine tilt',     'deg',  _spine,                                 True,  None),
     ]
     repeatability, drifting = [], []
-    for key, label, unit, fn, best_effort, thr in SPECS:
+    for key, label, unit, fn, best_effort, trend_min in SPECS:
         vals = _series(fn)
         if not vals:
             repeatability.append({'key': key, 'label': label, 'unit': unit, 'status': 'building',
@@ -369,7 +378,9 @@ def form_session_summary(sid: str, user=Depends(current_user)):
                                   'mode': mode, 'count': cnt, 'best_effort': False,
                                   'display': f'Step {mode} on {cnt} of {len(steps)}'})
             continue
-        status = 'best_effort' if best_effort else ('steady' if (thr is None or spread <= thr) else 'drifting')
+        fl = _first_last(vals)
+        drift = bool(fl and trend_min is not None and abs(fl[1] - fl[0]) >= trend_min)
+        status = 'best_effort' if best_effort else ('drifting' if drift else 'steady')
         if unit == 's':
             display = f'{mean:.2f} s ± {spread:.2f}'
         elif unit == 'deg':
