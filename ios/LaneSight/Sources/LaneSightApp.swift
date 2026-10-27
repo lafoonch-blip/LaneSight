@@ -34,7 +34,8 @@ struct LaneSightApp: App {
                     #endif
                 }
                 // Seamless launch: keep the branded splash up until Home has loaded (real app only, not previews).
-                if !isPreview, model.gate == .ready, !model.homeLoaded {
+                // Not while the first-run intro is up (that precedes Home).
+                if !isPreview, model.gate == .ready, model.hasSeenIntro, !model.homeLoaded {
                     LaunchSplash().transition(.opacity).zIndex(1)
                 }
             }
@@ -50,7 +51,8 @@ struct LaneSightApp: App {
         switch model.gate {
         case .unauthenticated: AuthFlow()
         case .needsProfile:    ProfileSetupFlow()
-        case .ready:           RootTabs()
+        // First-run: show the "how it works" intro once before Home.
+        case .ready:           if model.hasSeenIntro { RootTabs() } else { HowItWorksFlow() }
         }
     }
 }
@@ -95,6 +97,7 @@ struct PreviewHarness: View {
                     }
                 case "welcome": AuthFlow()
                 case "splash": LaunchSplash()
+                case "howitworks": HowItWorksFlow()
                 case "signin": NavigationStack { SignInStep() }
                 case "createaccount": NavigationStack { CreateAccountStep() }
                 case "profilesetup": ProfileSetupFlow()

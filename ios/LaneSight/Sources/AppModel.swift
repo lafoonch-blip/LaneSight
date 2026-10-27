@@ -100,6 +100,9 @@ final class AppModel: ObservableObject {
     // Auth session (tokens live in the Keychain, not here/UserDefaults).
     @Published private(set) var session: AuthSession?
     @Published private(set) var profileComplete: Bool { didSet { defaults.set(profileComplete, forKey: Keys.profileComplete) } }
+    /// Whether the one-time "how it works" intro has been shown (first-run demo before Home).
+    @Published private(set) var hasSeenIntro: Bool { didSet { defaults.set(hasSeenIntro, forKey: Keys.seenIntro) } }
+    func markIntroSeen() { hasSeenIntro = true }
     private var refreshTask: Task<String?, Never>?
 
     /// The single source of truth the app root switches on.
@@ -164,6 +167,7 @@ final class AppModel: ObservableObject {
         static let speak = "ls.speakAdjustments"
         static let preferredFPS = "ls.preferredFPS"
         static let arsenalMigrated = "ls.arsenalMigrated"
+        static let seenIntro = "ls.hasSeenIntro"
     }
 
     init() {
@@ -181,6 +185,7 @@ final class AppModel: ObservableObject {
         useDevUser = defaults.bool(forKey: Keys.useDevUser)
         handed = defaults.string(forKey: Keys.handed) ?? "R"
         profileComplete = defaults.bool(forKey: Keys.profileComplete)
+        hasSeenIntro = defaults.bool(forKey: Keys.seenIntro)
         speedUnit = defaults.string(forKey: Keys.speedUnit) ?? "mph"
         speakAdjustments = defaults.bool(forKey: Keys.speak)
         preferredFPS = (defaults.object(forKey: Keys.preferredFPS) as? Int) ?? 120
