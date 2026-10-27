@@ -29,6 +29,14 @@ struct ShotResult: Equatable {
     var insightsState: String?
     var insightsConfidence: String?
     var insightsNote: String?
+    // DEC-088/090 shot card: fitted lane path + pinned points, Power, baseline, and the two-part coach read.
+    var pathFit: PathFit?
+    var keyPoints: [String: ShotKeyPoint] = [:]
+    var baseline: Baseline?
+    var impactEnergyJ: Double?
+    var coachThrow: CoachThrow?
+    var coachLane: CoachLane?
+    var coachAction: CoachAction?
     // Capture-quality banner (B): shown above "Target vs actual" when the far lane was limited.
     var captureFarLaneLimited: Bool = false
     var captureReason: String?
@@ -563,6 +571,7 @@ final class AppModel: ObservableObject {
                                    formStatus: record?.status,
                                    formVersion: record?.form_version)
             if isForm { Self.attachFormFundamentals(&built, record) }
+            else { Self.attachShotCard(&built, record) }
             result = built
             shotCount += 1
             pipeline = .done
@@ -613,6 +622,7 @@ final class AppModel: ObservableObject {
                                    formVersion: record?.form_version)
             built.shotNumber = shot.sequence
             if isForm { Self.attachFormFundamentals(&built, record) }
+            else { Self.attachShotCard(&built, record) }
             result = built
             return true
         } catch {
@@ -622,6 +632,19 @@ final class AppModel: ObservableObject {
 
     /// Copies the form fundamentals v1 payload (DEC-057) from the shot record onto the result. Everything
     /// stays absent when the record didn't carry it — nothing is fabricated.
+    /// DEC-088/090: copy the shot-card fields (fitted path, pinned points, Power, baseline, coach read) from
+    /// the record onto the result. Ball shots only; everything stays nil when the record didn't carry it.
+    private static func attachShotCard(_ r: inout ShotResult, _ record: ShotRecord?) {
+        guard let record, record.form_version == nil else { return }
+        r.pathFit = record.path_fit
+        r.keyPoints = record.key_points ?? [:]
+        r.baseline = record.baseline
+        r.impactEnergyJ = record.impact_energy_j
+        r.coachThrow = record.insights?.throwRead
+        r.coachLane = record.insights?.lane
+        r.coachAction = record.insights?.coach
+    }
+
     private static func attachFormFundamentals(_ r: inout ShotResult, _ record: ShotRecord?) {
         guard let record else { return }
         r.formFPS = record.fps

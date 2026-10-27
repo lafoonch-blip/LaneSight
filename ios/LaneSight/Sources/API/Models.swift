@@ -117,6 +117,11 @@ struct ShotRecord: Codable {
     // is the honest one-line explanation. `source` distinguishes an uploaded clip from a live shot.
     let capture_quality: CaptureQuality?
     let source: String?
+    // DEC-088/090 shot card: the fitted lane path, the 4 pinned points, Power, and the bowler's baseline.
+    let path_fit: PathFit?
+    let key_points: [String: ShotKeyPoint]?
+    let impact_energy_j: Double?
+    let baseline: Baseline?
 
     // Form fundamentals v1 (DEC-057) — the after_form_analyzed footer fields written onto the record.
     // key_frames: the KEY POSITIONS stills actually exported (fetched via GET /shots/{id}/frame/{key}).
@@ -137,6 +142,7 @@ struct ShotRecord: Codable {
         case key_frames, key_frame_poses, events, timing_checkpoints, measured_positions
         case swing_timing, coaching_cues, focus, footer
         case capture_quality, source
+        case path_fit, key_points, impact_energy_j, baseline
     }
 
     // Lenient decode: decode each field independently with `try?` so one malformed/unexpected form field
@@ -162,6 +168,10 @@ struct ShotRecord: Codable {
         footer = (try? c?.decodeIfPresent(FormFooter.self, forKey: .footer)) ?? nil
         capture_quality = (try? c?.decodeIfPresent(CaptureQuality.self, forKey: .capture_quality)) ?? nil
         source = (try? c?.decodeIfPresent(String.self, forKey: .source)) ?? nil
+        path_fit = (try? c?.decodeIfPresent(PathFit.self, forKey: .path_fit)) ?? nil
+        key_points = (try? c?.decodeIfPresent([String: ShotKeyPoint].self, forKey: .key_points)) ?? nil
+        impact_energy_j = (try? c?.decodeIfPresent(Double.self, forKey: .impact_energy_j)) ?? nil
+        baseline = (try? c?.decodeIfPresent(Baseline.self, forKey: .baseline)) ?? nil
     }
 }
 
@@ -288,7 +298,45 @@ struct ShotInsights: Codable, Equatable {
     let state: String?
     let confidence: String?
     let note: String?
+    // DEC-088/090 shot card: the two-part read + the single coach action (server `insights.throw/lane/coach`).
+    let throwRead: CoachThrow?
+    let lane: CoachLane?
+    let coach: CoachAction?
+
+    enum CodingKeys: String, CodingKey {
+        case recommendations, suggested_target, state, confidence, note, lane, coach
+        case throwRead = "throw"
+    }
 }
+
+// MARK: - DEC-088/090 shot-card coach
+struct CoachThrow: Codable, Equatable {
+    let status: String?        // good | off | building
+    let verdict: String?
+    let rings: [String: CoachRing]?   // speed | rev | accuracy
+}
+struct CoachRing: Codable, Equatable { let value: Double?; let vs: String? }
+struct CoachLane: Codable, Equatable {
+    let status: String?        // good | miss | not_read
+    let explanation: String?
+    let side: String?          // light | high (on a miss)
+    let entry_board: Double?
+    let entry_angle: Double?
+}
+struct CoachAction: Codable, Equatable {
+    let action: String?        // keep | lane_move | no_move | no_move_yet
+    let text: String?
+    let move: CoachMove?
+}
+struct CoachMove: Codable, Equatable { let feet: Double?; let eyes: Double?; let direction: String? }
+
+struct PathFit: Codable, Equatable {
+    let points: [PathPoint]?
+    let measured_extent_ft: [Double]?
+}
+struct PathPoint: Codable, Equatable { let z_ft: Double?; let board: Double? }
+struct ShotKeyPoint: Codable, Equatable { let z_ft: Double?; let board: Double?; let angle_deg: Double? }
+struct Baseline: Codable, Equatable { let n: Int?; let speed: Double?; let rev: Double?; let arrows: Double? }
 
 struct Recommendation: Codable, Equatable {
     let type: String?
