@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Auth flow (real email/password)
 //
@@ -28,12 +29,20 @@ private struct WelcomeStep: View {
                 .font(.lsSubheadline).tracking(3)
                 .foregroundStyle(LS.textSecondary)
 
-            // Hero photograph (Figma 442:6462) — the real bowler image; its top/bottom fade into the
-            // canvas is baked into the export, so it blends seamlessly without an extra overlay.
+            // Hero photograph (Figma 442:6462). Fade the top/bottom edges into the canvas with a gradient
+            // mask so it blends seamlessly instead of reading as a hard square.
             Image("WelcomeHero")
                 .resizable().scaledToFill()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
+                .mask(
+                    LinearGradient(stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.14),
+                        .init(color: .black, location: 0.86),
+                        .init(color: .clear, location: 1.0),
+                    ], startPoint: .top, endPoint: .bottom)
+                )
                 .accessibilityElement()
                 .accessibilityLabel("A bowler releasing the ball")
 
@@ -432,17 +441,30 @@ private struct ProfileSetupStep: View {
 
     @State private var firstName = ""
     @State private var lastName = ""
-    @State private var dob = Calendar.current.date(byAdding: .year, value: -25, to: Date()) ?? Date()
+    // Typable DOB (MM / DD / YYYY) — the wheel picker was painful to scroll back decades.
+    @State private var dobMonth = ""
+    @State private var dobDay = ""
+    @State private var dobYear = ""
     @State private var handedness = "right"
     @State private var delivery = "one_handed_thumb"
     @State private var saving = false
     @State private var saveError: String?
     @State private var showUnder13 = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var photoBusy = false
 
-    private var age: Int {
-        Calendar.current.dateComponents([.year], from: dob, to: Date()).year ?? 0
+    private var dobDate: Date? {
+        guard let m = Int(dobMonth), let d = Int(dobDay), let y = Int(dobYear),
+              (1...12).contains(m), (1...31).contains(d), (1900...2100).contains(y) else { return nil }
+        var c = DateComponents(); c.year = y; c.month = m; c.day = d
+        guard let date = Calendar.current.date(from: c), date <= Date() else { return nil }
+        // Reject roll-over (e.g. Feb 31 → Mar) by confirming the components survive the round trip.
+        let back = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return (back.month == m && back.day == d) ? date : nil
     }
-    private var ageOK: Bool { age >= 13 }
+    private var dobComplete: Bool { dobDate != nil }
+    private var age: Int { dobDate.map { Calendar.current.dateComponents([.year], from: $0, to: Date()).year ?? 0 } ?? 0 }
+    private var ageOK: Bool { dobComplete && age >= 13 }
 
     // Short labels per the v3.7 design — the section header already says "one-handed: thumb or no thumb".
     private let deliveryOptions: [(String, String)] = [
@@ -456,21 +478,23 @@ private struct ProfileSetupStep: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("STEP 1 OF 2").font(.system(size: 12, weight: .semibold)).tracking(1).foregroundStyle(LS.action)
 
+                photoPicker
+
                 fieldLabel("First name")
                 profileField("[First]", text: $firstName, content: .givenName)
                 fieldLabel("Last name")
                 profileField("[Last]", text: $lastName, content: .familyName)
 
                 fieldLabel("Date of birth")
-                HStack {
-                    DatePicker("", selection: $dob, in: ...Date(), displayedComponents: .date)
-                        .datePickerStyle(.compact).labelsHidden().tint(LS.action)
+                HStack(spacing: 8) {
+                    dobField($dobMonth, "MM", 2)
+                    Text("/").foregroundStyle(LS.textSecondary)
+                    dobField($dobDay, "DD", 2)
+                    Text("/").foregroundStyle(LS.textSecondary)
+                    dobField($dobYear, "YYYY", 4)
                     Spacer()
                 }
-                .padding(.horizontal, 14).frame(minHeight: 50)
-                .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
-                if !ageOK {
+                if dobComplete && !ageOK {
                     Label("You must be 13 or older to use LaneSight.", systemImage: "exclamationmark.triangle.fill")
                         .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
@@ -512,11 +536,19 @@ private struct ProfileSetupStep: View {
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(saving)
                     .simultaneousGesture(TapGesture().onEnded { Task { await saveProfile() } })
-                } else {
+                } else if dobComplete {          // a valid date, but under 13
                     Button { showUnder13 = true } label: {
                         HStack(spacing: 8) { Text("Continue"); Image(systemName: "arrow.right") }.frame(maxWidth: .infinity)
                     }
                     .buttonStyle(PrimaryButtonStyle())
+                } else {                          // date not entered yet
+                    Button {} label: {
+                        HStack(spacing: 8) { Text("Continue"); Image(systemName: "arrow.right") }.frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle()).disabled(true).opacity(0.5)
+                    Text("Enter your date of birth to continue.")
+                        .font(.lsCaption2).foregroundStyle(LS.textFaint)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
             .padding(.top, 16).padding(.horizontal, 20).padding(.bottom, 40)
@@ -528,6 +560,58 @@ private struct ProfileSetupStep: View {
         .fullScreenCover(isPresented: $showUnder13) {
             Under13View().environmentObject(model)
         }
+    }
+
+    // Optional profile photo, added right here at sign-up (uploads immediately — the user is authed).
+    private var photoPicker: some View {
+        HStack {
+            Spacer()
+            VStack(spacing: 6) {
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    ZStack {
+                        Circle().fill(LS.raised).frame(width: 92, height: 92)
+                        if let img = model.avatarImage {
+                            Image(uiImage: img).resizable().scaledToFill().frame(width: 92, height: 92).clipShape(Circle())
+                        } else if photoBusy {
+                            ProgressView().tint(LS.action)
+                        } else {
+                            VStack(spacing: 4) {
+                                Image(systemName: "camera.fill").font(.system(size: 22)).foregroundStyle(LS.action)
+                                Text("Add photo").font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                            }
+                        }
+                    }
+                    .overlay(Circle().strokeBorder(LS.borderStrong, lineWidth: 1))
+                }
+                Text(model.avatarImage == nil ? "Optional" : "Change photo")
+                    .font(.system(size: 11)).foregroundStyle(LS.textFaint)
+            }
+            Spacer()
+        }
+        .padding(.bottom, 2)
+        .onChange(of: photoItem) { _, item in Task { await uploadPhoto(item) } }
+    }
+
+    private func uploadPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        photoBusy = true; defer { photoBusy = false; photoItem = nil }
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        _ = try? await model.makeClient().uploadAvatar(data, mime: "image/jpeg")
+        await model.refreshAvatar()
+    }
+
+    /// One numeric DOB segment (MM / DD / YYYY), capped to `maxLen` digits.
+    private func dobField(_ text: Binding<String>, _ placeholder: String, _ maxLen: Int) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(.numberPad).multilineTextAlignment(.center)
+            .font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            .frame(width: maxLen == 4 ? 78 : 54, height: 50)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+            .onChange(of: text.wrappedValue) { _, v in
+                let digits = String(v.filter(\.isNumber).prefix(maxLen))
+                if digits != v { text.wrappedValue = digits }
+            }
     }
 
     private func fieldLabel(_ s: String) -> some View {
@@ -562,10 +646,10 @@ private struct ProfileSetupStep: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        let fields: [String: Any] = [
+        var fields: [String: Any] = [
             "name": fullName, "handedness": handedness, "delivery_style": delivery,
-            "dob": ISO8601DateFormatter().string(from: dob),
         ]
+        if let d = dobDate { fields["dob"] = ISO8601DateFormatter().string(from: d) }
         model.handed = (handedness == "left") ? "L" : "R"
         do { _ = try await model.makeClient().putProfile(fields) }
         catch { saveError = "Couldn't save profile (you can still continue): \(error.localizedDescription)" }

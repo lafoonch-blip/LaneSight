@@ -53,8 +53,11 @@ struct SessionView: View {
                 }
                 sessionStatsHeading
                 ringRow
-                sectionHeading("Target Line", action: "Why it matters")
-                targetSteppers
+                // Target line is only adjustable during a live session — hide it in the ended-session review.
+                if !readOnly {
+                    sectionHeading("Target Line", action: "Why it matters")
+                    targetSteppers
+                }
                 collapsedRow(title: "Shot history (\(rows.count))", subtitle: historySubtitle)
                 collapsedRow(title: "Lane transition", subtitle: "Inferred from your line, not measured oil")
                 if let loadError {

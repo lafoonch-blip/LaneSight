@@ -28,6 +28,7 @@ struct LaneSightApp: App {
             .tint(LS.action)
             .lsAppFont()
             .preferredColorScheme(.dark)
+            .installGlobalKeyboardDismiss()     // tap outside a field anywhere dismisses the keyboard
         }
     }
 
