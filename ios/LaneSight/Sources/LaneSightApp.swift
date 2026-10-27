@@ -74,6 +74,7 @@ struct PreviewHarness: View {
                 case "welcome": AuthFlow()
                 case "settings": NavigationStack { SettingsView() }
                 case "profile":  NavigationStack { ProfileView() }
+                case "achievements": NavigationStack { AchievementsView() }
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
                 }
             }
