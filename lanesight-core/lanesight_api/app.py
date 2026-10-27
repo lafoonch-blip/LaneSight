@@ -591,12 +591,64 @@ def get_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(404, 'job not found')
     return job.public()
 
+def _flat_metrics(m: dict) -> dict:
+    """Flatten a record's metrics ({k:{value}} or {k:v}) to {k: value}."""
+    out = {}
+    for k, v in (m or {}).items():
+        out[k] = v.get('value') if isinstance(v, dict) else v
+    return out
+
+
+def _shot_card_enrich(store, user, sh: dict) -> dict:
+    """DEC-088/090: add the shot-card fields to a BALL shot's record — path_fit (from the already-smoothed
+    trajectory), impact_energy_j (DEC-024), baseline, and insights.throw/lane/coach (the coach matrix).
+    Best-effort + additive; a form shot or any error leaves the record untouched (older clients ignore the
+    new keys). Computed at read time so the baseline is always current."""
+    try:
+        rec = sh.get('record') or {}
+        if not rec or rec.get('form_version') or not rec.get('metrics'):
+            return sh          # form shots / empty records have no ball lane read
+        m = _flat_metrics(rec.get('metrics'))
+        # path_fit: the trajectory is already LOESS-smoothed in lane coords; expose it + the measured extent.
+        tr = rec.get('trajectory') or {}
+        sm = tr.get('smoothed') or []
+        if sm:
+            zs = [p['z_ft'] for p in sm if p.get('z_ft') is not None]
+            rec['path_fit'] = {'points': sm, 'measured_extent_ft': [min(zs), max(zs)] if zs else None}
+        # Power / impact energy (DEC-024): pocket speed + rev + ball weight; best-effort, labeled.
+        from lanesight_core import power
+        pw = power.power(engines._weight_lb(store, user), m.get('speed_late') or m.get('ball_speed'),
+                         m.get('rev_rate'))
+        rec['impact_energy_j'] = pw.get('energy_j')
+        rec['power'] = pw
+        # Coach: classify throw vs the bowler's normal (prior LIVE shots) + lane vs the pocket.
+        from lanesight_core.insights import coach as _coach
+        prior = []
+        for p in store.shot_points(user):
+            if p.get('shot_id') == sh.get('id'):
+                continue
+            pm = _flat_metrics((p.get('record') or {}).get('metrics'))
+            prior.append({'ball_speed': pm.get('ball_speed'), 'rev_rate': pm.get('rev_rate'),
+                          'arrows_board': pm.get('arrows_board')})
+        intent = sh.get('intent') or {}
+        target = {'arrows_board': intent.get('arrows_board')} if intent.get('arrows_board') is not None else None
+        rec0 = ((rec.get('insights') or {}).get('recommendations') or [{}])[0] or {}
+        far = 'not_read' if (rec.get('capture_quality') or {}).get('far_lane') in ('limited', 'not_read') else None
+        cb = _coach.build(m, rec.get('key_points'), prior, target=target, recommendation=rec0, far_lane=far)
+        ins = rec.setdefault('insights', {})
+        ins['throw'], ins['lane'], ins['coach'] = cb['throw'], cb['lane'], cb['coach']
+        rec['baseline'] = cb['baseline']
+    except Exception as e:
+        print(f'shot-card enrich skipped ({type(e).__name__}: {e})')
+    return sh
+
+
 @app.get('/shots/{shot_id}')
 def get_shot(shot_id: str, user=Depends(current_user)):
     sh = get_store().get_shot(user, shot_id)
     if not sh:
         raise HTTPException(404, 'shot not found')
-    return sh
+    return _shot_card_enrich(get_store(), user, sh)
 
 @app.patch('/shots/{shot_id}')
 def patch_shot(shot_id: str, body: dict, user=Depends(current_user)):

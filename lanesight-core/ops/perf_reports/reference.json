@@ -15,30 +15,160 @@
       },
       "pins_read": true,
       "far_lane": "limited",
-      "wall_s": 64.65,
-      "cpu_s": 168.38,
-      "peak_rss_mb": 1873.8,
+      "wall_s": 61.14,
+      "cpu_s": 163.94,
+      "peak_rss_mb": 1955.9,
       "timings": {
-        "probe_s": 0.13,
-        "window_s": 3.85,
-        "convert_s": 39.64,
+        "probe_s": 0.12,
+        "window_s": 3.64,
+        "convert_s": 37.51,
         "cv": {
-          "stabilize_s": 15.653,
-          "find_lanes_s": 0.067,
-          "extract_blobs_s": 1.227,
-          "link_s": 0.184,
+          "stabilize_s": 14.772,
+          "find_lanes_s": 0.069,
+          "extract_blobs_s": 1.159,
+          "link_s": 0.183,
           "extend_s": 0.046,
-          "detect_impact_s": 0.544,
-          "refine_s": 0.533,
-          "compute_s": 0.013,
-          "read_pins_s": 2.304,
-          "rev_rate_s": 0.405
+          "detect_impact_s": 0.537,
+          "refine_s": 0.525,
+          "compute_s": 0.016,
+          "read_pins_s": 2.109,
+          "rev_rate_s": 0.396
         },
-        "analyze_s": 20.98,
+        "analyze_s": 19.81,
         "decode": {
           "passes": 9,
           "frames": 4001,
-          "seconds": 3.618
+          "seconds": 3.488
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8752.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8752.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.334,
+        "entry_board": 20.813,
+        "entry_angle": 4.582,
+        "rev_rate": 435.14,
+        "breakpoint_board": 11.194,
+        "laydown_board": 17.058,
+        "breakpoint_distance": 36.492
+      },
+      "pins_read": true,
+      "far_lane": "ok",
+      "wall_s": 14.9,
+      "cpu_s": 93.47,
+      "peak_rss_mb": 2021.0,
+      "timings": {
+        "probe_s": 0.1,
+        "window_s": 1.43,
+        "cv": {
+          "stabilize_s": 8.497,
+          "find_lanes_s": 0.054,
+          "extract_blobs_s": 1.216,
+          "link_s": 0.128,
+          "extend_s": 0.034,
+          "detect_impact_s": 0.555,
+          "refine_s": 0.543,
+          "compute_s": 0.012,
+          "read_pins_s": 1.85,
+          "rev_rate_s": 0.42
+        },
+        "analyze_s": 13.31,
+        "decode": {
+          "passes": 9,
+          "frames": 3893,
+          "seconds": 2.66
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8753.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8753.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.838,
+        "entry_board": 16.632,
+        "entry_angle": 3.049,
+        "rev_rate": 377.536,
+        "breakpoint_board": 11.279,
+        "laydown_board": 15.218,
+        "breakpoint_distance": 42.0
+      },
+      "pins_read": true,
+      "far_lane": "ok",
+      "wall_s": 6.6,
+      "cpu_s": 30.93,
+      "peak_rss_mb": 2021.0,
+      "timings": {
+        "probe_s": 0.09,
+        "window_s": 0.8,
+        "cv": {
+          "stabilize_s": 0.002,
+          "find_lanes_s": 0.059,
+          "extract_blobs_s": 0.011,
+          "link_s": 0.718,
+          "extend_s": 0.647,
+          "detect_impact_s": 0.609,
+          "refine_s": 0.625,
+          "compute_s": 0.008,
+          "read_pins_s": 2.538,
+          "rev_rate_s": 0.483
+        },
+        "analyze_s": 5.71,
+        "decode": {
+          "passes": 4,
+          "frames": 2854,
+          "seconds": 1.826
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8754.mov",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8754.mov",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 16.975,
+        "entry_board": 22.255,
+        "entry_angle": 6.9,
+        "rev_rate": 446.811,
+        "breakpoint_board": 9.068,
+        "laydown_board": 16.014,
+        "breakpoint_distance": 36.75
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 71.8,
+      "cpu_s": 177.04,
+      "peak_rss_mb": 2021.0,
+      "timings": {
+        "probe_s": 0.09,
+        "window_s": 3.53,
+        "convert_s": 45.74,
+        "cv": {
+          "stabilize_s": 17.222,
+          "find_lanes_s": 0.069,
+          "extract_blobs_s": 1.209,
+          "link_s": 0.165,
+          "extend_s": 0.062,
+          "detect_impact_s": 0.555,
+          "refine_s": 0.549,
+          "compute_s": 0.012,
+          "read_pins_s": 2.143,
+          "rev_rate_s": 0.396
+        },
+        "analyze_s": 22.39,
+        "decode": {
+          "passes": 9,
+          "frames": 4382,
+          "seconds": 3.843
         }
       },
       "expected": "analyzed",
@@ -50,27 +180,291 @@
       "status": "failed",
       "failure_code": "FOUL_LINE_NOT_IN_VIEW",
       "error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame",
-      "wall_s": 41.14,
-      "cpu_s": 301.44,
-      "peak_rss_mb": 1876.9,
+      "wall_s": 2.66,
+      "cpu_s": 16.16,
+      "peak_rss_mb": 2021.0,
       "timings": {
         "probe_s": 0.12,
-        "window_s": 2.58,
+        "window_s": 2.5,
         "cv": {
-          "stabilize_s": 38.389,
+          "stabilize_s": 0.005,
           "find_lanes_s": 0.041
         },
-        "analyze_s": 38.43,
+        "analyze_s": 0.05,
         "decode": {
-          "passes": 4,
-          "frames": 11378,
-          "seconds": 7.403
+          "passes": 0,
+          "frames": 0,
+          "seconds": 0.0
         }
       },
       "expected": "failed",
       "expected_failure_code": "FOUL_LINE_NOT_IN_VIEW"
+    },
+    {
+      "clip": "IMG_8807.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8807.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.71,
+        "entry_board": 19.464,
+        "entry_angle": 5.559,
+        "rev_rate": 446.99,
+        "breakpoint_board": 9.372,
+        "laydown_board": 17.498,
+        "breakpoint_distance": 40.5
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 14.79,
+      "cpu_s": 88.18,
+      "peak_rss_mb": 2021.0,
+      "timings": {
+        "probe_s": 0.09,
+        "window_s": 1.18,
+        "cv": {
+          "stabilize_s": 8.827,
+          "find_lanes_s": 0.078,
+          "extract_blobs_s": 1.089,
+          "link_s": 0.176,
+          "extend_s": 0.098,
+          "detect_impact_s": 0.521,
+          "refine_s": 0.56,
+          "compute_s": 0.011,
+          "read_pins_s": 1.714,
+          "rev_rate_s": 0.395
+        },
+        "analyze_s": 13.47,
+        "decode": {
+          "passes": 9,
+          "frames": 3801,
+          "seconds": 3.099
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8808.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8808.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.297,
+        "entry_board": 16.804,
+        "entry_angle": -1.95,
+        "breakpoint_board": 6.347,
+        "breakpoint_distance": 39.552
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 13.37,
+      "cpu_s": 81.34,
+      "peak_rss_mb": 2021.0,
+      "timings": {
+        "probe_s": 0.1,
+        "window_s": 0.55,
+        "cv": {
+          "stabilize_s": 8.807,
+          "find_lanes_s": 0.091,
+          "extract_blobs_s": 0.875,
+          "link_s": 0.16,
+          "extend_s": 0.06,
+          "detect_impact_s": 0.407,
+          "refine_s": 0.373,
+          "compute_s": 0.008,
+          "read_pins_s": 1.934
+        },
+        "analyze_s": 12.72,
+        "decode": {
+          "passes": 8,
+          "frames": 3351,
+          "seconds": 2.424
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8815.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8815.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 21.044,
+        "entry_board": 4.634,
+        "entry_angle": 2.893,
+        "rev_rate": 323.275,
+        "breakpoint_board": 11.818,
+        "breakpoint_distance": 15.237
+      },
+      "pins_read": false,
+      "far_lane": "ok",
+      "wall_s": 15.73,
+      "cpu_s": 94.37,
+      "peak_rss_mb": 2090.8,
+      "timings": {
+        "probe_s": 0.1,
+        "window_s": 1.14,
+        "cv": {
+          "stabilize_s": 9.367,
+          "find_lanes_s": 0.073,
+          "extract_blobs_s": 1.201,
+          "link_s": 0.215,
+          "extend_s": 0.108,
+          "detect_impact_s": 0.456,
+          "refine_s": 0.437,
+          "compute_s": 0.007,
+          "read_pins_s": 2.218,
+          "rev_rate_s": 0.342
+        },
+        "analyze_s": 14.43,
+        "decode": {
+          "passes": 9,
+          "frames": 3976,
+          "seconds": 3.193
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8817.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8817.MOV",
+      "status": "failed",
+      "failure_code": "FOUL_LINE_NOT_IN_VIEW",
+      "error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame",
+      "wall_s": 29.61,
+      "cpu_s": 187.47,
+      "peak_rss_mb": 2090.8,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 1.15,
+        "cv": {
+          "stabilize_s": 28.179,
+          "find_lanes_s": 0.124
+        },
+        "analyze_s": 18.11,
+        "decode": {
+          "passes": 4,
+          "frames": 3483,
+          "seconds": 2.333
+        },
+        "windowed_error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame"
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8819.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8819.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 18.652,
+        "entry_board": 12.935,
+        "entry_angle": 2.79,
+        "rev_rate": 382.164,
+        "breakpoint_board": 9.791,
+        "laydown_board": 16.976,
+        "breakpoint_distance": 43.25
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 17.76,
+      "cpu_s": 110.69,
+      "peak_rss_mb": 2090.8,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 2.29,
+        "cv": {
+          "stabilize_s": 10.267,
+          "find_lanes_s": 0.097,
+          "extract_blobs_s": 1.228,
+          "link_s": 0.255,
+          "extend_s": 0.158,
+          "detect_impact_s": 0.451,
+          "refine_s": 0.512,
+          "compute_s": 0.01,
+          "read_pins_s": 1.97,
+          "rev_rate_s": 0.349
+        },
+        "analyze_s": 15.3,
+        "decode": {
+          "passes": 9,
+          "frames": 4287,
+          "seconds": 3.291
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8810.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8810.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 16.858,
+        "entry_angle": 5.133,
+        "breakpoint_board": 0.747,
+        "laydown_board": 20.388,
+        "breakpoint_distance": 39.2
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 40.61,
+      "cpu_s": 276.31,
+      "peak_rss_mb": 2090.8,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 1.45,
+        "cv": {
+          "stabilize_s": 29.594,
+          "find_lanes_s": 0.166,
+          "extract_blobs_s": 2.688,
+          "link_s": 0.179,
+          "extend_s": 0.073,
+          "detect_impact_s": 1.095,
+          "refine_s": 1.156,
+          "compute_s": 0.01,
+          "read_pins_s": 3.068,
+          "rev_rate_s": 0.962
+        },
+        "analyze_s": 29.82,
+        "decode": {
+          "passes": 9,
+          "frames": 9859,
+          "seconds": 8.057
+        },
+        "windowed_error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame"
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8845.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8845.MOV",
+      "status": "failed",
+      "failure_code": "FOUL_LINE_NOT_IN_VIEW",
+      "error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame",
+      "wall_s": 41.53,
+      "cpu_s": 261.37,
+      "peak_rss_mb": 2566.5,
+      "timings": {
+        "probe_s": 0.1,
+        "window_s": 2.22,
+        "cv": {
+          "stabilize_s": 39.074,
+          "find_lanes_s": 0.072
+        },
+        "analyze_s": 32.83,
+        "decode": {
+          "passes": 4,
+          "frames": 6667,
+          "seconds": 4.616
+        },
+        "windowed_error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame"
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
     }
   ],
-  "generated_wall": 1793135653.0,
+  "generated_wall": 1793136884.0,
   "clips_dir": "/Users/shaynel/LaneSightData/training_videos"
 }

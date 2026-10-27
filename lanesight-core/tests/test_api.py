@@ -299,6 +299,27 @@ def test_attempt_clip_and_quality_capture():
     assert _quality(None) is None and _quality({}) is None     # nothing measured → None
 
 
+def test_shot_card_enrichment_on_get_shot():
+    """DEC-088/090: GET /shots/{id} enriches a ball shot with path_fit, impact_energy_j, baseline and
+    insights.throw/lane/coach — the fields the redesigned shot card renders."""
+    h = {'X-Dev-User': 'u_card'}
+    sid = client.post('/sessions', json={'mode': 'practice'}, headers=h).json()['id']
+    store = get_store()
+    rec = json.loads(_VAL.read_text())
+    shot = store.create_shot('u_card', sid, {'handed': 'R'})
+    rec['shot_id'] = shot['id']
+    store.save_shot_result(shot['id'], rec, {'ok': True})
+    body = client.get(f"/shots/{shot['id']}", headers=h).json()
+    r = body['record']
+    assert r.get('path_fit') and r['path_fit']['points']            # the fitted lane path for the 3D view
+    assert r.get('impact_energy_j') is not None                     # Power ring (DEC-024)
+    ins = r.get('insights') or {}
+    assert ins.get('coach', {}).get('action') in ('keep', 'lane_move', 'no_move', 'no_move_yet')
+    assert ins.get('throw', {}).get('status') in ('good', 'off', 'building')
+    assert ins.get('lane', {}).get('status') in ('good', 'miss', 'not_read')
+    assert r.get('baseline', {}).get('n') is not None
+
+
 def test_precheck_is_safe_on_a_bad_path():
     """DEC-092 P0: the framing precheck never raises — an unreadable clip yields ok=None so the caller
     falls through to the full pipeline (shadow mode must never block analysis)."""
