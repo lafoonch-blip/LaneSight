@@ -316,7 +316,8 @@ struct ProcessingCover: View {
         let r = pipelineRank
         return VStack(spacing: 14) {
             ProgressView().tint(LS.action).scaleEffect(1.2).padding(.top, 4)
-            Text("Analyzing your shot").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+            Text(model.captureMode == "form" ? "Analyzing your delivery" : "Analyzing your shot")
+                .font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
             Text("Usually about a minute. The screen stays on and controls are locked. Your results open as soon as it finishes.")
                 .font(.system(size: 12)).foregroundStyle(LS.textSecondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 8)
