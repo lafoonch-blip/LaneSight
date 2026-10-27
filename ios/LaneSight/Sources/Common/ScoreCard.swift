@@ -190,14 +190,20 @@ struct ScoreCard: View {
             Text("Each part needs enough measured shots before a score appears.")
                 .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
             if let elig = score.eligibility, !elig.isEmpty {
+                // Canonical order + human labels (not the raw a_acc/c_cons keys). Matches the Home building card.
+                let order: [(key: String, label: String)] = [
+                    ("s_perf", "Performance"), ("a_acc", "Accuracy"),
+                    ("c_cons", "Consistency"), ("p_power", "Power"),
+                ]
                 VStack(alignment: .leading, spacing: 3) {
-                    ForEach(elig.sorted(by: { $0.key < $1.key }), id: \.key) { key, e in
+                    ForEach(order.filter { elig[$0.key] != nil }, id: \.key) { row in
+                        let e = elig[row.key]
                         HStack {
-                            Image(systemName: e.met == true ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(e.met == true ? LS.success : LS.textFaint).font(.caption)
-                            Text(MetricDisplay.humanize(key)).font(.caption).foregroundStyle(LS.textSecondary)
+                            Image(systemName: e?.met == true ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(e?.met == true ? LS.success : LS.textFaint).font(.caption)
+                            Text(row.label).font(.caption).foregroundStyle(LS.textSecondary)
                             Spacer()
-                            Text("\(e.have ?? 0)/\(e.need ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
+                            Text("\(e?.have ?? 0)/\(e?.need ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(LS.textSecondary)
                         }
                     }
                 }
