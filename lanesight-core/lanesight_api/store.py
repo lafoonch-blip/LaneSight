@@ -906,7 +906,8 @@ class PgStore(MemoryStore):
         return True
 
     def catalog_balls(self, q=None, limit=50):
-        qp = ('select=id,manufacturer,name,coverstock,core_type,ls_hook,ls_length,ls_backend,image_url'
+        qp = ('select=id,manufacturer,name,coverstock,core_type,rg,diff,factory_finish,'
+              'ls_hook,ls_length,ls_backend,image_url'
               f'&order=manufacturer,name&limit={int(limit)}')
         if q:
             from urllib.parse import quote

@@ -767,10 +767,21 @@ struct CatalogBall: Codable, Identifiable, Equatable {
     let name: String?
     let coverstock: String?
     let core_type: String?
+    let rg: Double?
+    let diff: Double?
+    let factory_finish: String?
     let ls_hook: FlexString?
     let ls_length: FlexString?
     let ls_backend: FlexString?
     let image_url: String?
+
+    /// "2.48 / 0.051" when both are present, else "—" (honest; the catalog row lacks the spec).
+    var rgDiff: String? {
+        guard rg != nil || diff != nil else { return nil }
+        let r = rg.map { String(format: "%.2f", $0) } ?? "—"
+        let d = diff.map { String(format: "%.3f", $0) } ?? "—"
+        return "\(r) / \(d)"
+    }
 }
 
 // MARK: - Arsenal (GET/POST /me/arsenal, PATCH /me/arsenal/{id})

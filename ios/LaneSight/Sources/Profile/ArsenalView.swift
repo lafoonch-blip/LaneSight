@@ -130,39 +130,24 @@ struct BallSetupView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
-                    if let mfr = ball?.manufacturer {
-                        Text("\(mfr) · from catalog").font(.lsCaption).foregroundStyle(LS.textSecondary)
-                    } else {
-                        Text("Custom ball").font(.lsCaption).foregroundStyle(LS.textSecondary)
-                    }
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                headerRow
 
+                // Factory specs (read-only, from the catalog). Custom balls have no factory data.
                 if let ball {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("FACTORY SPECS").lsEyebrow()
+                    cardSection(title: "Factory specs", trailing: "From catalog") {
                         specRow("Coverstock", ball.coverstock)
                         specRow("Core", ball.core_type)
-                        specRow("Hook", ball.ls_hook?.value)
-                        specRow("Length", ball.ls_length?.value)
-                        specRow("Backend", ball.ls_backend?.value)
+                        specRow("RG / Differential", ball.rgDiff)
                     }
-                    .lsCard()
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("YOUR SETUP (OPTIONAL)").lsEyebrow()
-                    field("Weight (lb)", text: $weight, keyboard: .decimalPad, placeholder: "15")
-                    field("Layout system", text: $layoutSystem, placeholder: "dual_angle")
-                    field("Layout", text: $layout, placeholder: "4.5 x 45 x 35")
-                    field("Surface", text: $surface, placeholder: "2000 abralon")
-                    Toggle(isOn: $makeCurrent) {
-                        Text("Make this my current ball").font(.lsSubheadline).foregroundStyle(LS.textPrimary)
-                    }.tint(LS.blue)
+                // Drilling (optional): the bowler's own weight / finish / layout for this ball.
+                cardSection(title: "Drilling (optional)", trailing: nil) {
+                    weightRow
+                    inlineEditRow("Finish", text: $surface, placeholder: ball?.factory_finish ?? "e.g. 1500 grit")
+                    inlineEditRow("Layout", text: $layout, placeholder: "e.g. 4.5 x 45 x 35")
                 }
-                .lsCard()
 
                 if let saveError {
                     Text(saveError).font(.lsCaption).foregroundStyle(LS.bestEffort)
@@ -184,26 +169,92 @@ struct BallSetupView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
-    private func field(_ label: String, text: Binding<String>,
-                       keyboard: UIKeyboardType = .default, placeholder: String) -> some View {
+    // Header: round ball thumbnail + name + "{mfr} · from catalog" (Figma 437:6000).
+    private var headerRow: some View {
+        HStack(spacing: 12) {
+            ballThumbnail
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 22, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Text(ball?.manufacturer.map { "\($0) · from catalog" } ?? "Custom ball")
+                    .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder private var ballThumbnail: some View {
+        let url = ball?.image_url.flatMap { URL(string: $0) }
+        ZStack {
+            Circle().fill(LS.raised).frame(width: 54, height: 54)
+            if let url {
+                AsyncImage(url: url) { img in
+                    img.resizable().scaledToFill()
+                } placeholder: {
+                    Image(systemName: "circle.circle").foregroundStyle(LS.blue)
+                }
+                .frame(width: 54, height: 54).clipShape(Circle())
+            } else {
+                Image(systemName: "circle.circle").font(.system(size: 26)).foregroundStyle(LS.blue)
+            }
+        }
+        .overlay(Circle().strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
+    private var weightRow: some View {
         HStack {
-            Text(label).font(.lsSubheadline).foregroundStyle(LS.textSecondary)
+            Text("Weight").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+            Spacer()
+            Menu {
+                ForEach(Array(stride(from: 10, through: 16, by: 1)), id: \.self) { w in
+                    Button("\(w) lb") { weight = String(w) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(weight.isEmpty ? "Select" : "\(weight) lb")
+                        .foregroundStyle(weight.isEmpty ? LS.textSecondary : LS.textPrimary)
+                    Image(systemName: "chevron.down").font(.system(size: 11)).foregroundStyle(LS.textSecondary)
+                }.font(.system(size: 15))
+            }
+        }
+        .frame(minHeight: 30)
+    }
+
+    private func inlineEditRow(_ label: String, text: Binding<String>, placeholder: String) -> some View {
+        HStack {
+            Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
             Spacer()
             TextField(placeholder, text: text)
-                .keyboardType(keyboard)
-                .autocorrectionDisabled()
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(LS.textPrimary)
-                .frame(maxWidth: 170)
+                .font(.system(size: 15)).multilineTextAlignment(.trailing)
+                .foregroundStyle(LS.textPrimary).autocorrectionDisabled()
+                .frame(maxWidth: 190)
+        }
+        .frame(minHeight: 30)
+    }
+
+    /// A v3.7 card section: title (+ optional trailing tag) above a raised card of rows separated by hairlines.
+    private func cardSection<Content: View>(title: String, trailing: String?, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Spacer()
+                if let trailing {
+                    Text(trailing).font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                }
+            }
+            VStack(spacing: 0) { content() }
+                .padding(.horizontal, 14).padding(.vertical, 4)
+                .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
         }
     }
 
     private func specRow(_ label: String, _ value: String?) -> some View {
         HStack {
-            Text(label).font(.lsSubheadline).foregroundStyle(LS.textSecondary)
+            Text(label).font(.system(size: 15)).foregroundStyle(LS.textPrimary)
             Spacer()
-            Text(value ?? "—").font(.lsSubheadline).foregroundStyle(value == nil ? LS.textFaint : LS.textPrimary)
+            Text(value ?? "—").font(.system(size: 15)).foregroundStyle(value == nil ? LS.textFaint : LS.textSecondary)
         }
+        .frame(minHeight: 34)
     }
 
     private func addToArsenal() async {
