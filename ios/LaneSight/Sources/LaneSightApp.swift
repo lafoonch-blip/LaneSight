@@ -57,7 +57,7 @@ struct PreviewHarness: View {
             } else {
                 switch screen.lowercased() {
                 case "home":  RootTabs()
-                case "setup": NavigationStack { SetupView() }
+                case "setup": NavigationStack { SetupView(initialMode: ProcessInfo.processInfo.environment["LS_PREVIEW_MODE"]) }
                 case "stats": StatsView()
                 case "lab":   LabView()
                 case "shotcard":

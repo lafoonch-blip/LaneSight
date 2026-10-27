@@ -24,6 +24,8 @@ struct SetupView: View {
                 if isShot {
                     targetSection
                     ballAndOilSection
+                } else {
+                    cameraViewCard
                 }
                 if healthOK { readyCard }
                 preflightSection
@@ -132,6 +134,32 @@ struct SetupView: View {
               let p = oilPatterns.first(where: { $0.name == name }) else { return "Tap to select a pattern" }
         let parts = [p.length.map { "~\(Int($0.rounded())) ft" }, p.source].compactMap { $0 }
         return parts.isEmpty ? "Selected" : parts.joined(separator: " · ")
+    }
+
+    // MARK: Camera view (Form) — guidance on which angle to film from (Figma 411:3583)
+
+    private var cameraViewCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Camera view").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+            Text("Film from the side or from behind. LaneSight detects which one and shows the metrics that view supports.")
+                .font(.system(size: 12)).foregroundStyle(Color(hex: 0xB9C6D9)).fixedSize(horizontal: false, vertical: true)
+            viewTip("Side view · best for timing and posture",
+                    "1.5–2.5 lanes away, phone at hip height, last two steps and the foul line in frame.")
+            viewTip("From behind · best for drift and swing line",
+                    "4–6 m back, phone at chest height, whole approach in frame.")
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LinearGradient(colors: [Color(hex: 0x04213F), Color(hex: 0x031B35)], startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.heroStroke, lineWidth: 1))
+    }
+
+    private func viewTip(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
+            Text(detail).font(.system(size: 12)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: Ready + pre-flight
