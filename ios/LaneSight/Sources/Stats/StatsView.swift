@@ -10,7 +10,9 @@ struct StatsView: View {
     @State private var formStats: Loadable<StatsResponse> = .idle
     @State private var equipment: Loadable<EquipmentStats> = .idle
 
-    private let tabs = ["Score", "Shot", "Form", "Equipment"]
+    // DEC-085: tab order Shot · Form · Score · Arsenal (was Score · Shot · Form · Equipment, DEC-073).
+    // Stats opens on Shot (the most-used view), so a new bowler lands on real shot values, not an empty card.
+    private let tabs = ["Shot", "Form", "Score", "Arsenal"]
 
     var body: some View {
         NavigationStack {
@@ -21,10 +23,10 @@ struct StatsView: View {
                         filterChips
                         tabBar
                         switch tab {
-                        case 0: scoreTab
-                        case 1: throwTab
-                        case 2: formTab
-                        default: equipmentTab
+                        case 0: throwTab
+                        case 1: formTab
+                        case 2: scoreTab
+                        default: equipmentTab    // Arsenal
                         }
                         Spacer(minLength: 8)
                     }
@@ -87,13 +89,153 @@ struct StatsView: View {
 
     private var scoreTab: some View {
         LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-            VStack(alignment: .leading, spacing: 12) {
-                ScoreCard(score: s, history: history, showBreakdown: false)
-                scoreTrendCard(s)
-                provisionalNote
-                scorePartsSection(s)
+            if s.eligible == true {
+                VStack(alignment: .leading, spacing: 12) {
+                    ScoreCard(score: s, history: history, showBreakdown: false)
+                    scoreTrendCard(s)
+                    provisionalNote
+                    scorePartsSection(s)
+                }
+            } else {
+                scoreBuildingTab(s)      // DEC-085: the real Score screen in a building/locked state
             }
         }
+    }
+
+    // MARK: Score — building state (DEC-085; mirrors the Home building card, DEC-083)
+
+    /// have/need for each weighted part, from the live GET /me/score eligibility (never mock counts).
+    private func elig(_ key: String) -> (have: Int, need: Int, met: Bool) {
+        let e = score.value?.eligibility?[key]
+        return (e?.have ?? 0, e?.need ?? 0, e?.met ?? false)
+    }
+    private var unlockPct: Double {
+        let keys = ["s_perf", "a_acc", "c_cons", "p_power"]
+        let have = keys.reduce(0.0) { $0 + Double(min(elig($1).have, elig($1).need)) }
+        let need = keys.reduce(0.0) { $0 + Double(elig($1).need) }
+        return need > 0 ? min(1, have / need) : 0
+    }
+    private var shotsRemaining: Int {
+        ["s_perf", "a_acc", "c_cons", "p_power"].reduce(0) { $0 + max(elig($1).need - elig($1).have, 0) }
+    }
+
+    private func scoreBuildingTab(_ s: ScoreResponse) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            buildingOverviewCard(s)
+            buildingTrendCard
+            provisionalNote
+            buildingPartsSection(s)
+        }
+    }
+
+    private func buildingOverviewCard(_ s: ScoreResponse) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image("ScoreBadgePlatinum").resizable().scaledToFit().frame(width: 96, height: 96)
+                .grayscale(1).blur(radius: 4).opacity(0.5)
+                .overlay(Image(systemName: "lock.fill").font(.system(size: 22)).foregroundStyle(LS.textSecondary))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("LANESIGHT SCORE").font(.system(size: 8, weight: .semibold)).tracking(0.2).foregroundStyle(LS.action)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("—").font(.system(size: 44, weight: .bold)).foregroundStyle(LS.textFaint)
+                    Text("BUILDING").font(.system(size: 13, weight: .bold)).tracking(0.5).foregroundStyle(LS.textSecondary)
+                }
+                Text(shotsRemaining > 0 ? "\(shotsRemaining) more measured shots to unlock your score"
+                                        : "Finishing up your first score…")
+                    .font(.system(size: 11)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Score unlocks").font(.system(size: 10)).foregroundStyle(LS.textSecondary)
+                        Spacer()
+                        Text("\(Int((unlockPct * 100).rounded()))%").font(.system(size: 11, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    }
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(LS.track).frame(height: 8)
+                        GeometryReader { g in Capsule().fill(LS.action).frame(width: max(0, g.size.width * CGFloat(unlockPct)), height: 8) }
+                            .frame(height: 8)
+                    }
+                    .frame(height: 8)
+                }
+                .padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    private var buildingTrendCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Score trend").font(.system(size: 17, weight: .bold)).foregroundStyle(LS.textPrimary)
+            RoundedRectangle(cornerRadius: 8).fill(LS.track).frame(height: 44)
+                .overlay(Text("Your trend starts with your first score")
+                    .font(.system(size: 12)).foregroundStyle(LS.textSecondary))
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+        .opacity(0.65)
+    }
+
+    private func buildingPartsSection(_ s: ScoreResponse) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Score parts").font(.system(size: 18, weight: .bold)).foregroundStyle(LS.textPrimary)
+                Spacer()
+                Text("How it's calculated").font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link)
+            }
+            Text("Each part needs enough measured shots before it counts. Inputs read “—” until the part is ready.")
+                .font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
+            buildingPartCard("Performance", 40, "s_perf", s.s_perf, performanceRows)
+            buildingPartCard("Accuracy", 25, "a_acc", s.a_acc, accuracyRows)
+            buildingPartCard("Consistency", 25, "c_cons", s.c_cons, consistencyRows)
+            buildingPartCard("Power", 10, "p_power", s.p_power, powerRows)
+        }
+    }
+
+    /// A part card in building mode: shot-progress bar + have/need; a ready part shows its value + "Ready ✓".
+    /// Input rows read "—" while building, except a coverage row (e.g. "Shots with a target set") which is real.
+    private func buildingPartCard(_ title: String, _ weight: Int, _ key: String, _ value: Double?, _ rows: [PartRow]) -> some View {
+        let e = elig(key)
+        let frac = e.need > 0 ? min(1, Double(e.have) / Double(e.need)) : 0
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                (Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(LS.textPrimary)
+                 + Text("  ·  \(weight)%").font(.system(size: 13, weight: .medium)).foregroundStyle(LS.textSecondary))
+                Spacer()
+                if e.met, let v = value {
+                    HStack(spacing: 6) {
+                        Text(String(Int(v.rounded()))).font(.system(size: 22, weight: .bold)).foregroundStyle(LS.textPrimary)
+                        Text("Ready ✓").font(.system(size: 11, weight: .bold)).foregroundStyle(LS.positive)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(LS.positive.opacity(0.14), in: Capsule())
+                    }
+                } else {
+                    Text("\(e.have)/\(e.need)").font(.system(size: 18, weight: .bold).monospacedDigit()).foregroundStyle(LS.textFaint)
+                }
+            }
+            ZStack(alignment: .leading) {
+                Capsule().fill(LS.track).frame(height: 6)
+                GeometryReader { g in Capsule().fill(e.met ? LS.positive : LS.action)
+                    .frame(width: max(0, g.size.width * CGFloat(e.met ? 1 : frac)), height: 6) }
+                    .frame(height: 6)
+            }
+            .frame(height: 6)
+            ForEach(rows) { r in
+                let showReal = r.label.hasPrefix("Shots with a target set")
+                HStack {
+                    Text(r.label).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                    Spacer()
+                    Text(showReal ? r.value : "—")
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(LS.textPrimary)
+                }
+            }
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     private var scoredHistory: [Double] { history.compactMap { $0.eligible == true ? $0.score : nil } }
@@ -223,16 +365,19 @@ struct StatsView: View {
                 PartRow(label: "Ball weight", value: weight)]
     }
 
-    // v3.7 Equipment tab (Figma 431:5748): per-ball and per-oil-pattern rollups from /me/stats/equipment.
+    // v3.7 Arsenal tab (DEC-085, Figma 431:5748): per-ball and per-oil-pattern rollups from /me/stats/equipment.
+    // A new bowler sees the real ball + pattern they've used so far, with a small-sample note (not an empty card).
     private var equipmentTab: some View {
         LoadableView(state: equipment, retry: { Task { await loadEquipment() } }) { e in
             let balls = e.by_ball ?? []
             let patterns = e.by_pattern ?? []
             if balls.isEmpty && patterns.isEmpty {
-                emptyCard("Equipment stats",
+                emptyCard("Arsenal stats",
                           "Per-ball and per-pattern rollups appear once you log measured shots. Tag a ball when you record and it rolls up here.")
             } else {
                 VStack(alignment: .leading, spacing: 14) {
+                    let n = (balls.map { $0.n ?? 0 }.max() ?? 0)
+                    if n > 0 && n < 20 { smallSampleBanner(n) }
                     if !balls.isEmpty { equipGroupCard("By ball", "Ball", balls) }
                     if !patterns.isEmpty { equipGroupCard("By oil pattern", "Pattern", patterns) }
                     Text("Expected reaction comes from your ball + layout; measured shots refine it. Groups with fewer than 20 shots are a small sample.")
@@ -240,6 +385,18 @@ struct StatsView: View {
                 }
             }
         }
+    }
+
+    /// Yellow small-sample note (DEC-085): a new bowler sees real values from their first shots, clearly flagged.
+    private func smallSampleBanner(_ n: Int) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(LS.dataYellow)
+            Text("Based on \(n) shot\(n == 1 ? "" : "s") from your first session\(n == 1 ? "" : "s"). Early numbers move around until you have ~20.")
+                .font(.system(size: 12)).foregroundStyle(LS.textPrimary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.dataYellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.dataYellow.opacity(0.5), lineWidth: 1))
     }
 
     private func equipGroupCard(_ title: String, _ colHeader: String, _ rows: [EquipGroup]) -> some View {
@@ -324,7 +481,8 @@ struct StatsView: View {
                     Text("Tap any metric for its average, range, trend and breakdown by ball and pattern. Impact Energy is energy at entry, not a carry prediction.")
                         .font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
                     coverageCard(s)
-                    sampleNote(s)
+                    // DEC-085: a new bowler sees real values from the first shots, flagged as a small sample.
+                    if let n = s.n_shots, n > 0 && n < 20 { smallSampleBanner(n) } else { sampleNote(s) }
                 }
             }
         }
@@ -450,9 +608,9 @@ struct StatsView: View {
     // MARK: loading
 
     private func loadForTab() async {
-        if tab == 1 { await loadThrow() }
-        else if tab == 2 { await loadForm() }
-        else if tab == 3 { await loadEquipment() }
+        if tab == 0 { await loadThrow() }
+        else if tab == 1 { await loadForm() }
+        else if tab == 3 { await loadEquipment() }      // Arsenal; Score (tab 2) loads via loadScore() in .task
     }
 
     private func loadScore() async {
