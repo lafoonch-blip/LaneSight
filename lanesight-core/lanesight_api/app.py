@@ -106,9 +106,12 @@ def _quality(rec) -> dict | None:
 
 
 def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
-                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None):
+                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
+                 client_timings: dict | None = None):
     def run(job):
         t0 = time.monotonic()
+        if client_timings:                       # DEC-092 P0 (M1): phone-side stage times onto the same row
+            job.timings['client'] = client_timings
         out_prefix = str(DATA_ROOT / 'out' / shot_id)
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
         store = get_store()
@@ -1076,7 +1079,8 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     with open(local, 'wb') as f:
         f.write(data)
     job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
-                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash)
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash,
+                       client_timings=body.get('client_timings'))
     store.storage_delete('shot-clips', storage_path)      # clip analyzed; don't retain it
     try:
         os.remove(local)

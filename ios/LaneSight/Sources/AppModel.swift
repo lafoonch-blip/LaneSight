@@ -438,6 +438,10 @@ final class AppModel: ObservableObject {
             // Snapshot the capture mode for THIS shot up front so detection later can't be confused by a
             // mode change while the clip is analyzing. This is also exactly what's sent as `capture_mode`.
             let capturedMode = captureMode
+            // DEC-092 P0 (M1): phone-side per-stage timings. The pre-analyze parts (trim, upload) are the
+            // wait the server can't see; they ride along with the analyze request onto the attempt row.
+            let tTap = Date()
+            var ct: [String: Double] = [:]
 
             // 1. Ensure a session exists for this app run — LIVE captures only. An upload (DEC-055) is a
             // STANDALONE analysis: it never creates or joins a session (so it stays out of Recent
@@ -462,7 +466,12 @@ final class AppModel: ObservableObject {
             // to fit (bitrate only). This keeps uploads under Supabase's ~50 MB free-tier limit; the server
             // re-trims precisely afterwards.
             pipeline = .trimming
+            let tTrim = Date()
             let uploadURL = await VideoTrimmer.trimForUpload(fileURL)
+            ct["trim_s"] = Date().timeIntervalSince(tTrim)
+            if let b = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path))?[.size] as? Int {
+                ct["upload_bytes"] = Double(b)
+            }
 
             // 3. Upload the clip (multipart) with progress.
             pipeline = .uploading(0)
@@ -486,19 +495,25 @@ final class AppModel: ObservableObject {
                 userBallId: ball?.id
             )
             // Upload the clip straight to Supabase Storage (no API request-size cap), then analyze from there.
+            let tUrl = Date()
             let target = try await client.signedUploadURL()
+            ct["signed_url_s"] = Date().timeIntervalSince(tUrl)
+            let tUp = Date()
             try await client.putClipToStorage(uploadURL: target.upload_url, fileURL: uploadURL) { [weak self] frac in
                 self?.pipeline = .uploading(frac)
             }
+            ct["upload_s"] = Date().timeIntervalSince(tUp)
 
             // 4. Analyze. The Phase-1 backend runs the CV INLINE, so this one request blocks for the whole
             //    analysis — we show the processing state for its full duration (treated as async in the UI;
             //    the result is durable in Supabase). `sessionId` nil → standalone upload; set → live shot.
             pipeline = .analyzing(state: "running", timings: [:])
+            ct["client_pre_analyze_s"] = Date().timeIntervalSince(tTap)   // tap-stop → analyze request sent
             let created = try await client.analyzeFromStorage(
                 storagePath: target.path,
                 sessionId: (source == "upload" ? nil : sid),
-                metadata: metadata)
+                metadata: metadata,
+                clientTimings: ct)
 
             // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
             let last = try await client.job(created.job_id)

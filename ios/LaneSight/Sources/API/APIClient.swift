@@ -397,7 +397,8 @@ struct APIClient {
     /// set → a shot in that live session. Phase-1 backend runs the CV INLINE, so this request blocks for the
     /// whole analysis — hence the long client timeout (treat as async in the UI regardless).
     func analyzeFromStorage(storagePath: String, sessionId: String?,
-                            metadata: ShotMetadata) async throws -> CreateShotResponse {
+                            metadata: ShotMetadata,
+                            clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
         var req = makeRequest("shots/analyze", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
@@ -405,6 +406,7 @@ struct APIClient {
             with: Data(metadata.jsonString().utf8))) ?? [:]
         var body: [String: Any] = ["storage_path": storagePath, "metadata": metaObj]
         if let sessionId { body["session_id"] = sessionId }
+        if let clientTimings { body["client_timings"] = clientTimings }   // DEC-092 P0: phone-side stage times
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(req, as: CreateShotResponse.self)
     }
