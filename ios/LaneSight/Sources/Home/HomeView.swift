@@ -235,6 +235,7 @@ struct HomeView: View {
         await loadSessions()
         await loadActivity()
         if model.avatarImage == nil { await model.refreshAvatar() }   // show the photo in the header
+        if !model.homeLoaded { withAnimation(.easeOut(duration: 0.35)) { model.homeLoaded = true } }
     }
 
     private func loadFocus() async {

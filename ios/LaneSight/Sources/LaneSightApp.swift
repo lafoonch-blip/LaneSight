@@ -11,18 +11,32 @@ struct LaneSightApp: App {
         #endif
     }
 
+    private var isPreview: Bool {
+        #if DEBUG
+        return !(ProcessInfo.processInfo.environment["LS_PREVIEW"] ?? "").isEmpty
+        #else
+        return false
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
-            Group {
-                #if DEBUG
-                if let screen = ProcessInfo.processInfo.environment["LS_PREVIEW"], !screen.isEmpty {
-                    PreviewHarness(screen: screen)
-                } else {
+            ZStack {
+                Group {
+                    #if DEBUG
+                    if let screen = ProcessInfo.processInfo.environment["LS_PREVIEW"], !screen.isEmpty {
+                        PreviewHarness(screen: screen)
+                    } else {
+                        gateView
+                    }
+                    #else
                     gateView
+                    #endif
                 }
-                #else
-                gateView
-                #endif
+                // Seamless launch: keep the branded splash up until Home has loaded (real app only, not previews).
+                if !isPreview, model.gate == .ready, !model.homeLoaded {
+                    LaunchSplash().transition(.opacity).zIndex(1)
+                }
             }
             .environmentObject(model)
             .tint(LS.action)
@@ -80,6 +94,7 @@ struct PreviewHarness: View {
                         MetricDetailView(metric: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] ?? "ball_speed")
                     }
                 case "welcome": AuthFlow()
+                case "splash": LaunchSplash()
                 case "signin": NavigationStack { SignInStep() }
                 case "createaccount": NavigationStack { CreateAccountStep() }
                 case "profilesetup": ProfileSetupFlow()

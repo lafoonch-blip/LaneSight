@@ -94,6 +94,8 @@ final class AppModel: ObservableObject {
     /// The bowler's profile photo (served by GET /me/avatar; nil when none set). Shown in the tab header
     /// and on Profile. Refreshed on load and after an upload/remove.
     @Published var avatarImage: UIImage?
+    /// True once Home has finished its first data load — drives the branded launch splash (seamless startup).
+    @Published var homeLoaded = false
 
     // Auth session (tokens live in the Keychain, not here/UserDefaults).
     @Published private(set) var session: AuthSession?
@@ -251,6 +253,8 @@ final class AppModel: ObservableObject {
         arsenal = []
         sessionTarget = ShotIntent()
         sessionSuggested = nil
+        homeLoaded = false          // re-show the launch splash on the next sign-in
+        avatarImage = nil
         Keychain.delete(Keychain.Account.accessToken)
         Keychain.delete(Keychain.Account.refreshToken)
         Keychain.delete(Keychain.Account.userId)
