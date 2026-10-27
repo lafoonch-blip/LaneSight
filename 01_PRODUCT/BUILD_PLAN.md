@@ -1,7 +1,7 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.11  
-Last Updated: 2026-10-26  
+Version: 3.12  
+Last Updated: 2026-10-27  
 Owner: Shayne  
 Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
@@ -255,3 +255,16 @@ Detail and acceptance criteria: `03_ENGINEERING/MVP_HANDOFF.md` §3. Designs: Fi
 - [ ] **MVP-11** Analyzing screen: keep awake, lock clip settings, auto-open results (DEC-068/080)
 - [ ] **MVP-12** Home "next focus"
 - [ ] **MVP-13** first-use states and camera permission screens
+
+---
+## Proposed coaching intelligence workstream (2026-10-27; not authorized MVP scope)
+Reference: `01_PRODUCT/AI_COACHING_STRATEGY.md` v1.0. These are **candidate tasks**; IDs below are scoped to the proposal and do not replace existing canonical M4 tasks or accepted release gates.
+- [ ] **AI-C01 (design):** Audit `Observation` / `Recommendation` / `RecommendationOutcome`, event provenance and permission model to avoid schema duplication.
+- [ ] **AI-C02 (design):** Define typed coaching observation, recommendation, intervention, coach feedback and outcome contracts, including versions and explicit metric eligibility (DEC-061/065).
+- [ ] **AI-C03 (evaluation):** Curate rights-cleared drill and coaching knowledge; define abstention, expert review and comparable-session outcome evaluation.
+- [ ] **AI-C04 (candidate Beta):** Persist opt-in recommendation feedback, actual attempted adjustments, drill adherence and comparable outcomes.
+- [ ] **AI-C05 (candidate Beta):** Add one evidence-linked practice focus and closed-loop drill in Performance Lab/Session Review; avoid new mandatory tabs.
+- [ ] **AI-C06 (partner discovery):** Interview founding coaches; prototype permissioned annotations, human edits and student-specific benchmarks, with explicit reuse rights.
+- [ ] **AI-C07 (later):** Orchestrated personalized coaching, longitudinal memory, coach portal and model improvements only after evaluation evidence.
+
+**Dependencies:** Never coach off invalid far-lane values, infer causation from simple before/after, train on user/coach content without appropriate rights, or modify the LaneSight Score. DEC-047 rollout and owner-controlled MVP exit are unchanged. This section does **not** mark any work complete.
