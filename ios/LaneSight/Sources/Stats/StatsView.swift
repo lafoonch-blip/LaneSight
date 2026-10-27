@@ -8,6 +8,7 @@ struct StatsView: View {
     @State private var breakdown: ScoreBreakdown?
     @State private var throwStats: Loadable<StatsResponse> = .idle
     @State private var formStats: Loadable<StatsResponse> = .idle
+    @State private var equipment: Loadable<EquipmentStats> = .idle
 
     private let tabs = ["Score", "Shot", "Form", "Equipment"]
 
@@ -222,9 +223,60 @@ struct StatsView: View {
                 PartRow(label: "Ball weight", value: weight)]
     }
 
+    // v3.7 Equipment tab (Figma 431:5748): per-ball and per-oil-pattern rollups from /me/stats/equipment.
     private var equipmentTab: some View {
-        emptyCard("Equipment stats",
-                  "Per-ball speed, rev rate and pocket % roll up here once you log shots with more than one ball in the session.")
+        LoadableView(state: equipment, retry: { Task { await loadEquipment() } }) { e in
+            let balls = e.by_ball ?? []
+            let patterns = e.by_pattern ?? []
+            if balls.isEmpty && patterns.isEmpty {
+                emptyCard("Equipment stats",
+                          "Per-ball and per-pattern rollups appear once you log measured shots. Tag a ball when you record and it rolls up here.")
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    if !balls.isEmpty { equipGroupCard("By ball", "Ball", balls) }
+                    if !patterns.isEmpty { equipGroupCard("By oil pattern", "Pattern", patterns) }
+                    Text("Expected reaction comes from your ball + layout; measured shots refine it. Groups with fewer than 20 shots are a small sample.")
+                        .font(.system(size: 11)).foregroundStyle(LS.textFaint).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func equipGroupCard(_ title: String, _ colHeader: String, _ rows: [EquipGroup]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+            HStack {
+                Text(colHeader).font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.textSecondary)
+                Spacer()
+                Text("shots · mph · rev · pocket").font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.textSecondary)
+            }
+            ForEach(rows) { g in
+                HStack(alignment: .firstTextBaseline) {
+                    Text(g.name ?? "—").font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(equipLine(g)).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(LS.textPrimary)
+                }
+                if g.identity != rows.last?.identity { Divider().overlay(LS.border) }
+            }
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    private func equipLine(_ g: EquipGroup) -> String {
+        [ "\(g.n ?? 0)",
+          g.speed.map { Fmt.number($0) } ?? "—",
+          g.rev.map { "\(Int($0.rounded()))" } ?? "—",
+          g.pocket_pct.map { "\(Int($0.rounded()))%" } ?? "—",
+        ].joined(separator: " · ")
+    }
+
+    private func loadEquipment() async {
+        equipment = .loading
+        do { equipment = .loaded(try await model.makeClient().equipmentStats()) }
+        catch { equipment = .failed(error.localizedDescription) }
     }
 
     // MARK: Throw
@@ -400,6 +452,7 @@ struct StatsView: View {
     private func loadForTab() async {
         if tab == 1 { await loadThrow() }
         else if tab == 2 { await loadForm() }
+        else if tab == 3 { await loadEquipment() }
     }
 
     private func loadScore() async {

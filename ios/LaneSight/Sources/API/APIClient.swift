@@ -239,6 +239,11 @@ struct APIClient {
         try await send(makeRequest("me/stats/metric/\(metric)"), as: MetricDetailResponse.self)
     }
 
+    /// Per-ball / per-oil-pattern rollup for the Stats · Equipment tab (GET /me/stats/equipment).
+    func equipmentStats() async throws -> EquipmentStats {
+        try await send(makeRequest("me/stats/equipment"), as: EquipmentStats.self)
+    }
+
     // MARK: achievements
 
     func achievements() async throws -> AchievementsResponse {

@@ -462,6 +462,23 @@ struct MetricGroupStat: Codable, Identifiable {
     var id: String { key ?? UUID().uuidString }
 }
 
+// MARK: - Equipment rollup (GET /me/stats/equipment)
+
+struct EquipmentStats: Codable {
+    let by_ball: [EquipGroup]?
+    let by_pattern: [EquipGroup]?
+}
+
+struct EquipGroup: Codable, Identifiable {
+    let id: String?
+    let name: String?
+    let n: Int?
+    let speed: Double?
+    let rev: Double?
+    let pocket_pct: Double?
+    var identity: String { id ?? name ?? UUID().uuidString }
+}
+
 // MARK: - Score-parts breakdown (GET /me/score/breakdown)
 
 struct ScoreBreakdown: Codable {
