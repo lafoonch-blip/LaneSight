@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.44  
+Version: 1.45  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.43
+Supersedes: v1.44
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -12,7 +12,7 @@ Supersedes: v1.43
 - The September 2026 local docs are archived in `99_ARCHIVE/2026-09-27_local_folder/`. Historical only.
 
 ## Building now
-**Active workstream: the LaneSight app (one app, built to the v3.7 designs — DEC-089).** The old "Dev Build v0 (now) vs target state (later)" split is retired: there is a single app built directly to the screen designs in `02_DESIGN/dev_build_v0/`, and newly-synced designs ship into it rather than being deferred. It runs on Cloud Run + Supabase (the Mac-over-Tailscale setup from the original dev build, DEC-045…053, is history — see the Dev Build v0 section below for that record). Back-end accuracy/robustness work continues in parallel.
+**Active workstream: the LaneSight app (one app, built to the v3.7 designs — DEC-089).** The old "Dev Build v0 (now) vs target state (later)" split is retired: there is a single app built to the Figma "Target state – v3.7" designs (DEC-091); every design change is queued in `03_ENGINEERING/APP_DESIGN_CHANGES.md` and built incrementally. Open now: the Shot card redesign (DEC-088/090) and its states and Upload result. It runs on Cloud Run + Supabase (the Mac-over-Tailscale setup from the original dev build, DEC-045…053, is history — see the Dev Build v0 section below for that record). Back-end accuracy/robustness work continues in parallel.
 
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 

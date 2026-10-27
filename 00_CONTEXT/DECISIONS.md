@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.51  
+Version: 1.52  
 Last Updated: 2026-10-27  
 Owner: Shayne  
-Supersedes: v1.50
+Supersedes: v1.51
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1042,6 +1042,19 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 **Status:** ACCEPTED (target state). Figma frames updated in place.
 **Supersedes:** in part DEC-088 (ring set and Target label).
 
+### DEC-091 — The app's design source is Figma "Target state – v3.7"; every design change becomes a build item in APP_DESIGN_CHANGES.md
+**Decision (Shayne, 2026-10-27):**
+- The app is built to the **Figma target-state designs**: "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`). This corrects DEC-089, which pointed the one app at `02_DESIGN/dev_build_v0/`. That Claude Design canvas was last synced on 2026-10-26 (v3.8) and has none of the later Figma changes.
+- `02_DESIGN/dev_build_v0/` is **frozen** (historical reference); it is not updated again. Where it disagrees with Figma, Figma wins.
+- **Every design change is incremental build work.** In the same session that Figma changes, Claude (claude.ai) adds an entry to `03_ENGINEERING/APP_DESIGN_CHANGES.md`. Each entry has: what changed, Figma node, PNG export in `02_DESIGN/target_state/screens/<date>/`, exact spec, data/API, done-when, and status NOT BUILT.
+- Claude Code builds every NOT BUILT entry, marks it BUILT (commit), and records any deliberate difference as DIFFERS.
+- DEC-089's "one app, no target/dev split" stands; only its design-folder pointer is replaced.
+
+**Why:** Today's Shot card changes (DEC-088, DEC-090) lived only in Figma and in notes Claude Code was told not to build from, so they never reached the app. One design source plus an explicit build queue makes every change visible and trackable.
+**Date:** 2026-10-27
+**Status:** ACCEPTED.
+**Supersedes:** in part DEC-089 (the `02_DESIGN/dev_build_v0/` design-source pointer) and the matching lines in CLAUDE.md, AGENTS.md, CURRENT_STATE.md and `02_DESIGN/dev_build_v0/README.md`.
+
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
@@ -1060,6 +1073,7 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 - DEC-042 — the disabled MVP "Compare to a PBA Pro" tile superseded by DEC-069 (hidden for now; post-MVP direction unchanged).
 - DEC-021 / DEC-049 — sensor pairing and the per-shot sensor question removed from MVP by DEC-070 (kept in the dev build; parked for a future partnership).
 - DEC-035 — "No Session Summary screen" superseded by DEC-072 (score popup on end, session summary also used for past sessions).
+- DEC-089 — design-source folder (`02_DESIGN/dev_build_v0/`) superseded by DEC-091 (Figma Target state – v3.7 + `03_ENGINEERING/APP_DESIGN_CHANGES.md`).
 - DEC-088 — ring set and "Target" label partly superseded by DEC-090 (Accuracy; Entry point, Entry angle, Power).
 - DEC-073 (Shot-card column) / DEC-080 (button label) — partly superseded by DEC-088 (3D lane, throw vs lane groups, coach takeaway, "Record next shot").
 - DEC-055 / DEC-043 — the upload de-duplication clause is superseded by DEC-086 while `LANESIGHT_UPLOAD_DEDUPE` is off (default); the rest of DEC-055 stands.

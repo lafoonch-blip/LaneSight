@@ -1,9 +1,10 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.6 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING · Version: 1.7 · Last Updated: 2026-10-27 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
 ## 0. Read this first
+- **Build queue (DEC-091):** design changes after this doc are tracked as build items in `03_ENGINEERING/APP_DESIGN_CHANGES.md` (NOT BUILT → BUILT). Start there.
 - This builds on Dev Build v0 (`03_ENGINEERING/dev_build_v0/HANDOFF.md`, designs `02_DESIGN/dev_build_v0/` 3.8). Reuse its API, auth, upload queue and engines; this doc lists **what the MVP designs add or change**.
 - Backend is Cloud Run + Supabase (Storage for uploads); the Mac runner is no longer in the loop.
 - **Sample numbers in Figma are illustrative.** Never hardcode them. `[Bracketed]` = user data.

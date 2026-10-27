@@ -1,12 +1,15 @@
 # Target-state (MVP) designs — v3.7
-Status: APPROVED FOR HANDOFF · Version: 3.7.9 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: APPROVED FOR HANDOFF · Version: 3.7.10 · Last Updated: 2026-10-27 · Owner: Shayne
+
+## Role (DEC-091)
+These Figma designs are **the app's design source**. Every change is queued for the build in `03_ENGINEERING/APP_DESIGN_CHANGES.md`, with PNGs in `screens/<date>/`.
 
 ## Where they live
 - **Figma:** "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7**.
 - **Parked:** section "Parked · Sensor partnership (post-MVP)" (DEC-070).
 - **Archived:** page **archived** holds superseded sections, old screens and removed parts (nothing deleted).
 - **PNG export:** `LaneSight_v3.7_target_state_screens_2026-10-26.zip` (63 frames), shared in the claude.ai chat; not committed (binary).
-- **Dev Build v0** screens are separate: `02_DESIGN/dev_build_v0/` (Claude Design canvas). Target-state decisions apply there only when a DEC says so.
+- `02_DESIGN/dev_build_v0/` (Claude Design canvas) is frozen as of 2026-10-26 and is no longer a design source (DEC-091).
 
 ## Prototype (Figma › Present)
 Flow starts: **Shot session (live)** · **Form session (live)** · **Onboarding → first use** · **Stats**. 245 links, none broken (audited 2026-10-27).
@@ -39,6 +42,7 @@ DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Met
 Back, Edit, Form/Field, Control/Segment option, Row/List item, Tile/Stat were orphaned (main components lost). Rebuilt in Design Components › "LaneSight / Core controls (rebuilt 2026-10-26)" and all 94 instances relinked. Also new: `Sessions / Next-shot card` (6 states); Result badge gained Not a strike / Not read; Metric status row gained Best effort.
 
 ## Changelog
+- **3.7.10 (2026-10-27):** DEC-091: these designs are the app's design source; build queue `03_ENGINEERING/APP_DESIGN_CHANGES.md`; PNG exports in `screens/2026-10-27/`.
 - **3.7.9 (2026-10-27):** lane view camera pulled back so the **foul line, approach dots and pins** are all in frame; new **Laydown** label (board + distance past the foul line); target and ball lines thinned to ~1 board with minimal glow so they stay readable when they overlap.
 - **3.7.8 (2026-10-27):** DEC-090 — lane view gets Entry point, Breakpoint and Arrows data labels with dots on the path (markers drawn on top; pin glow reduced); "Target" ring → **Accuracy**; Lane & pins rings → **Entry point, Entry angle, Power** (Impact Energy, J). Breakpoint moves to the lane view and All metrics.
 - **3.7.7 (2026-10-27):** DEC-088 — new Shot card: 3D lane view rendered from the shot data (fitted ball path, target band, Entry/Breakpoint labels, true-scale pins), core rings split into **Your throw** (speed, revs, target vs your normal) and **Lane & pins** (breakpoint, entry board, entry angle vs target), one **Coach** takeaway, All metrics / notes collapsed, button "Record next shot". New state frames "off throw → no move" and "far lane not read"; Upload result rebuilt on the same layout (Done). Old Shot card, old Upload result and redesign options A–D moved to "archived". The lane images in Figma are renders from `02_DESIGN/target_state/lane_render/` (Three.js); the app draws the same view live.

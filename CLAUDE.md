@@ -15,9 +15,10 @@ Read `AGENTS.md` first and follow its read order and rules. Short version: `DECI
 - Accuracy beats coverage when the number drives a recommendation (e.g. entry board decides pocket/light/high: a 2-board error flips the advice).
 - If something fails, show the exact error before changing code.
 
-## Design source of truth (DEC-089 — one app, one design set)
-- `02_DESIGN/dev_build_v0/` is the **only** source for the app's screen designs — the v3.7 designs the app is built to. Build the iOS UI from it; read its `README.md` first. (The folder keeps its `dev_build_v0` name for now; there is **no** separate "target state (later)" app — that split was retired in DEC-089.)
-- **Do not edit files in that folder.** Shayne changes designs in the claude.ai Claude Design canvas, and Claude (claude.ai) syncs the approved files here.
-- If a code change makes a screen differ from its design, list the screen and the difference in your report. Don't silently diverge.
-- When design files change (check `git diff 02_DESIGN/`), update the matching SwiftUI screens and report what changed. A newly-synced design is built into the app now — it is never deferred to a "later version."
-- Visual standards come from the Figma "01 - Design Standards" page (tokens are listed in the design README); logos and icons come from `02_DESIGN/brand/`. `02_DESIGN/target_state/` holds forward design-system notes + `lane_render`, not a second app.
+## Design source of truth (DEC-091 — Figma target state; one app)
+- The app is built to the **Figma "Target state – v3.7"** designs (file `k6F8iHTtl2ZHvnXlHmYPnd`, page "01 — Home & Foundation"). Guide and changelog: `02_DESIGN/target_state/README.md`.
+- **Your build queue is `03_ENGINEERING/APP_DESIGN_CHANGES.md`.** Before any UI work, read it and build every entry marked **NOT BUILT**, in order: match the PNGs in `02_DESIGN/target_state/screens/<date>/` and the written spec. Then set the entry to **BUILT (commit)**. If you must differ, add **DIFFERS:** with the reason. Never defer an entry to a "later version".
+- If you have Figma access (Dev Mode / Figma MCP), use the node IDs in each entry for exact values. Otherwise, the PNGs plus the spec are the reference.
+- `02_DESIGN/dev_build_v0/` is **frozen** (last synced 2026-10-26). Don't build new UI from it; Figma and APP_DESIGN_CHANGES.md win where they differ.
+- Don't edit design files. If a code change makes a screen differ from its design, list the screen and the difference in your report.
+- Visual standards come from the Figma "01 - Design Standards" page (tokens in the design README); logos and icons come from `02_DESIGN/brand/`. Lane view reference: `02_DESIGN/target_state/lane_render/`.

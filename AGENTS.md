@@ -9,7 +9,7 @@
 | Pushed state | GitHub `lafoonch-blip/LaneSight` | — |
 | Decisions | `00_CONTEXT/DECISIONS.md` (highest DEC number wins) | Older docs, `99_ARCHIVE/` |
 | What's being built now | `00_CONTEXT/CURRENT_STATE.md`, `03_ENGINEERING/DEV_BUILD_PLAN.md` | — |
-| App screen designs (the v3.7 designs; DEC-089 — one app, no target/dev split) | `02_DESIGN/dev_build_v0/` (synced from the Claude Design canvas) | Figma screens, old mockups, a separate "target state" app |
+| App screen designs (DEC-091) | Figma "Target state – v3.7" + build queue `03_ENGINEERING/APP_DESIGN_CHANGES.md` (PNGs in `02_DESIGN/target_state/screens/`) | `02_DESIGN/dev_build_v0/` (frozen 2026-10-26), old mockups |
 | Visual standards (color, type, spacing) | Figma "01 - Design Standards" page | Colors in old docs/UI Spec v1 |
 | Logo and app/web icons | Figma Design Components › "Brand standards" → exported to `02_DESIGN/brand/` (DEC-054) | **The LS monogram concept: never use it** |
 | Code | `lanesight-core/` (Python CV/API), `ios/LaneSight/` (SwiftUI) | — |
@@ -19,11 +19,12 @@
 1. If you can reach the repo: `git fetch && git status && git branch --show-current && git log --oneline -5`. Work from the newest local branch, not an old clone or a pasted file.
 2. Read the last ~5 entries of `DECISIONS.md` and the top of `CURRENT_STATE.md`.
 3. Compare any doc you were handed (mirror, upload, paste) by its `Version` / `Last Updated` header against the repo copy. If the repo is newer, use the repo.
-4. Before building UI: `git diff 02_DESIGN/` and read `02_DESIGN/dev_build_v0/README.md` (changelog at the bottom).
+4. Before building UI: read `03_ENGINEERING/APP_DESIGN_CHANGES.md` (build every NOT BUILT entry) and `02_DESIGN/target_state/README.md` (changelog at the bottom).
 5. Several AI sessions may work at once. Re-read a file right before you edit it; never overwrite changes you didn't read.
 
 ### When you change something
 - Write it to this repo in the same session (doc, DEC entry, design sync or code). A change that lives only in a chat, canvas, Figma or a mirror is not done.
+- Design changes (Figma): add an entry to `03_ENGINEERING/APP_DESIGN_CHANGES.md` with PNGs in `02_DESIGN/target_state/screens/<date>/` in the same session (DEC-091).
 - Decisions: add a new DEC; mark the old one superseded. Docs: bump `Version` / `Last Updated`.
 - Commit locally; push to GitHub only when Shayne says so. Then re-sync the claude.ai Project docs (don't update the retired Drive copies).
 - Report what you changed and anything you could not update.
