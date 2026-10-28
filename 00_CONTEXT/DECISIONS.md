@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.55  
+Version: 1.56  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.54
+Supersedes: v1.55
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1105,6 +1105,14 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 **Preserved:** DEC-062/065 (geometry first; far-lane unavailable until Phase-2 passes) · DEC-070 (Ruby validation-only) · DEC-092 (latency order) · DEC-043 (cost caps) · DEC-093 (lane selection recorded on the shot) · existing measurement schema (changes additive only; `observed_fraction` is one such addition).
 
 **Why:** Far-lane failures are a detection problem first — on IMG_8929 the bowler's lane isn't detected at all, and the ball gets only 3–11 observations on the lane that is; a tracker can bridge a few misses but can't rebuild a path from that few observations without large uncertainty. A believable wrong number hurts coaching more than an honest "unavailable." Correction factors hide calibration errors that vary by camera setup.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none
+
+### DEC-095 — Form: physiological event sanity gates; the display follows only trustworthy events
+**Decision (2026-10-28):** located swing events are gated before anything is shown. **Release** must sit within −0.10…+0.15 s of the slide stop (E8) — it's the anchor the delivery is timed from, so if it's off, the whole delivery was mis-isolated and **every** display event is dropped. **Ball-start→release** must be 1.3–2.5 s. Events must be in chronological order. A gated-out event is nulled at the source (`pose.extras['events']`), so it produces **no thumbnail, no time, no Early/Late checkpoint, and no fundamentals position** — the entire display chain (key frames, `timing_checkpoints`, `measured_positions`) reads the gated events. Honest "unavailable with a reason" instead of a confident-wrong key position. Also: a key-frame crop requires the torso (both shoulders + both hips) visible, else the uncropped frame is shown (no thighs crop on a blurred slide/release frame).
+
+**Naming note (not a bug):** the FORM pipeline's view `down_lane` means a **side/profile** view (`classify_view_from_pose`: bowler moves across the frame), so the app's `down_lane → "Side view"` label is correct — an overloaded name vs the CV pipeline's literal down-lane. A future rename (form `down_lane` → `side`) is advisable but deferred (touches stored records + DEC-076).
+
+**Why:** Form shot c9df6ca0 displayed key positions that didn't match their labels — release read 0.57 s before the slide stopped and ball-start→release was 1.08 s (the delivery window was mis-isolated, ~1 s late). A believable-but-wrong frame/timing misleads more than an honest gap (consistent with DEC-026/061). Full root-cause of the mis-isolation needs the clip in the form eval set with hand-marked frames (pending Shayne).
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none
 
 ## Superseded decisions
