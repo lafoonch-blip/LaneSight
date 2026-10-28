@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct LaneSightApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         LSAppearance.apply()
@@ -51,6 +52,12 @@ struct LaneSightApp: App {
                     .environmentObject(model)
                     .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
                     .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+            }
+            // Recover-on-resume: if an analysis was in flight when the app was backgrounded, the server
+            // finishes it durably even though our request dropped — so on return to the foreground, fetch
+            // that shot and present its result (or failure) instead of leaving the user stuck.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await model.reconcilePendingAnalysis() } }
             }
         }
     }

@@ -164,6 +164,18 @@ final class AppModel: ObservableObject {
     // Upload screen), so the result can never be orphaned if the user navigates away mid-analysis.
     @Published var uploadBusy = false
 
+    // Recover-on-resume: the analysis runs server-side and its result is durable in Supabase even if the app
+    // is backgrounded and the request drops. We persist a marker for the in-flight analysis so that on return
+    // to the foreground we can fetch the finished shot and show it, instead of leaving a stale failure.
+    private struct PendingAnalysis: Codable { let source: String; let sessionId: String?; let startedAt: Double }
+    private var pendingAnalysis: PendingAnalysis? {
+        get { defaults.data(forKey: "ls.pendingAnalysis").flatMap { try? JSONDecoder().decode(PendingAnalysis.self, from: $0) } }
+        set {
+            if let v = newValue, let d = try? JSONEncoder().encode(v) { defaults.set(d, forKey: "ls.pendingAnalysis") }
+            else { defaults.removeObject(forKey: "ls.pendingAnalysis") }
+        }
+    }
+
     // Connection check
     @Published var healthText: String?
     @Published var healthIsError = false
@@ -522,6 +534,8 @@ final class AppModel: ObservableObject {
             //    analysis — we show the processing state for its full duration (treated as async in the UI;
             //    the result is durable in Supabase). `sessionId` nil → standalone upload; set → live shot.
             pipeline = .analyzing(state: "running", timings: [:])
+            // Mark the in-flight analysis so a backgrounded/dropped request can be recovered on resume.
+            markPendingAnalysis(source: source, sessionId: (source == "upload" ? nil : sid))
             ct["client_pre_analyze_s"] = Date().timeIntervalSince(tTap)   // tap-stop → analyze request sent
             let created = try await client.analyzeFromStorage(
                 storagePath: target.path,
@@ -536,6 +550,7 @@ final class AppModel: ObservableObject {
                 let friendly = last.failure?.display
                 pipeline = .failed(friendly?.isEmpty == false ? friendly!
                                    : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
+                clearPendingAnalysis()      // a real analysis failure — nothing to recover
                 return
             }
             pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
@@ -582,6 +597,7 @@ final class AppModel: ObservableObject {
             shotCount += 1
             pipeline = .done
             showResult = true
+            clearPendingAnalysis()      // delivered in-app; nothing to recover
 
             // Clean up the temp clips (the original recording and, if different, the trimmed upload).
             try? FileManager.default.removeItem(at: fileURL)
@@ -706,6 +722,50 @@ final class AppModel: ObservableObject {
         pipeline = .idle
         showResult = false
         uploadBusy = false
+    }
+
+    // MARK: recover-on-resume (an analysis that was in flight when the app was backgrounded)
+
+    private func markPendingAnalysis(source: String, sessionId: String?) {
+        pendingAnalysis = PendingAnalysis(source: source, sessionId: sessionId, startedAt: Date().timeIntervalSince1970)
+    }
+    func clearPendingAnalysis() { pendingAnalysis = nil }
+
+    /// Called when the app returns to the foreground. If an analysis was in flight when we were backgrounded,
+    /// the server likely finished it (the result is durable in Supabase) even though our request dropped — so
+    /// fetch the shot the server was working on and present its result (or its failure), instead of leaving the
+    /// user on a stale "failed". If it's still running, re-raise the analyzing cover and keep the marker.
+    func reconcilePendingAnalysis() async {
+        guard let pending = pendingAnalysis, let client = try? makeClient() else { return }
+        let id: String?, hint: String?, state: String?
+        do {
+            if pending.source == "upload" {
+                let rows = try await client.listUploads()
+                // The upload created at/after we started analyzing (newest, ordering-agnostic).
+                let c = rows.filter { ($0.created_at ?? 0) >= pending.startedAt - 5 }
+                    .max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
+                    ?? rows.max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
+                id = c?.id; hint = c?.capture_mode; state = c?.state
+            } else {
+                let rows = try await client.sessionShots(pending.sessionId ?? "")
+                let c = rows.filter { ($0.created_at ?? 0) >= pending.startedAt - 5 }
+                    .max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
+                id = c?.id; hint = nil; state = c?.state     // live: loadShotResult detects form from the record
+            }
+        } catch { return }                                   // still offline — try again on the next foreground
+        guard let sid = id else { return }                   // the shot isn't there yet / nothing to recover
+        switch state {
+        case "analyzed":
+            if await loadShotResult(shotId: sid, captureModeHint: hint) {
+                pipeline = .done; uploadBusy = true          // present the recovered result at the app root
+            }
+            clearPendingAnalysis()
+        case "failed":
+            pipeline = .failed("We couldn't analyze that shot."); uploadBusy = true
+            clearPendingAnalysis()
+        default:
+            pipeline = .analyzing(state: "running", timings: [:]); uploadBusy = true   // still running; keep waiting
+        }
     }
 
     var activeSessionId: String? { sessionId }
