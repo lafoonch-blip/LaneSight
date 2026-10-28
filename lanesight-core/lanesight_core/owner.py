@@ -5,6 +5,11 @@ then CLEARED. Definitions (achievement_definition, score_formula_version) and ow
 """
 from __future__ import annotations
 
+# Canonical ops owner (DEC-098). The single human who may read the owner ops dashboard. This id MUST match
+# the row seeded in migration 025 ops.app_owner and the OPS_OWNER_ID env var of the ops-dashboard app.
+# It is auth.users.id for lafoonch@gmail.com (the real account, LANESIGHT_MASTER_CONTEXT / DEC-063).
+OWNER_USER_ID = '551bc775-dee4-41bd-a19c-116e8691d053'
+
 # Per-user data cleared on reset, in FK-safe order (children before parents):
 #   tier_event -> score_snapshot (FK snapshot_id); the rest key off auth.users / achievement_definition.
 RESET_CLEAR_ORDER = [
