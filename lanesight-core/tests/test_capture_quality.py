@@ -127,3 +127,33 @@ def test_vp_solve_returns_finite_on_good_system():
     A = np.array([[1.0, -0.10], [1.0, -0.20]]); b = np.array([100.0, 50.0]); wt = np.array([1.0, 1.0])
     vp = _vp_solve(A, b, wt)
     assert vp.shape == (2,) and np.all(np.isfinite(vp))
+
+
+# ---- DEC-092 precheck three-way verdict: never reject on doubt (HDR / NO_EDGES / foul / low angle) ----
+
+def test_precheck_never_confidently_rejects_hdr():
+    from lanesight_core.cv.precheck import _confident_reject
+    from lanesight_core.failures import AnalysisFailure
+    e = AnalysisFailure('LANE_NOT_DETECTED_NO_WOOD', 'no wood', stage='lane', diagnostics={'pct_pixels_matched': 0.1})
+    # same failure that would reject on SDR must be inconclusive on an HLG/PQ clip
+    assert _confident_reject(e, 'arib-std-b67') == (False, 'hdr')
+    assert _confident_reject(e, 'smpte2084') == (False, 'hdr')
+
+
+def test_precheck_confident_reject_only_on_empty_lane_sdr():
+    from lanesight_core.cv.precheck import _confident_reject
+    from lanesight_core.failures import AnalysisFailure
+    # non-HDR, essentially no lane-coloured wood anywhere -> confident reject (camera not at a lane)
+    empty = AnalysisFailure('LANE_NOT_DETECTED_NO_WOOD', 'no wood', stage='lane', diagnostics={'pct_pixels_matched': 0.2})
+    assert _confident_reject(empty, 'bt709')[0] is True
+    # some wood but under the strict floor -> uncertain (could be pale/HDR-residual) -> inconclusive
+    some = AnalysisFailure('LANE_NOT_DETECTED_NO_WOOD', 'no wood', stage='lane', diagnostics={'pct_pixels_matched': 6.0})
+    assert _confident_reject(some, 'bt709')[0] is False
+
+
+def test_precheck_no_edges_and_foul_line_are_inconclusive():
+    from lanesight_core.cv.precheck import _confident_reject
+    from lanesight_core.failures import AnalysisFailure
+    for code in ('LANE_NOT_DETECTED_NO_EDGES', 'FOUL_LINE_NOT_IN_VIEW', 'LANE_GEOMETRY_UNUSABLE'):
+        e = AnalysisFailure(code, 'x', stage='lane')
+        assert _confident_reject(e, 'bt709')[0] is False      # never reject on doubt (incl. low-camera foul miss)

@@ -16,8 +16,8 @@ for e in man:
         rows.append((name, 'missing', '', '')); continue
     pc = precheck(p)
     pc_ok = pc.get('ok')
-    pc_s = 'reject' if pc_ok is False else ('pass' if pc_ok is True else 'unknown')
-    pc_code = pc.get('code', '')
+    pc_s = 'reject' if pc_ok is False else ('pass' if pc_ok is True else 'inconclusive')
+    pc_code = pc.get('code') or pc.get('precheck_code') or pc.get('inconclusive') or ''
     # full pipeline outcome
     signal.signal(signal.SIGALRM, lambda s, f: (_ for _ in ()).throw(TimeoutError())); signal.alarm(500)
     try:

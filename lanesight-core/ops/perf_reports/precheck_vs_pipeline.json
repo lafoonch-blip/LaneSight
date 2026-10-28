@@ -1,10 +1,10 @@
 [
   [
     "IMG_8751.mov",
-    "reject",
-    "LANE_NOT_DETECTED_NO_WOOD",
+    "pass",
+    "",
     "analyzed",
-    "FALSE_REJECT"
+    ""
   ],
   [
     "IMG_8752.MOV",
@@ -22,14 +22,14 @@
   ],
   [
     "IMG_8754.mov",
-    "reject",
-    "LANE_NOT_DETECTED_NO_WOOD",
+    "pass",
+    "",
     "analyzed",
-    "FALSE_REJECT"
+    ""
   ],
   [
     "IMG_8831.MOV",
-    "reject",
+    "inconclusive",
     "LANE_NOT_DETECTED_NO_EDGES",
     "failed FOUL_LINE_NOT_IN_VIEW",
     ""
@@ -92,7 +92,7 @@
   ],
   [
     "IMG_8845.MOV",
-    "reject",
+    "inconclusive",
     "FOUL_LINE_NOT_IN_VIEW",
     "failed LANE_NOT_DETECTED_NO_WOOD",
     ""
