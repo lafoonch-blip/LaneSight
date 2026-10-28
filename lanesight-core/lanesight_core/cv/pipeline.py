@@ -13,6 +13,7 @@ from .revrate import ball_crops, rev_rate
 from ..models.shot import ShotRecord, m, ALGO_VERSION
 from ..failures import AnalysisFailure
 from ..insights.adjust import strike_adjustment, no_reliable_data_insight
+from ..insights.uncertainty import quality_map
 from ..insights.spares import spare_plan
 
 # Every shot metric, as (name, unit) — used to emit an all-`unavailable` record when the capture view can't
@@ -263,6 +264,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                      capture_quality={'far_lane': 'limited' if cq_limited else 'ok', 'lane': chosen_lane,
                                       **({'reason': cq_reason} if cq_reason else {})})
     shot_view = {x.metric: x.value for x in meas}
+    shot_view['_quality'] = quality_map(meas)   # DEC-094 §5/§6: per-metric status/uncertainty for the coaching gate
     shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence
     shot_view['far_lane_limited'] = cq_limited      # the gate's verdict drives the insights state (single source)
     if cq_reason:

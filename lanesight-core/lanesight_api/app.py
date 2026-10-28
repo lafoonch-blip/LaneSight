@@ -272,11 +272,14 @@ def _shot_view_from_record(rec, standing, uncertain=None):
     recompute insights when the user reports their leave (POST /shots/{id}/pins). standing None = unreadable."""
     M = rec.get('metrics') or {}
     val = lambda k: (M.get(k) or {}).get('value')
+    # DEC-094 §5/§6: carry per-metric quality so the recompute path gates moves the same way analysis does.
+    quality = {k: {'status': v.get('status'), 'uncertainty': v.get('uncertainty'), 'confidence': v.get('confidence')}
+               for k, v in M.items() if isinstance(v, dict)}
     return dict(entry_board=val('entry_board'), entry_angle_deg=val('entry_angle'),
                 board_at_15ft=val('arrows_board'), board_at_0ft=val('laydown_board'),
                 breakpoint_board=val('breakpoint_board'),
                 speed_early=val('speed_early'), speed_late=val('speed_late'),
-                trajectory=rec.get('trajectory'),
+                trajectory=rec.get('trajectory'), _quality=quality,
                 pins_standing=standing, pins_uncertain=(set(uncertain) if uncertain else set()))
 
 
@@ -634,7 +637,10 @@ def _shot_card_enrich(store, user, sh: dict) -> dict:
         target = {'arrows_board': intent.get('arrows_board')} if intent.get('arrows_board') is not None else None
         rec0 = ((rec.get('insights') or {}).get('recommendations') or [{}])[0] or {}
         far = 'not_read' if (rec.get('capture_quality') or {}).get('far_lane') in ('limited', 'not_read') else None
-        cb = _coach.build(m, rec.get('key_points'), prior, target=target, recommendation=rec0, far_lane=far)
+        _mq = rec.get('metrics') or {}
+        quality = {k: {'status': v.get('status'), 'uncertainty': v.get('uncertainty'), 'confidence': v.get('confidence')}
+                   for k, v in _mq.items() if isinstance(v, dict)}       # DEC-094 §5/§6
+        cb = _coach.build(m, rec.get('key_points'), prior, target=target, recommendation=rec0, far_lane=far, quality=quality)
         ins = rec.setdefault('insights', {})
         ins['throw'], ins['lane'], ins['coach'] = cb['throw'], cb['lane'], cb['coach']
         rec['baseline'] = cb['baseline']

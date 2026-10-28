@@ -5,6 +5,7 @@ from __future__ import annotations
 from statistics import mean
 from .rules import RULES_VERSION, POCKET_RH
 from .reading import read_hit, read_leave, execution_check, classify_shot
+from .uncertainty import gate as uncertainty_gate
 
 def _rec(kind, reason, evidence, confidence, **kw):
     return dict(type=kind, reason=reason, evidence=evidence, confidence=confidence, rules_version=RULES_VERSION, **kw)
@@ -77,6 +78,26 @@ def _confirmed_direction(history, hit, handed) -> bool:
 
 # Explicit card states the app renders from (handoff C.7). One primary state per shot.
 STATES = ('move', 'low_confidence_move', 'strike_repeat', 'execution_miss', 'pins_unknown', 'no_reliable_data')
+
+
+def _apply_uncertainty_contract(recs, shot):
+    """DEC-094 §5/§6: suppress any adjustment whose required metrics don't meet the quality bar (shot['_quality']),
+    so a move is never shown off an unavailable / low-confidence metric. The primary (recs[0]) is replaced by a
+    'none' recommendation whose `suppressed_reason` the shot card shows; a suppressed secondary is dropped. No-op
+    when the shot carries no quality map (older callers / unit tests)."""
+    if not recs:
+        return recs
+    out = []
+    for i, r in enumerate(recs):
+        ok, why = uncertainty_gate(r, shot)
+        if ok:
+            out.append(r)
+        elif i == 0:
+            out.append(_rec('none', "Not enough reliable lane data to suggest a move this shot.",
+                            dict(reason=why, suppressed=r.get('type')), 'low',
+                            low_confidence=True, move_feet=0, move_target=0, suppressed_reason=why))
+        # a suppressed secondary recommendation is simply dropped
+    return out
 
 
 def _derive_state(cls, recs, leave) -> str:
@@ -226,6 +247,7 @@ def strike_adjustment(shot: dict, handed='R', intent=None, user_said=None, histo
         exp = pattern['length_ft'] - 31
         recs.append(_rec('pattern_note', f"On a {pattern['length_ft']} ft pattern the usual exit point is around board {exp:.0f}; "
                          f"your breakpoint was board {shot['breakpoint_board']:.1f}.", dict(rule='length − 31'), 'low'))
+    recs = _apply_uncertainty_contract(recs, shot)      # DEC-094 §5/§6: gate moves on per-metric quality
     state = _derive_state(cls, recs, leave)
     primary = recs[0] if recs else None
     return dict(hit=hit, leave=leave, execution=ex, classification=cls, state=state,

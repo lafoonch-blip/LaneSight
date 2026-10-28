@@ -80,12 +80,19 @@ def classify_throw(metrics: dict, base: dict, target: dict | None = None) -> dic
     return {'status': 'good', 'verdict': 'Good · your normal throw', 'rings': rings}
 
 
-def classify_lane(metrics: dict, key_points: dict | None, far_lane: str | None = None) -> dict:
-    """Lane result from the entry board/angle vs the pocket. 'not_read' when the far lane wasn't measured."""
+def classify_lane(metrics: dict, key_points: dict | None, far_lane: str | None = None,
+                  quality: dict | None = None) -> dict:
+    """Lane result from the entry board/angle vs the pocket. 'not_read' when the far lane wasn't measured or the
+    entry board doesn't meet the coaching quality bar (DEC-094 §5/§6) — the coach never proposes a lane move off
+    an unavailable / low-confidence entry board."""
     entry = (key_points or {}).get('entry') or {}
     entry_board = entry.get('board') if entry.get('board') is not None else metrics.get('entry_board')
     entry_angle = entry.get('angle_deg') if entry.get('angle_deg') is not None else metrics.get('entry_angle')
-    if entry_board is None or far_lane == 'not_read':
+    eb_ok = True
+    if quality is not None:
+        from .uncertainty import metric_ok
+        eb_ok, _ = metric_ok({'_quality': quality}, 'entry_board')
+    if entry_board is None or far_lane == 'not_read' or not eb_ok:
         return {'status': 'not_read', 'explanation': 'Not read from this camera spot',
                 'entry_board': None, 'entry_angle': entry_angle}
     d = entry_board - POCKET_BOARD
@@ -142,9 +149,11 @@ def _lane_move_text(lane: dict, rec: dict | None) -> str:
 
 
 def build(metrics: dict, key_points: dict | None, prior_shots: list[dict],
-          target: dict | None = None, recommendation: dict | None = None, far_lane: str | None = None) -> dict:
-    """Full coach block for the shot card: {throw, lane, coach, baseline}."""
+          target: dict | None = None, recommendation: dict | None = None, far_lane: str | None = None,
+          quality: dict | None = None) -> dict:
+    """Full coach block for the shot card: {throw, lane, coach, baseline}. `quality` is the per-metric
+    status/uncertainty map (DEC-094 §5/§6); when given, the lane verdict is gated on entry-board quality."""
     base = baseline(prior_shots)
     throw = classify_throw(metrics or {}, base, target)
-    lane = classify_lane(metrics or {}, key_points, far_lane)
+    lane = classify_lane(metrics or {}, key_points, far_lane, quality=quality)
     return {'throw': throw, 'lane': lane, 'coach': coach(throw, lane, recommendation), 'baseline': base}
