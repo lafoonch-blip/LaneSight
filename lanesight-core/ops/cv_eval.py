@@ -149,6 +149,67 @@ def _resolve(path, base_dir):
     return None
 
 
+def secs_after_noon(t):
+    """'H:MM:SS' 12-hour (all PM) -> seconds after noon (matches the Ruby session transcription)."""
+    h, m, s = (int(x) for x in t.split(':'))
+    return (h % 12) * 3600 + m * 60 + s
+
+
+def _creation_secs(path):
+    """A clip's QuickTime recording-start time, as seconds-after-noon, for video<->Ruby matching (M5-05)."""
+    import subprocess
+    out = subprocess.run(['ffprobe', '-v', 'quiet', '-print_format', 'json',
+                          '-show_entries', 'format_tags=com.apple.quicktime.creationdate', path],
+                         capture_output=True, text=True).stdout
+    try:
+        cd = json.loads(out)['format']['tags']['com.apple.quicktime.creationdate']
+        return secs_after_noon(cd.split('T')[1][:8])
+    except Exception:
+        return None
+
+
+def match_ruby_session(created, rshots, window=70, offset=30):
+    """Greedy nearest video->Ruby-shot match by capture time (M5-05): each clip's creation-second + `offset` to
+    the nearest UNUSED Ruby shot within `window` s after it; never force-matched. `created`={id: creation_secs};
+    `rshots`=[{'t': secs, 'mph':.., 'rpm':..}]. Returns {id: shot}. Earliest clip first (greedy)."""
+    matches, used = {}, set()
+    for cid, cs in sorted(created.items(), key=lambda kv: kv[1]):
+        cands = sorted((abs(r['t'] - (cs + offset)), i, r) for i, r in enumerate(rshots)
+                       if 0 < r['t'] - cs <= window and i not in used)
+        if cands:
+            _, i, r = cands[0]; used.add(i); matches[cid] = r
+    return matches
+
+
+def _match_sessions(manifest, clips_dir, base_dir):
+    """Timestamp-match every clip whose ground_truth points at a multi-shot Ruby SESSION file. Returns
+    {id: {'mph','rpm',...}}. Single-shot Ruby files are handled directly in _gt_metrics_from_labels."""
+    from collections import defaultdict
+    by_file = defaultdict(list)
+    for s in manifest:
+        f = (s.get('ground_truth') or {}).get('file')
+        if f:
+            by_file[f].append(s)
+    out = {}
+    for ref_file, shots in by_file.items():
+        rp = _resolve(ref_file, base_dir)
+        if not rp:
+            continue
+        data = json.load(open(rp))
+        if not (isinstance(data, dict) and 'shots' in data):      # not a session file
+            continue
+        rshots = [dict(r, t=secs_after_noon(r['time'])) for r in data['shots'] if r.get('mph') is not None]
+        created = {}
+        for s in shots:
+            if s.get('present') is False:
+                continue
+            cs = _creation_secs(str(Path(clips_dir) / s['clip']))
+            if cs is not None:
+                created[s['id']] = cs
+        out.update(match_ruby_session(created, rshots))
+    return out
+
+
 def _gt_metrics_from_labels(labels, inline_gt, base_dir=None):
     """Map labels / Ruby reference / inline ground truth to the engine's metric names where a direct comparison
     exists. Conservative: only unambiguous mappings are surfaced (speed/rev/loft from Ruby; manual speed)."""
@@ -175,6 +236,10 @@ def _gt_metrics_from_labels(labels, inline_gt, base_dir=None):
 # ---------------- main ----------------
 
 def run(manifest, clips_dir, labels_dir, tolerances, only=None, base_dir=None):
+    ruby_match = _match_sessions(manifest, clips_dir, base_dir)   # cohort clips -> Ruby shot by capture time
+    if ruby_match:
+        print(f"[cv_eval] Ruby session match: {len(ruby_match)} clip(s) paired by timestamp "
+              f"({', '.join(sorted(ruby_match))})", flush=True)
     results = []
     for s in manifest:
         if only and s['id'] not in only:
@@ -187,7 +252,15 @@ def run(manifest, clips_dir, labels_dir, tolerances, only=None, base_dir=None):
         r['id'] = s['id']; r['camera_class'] = s.get('camera_class'); r['split'] = s.get('split')
         labels = _load_labels(labels_dir, s['id'])
         r['has_labels'] = labels is not None
-        r['gt_metrics'] = _gt_metrics_from_labels(labels, s.get('ground_truth'), base_dir)
+        gt = _gt_metrics_from_labels(labels, s.get('ground_truth'), base_dir)
+        rs = ruby_match.get(s['id'])
+        if rs:                                       # timestamp-matched Ruby session shot
+            if rs.get('mph') is not None:
+                gt.setdefault('ball_speed', rs['mph'])
+            if rs.get('rpm') is not None:
+                gt.setdefault('rev_rate', rs['rpm'])
+            r['ruby_matched'] = {'time': rs.get('time'), 'mph': rs.get('mph'), 'rpm': rs.get('rpm')}
+        r['gt_metrics'] = gt
         results.append(r)
         print(f"[cv_eval]   {r.get('status')} in {r.get('wall_s')}s"
               + (f" · obs {r.get('observations')}" if r.get('observations') else ''), flush=True)

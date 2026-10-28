@@ -722,14 +722,18 @@
         "center_x_px": 263.9,
         "lanes_detected": 1
       },
-      "wall_s": 62.83,
-      "cpu_s": 165.48,
-      "peak_rss_mb": 1902.6,
+      "wall_s": 62.11,
+      "cpu_s": 166.82,
+      "peak_rss_mb": 1937.1,
       "id": "IMG_8751",
       "camera_class": "rear-centered",
       "split": "test",
-      "has_labels": false,
-      "gt_metrics": {}
+      "has_labels": true,
+      "gt_metrics": {
+        "ball_speed": 16.9,
+        "rev_rate": 411,
+        "loft": 2.5
+      }
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8752.MOV",
@@ -1458,14 +1462,18 @@
         "center_x_px": 190.2,
         "lanes_detected": 1
       },
-      "wall_s": 15.4,
-      "cpu_s": 94.18,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 15.07,
+      "cpu_s": 92.88,
+      "peak_rss_mb": 1937.1,
       "id": "IMG_8752",
       "camera_class": "rear-centered",
       "split": "test",
       "has_labels": false,
-      "gt_metrics": {}
+      "gt_metrics": {
+        "ball_speed": 17.4,
+        "rev_rate": 407,
+        "loft": 2.0
+      }
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8753.MOV",
@@ -1964,14 +1972,18 @@
         "center_x_px": 735.8,
         "lanes_detected": 1
       },
-      "wall_s": 24.56,
-      "cpu_s": 155.21,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 23.66,
+      "cpu_s": 152.74,
+      "peak_rss_mb": 1937.1,
       "id": "IMG_8753",
       "camera_class": "rear-centered",
       "split": "test",
       "has_labels": false,
-      "gt_metrics": {}
+      "gt_metrics": {
+        "ball_speed": 17.8,
+        "rev_rate": 392,
+        "loft": 2.6
+      }
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8754.mov",
@@ -2729,23 +2741,27 @@
         "center_x_px": 259.9,
         "lanes_detected": 1
       },
-      "wall_s": 73.23,
-      "cpu_s": 178.07,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 71.8,
+      "cpu_s": 176.31,
+      "peak_rss_mb": 1937.1,
       "id": "IMG_8754",
       "camera_class": "rear-centered",
       "split": "test",
       "has_labels": false,
-      "gt_metrics": {}
+      "gt_metrics": {
+        "ball_speed": 17.0,
+        "rev_rate": 428,
+        "loft": 1.5
+      }
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8929.MOV",
       "status": "failed",
       "failure_code": "TRACK_TOO_SPARSE_FOR_SPEED",
       "error": "TRACK_TOO_SPARSE_FOR_SPEED: ball not tracked enough to measure speed (the rolling track is too short or sparse)",
-      "wall_s": 46.84,
-      "cpu_s": 332.86,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 46.21,
+      "cpu_s": 329.96,
+      "peak_rss_mb": 1978.4,
       "id": "IMG_8929",
       "camera_class": "ball-return-POV",
       "split": "test",
@@ -2755,9 +2771,18 @@
       }
     },
     {
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8930.MOV",
+      "status": "failed",
+      "failure_code": "BALL_TRACK_NOT_FOUND",
+      "error": "BALL_TRACK_NOT_FOUND: ball track not found",
+      "wall_s": 12.15,
+      "cpu_s": 80.75,
+      "peak_rss_mb": 1978.4,
       "id": "IMG_8930",
-      "status": "not_present",
-      "camera_class": "low-approach"
+      "camera_class": "low-approach",
+      "split": "test",
+      "has_labels": false,
+      "gt_metrics": {}
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8807.MOV",
@@ -3413,36 +3438,52 @@
         "center_x_px": 188.4,
         "lanes_detected": 1
       },
-      "wall_s": 15.16,
-      "cpu_s": 88.94,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 15.04,
+      "cpu_s": 88.36,
+      "peak_rss_mb": 1978.4,
       "id": "IMG_8807",
       "camera_class": "rear-oblique-multilane",
       "split": "tune",
       "has_labels": false,
-      "gt_metrics": {}
+      "ruby_matched": {
+        "time": "12:34:43",
+        "mph": 17.19,
+        "rpm": 435
+      },
+      "gt_metrics": {
+        "ball_speed": 17.19,
+        "rev_rate": 435
+      }
     },
     {
       "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8817.MOV",
       "status": "failed",
       "failure_code": "FOUL_LINE_NOT_IN_VIEW",
       "error": "FOUL_LINE_NOT_IN_VIEW: foul line not found \u2014 the lane runs off the bottom of the frame",
-      "wall_s": 29.97,
-      "cpu_s": 186.99,
-      "peak_rss_mb": 2026.8,
+      "wall_s": 29.46,
+      "cpu_s": 185.97,
+      "peak_rss_mb": 1978.4,
       "id": "IMG_8817",
       "camera_class": "rear-oblique-multilane",
       "split": "tune",
       "has_labels": false,
-      "gt_metrics": {}
+      "ruby_matched": {
+        "time": "1:02:29",
+        "mph": 17.17,
+        "rpm": 386
+      },
+      "gt_metrics": {
+        "ball_speed": 17.17,
+        "rev_rate": 386
+      }
     }
   ],
   "summary": {
     "n_shots": 8,
     "n_analyzed": 5,
-    "n_failed": 2,
-    "n_missing": 1,
-    "n_labeled": 0,
+    "n_failed": 3,
+    "n_missing": 0,
+    "n_labeled": 1,
     "coverage": {
       "ball_speed": 1.0,
       "speed_release": 1.0,
@@ -3453,13 +3494,60 @@
       "breakpoint_board": 1.0,
       "entry_board": 1.0,
       "entry_angle": 1.0,
-      "loft": 0.4
+      "loft": 0.4,
+      "rev_rate": 1.0
     },
-    "metric_accuracy": {},
-    "plausible_but_wrong": [],
-    "plausible_but_wrong_rate": null,
+    "metric_accuracy": {
+      "ball_speed": {
+        "n": 5,
+        "mae": 0.266,
+        "median": 0.066,
+        "p90": 0.52,
+        "bias": 0.23
+      },
+      "loft": {
+        "n": 2,
+        "mae": 0.455,
+        "median": 0.455,
+        "p90": 0.224,
+        "bias": -0.231
+      },
+      "rev_rate": {
+        "n": 5,
+        "mae": 17.082,
+        "median": 14.464,
+        "p90": 18.811,
+        "bias": 11.296
+      }
+    },
+    "plausible_but_wrong": [
+      {
+        "clip": "IMG_8751",
+        "metric": "ball_speed",
+        "measured": 17.583,
+        "truth": 16.9,
+        "error": 0.683,
+        "tol": 0.5
+      },
+      {
+        "clip": "IMG_8752",
+        "metric": "rev_rate",
+        "measured": 435.14,
+        "truth": 407,
+        "error": 28.14,
+        "tol": 25.0
+      },
+      {
+        "clip": "IMG_8807",
+        "metric": "ball_speed",
+        "measured": 17.71,
+        "truth": 17.19,
+        "error": 0.52,
+        "tol": 0.5
+      }
+    ],
+    "plausible_but_wrong_rate": 0.25,
     "labels_needed": [
-      "IMG_8751",
       "IMG_8752",
       "IMG_8753",
       "IMG_8754",
@@ -3472,8 +3560,8 @@
       "rear-oblique-multilane": 2
     },
     "runtime": {
-      "total_wall_s": 268.0,
-      "total_cpu_s": 1201.7
+      "total_wall_s": 275.5,
+      "total_cpu_s": 1273.8
     }
   }
 }

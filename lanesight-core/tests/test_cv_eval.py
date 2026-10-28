@@ -67,6 +67,30 @@ def test_gt_metrics_inline_manual_speed():
     assert gt == {"ball_speed": 15.5}
 
 
+def test_secs_after_noon():
+    from ops.cv_eval import secs_after_noon
+    assert secs_after_noon("12:30:39") == 30 * 60 + 39      # noon-relative
+    assert secs_after_noon("1:00:21") == 3600 + 21
+
+
+def test_match_ruby_session_greedy_nearest_no_force():
+    from ops.cv_eval import match_ruby_session
+    # two clips created at 100s and 200s; three ruby shots. offset 30, window 70.
+    rshots = [{'t': 135, 'mph': 16.1}, {'t': 235, 'mph': 17.3}, {'t': 900, 'mph': 15.0}]
+    created = {'A': 100, 'B': 200}
+    m = match_ruby_session(created, rshots, window=70, offset=30)
+    assert m['A']['mph'] == 16.1 and m['B']['mph'] == 17.3     # each nearest its +30 window
+    # a clip with no ruby shot in its window is left unmatched (never forced)
+    assert match_ruby_session({'C': 500}, rshots, window=70, offset=30) == {}
+
+
+def test_match_ruby_session_no_double_use():
+    from ops.cv_eval import match_ruby_session
+    rshots = [{'t': 135, 'mph': 16.1}]       # a single ruby shot, two nearby clips
+    m = match_ruby_session({'A': 100, 'B': 104}, rshots, window=70, offset=30)
+    assert len(m) == 1 and 'A' in m          # greedy earliest-clip-first claims the shot; B left unmatched
+
+
 def test_thin_camera_classes():
     manifest = [{'camera_class': 'rear-centered'}] * 7 + [{'camera_class': 'glasses'}] * 2
     thin = thin_camera_classes(manifest, min_per_class=6)
