@@ -299,8 +299,15 @@ struct ProcessingCover: View {
                     Text("We couldn't analyze this clip").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text(msg).font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
-                    Button(failButtonLabel) { model.resetPipeline(); busy = false }
+                    // DEC-096: Retry re-analyzes the same clip (no re-recording); the secondary action returns to
+                    // the Active Session for a live session, else closes the upload cover.
+                    Button("Retry") { Task { await model.retryLastAnalysis() } }
                         .buttonStyle(PrimaryButtonStyle())
+                        .disabled(model.lastCaptureURL == nil)
+                    Button(model.inLiveCapture ? "Back to session" : failButtonLabel) {
+                        if model.inLiveCapture { model.exitToSession() } else { model.resetPipeline(); busy = false }
+                    }
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link)
                 }
                 .padding(32)
 

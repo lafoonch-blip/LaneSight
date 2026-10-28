@@ -83,6 +83,11 @@ struct SessionView: View {
         .fullScreenCover(isPresented: $showSummary) {
             SummaryView(summary: model.endSummary).environmentObject(model)
         }
+        // DEC-096: the record → analyze → result flow runs as a cover OVER the Active Session; every exit
+        // inside it returns here. Reload the shot list when it closes so the new shot (or a failed row) shows.
+        .fullScreenCover(isPresented: $model.inLiveCapture, onDismiss: { Task { await load() } }) {
+            CaptureView().environmentObject(model)
+        }
     }
 
     // MARK: header + context
@@ -102,11 +107,8 @@ struct SessionView: View {
             if let ball = model.currentBall?.displayName ?? model.currentBallName { chip(ball) }
             if let pat = model.selectedOilPatternName { chip(pat) }
             Spacer()
-            if !readOnly {
-                NavigationLink { SetupView() } label: {
-                    Text("Change").font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link)
-                }
-            }
+            // DEC-096: the session never returns to Session Setup. The target is edited in place via the
+            // Target Line steppers below; changing ball/oil mid-session is a follow-up in-session picker.
         }
     }
 
@@ -282,7 +284,7 @@ struct SessionView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            Button { dismiss() } label: {
+            Button { model.inLiveCapture = true } label: {       // DEC-096: open the camera over the Active Session
                 HStack(spacing: 8) {
                     Image(systemName: "circle.fill").font(.system(size: 13))
                     Text(latest?.seq.map { "Record Shot \($0 + 1)" } ?? "Record shot")

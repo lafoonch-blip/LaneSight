@@ -41,7 +41,10 @@ struct FormCardView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss(); model.resetPipeline() }
+                    // DEC-096: live form session → Done returns to the Active (form) session; else dismiss in place.
+                    Button("Done") {
+                        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
+                    }
                 }
             }
         }

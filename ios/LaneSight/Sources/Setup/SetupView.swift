@@ -56,7 +56,12 @@ struct SetupView: View {
         .navigationTitle(isShot ? "Shot Analysis" : "Form Analysis")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .navigationDestination(isPresented: $goCapture) { CaptureView() }
+        // DEC-096: starting a live session lands on the Active Session hub (not straight on the camera).
+        // The hub presents the camera/analyze/result flow and every analysis returns here until End session.
+        .navigationDestination(isPresented: $goCapture) {
+            if isShot { SessionView() }
+            else { FormSessionView(sessionId: model.activeSessionId ?? "") }
+        }
         .onAppear { if let initialMode { model.captureMode = initialMode }; model.prewarm() }   // warm analyzer (DEC-092 D2)
         .task {
             await loadOil()

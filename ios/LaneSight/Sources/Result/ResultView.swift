@@ -91,7 +91,11 @@ struct ShotCardView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss(); model.resetPipeline() }
+                    // DEC-096: in a live session, Done returns to the Active Session (collapses the capture
+                    // cover); for an upload / a pushed review it just dismisses in place.
+                    Button("Done") {
+                        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
+                    }
                 }
             }
             .task { await loadSensors() }

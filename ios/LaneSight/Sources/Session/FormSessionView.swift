@@ -33,6 +33,10 @@ struct FormSessionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .task { await load() }
+        // DEC-096: record a delivery over the Active (form) session; every analysis returns here. Reload on close.
+        .fullScreenCover(isPresented: $model.inLiveCapture, onDismiss: { Task { await load() } }) {
+            CaptureView().environmentObject(model)
+        }
     }
 
     private func load() async {
@@ -154,11 +158,13 @@ struct FormSessionView: View {
                 HStack(spacing: 8) { Text("Done"); Image(systemName: "arrow.right") }.frame(maxWidth: .infinity)
             }.buttonStyle(PrimaryButtonStyle())
         } else {
-            Button { dismiss() } label: {
+            // DEC-096: Record delivery opens the camera over this Active Session; End session ends it in place
+            // and reloads into the ended (TAKEAWAY) summary — never bounces to Setup or out of the session.
+            Button { model.captureMode = "form"; model.inLiveCapture = true } label: {
                 HStack(spacing: 8) { Text("Record delivery \((s.n_deliveries ?? 0) + 1)"); Image(systemName: "arrow.right") }
                     .frame(maxWidth: .infinity)
             }.buttonStyle(PrimaryButtonStyle())
-            Button("End session") { dismiss() }
+            Button("End session") { Task { try? await model.endCurrentSession(); await load() } }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link)
                 .frame(maxWidth: .infinity).frame(minHeight: 44)
         }

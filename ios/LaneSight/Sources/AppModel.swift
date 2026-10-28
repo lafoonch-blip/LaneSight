@@ -164,6 +164,15 @@ final class AppModel: ObservableObject {
     // Upload screen), so the result can never be orphaned if the user navigates away mid-analysis.
     @Published var uploadBusy = false
 
+    // DEC-096: in a LIVE session the record→analyze→result flow is presented as a full-screen cover OVER the
+    // Active Session (SessionView / FormSessionView). This flag is that cover's presentation binding, so any
+    // exit deep inside it (result Done, failure "Back to session", capture Done) returns to the Active Session
+    // by setting it false — never back to Session Setup.
+    @Published var inLiveCapture = false
+    // The last analyzed clip + its source, so a failed analysis can Retry without re-recording (DEC-096/086).
+    private(set) var lastCaptureURL: URL?
+    private var lastSource = "live"
+
     // Recover-on-resume: the analysis runs server-side and its result is durable in Supabase even if the app
     // is backgrounded and the request drops. We persist a marker for the in-flight analysis so that on return
     // to the foreground we can fetch the finished shot and show it, instead of leaving a stale failure.
@@ -442,15 +451,30 @@ final class AppModel: ObservableObject {
 
     // MARK: full shot pipeline
 
-    func processShot(fileURL: URL) async { await runPipeline(fileURL: fileURL, source: "live") }
+    func processShot(fileURL: URL) async {
+        lastCaptureURL = fileURL; lastSource = "live"
+        await runPipeline(fileURL: fileURL, source: "live")
+    }
 
     /// Analyze a clip picked from Photos/Files (POST /uploads) through the same job pipeline + Shot card.
     /// Raises the root-level blocking cover (DEC-086) for the whole analysis so it's never orphaned.
     func processUpload(fileURL: URL) async {
+        lastCaptureURL = fileURL; lastSource = "upload"
         pipeline = .trimming
         uploadBusy = true
         await runPipeline(fileURL: fileURL, source: "upload")
     }
+
+    /// DEC-096: re-analyze the last clip after a failure — no re-recording. Stays in whichever cover is up
+    /// (the live capture cover or the root upload cover).
+    func retryLastAnalysis() async {
+        guard let url = lastCaptureURL else { return }
+        if lastSource == "upload" { uploadBusy = true }
+        await runPipeline(fileURL: url, source: lastSource)
+    }
+
+    /// DEC-096: collapse the live capture/analyze/result cover back to the Active Session.
+    func exitToSession() { inLiveCapture = false; resetPipeline() }
 
     private func runPipeline(fileURL: URL, source: String) async {
         // Keep the upload + analyze request running if the user switches apps mid-analysis (iOS otherwise
