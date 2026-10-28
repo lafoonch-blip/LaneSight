@@ -1,0 +1,178 @@
+"""Per-frame ball labeling for the CV accuracy eval set (DEC-094 §1).
+
+Extends the calib labeling tool family (shares `view_to_image` / `image_to_view` and the same safeguards as
+`label_tool.py`) with the ONE thing the landmark tool doesn't do: mark the ball's **center** and **contact
+point** on frames sampled ~every 0.1 s along the full roll, so a tracker/detector can be scored against real
+observations. Same rules as the landmark tool:
+
+- Coordinates are ORIGINAL-frame pixels, never scaled-preview coords.
+- A position is recorded only when the ball is actually visible. If it isn't, mark the frame `occluded` — never
+  guess a position (an interpolated point is not a measurement; DEC-094 §2).
+
+Writes `validation/cv_eval/labels/<id>.json` in the schema documented in `validation/cv_eval/README.md`.
+
+GUI run (needs a display):
+  python -m lanesight_core.cv.calib.ball_label CLIP --id IMG_8929 [--labels-dir validation/cv_eval/labels]
+       [--step 0.1] [--t0 16.5 --t1 21.0]     # restrict sampling to the shot window
+Keys: n/p next/prev sample · clicks: 1st = center, 2nd = contact · o toggle occluded · c clear · s save · q quit.
+
+The pure functions below (sampling + label I/O + upsert) carry the logic and are unit-tested headlessly; the GUI
+loop is a thin shell over them.
+"""
+from __future__ import annotations
+import json
+import os
+from pathlib import Path
+
+# shared view<->image transform + safeguards from the landmark tool (same tool family, not a new one)
+from .label_tool import view_to_image, image_to_view  # noqa: F401  (image_to_view used by the GUI)
+
+SCHEMA_VERSION = 1
+
+
+# ------------------------------------------------------------------ pure helpers (testable headless)
+
+def sample_times(t0: float, t1: float, step_s: float = 0.1):
+    """Sample times [t0, t1] every step_s, rounded to the step grid (stable keys). t1 inclusive within eps."""
+    if step_s <= 0 or t1 < t0:
+        return []
+    n = int(round((t1 - t0) / step_s))
+    return [round(t0 + i * step_s, 3) for i in range(n + 1)]
+
+
+def empty_labels(clip: str, fps: float) -> dict:
+    return {'schema': SCHEMA_VERSION, 'clip': clip, 'fps': fps,
+            'events': {'foul_cross_s': None, 'first_pin_contact_s': None, 'release_s': None, 'touchdown_s': None},
+            'pins_before': list(range(1, 11)), 'pins_after': None,
+            'balls': [], 'ruby': None, 'reference': None}
+
+
+def _key(t: float) -> float:
+    return round(float(t), 3)
+
+
+def find_ball(labels: dict, t: float):
+    """The ball sample at time t (within half a millisecond), or None."""
+    for b in labels.get('balls', []):
+        if abs(b.get('t', -1) - _key(t)) < 5e-4:
+            return b
+    return None
+
+
+def upsert_ball(labels: dict, t: float, center=None, contact=None, occluded: bool = False) -> dict:
+    """Set/replace the ball sample at time t. An occluded frame stores no position (center/contact forced None)
+    — never guess a hidden ball. Returns the sample dict. Keeps `balls` sorted by time."""
+    if occluded:
+        center = contact = None
+    b = find_ball(labels, t)
+    if b is None:
+        b = {'t': _key(t)}
+        labels.setdefault('balls', []).append(b)
+    b['center'] = (list(center) if center is not None else None)
+    b['contact'] = (list(contact) if contact is not None else None)
+    b['occluded'] = bool(occluded)
+    labels['balls'].sort(key=lambda s: s['t'])
+    return b
+
+
+def clear_ball(labels: dict, t: float) -> None:
+    labels['balls'] = [b for b in labels.get('balls', []) if abs(b.get('t', -1) - _key(t)) >= 5e-4]
+
+
+def observed_count(labels: dict) -> int:
+    """How many samples have a real (non-occluded) center — the ground-truth observation count."""
+    return sum(1 for b in labels.get('balls', []) if not b.get('occluded') and b.get('center') is not None)
+
+
+def label_path(labels_dir, shot_id: str) -> Path:
+    return Path(labels_dir) / f"{shot_id}.json"
+
+
+def load(labels_dir, shot_id: str):
+    p = label_path(labels_dir, shot_id)
+    return json.load(open(p)) if p.exists() else None
+
+
+def save(labels_dir, shot_id: str, labels: dict) -> str:
+    os.makedirs(labels_dir, exist_ok=True)
+    p = label_path(labels_dir, shot_id)
+    json.dump(labels, open(p, 'w'), indent=2)
+    return str(p)
+
+
+# ------------------------------------------------------------------ GUI (needs a display)
+
+def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=None, t1=None):  # pragma: no cover
+    """cv2 HighGUI scrub-and-click labeler. Thin shell over the pure helpers above; needs a display."""
+    import cv2
+    cap = cv2.VideoCapture(clip)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 60.0
+    dur = (cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) / fps
+    t0 = 0.0 if t0 is None else t0
+    t1 = dur if t1 is None else t1
+    times = sample_times(t0, min(t1, dur), step_s)
+    labels = load(labels_dir, shot_id) or empty_labels(os.path.basename(clip), fps)
+    view = {'ox': 0.0, 'oy': 0.0, 'zoom': 1.0}
+    state = {'i': 0, 'click': 'center'}
+
+    def on_mouse(event, x, y, flags, _):
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        ix, iy = view_to_image(x, y, view)
+        t = times[state['i']]
+        b = find_ball(labels, t) or {}
+        center = b.get('center'); contact = b.get('contact')
+        if state['click'] == 'center':
+            center = (ix, iy); state['click'] = 'contact'
+        else:
+            contact = (ix, iy); state['click'] = 'center'
+        upsert_ball(labels, t, center=center, contact=contact, occluded=False)
+
+    cv2.namedWindow('ball'); cv2.setMouseCallback('ball', on_mouse)
+    while True:
+        t = times[state['i']]
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
+        ok, frame = cap.read()
+        if ok:
+            b = find_ball(labels, t)
+            if b and b.get('center'):
+                cv2.circle(frame, tuple(int(v) for v in b['center']), 10, (0, 255, 0), 2)
+            if b and b.get('contact'):
+                cv2.circle(frame, tuple(int(v) for v in b['contact']), 5, (0, 200, 255), 2)
+            tag = 'OCCLUDED' if (b and b.get('occluded')) else (f"obs {observed_count(labels)}")
+            cv2.putText(frame, f"{shot_id} t={t:.2f} [{state['i']+1}/{len(times)}] next-click={state['click']} {tag}",
+                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.imshow('ball', frame)
+        k = cv2.waitKey(0) & 0xFF
+        if k in (ord('q'), 27):
+            break
+        elif k == ord('n'):
+            state['i'] = min(state['i'] + 1, len(times) - 1); state['click'] = 'center'
+        elif k == ord('p'):
+            state['i'] = max(state['i'] - 1, 0); state['click'] = 'center'
+        elif k == ord('o'):
+            cur = find_ball(labels, t)
+            upsert_ball(labels, t, occluded=not (cur and cur.get('occluded')))
+        elif k == ord('c'):
+            clear_ball(labels, t); state['click'] = 'center'
+        elif k == ord('s'):
+            print('saved', save(labels_dir, shot_id, labels))
+    save(labels_dir, shot_id, labels)
+    cap.release(); cv2.destroyAllWindows()
+
+
+def _main():  # pragma: no cover
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('clip')
+    ap.add_argument('--id', required=True)
+    ap.add_argument('--labels-dir', default='validation/cv_eval/labels')
+    ap.add_argument('--step', type=float, default=0.1)
+    ap.add_argument('--t0', type=float, default=None)
+    ap.add_argument('--t1', type=float, default=None)
+    a = ap.parse_args()
+    run(a.clip, a.id, a.labels_dir, a.step, a.t0, a.t1)
+
+
+if __name__ == '__main__':  # pragma: no cover
+    _main()

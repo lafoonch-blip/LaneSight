@@ -1,0 +1,20 @@
+{
+  "_note": "DEC-094 §2 accuracy-vs-ground-truth tolerances. A metric shown measured/ok whose error exceeds its tolerance counts toward the plausible-but-wrong rate (the report's headline number). SEPARATE from ops/perf_benchmark.py TOL, which is the don't-regress-the-current-engine gate (tighter).",
+  "metrics": {
+    "ball_speed": 0.5,
+    "speed_release": 0.5,
+    "speed_early": 0.5,
+    "speed_late": 0.5,
+    "laydown_board": 1.0,
+    "arrows_board": 1.0,
+    "breakpoint_board": 1.0,
+    "entry_board": 1.0,
+    "entry_angle": 1.0,
+    "loft": 1.0
+  },
+  "pins": "exact",
+  "detection": {
+    "recall_radius_ball_fraction": 0.5,
+    "regions_ft": [[0, 15], [15, 40], [40, 60]]
+  }
+}
