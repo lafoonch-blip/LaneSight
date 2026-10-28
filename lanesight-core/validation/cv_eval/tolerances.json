@@ -10,7 +10,8 @@
     "breakpoint_board": 1.0,
     "entry_board": 1.0,
     "entry_angle": 1.0,
-    "loft": 1.0
+    "loft": 1.0,
+    "rev_rate": 25.0
   },
   "pins": "exact",
   "detection": {

@@ -138,23 +138,43 @@ def _load_labels(labels_dir, shot_id):
     return json.load(open(p)) if p.exists() else None
 
 
-def _gt_metrics_from_labels(labels, inline_gt):
-    """Map labels / inline ground truth to the engine's metric names where a direct comparison exists.
-    Conservative: only fields with an unambiguous mapping (speed from ruby / manual) are surfaced."""
+RUBY_MAP = {'speed_mph': 'ball_speed', 'rev_rate_rpm': 'rev_rate', 'loft_ft': 'loft'}
+
+
+def _resolve(path, base_dir):
+    """First existing candidate for a manifest-relative path: as-is (cwd), then under base_dir."""
+    for c in (path, os.path.join(base_dir or '', path)):
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def _gt_metrics_from_labels(labels, inline_gt, base_dir=None):
+    """Map labels / Ruby reference / inline ground truth to the engine's metric names where a direct comparison
+    exists. Conservative: only unambiguous mappings are surfaced (speed/rev/loft from Ruby; manual speed)."""
     gt = {}
+    # Ruby reference file named in the manifest entry (validation clips) — the independent speed/rev/loft truth.
+    ref_file = (inline_gt or {}).get('file')
+    if ref_file:
+        rp = _resolve(ref_file, base_dir)
+        if rp:
+            ruby = json.load(open(rp))
+            for rk, mk in RUBY_MAP.items():
+                if ruby.get(rk) is not None:
+                    gt[mk] = ruby[rk]
     if labels:
         ruby = labels.get('ruby') or {}
-        if ruby.get('speed_mph') is not None:
-            gt['ball_speed'] = ruby['speed_mph']
-    if inline_gt:
-        if inline_gt.get('speed_foul_to_pins_mph') is not None:
-            gt.setdefault('ball_speed', inline_gt['speed_foul_to_pins_mph'])
+        for rk, mk in RUBY_MAP.items():
+            if ruby.get(rk) is not None:
+                gt.setdefault(mk, ruby[rk])
+    if inline_gt and inline_gt.get('speed_foul_to_pins_mph') is not None:
+        gt.setdefault('ball_speed', inline_gt['speed_foul_to_pins_mph'])
     return gt
 
 
 # ---------------- main ----------------
 
-def run(manifest, clips_dir, labels_dir, tolerances, only=None):
+def run(manifest, clips_dir, labels_dir, tolerances, only=None, base_dir=None):
     results = []
     for s in manifest:
         if only and s['id'] not in only:
@@ -167,7 +187,7 @@ def run(manifest, clips_dir, labels_dir, tolerances, only=None):
         r['id'] = s['id']; r['camera_class'] = s.get('camera_class'); r['split'] = s.get('split')
         labels = _load_labels(labels_dir, s['id'])
         r['has_labels'] = labels is not None
-        r['gt_metrics'] = _gt_metrics_from_labels(labels, s.get('ground_truth'))
+        r['gt_metrics'] = _gt_metrics_from_labels(labels, s.get('ground_truth'), base_dir)
         results.append(r)
         print(f"[cv_eval]   {r.get('status')} in {r.get('wall_s')}s"
               + (f" · obs {r.get('observations')}" if r.get('observations') else ''), flush=True)
@@ -212,7 +232,8 @@ def main():
     manifest = json.load(open(a.manifest))['clips']
     tolerances = json.load(open(a.tolerances))
     only = set(a.clips.split(',')) if a.clips else None
-    results = run(manifest, a.clips_dir, a.labels_dir, tolerances, only)
+    base_dir = str(Path(a.manifest).resolve().parents[2])   # .../validation/cv_eval/manifest.json -> repo root
+    results = run(manifest, a.clips_dir, a.labels_dir, tolerances, only, base_dir)
     report = {'results': results, 'summary': summarize(results, manifest, tolerances)}
 
     out = a.out or f'ops/perf_reports/cv_eval_{int(time.time())}.json'

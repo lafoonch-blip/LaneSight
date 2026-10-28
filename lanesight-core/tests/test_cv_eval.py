@@ -52,6 +52,21 @@ def test_metric_errors_skips_missing_truth():
     assert wrong == [] and agg == {}
 
 
+def test_gt_metrics_from_ruby_reference(tmp_path):
+    from ops.cv_eval import _gt_metrics_from_labels
+    ruby = tmp_path / "r.json"
+    import json as _j
+    ruby.write_text(_j.dumps({"vendor": "ruby", "speed_mph": 16.9, "rev_rate_rpm": 411, "loft_ft": 2.5}))
+    gt = _gt_metrics_from_labels(None, {"file": "r.json"}, base_dir=str(tmp_path))
+    assert gt == {"ball_speed": 16.9, "rev_rate": 411, "loft": 2.5}
+
+
+def test_gt_metrics_inline_manual_speed():
+    from ops.cv_eval import _gt_metrics_from_labels
+    gt = _gt_metrics_from_labels(None, {"speed_foul_to_pins_mph": 15.5}, base_dir=None)
+    assert gt == {"ball_speed": 15.5}
+
+
 def test_thin_camera_classes():
     manifest = [{'camera_class': 'rear-centered'}] * 7 + [{'camera_class': 'glasses'}] * 2
     thin = thin_camera_classes(manifest, min_per_class=6)
