@@ -1,7 +1,7 @@
 # LaneSight — Bowling Industry Intelligence & Opportunity Monitoring Strategy
-Status: PROPOSED OPERATING STRATEGY  
-Version: 1.0  
-Last Updated: 2026-10-26  
+Status: OPERATING STRATEGY (registry + weekly analyzer implemented, DEC-098)  
+Version: 1.1  
+Last Updated: 2026-10-28  
 Owner: LaneSight  
 Authority: Strategy context; subordinate to `00_CONTEXT/DECISIONS.md` and `00_CONTEXT/CURRENT_STATE.md`
 
@@ -30,12 +30,15 @@ Align with the canonical strategy: hardware-agnostic Bowler Profile; **Measure �
 - Include: headline, exact date, 1–2 source links, category, relevance, urgency, recommended next action.
 - Deduplicate by canonical source URL + event/entity + substantive change. Escalate meaningful updates on previously tracked items.
 
-### Weekly — LaneSight Weekly Industry Brief
+### Weekly — LaneSight Weekly Opportunity Analyzer (Claude, DEC-098)
+> **v1.1 (2026-10-28):** the weekly brief is now a Claude scheduled task (Mondays ~7:51 a.m. ET) that also stores, scores and tracks every item in the Supabase `intel` registry. It replaces the ChatGPT weekly brief below. Runbook: `02_RESEARCH/intel/WEEKLY_OPPORTUNITY_ANALYZER.md`.
+
+### (Replaced) ChatGPT Weekly Industry Brief
 - Scheduled Mondays at approximately **8 a.m. America/New_York**.
 - Top **five** verified developments; competitive/technology changes; creator and coaching movements; partnership leads; top **three** recommended actions ranked by expected value and effort.
 - Link to earlier alert/opportunity when continuing a story. Avoid asserting that a lead is a confirmed opportunity or relationship.
 
-These are ChatGPT scheduled monitoring tasks, **not** an implemented ingestion platform or GitHub-writing automation. Execution quality and available sources must be validated. GitHub remains the authoritative documentation source; automated outputs must not silently overwrite governance documents.
+The daily watch remains a ChatGPT task and is **not** connected to the registry. The ChatGPT tasks are **not** an implemented ingestion platform or GitHub-writing automation. Execution quality and available sources must be validated. GitHub remains the authoritative documentation source; automated outputs must not silently overwrite governance documents.
 
 ## 4. Opportunity classification, scoring and response
 **Types:** Product/feature, integration/API, distribution/channel, creator/influencer, coaching, tournament/event, regulatory/policy, competitor threat, user insight.
@@ -57,7 +60,7 @@ Each prospect must have an explicit **owner, next action, due date, status, and 
 
 Lifecycle: `new → triaged → researching → outreach_planned → contacted → evaluating → approved → executing → measured → closed` (with `watchlist` and `rejected` side paths).
 
-Start with a lightweight versioned Markdown/CSV registry or private database; only build a searchable dashboard when volume warrants it. Never store scraped private personal data or nonpublic information without authorization.
+**Implemented (DEC-098):** Supabase schema `intel` (migration 025) — `opportunity` (this schema; score and band generated), `score_history`, `decision`, `theme`, `run`. Build a dashboard only when volume warrants it. Never store scraped private personal data or nonpublic information without authorization.
 
 ## 6. Proposed AI-agent workflow
 1. **Collector:** gather permitted RSS, official announcements, public web updates, authorized APIs and selected public discussions.
