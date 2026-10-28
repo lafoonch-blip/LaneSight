@@ -575,7 +575,8 @@ struct APIClient {
                  layoutSystem: String? = nil,
                  layout: String? = nil,
                  surface: String? = nil,
-                 makeCurrent: Bool = false) async throws -> ArsenalBall {
+                 makeCurrent: Bool = false,
+                 makeDefault: Bool = false) async throws -> ArsenalBall {
         var req = makeRequest("me/arsenal", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: Any] = [:]
@@ -588,6 +589,7 @@ struct APIClient {
         if let layout, !layout.isEmpty { body["layout"] = layout }
         if let surface, !surface.isEmpty { body["surface"] = surface }
         if makeCurrent { body["make_current"] = true }
+        if makeDefault { body["make_default"] = true }      // DEC-099
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(req, as: ArsenalBall.self)
     }

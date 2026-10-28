@@ -136,3 +136,43 @@ def test_email_change_rejects_garbage():
     r = client.put('/me/email', json={'email': 'not-an-email'},
                    headers={'X-Dev-User': 'p_email2', 'Authorization': 'Bearer faketoken'})
     assert r.status_code == 400 and r.json()['detail']['field'] == 'email'
+
+
+# ---------------------------------------------------------------- DEC-099
+
+def test_existing_profile_without_dob_can_still_edit_names():
+    # A profile created before the DOB gate (name stored, no dob) must be able to edit first/last name.
+    from lanesight_api.store import get_store
+    get_store().put_profile('p_legacy', {'display_name': 'Shay Old'})
+    h = _h('p_legacy')
+    r = client.put('/me/profile', json={'first_name': 'Shayne'}, headers=h)
+    assert r.status_code == 200, r.text
+    r = client.put('/me/profile', json={'last_name': 'Lafoon'}, headers=h)
+    p = r.json()
+    assert r.status_code == 200 and p['first_name'] == 'Shayne' and p['last_name'] == 'Lafoon'
+    assert p['display_name'] == 'Shayne Lafoon'
+
+
+def test_form_baseline_entered_round_trips_and_clears():
+    h = _h('p_fb')
+    client.put('/me/profile', json={'first_name': 'F', 'last_name': 'B', 'dob': _adult_dob()}, headers=h)
+    fb = {'mode': 'entered', 'pushaway_time': 0.45, 'backswing_time': 0.55, 'downswing_time': 0.35,
+          'release_time': 0.03}
+    r = client.put('/me/profile', json={'form_baseline': fb}, headers=h)
+    assert r.status_code == 200 and r.json()['form_baseline']['pushaway_time'] == 0.45
+    assert client.put('/me/profile', json={'form_baseline': {'mode': 'average'}}, headers=h).status_code == 200
+    r = client.put('/me/profile', json={'form_baseline': None}, headers=h)
+    assert r.status_code == 200 and r.json().get('form_baseline') is None
+
+
+@pytest.mark.parametrize('fb,field', [
+    ({'mode': 'guess'}, 'form_baseline'),
+    ({'mode': 'entered'}, 'form_baseline'),                          # nothing entered
+    ({'mode': 'entered', 'backswing_time': 0}, 'backswing_time'),    # must be > 0
+    ({'mode': 'entered', 'downswing_time': 7.5}, 'downswing_time'),  # beyond the 3 s sanity bound
+    ({'mode': 'entered', 'pushaway_time': 'fast'}, 'pushaway_time'),
+])
+def test_form_baseline_rejects_bad_input(fb, field):
+    h = _h('p_fb_bad')
+    r = client.put('/me/profile', json={'form_baseline': fb}, headers=h)
+    assert r.status_code == 400 and r.json()['detail']['field'] == field

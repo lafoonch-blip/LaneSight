@@ -558,3 +558,27 @@ def test_session_shots_carry_per_shot_ball_and_oil():
     assert [r['user_ball_id'] for r in rows] == ['ballR1', 'ballR2']
     assert [r['oil_pattern_id'] for r in rows] == ['oilR1', 'oilR2']   # first backfilled to the session oil at record
     assert all('ball_name' in r and 'oil_name' in r for r in rows)     # name fields present (None offline)
+
+
+def test_arsenal_default_ball_is_separate_from_current():
+    # DEC-099: one default ball per bowler (what a new session starts with), independent of is_current.
+    hh = {'X-Dev-User': 'ars_def'}
+    a = client.post('/me/arsenal', json={'name': 'Phaze II', 'make_current': True, 'make_default': True},
+                    headers=hh).json()
+    assert a['is_default'] is True and a['is_current'] is True
+    b = client.post('/me/arsenal', json={'name': 'Spare Ball'}, headers=hh).json()
+    assert b['is_default'] is False
+    # picking another ball for the session moves CURRENT, never the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_current': True}, headers=hh)
+    by_id = {x['id']: x for x in client.get('/me/arsenal', headers=hh).json()}
+    assert by_id[b['id']]['is_current'] and by_id[a['id']]['is_default'] and not by_id[b['id']]['is_default']
+    # setting a new default unsets the old one
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': True}, headers=hh)
+    lst = client.get('/me/arsenal', headers=hh).json()
+    assert [x['id'] for x in lst if x['is_default']] == [b['id']]
+    # clearing / retiring removes the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': False}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+    client.patch(f"/me/arsenal/{a['id']}", json={'is_default': True}, headers=hh)
+    client.patch(f"/me/arsenal/{a['id']}", json={'retired': True}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())

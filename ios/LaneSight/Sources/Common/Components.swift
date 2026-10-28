@@ -11,6 +11,31 @@ enum Loadable<T> {
     var value: T? { if case .loaded(let v) = self { return v }; return nil }
 }
 
+extension Loadable {
+    /// Stale-while-revalidate: a refresh that fails keeps the data already on screen (only a first load
+    /// with nothing to show surfaces the error). Keeps tab revisits seamless — no spinner/error flash.
+    func keepingLoaded(over old: Loadable<T>) -> Loadable<T> {
+        if case .failed = self, old.value != nil { return old }
+        return self
+    }
+}
+
+extension View {
+    /// DEC-099: only the four primary tabs (Home · Stats · Lab · Coaching) show the bottom tab bar. Every
+    /// screen pushed on top of a tab (Profile, Settings, Setup, sessions, details…) hides it, so a pushed
+    /// screen can never be left "open" underneath another tab.
+    func lsHidesTabBar() -> some View { toolbar(.hidden, for: .tabBar) }
+}
+
+/// One page-level loading state for a tab's FIRST load (DEC-099): the whole page appears at once instead of
+/// section by section.
+struct LSPageLoading: View {
+    var body: some View {
+        ProgressView().tint(LS.cyan).controlSize(.large)
+            .frame(maxWidth: .infinity, minHeight: 320)
+    }
+}
+
 /// Renders a Loadable: spinner while loading, the content when loaded, an honest error with Retry on failure.
 struct LoadableView<T, Content: View>: View {
     let state: Loadable<T>

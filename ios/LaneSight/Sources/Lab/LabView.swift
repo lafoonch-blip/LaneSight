@@ -5,8 +5,10 @@ import SwiftUI
 /// (standalone clip analyses — not in Stats or the Score). Every number is live.
 struct LabView: View {
     @EnvironmentObject var model: AppModel
-    @State private var sessions: Loadable<[SessionRow]> = .idle
-    @State private var uploads: Loadable<[UploadRow]> = .idle
+    // DEC-099: sessions, uploads AND each session card's rings load together (shared tab store).
+    @EnvironmentObject var tabs: TabDataStore
+    private var sessions: Loadable<[SessionRow]> { tabs.lab.sessions }
+    private var uploads: Loadable<[UploadRow]> { tabs.lab.uploads }
     @State private var showUploadResult = false
 
     var body: some View {
@@ -16,8 +18,12 @@ struct LabView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         analyzeSection
-                        sessionsSection
-                        uploadsSection
+                        if !tabs.labReady {
+                            LSPageLoading()
+                        } else {
+                            sessionsSection
+                            uploadsSection
+                        }
                         Spacer(minLength: 8)
                     }
                     .padding(16)
@@ -47,12 +53,6 @@ struct LabView: View {
                         .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
                 }
                 Spacer()
-                NavigationLink { UploadView() } label: {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LS.textSecondary).frame(width: 28, height: 28)
-                        .background(LS.raised, in: RoundedRectangle(cornerRadius: 14))
-                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.border, lineWidth: 1))
-                }
             }
             AnalyzeCards()
         }
@@ -85,7 +85,7 @@ struct LabView: View {
                 Spacer()
                 Text("Practice only").font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link)
             }
-            LoadableView(state: sessions, retry: { Task { await loadSessions() } }) { rows in
+            LoadableView(state: sessions, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("No sessions yet. Start a live session and it shows up here.")
                         .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
@@ -99,7 +99,7 @@ struct LabView: View {
                                 .foregroundStyle(LS.textSecondary).padding(.top, 4)
                             ForEach(g.rows) { s in
                                 NavigationLink { SessionView(reviewSessionId: s.id, readOnly: true) } label: {
-                                    LabSessionCard(session: s)
+                                    LabSessionCard(session: s, prefetched: tabs.lab.summaries[s.id])
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -121,7 +121,7 @@ struct LabView: View {
             }
             Text("Quick analysis of a single video. Start a session to track your progress over time.")
                 .font(.system(size: 12)).foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
-            LoadableView(state: uploads, retry: { Task { await loadUploads() } }) { rows in
+            LoadableView(state: uploads, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("No uploads yet. Analyze a clip from Photos to see it here.")
                         .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
@@ -133,7 +133,7 @@ struct LabView: View {
                         ForEach(rows) { row in
                             if row.isFailed {
                                 // No result to open; offer a fresh analyze run (the clip isn't kept server-side).
-                                NavigationLink { UploadView() } label: { UploadRowCard(upload: row) }
+                                NavigationLink { UploadView(mode: row.capture_mode == "form" ? "form" : "shot") } label: { UploadRowCard(upload: row) }
                                     .buttonStyle(.plain)
                             } else if row.isAnalyzing {
                                 UploadRowCard(upload: row)      // in-flight — nothing to open yet
@@ -150,21 +150,7 @@ struct LabView: View {
         }
     }
 
-    private func loadAll() async { await loadSessions(); await loadUploads() }
-    private func loadSessions() async {
-        sessions = .loading
-        do { sessions = .loaded(try await model.makeClient().listSessions()) }
-        catch { sessions = .failed(error.localizedDescription) }
-    }
-    private func loadUploads() async {
-        uploads = .loading
-        do { uploads = .loaded(try await model.makeClient().listUploads()) }
-        catch {
-            // DEC-086: a response we can't read is our problem, not a scary host/status string.
-            if case APIError.decoding = error { uploads = .failed("Couldn't load your uploads. Pull to refresh.") }
-            else { uploads = .failed(error.localizedDescription) }
-        }
-    }
+    private func loadAll() async { await tabs.load(.lab, model: model) }
 }
 
 /// A Lab session card: flame glyph + "Practice Session" + date · pattern + N shots, with the session's
@@ -172,8 +158,12 @@ struct LabView: View {
 /// card appears. Accuracy needs per-shot targets → "—" when they weren't set.
 struct LabSessionCard: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var tabs: TabDataStore
     let session: SessionRow
-    @State private var summary: SessionSummary?
+    /// DEC-099: rings fetched with the Lab page (nil for cards beyond the prefetched set → fetched here once).
+    var prefetched: SessionSummary? = nil
+    @State private var fetched: SessionSummary?
+    private var summary: SessionSummary? { prefetched ?? fetched }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -206,7 +196,13 @@ struct LabSessionCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
-        .task { summary = try? await model.makeClient().sessionSummary(session.id) }
+        .task {
+            guard prefetched == nil, fetched == nil else { return }
+            if let s = try? await model.makeClient().sessionSummary(session.id) {
+                fetched = s
+                tabs.storeSummary(s, for: session.id)
+            }
+        }
     }
 
     private var subtitle: String {

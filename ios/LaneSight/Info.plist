@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>LaneSight records your delivery to analyze your shot.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>LaneSight saves a copy of your recordings to Photos when you turn on "Save recordings to my phone" in Settings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>LaneSight uses a photo you choose as your profile picture.</string>
 	<key>UIAppFonts</key>

@@ -6,6 +6,9 @@ import UniformTypeIdentifiers
 /// Shot card. One shot per clip. All results are live from the pipeline; nothing is simulated.
 struct UploadView: View {
     @EnvironmentObject var model: AppModel
+    /// DEC-099: the analysis type is chosen BEFORE this screen (Lab › Shot/Form Analysis › Upload video), so
+    /// Upload never asks "Shot or Form" again. "shot" | "form".
+    let mode: String
     @State private var pickedURL: URL?
     @State private var pickedName: String?
     @State private var showPicker = false
@@ -23,8 +26,7 @@ struct UploadView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 clipCard
-                modeSection
-                intentSection
+                if mode == "shot" { intentSection }      // Form has no target line (DEC-081)
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -47,9 +49,11 @@ struct UploadView: View {
             .padding(16)
         }
         .background(LSBackground())
-        .navigationTitle("Analyze a video")
+        .navigationTitle(mode == "form" ? "Upload · Form Analysis" : "Upload · Shot Analysis")
+        .onAppear { model.captureMode = mode }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .videos)
         .onChange(of: pickerItem) { _, item in Task { await loadPicked(item) } }
         // The analyzing modal + the result + any failure are presented at the app root (DEC-086), so
@@ -77,31 +81,6 @@ struct UploadView: View {
                 Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
             }
             .lsCard(padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var modeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("WHAT'S IN THIS CLIP?").lsEyebrow()
-            HStack(spacing: 10) {
-                modeButton("shot", "Shot", "Ball & lane")
-                modeButton("form", "Form", "Approach & swing")
-            }
-        }
-    }
-
-    private func modeButton(_ value: String, _ title: String, _ sub: String) -> some View {
-        let on = model.captureMode == value
-        return Button { model.captureMode = value } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                Text(sub).font(.lsCaption2).foregroundStyle(LS.textSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(on ? LS.blue.opacity(0.18) : LS.card, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(on ? LS.blue : LS.cardStroke, lineWidth: on ? 2 : 1))
         }
         .buttonStyle(.plain)
     }

@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.59  
+Version: 1.60  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.58
+Supersedes: v1.59
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1152,7 +1152,21 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Date:** 2026-10-28 · **Status:** ACCEPTED (migration 025 applied live `europwryibstnmipbvam`; security proven: anon/authenticated denied on `ops`, non-owner RPC → 42501, owner RPC → correct KPIs) · **Supersedes:** nothing — additive to DEC-086/092.
 
+### DEC-099 — App usability batch: seamless tab loading, tab bar only on the 4 primary tabs, save-to-phone instead of retention, default ball, editable names, settable Form baseline, no Shot/Form re-ask on Upload
+**Decision (Shayne, 2026-10-28):**
+1. **Tabs load seamlessly.** A tab's page appears all at once, not section by section. Home, Stats (all four views) and Lab (sessions, uploads and each card's rings) fetch every section in parallel and publish together; a revisit keeps what's on screen and refreshes silently (a failed refresh never replaces good data with an error); Stats and Lab are prefetched in the background once Home is up. Implementation: `ios/…/Common/TabDataStore.swift`.
+2. **The bottom tab bar shows only on Home · Stats · Lab · Coaching.** Every screen pushed on top of a tab (Profile, Settings, Setup, Active Session, Upload, metric detail, achievements, ball setup, Form baseline, summaries…) hides it, so a pushed screen can't stay open underneath another tab. **Supersedes in part DEC-096**'s "leaving the Lab tab doesn't end the session": with the tab bar hidden on the Active Session, the way out is End session (backgrounding the app still keeps the session).
+3. **Video storage: the bowler chooses only "Save recordings to my phone"** (Settings › Videos, default OFF; adds each live recording to Photos with add-only access, saved before analysis so a failed analysis still keeps the clip). **How long video stays on LaneSight's servers is set by LaneSight, not the user, and will be plan/subscription-based** (policy TBD). The "Raw video retention · 30 days" row is removed. The Privacy Policy must describe server retention when it's defined.
+4. **Default ball.** A bowler can mark one arsenal ball as their **default** — a checkbox on Add ball (on by default when they have no default yet) and on the ball's setup/edit screen; shown as a "Default" tag in Profile › Arsenal and the ball picker. The default is separate from the **current** ball (which moves whenever a ball is picked, DEC-097). **A new session starts with the default ball**; "From your last session" still overrides it. Storage: `user_balls.is_default` (migration 026, one per user by partial unique index); API `make_default` on POST, `is_default` on PATCH; retiring a ball clears its default.
+5. **First and last name are editable from Profile for every account.** Root cause: the DEC-087 "DOB required" gate fired on every name edit for a profile created before the DOB gate, so the save always failed. The gate now applies only when the profile is first created. Phone (optional) stays editable; editable rows now show a pencil so they don't read as static labels.
+6. **The Form baseline is defined and settable** (Profile › Form baseline). The values are the engine's measured swing phases, in seconds: **Pushaway** (ball starts moving → ball at hip, E2→E3), **Backswing** (hip → top of backswing, E3→E4), **Downswing** (top → bottom of the swing, E4→E6), **Release** (bottom of the swing → release, E6→E7); **Total swing** = their sum (= `swing_time`, ball start → release). Modes: **Use my average** (median of the bowler's measured form deliveries once established), **Enter my timing**, or **No baseline**. Plus **"Use this delivery as my baseline"** on a Form result (saves only that delivery's measured phases). Server validates: mode `entered`|`average`, each value 0 < t ≤ 3 s (sanity bound, not a target — DEC-095 puts the whole swing at 1.3–2.5 s), at least one phase when entered; `null` clears it.
+7. **Once the bowler picks Shot or Form Analysis, nothing asks again.** The Upload screen no longer shows "What's in this clip? Shot / Form" — the mode comes from the Shot/Form card (Form uploads also drop the target fields). The Lab header's upload shortcut (an entry with no Shot/Form choice) is removed; the flow is Shot/Form → Live session or Upload video (per the Lab flow decision).
+**Why:** Shayne's 2026-10-28 test pass: tabs filled in piece by piece; pushed screens stayed open under other tabs; the retention row was unclear (server vs phone) and isn't the user's call; no way to set a default ball; names couldn't be saved; the Form card compared against a baseline that couldn't be set; Upload re-asked Shot vs Form.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** in part DEC-096 (tab-switch-away bullet); the "Raw video retention" Settings row (v3.7 Figma 434:6174); in part DEC-087 (DOB gate scope — create only).
+**Deploy order:** apply migration `026_arsenal_default_ball.sql` to live Supabase BEFORE deploying the API (the arsenal select now reads `is_default`).
+
 ## Superseded decisions
+- DEC-096 — "leaving the Lab tab doesn't end the session" superseded in part by DEC-099 (the tab bar is hidden on the Active Session; End session is the way out).
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).

@@ -87,7 +87,51 @@ def validate_profile_patch(patch: dict, existing: dict | None = None, today: dat
     # Create-time gate: completing the profile from onboarding (which sends first_name/last_name — DEC-087)
     # requires a DOB, here or already stored. The legacy `name`/`display_name` alias does NOT trip the gate
     # (it's a compatibility path for partial edits like setting location, not the onboarding completion).
+    # DEC-099: the gate applies ONLY when the profile is being created (no name stored yet). An existing
+    # profile that predates the DOB gate must still be able to edit its first/last name from Profile — before
+    # this, every name edit on such a profile failed with "Date of birth is required."
     names_in_patch = any(patch.get(k) for k in ('first_name', 'last_name'))
     has_dob = (patch.get('dob') and str(patch['dob']).strip() != '') or bool(existing.get('dob'))
-    if names_in_patch and not has_dob:
+    creating = not any(existing.get(k) for k in ('first_name', 'last_name', 'display_name'))
+    if names_in_patch and creating and not has_dob:
         raise ProfileValidationError('dob', 'Date of birth is required.')
+
+    if 'form_baseline' in patch:
+        validate_form_baseline(patch.get('form_baseline'))
+
+
+# DEC-099: the Form baseline the swing-timing bar compares each delivery against (FORM_BENCHMARKS §0.4).
+# Phases are the engine's measured splits: pushaway = ball start (E2) → ball at hip (E3); backswing = hip →
+# top of backswing (E4); downswing = top → bottom of the arc (E6); release = bottom of the arc → release (E7).
+# `total` (ball start → release, = swing_time) is optional; when absent the engine sums the phases.
+# Bounds are sanity limits only (keep a typo out), NOT a target: DEC-095's own plausibility gate puts the whole
+# ball-start → release swing at 1.3–2.5 s, so no single phase or total can legitimately exceed 3 s.
+FORM_BASELINE_PHASES = ('pushaway_time', 'backswing_time', 'downswing_time', 'release_time')
+_FORM_BASELINE_MAX_S = 3.0
+
+
+def validate_form_baseline(fb) -> None:
+    if fb is None:
+        return                                       # clears the baseline
+    if not isinstance(fb, dict):
+        raise ProfileValidationError('form_baseline', 'Form baseline must be an object.')
+    mode = fb.get('mode')
+    if mode not in ('entered', 'average'):
+        raise ProfileValidationError('form_baseline', 'Choose "Use my average" or enter your timing.')
+    if mode == 'average':
+        return
+    entered = 0
+    for key in FORM_BASELINE_PHASES + ('total',):
+        v = fb.get(key)
+        if v is None:
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            raise ProfileValidationError(key, 'Enter a time in seconds, e.g. 0.45.')
+        if not (0 < v <= _FORM_BASELINE_MAX_S):
+            raise ProfileValidationError(key, f'Enter a time between 0 and {_FORM_BASELINE_MAX_S:g} seconds.')
+        if key != 'total':
+            entered += 1
+    if entered == 0:
+        raise ProfileValidationError('form_baseline', 'Enter at least one phase time.')

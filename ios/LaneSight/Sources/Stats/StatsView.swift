@@ -3,12 +3,15 @@ import SwiftUI
 struct StatsView: View {
     @EnvironmentObject var model: AppModel
     @State private var tab = 0
-    @State private var score: Loadable<ScoreResponse> = .idle
-    @State private var history: [ScoreResponse] = []
-    @State private var breakdown: ScoreBreakdown?
-    @State private var throwStats: Loadable<StatsResponse> = .idle
-    @State private var formStats: Loadable<StatsResponse> = .idle
-    @State private var equipment: Loadable<EquipmentStats> = .idle
+    // DEC-099: all four Stats views (Shot · Form · Score · Arsenal) load together from the shared tab store,
+    // so switching between them is instant and the page never fills in piece by piece.
+    @EnvironmentObject var tabs: TabDataStore
+    private var score: Loadable<ScoreResponse> { tabs.stats.score }
+    private var history: [ScoreResponse] { tabs.stats.history }
+    private var breakdown: ScoreBreakdown? { tabs.stats.breakdown }
+    private var throwStats: Loadable<StatsResponse> { tabs.stats.throwStats }
+    private var formStats: Loadable<StatsResponse> { tabs.stats.formStats }
+    private var equipment: Loadable<EquipmentStats> { tabs.stats.equipment }
 
     // DEC-085: tab order Shot · Form · Score · Arsenal (was Score · Shot · Form · Equipment, DEC-073).
     // Stats opens on Shot (the most-used view), so a new bowler lands on real shot values, not an empty card.
@@ -22,19 +25,22 @@ struct StatsView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         filterChips
                         tabBar
-                        switch tab {
-                        case 0: throwTab
-                        case 1: formTab
-                        case 2: scoreTab
-                        default: equipmentTab    // Arsenal
+                        if !tabs.statsReady {
+                            LSPageLoading()
+                        } else {
+                            switch tab {
+                            case 0: throwTab
+                            case 1: formTab
+                            case 2: scoreTab
+                            default: equipmentTab    // Arsenal
+                            }
                         }
                         Spacer(minLength: 8)
                     }
                     .padding(16)
                 }
-                .task { await loadScore() }
-                .task(id: tab) { await loadForTab() }
-                .refreshable { await loadScore(); await loadForTab() }
+                .task { await reload() }
+                .refreshable { await reload() }
                 #if DEBUG
                 .onAppear { if let t = ProcessInfo.processInfo.environment["LS_PREVIEW_TAB"], let i = Int(t) { tab = i } }
                 #endif
@@ -88,7 +94,7 @@ struct StatsView: View {
     // MARK: Score
 
     private var scoreTab: some View {
-        LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
+        LoadableView(state: score, retry: { Task { await reload() } }) { s in
             if s.eligible == true {
                 VStack(alignment: .leading, spacing: 12) {
                     ScoreCard(score: s, history: history, showBreakdown: false)
@@ -368,7 +374,7 @@ struct StatsView: View {
     // v3.7 Arsenal tab (DEC-085, Figma 431:5748): per-ball and per-oil-pattern rollups from /me/stats/equipment.
     // A new bowler sees the real ball + pattern they've used so far, with a small-sample note (not an empty card).
     private var equipmentTab: some View {
-        LoadableView(state: equipment, retry: { Task { await loadEquipment() } }) { e in
+        LoadableView(state: equipment, retry: { Task { await reload() } }) { e in
             let balls = e.by_ball ?? []
             let patterns = e.by_pattern ?? []
             if balls.isEmpty && patterns.isEmpty {
@@ -430,11 +436,6 @@ struct StatsView: View {
         ].joined(separator: " · ")
     }
 
-    private func loadEquipment() async {
-        equipment = .loading
-        do { equipment = .loaded(try await model.makeClient().equipmentStats()) }
-        catch { equipment = .failed(error.localizedDescription) }
-    }
 
     // MARK: Throw
 
@@ -461,7 +462,7 @@ struct StatsView: View {
     }
 
     private var throwTab: some View {
-        LoadableView(state: throwStats, retry: { Task { await loadThrow() } }) { s in
+        LoadableView(state: throwStats, retry: { Task { await reload() } }) { s in
             if s.empty == true || (s.n_shots ?? 0) == 0 {
                 emptyCard("Shot stats need more shots",
                           "Record shots and they'll roll up here — speed, rev rate, entry, breakpoint, loft and more, each with its own trend and breakdown by ball and pattern.")
@@ -491,7 +492,7 @@ struct StatsView: View {
     // MARK: Form
 
     private var formTab: some View {
-        LoadableView(state: formStats, retry: { Task { await loadForm() } }) { s in
+        LoadableView(state: formStats, retry: { Task { await reload() } }) { s in
             if s.empty == true {
                 emptyCard("Form stats need form clips",
                           s.note ?? "Form metrics require form clips and supported camera angles. Record in Form mode and they'll appear here.")
@@ -607,37 +608,7 @@ struct StatsView: View {
 
     // MARK: loading
 
-    private func loadForTab() async {
-        if tab == 0 { await loadThrow() }
-        else if tab == 1 { await loadForm() }
-        else if tab == 3 { await loadEquipment() }      // Arsenal; Score (tab 2) loads via loadScore() in .task
-    }
-
-    private func loadScore() async {
-        score = .loading
-        do {
-            let client = try model.makeClient()
-            async let s = client.score()
-            async let h = client.scoreHistory()
-            async let b = try? client.scoreBreakdown()      // nil until the endpoint is deployed → rows show "—"
-            let (sv, hv) = try await (s, h)
-            history = hv
-            breakdown = await b
-            score = .loaded(sv)
-        } catch { score = .failed(error.localizedDescription) }
-    }
-
-    private func loadThrow() async {
-        throwStats = .loading
-        do { throwStats = .loaded(try await model.makeClient().stats(view: "throw", range: nil)) }
-        catch { throwStats = .failed(error.localizedDescription) }
-    }
-
-    private func loadForm() async {
-        formStats = .loading
-        do { formStats = .loaded(try await model.makeClient().stats(view: "form", range: nil)) }
-        catch { formStats = .failed(error.localizedDescription) }
-    }
+    private func reload() async { await tabs.load(.stats, model: model) }
 }
 
 /// A compact score sparkline (filled area + line) for the Stats trend card. Scales to its values' range.

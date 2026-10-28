@@ -32,6 +32,7 @@ struct FormSessionView: View {
         .navigationTitle("Form session")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .task { await load() }
         // DEC-096: record a delivery over the Active (form) session; every analysis returns here. Reload on close.
         .fullScreenCover(isPresented: $model.inLiveCapture, onDismiss: { Task { await load() } }) {

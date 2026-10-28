@@ -2,24 +2,30 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
-    @State private var score: Loadable<ScoreResponse> = .idle
-    @State private var history: [ScoreResponse] = []
-    @State private var sessions: Loadable<[SessionRow]> = .idle
-    @State private var activity: Loadable<[ActivityItem]> = .idle
-    @State private var focus: FocusResponse?
+    // DEC-099: Home's data lives in the shared tab store — fetched in parallel, published at once, refreshed
+    // silently on revisit (no section-by-section pop-in).
+    @EnvironmentObject var tabs: TabDataStore
+    private var score: Loadable<ScoreResponse> { tabs.home.score }
+    private var history: [ScoreResponse] { tabs.home.history }
+    private var sessions: Loadable<[SessionRow]> { tabs.home.sessions }
+    private var activity: Loadable<[ActivityItem]> { tabs.home.activity }
+    private var focus: FocusResponse? { tabs.home.focus }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 homeHeader
                 ScrollView {
+                    if !tabs.homeReady {
+                        LSPageLoading()
+                    } else {
                     VStack(alignment: .leading, spacing: 18) {
                         if showWelcome { welcomeStartCard }
 
                         // DEC-083: Home keeps the real score card in both states — ScoreCard renders the
                         // locked "BUILDING" treatment (greyed badge, "Score unlocks · N%", per-part progress)
                         // until the score is eligible, so the switch to a live score feels seamless.
-                        LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
+                        LoadableView(state: score, retry: { Task { await loadAll() } }) { s in
                             ScoreCard(score: s, history: history)
                         }
 
@@ -34,6 +40,7 @@ struct HomeView: View {
                         Spacer(minLength: 8)
                     }
                     .padding(16)
+                    }
                 }
                 .refreshable { await loadAll() }
             }
@@ -80,7 +87,7 @@ struct HomeView: View {
     private var recentSessions: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("RECENT SESSIONS").lsEyebrow()
-            LoadableView(state: sessions, retry: { Task { await loadSessions() } }) { rows in
+            LoadableView(state: sessions, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("No sessions yet. Start a practice session to see it here.")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -117,7 +124,7 @@ struct HomeView: View {
     private var recentActivity: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("RECENT ACTIVITY").lsEyebrow()
-            LoadableView(state: activity, retry: { Task { await loadActivity() } }) { rows in
+            LoadableView(state: activity, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("Your sessions, uploads and achievements will show here.")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -181,42 +188,12 @@ struct HomeView: View {
     }
 
     private func loadAll() async {
-        await loadScore()
-        await loadFocus()
-        await loadSessions()
-        await loadActivity()
-        if model.avatarImage == nil { await model.refreshAvatar() }   // show the photo in the header
-        if !model.homeLoaded { withAnimation(.easeOut(duration: 0.35)) { model.homeLoaded = true } }
-    }
-
-    private func loadFocus() async {
-        focus = try? await model.makeClient().focus()
-    }
-
-    private func loadActivity() async {
-        activity = .loading
-        do {
-            activity = .loaded(try await model.makeClient().activity())
-        } catch { activity = .failed(error.localizedDescription) }
-    }
-
-    private func loadScore() async {
-        score = .loading
-        do {
-            let client = try model.makeClient()
-            async let s = client.score()
-            async let h = client.scoreHistory()
-            let (sv, hv) = try await (s, h)
-            history = hv
-            score = .loaded(sv)
-        } catch { score = .failed(error.localizedDescription) }
-    }
-
-    private func loadSessions() async {
-        sessions = .loading
-        do {
-            sessions = .loaded(try await model.makeClient().listSessions())
-        } catch { sessions = .failed(error.localizedDescription) }
+        await tabs.load(.home, model: model)
+        if !model.homeLoaded {
+            withAnimation(.easeOut(duration: 0.35)) { model.homeLoaded = true }
+            // Home is up — warm Stats + Lab in the background so their first visit is instant too.
+            Task { await tabs.prefetchOtherTabs(model: model) }
+        }
     }
 }
 

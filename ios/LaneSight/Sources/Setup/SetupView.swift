@@ -56,6 +56,7 @@ struct SetupView: View {
         .navigationTitle(isShot ? "Shot Analysis" : "Form Analysis")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         // DEC-096: starting a live session lands on the Active Session hub (not straight on the camera).
         // The hub presents the camera/analyze/result flow and every analysis returns here until End session.
         .navigationDestination(isPresented: $goCapture) {
@@ -64,6 +65,8 @@ struct SetupView: View {
         }
         .onAppear { if let initialMode { model.captureMode = initialMode }; model.prewarm() }   // warm analyzer (DEC-092 D2)
         .task {
+            // DEC-099: a new session starts with the bowler's default ball ("From your last session" overrides).
+            if (initialMode ?? model.captureMode) == "shot" { await model.applyDefaultBallForNewSession() }
             await loadOil()
             await loadHealth()
             #if DEBUG

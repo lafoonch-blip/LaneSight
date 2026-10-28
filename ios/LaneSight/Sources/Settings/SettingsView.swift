@@ -1,11 +1,12 @@
 import SwiftUI
 
-/// Settings (v3.7 Figma 434:6174): unit toggles, capture quality, privacy retention and the account
+/// Settings (v3.7 Figma 434:6174): unit toggles, capture quality, save-to-phone (DEC-099) and the account
 /// rows, in the dark card style. Unimplemented items (Face ID lock, the legal pages) are shown honestly
 /// as "Coming later" rather than fake-working.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("ls.distanceUnit") private var distanceUnit = "feet"
+    @State private var photosNote: String?
 
     var body: some View {
         ScrollView {
@@ -27,8 +28,33 @@ struct SettingsView: View {
                     }
                 }
 
-                section("Privacy", footer: "Shot results are kept. Raw video is deleted after the retention period unless you save a clip. Must match the Privacy Policy.") {
-                    card { valueRow("Raw video retention", "30 days") }
+                // DEC-099: the bowler chooses only whether recordings are ALSO saved on their phone. How long video
+                // stays on LaneSight's servers is set by LaneSight (plan-based), so it isn't a user setting.
+                section("Videos", footer: photosNote ?? "LaneSight stores your recordings securely for analysis; your shot results are always kept. Turn this on to also save a copy of each recording to Photos on this iPhone.") {
+                    card {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Save recordings to my phone").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                                Text("Adds each live recording to Photos").font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                            }
+                            Spacer()
+                            Toggle("", isOn: Binding(
+                                get: { model.saveVideosToPhone },
+                                set: { on in
+                                    guard on else { model.saveVideosToPhone = false; photosNote = nil; return }
+                                    Task {
+                                        if await AppModel.requestPhotosAddAccess() {
+                                            model.saveVideosToPhone = true; photosNote = nil
+                                        } else {
+                                            model.saveVideosToPhone = false
+                                            photosNote = "LaneSight can't add to Photos. Allow it in iPhone Settings › LaneSight › Photos, then turn this on again."
+                                        }
+                                    }
+                                }))
+                            .labelsHidden().tint(LS.action)
+                        }
+                        .padding(.horizontal, 16).frame(minHeight: 60)
+                    }
                 }
 
                 section("Account") {
@@ -68,6 +94,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
     }
 
     // MARK: building blocks

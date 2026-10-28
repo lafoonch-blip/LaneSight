@@ -77,6 +77,7 @@ struct SessionView: View {
         .background(LSBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .toolbar { ToolbarItem(placement: .principal) { header } }
         .navigationDestination(isPresented: $showLatestCard) {
             if let r = model.result { ShotCardView(result: r) }
