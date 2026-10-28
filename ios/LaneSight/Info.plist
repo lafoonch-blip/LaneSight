@@ -26,13 +26,13 @@
 	<string>LaneSight records your delivery to analyze your shot.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>LaneSight uses a photo you choose as your profile picture.</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>RobotoCondensed-Regular.ttf</string>
 		<string>RobotoCondensed-SemiBold.ttf</string>
 	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
