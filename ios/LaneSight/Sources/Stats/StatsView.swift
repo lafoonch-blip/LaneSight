@@ -15,7 +15,7 @@ struct StatsView: View {
 
     // DEC-085: tab order Shot · Form · Score · Arsenal (was Score · Shot · Form · Equipment, DEC-073).
     // Stats opens on Shot (the most-used view), so a new bowler lands on real shot values, not an empty card.
-    private let tabs = ["Shot", "Form", "Score", "Arsenal"]
+    private let tabLabels = ["Shot", "Form", "Score", "Arsenal"]   // renamed: `tabs` is now the TabDataStore (DEC-099)
 
     var body: some View {
         NavigationStack {
@@ -54,9 +54,9 @@ struct StatsView: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            ForEach(tabs.indices, id: \.self) { i in
+            ForEach(tabLabels.indices, id: \.self) { i in
                 Button { tab = i } label: {
-                    Text(tabs[i])
+                    Text(tabLabels[i])
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(tab == i ? LS.onAction : LS.textSecondary)
                         .frame(maxWidth: .infinity).padding(.vertical, 9)
