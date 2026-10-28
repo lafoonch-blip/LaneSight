@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.56  
+Version: 1.57  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.55
+Supersedes: v1.56
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1114,6 +1114,18 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Why:** Form shot c9df6ca0 displayed key positions that didn't match their labels — release read 0.57 s before the slide stopped and ball-start→release was 1.08 s (the delivery window was mis-isolated, ~1 s late). A believable-but-wrong frame/timing misleads more than an honest gap (consistent with DEC-026/061). Full root-cause of the mis-isolation needs the clip in the form eval set with hand-marked frames (pending Shayne).
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none
+
+### DEC-096 — Live sessions stay in the session until the bowler ends them (Shot AND Form)
+**Decision (Shayne, 2026-10-28):** a live session is the landing point after every analysis until the bowler ends it. Applies to live **Shot** analysis and live **Form** analysis. Uploads are unchanged (standalone, DEC-055).
+- Starting a live session lands on the **Active Session** screen. From then on, the Active Session is the landing point after every analysis, until the bowler taps **End session** there.
+- **Success →** shot/form details → Done/close returns to the Active Session. "Record next shot" from details goes straight to recording (DEC-080).
+- **Failure →** the Analyzing/failure screen shows the friendly reason (DEC-086) with **Retry** (no re-recording) and **Back to session** (returns to the Active Session). The failed shot appears in the session's shot list as **Couldn't analyze**, with Retry.
+- **Nothing in the session returns to Session Setup.** Setup is reached only when starting a NEW session. Target line and ball/oil stay editable on the Active Session (DEC-071).
+- Leaving the Lab tab or backgrounding the app does **not** end the session. Returning to Lab shows the Active Session. After an app relaunch, offer **Resume session** (DEC-079 resume state).
+- **Ending is only from the Active Session** → session-end popup + summary (DEC-072).
+
+**Why:** a live practice session is a continuous loop (record → review → record next); bouncing back to Setup or out of the session after each shot breaks the rhythm and risks losing the session. One clear landing point (the Active Session) with one explicit exit (End session) makes the loop predictable and the session durable across failures, tab changes and relaunches.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — clarifies DEC-080/081 and extends them to failures and Form.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
