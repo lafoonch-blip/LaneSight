@@ -1,9 +1,9 @@
--- 026 Ops instrumentation (DEC-098 §2). Additive, idempotent, read-only for clients.
+-- 027 Ops instrumentation (DEC-098 §2). Additive, idempotent, read-only for clients.
 -- Adds the signals the ops dashboard's partial/no_data domains need, following 025's owner-only pattern:
 -- new data lives in retained public tables (written by the service role, locked to clients); aggregates
 -- live in the private `ops` schema and are read ONLY through owner-checked SECURITY DEFINER RPCs.
 --
--- NOT APPLIED TO LIVE BY CLAUDE CODE. Held until the parallel session parks; renumber if 026 is taken.
+-- NOT APPLIED TO LIVE BY CLAUDE CODE. Renumbered 026 -> 027 (026 was taken by arsenal_default_ball + intel_competitor_benchmark, both applied to live).
 -- Pairs with app.py/store.py (§2 code) + a Cloud Run redeploy — data flows only after both land.
 --
 -- Honesty (CLAUDE.md): no fabricated numbers.

@@ -26,7 +26,7 @@ APP_DIR = HERE.parents[1]
 REPO_ROOT = HERE.parents[2]
 DEFS_PATH = APP_DIR / "definitions.json"
 MIG_DIR = REPO_ROOT / "lanesight-core" / "lanesight_core" / "models" / "migrations"
-SQL_PATHS = [MIG_DIR / "025_ops_reporting.sql", MIG_DIR / "026_ops_instrumentation.sql"]
+SQL_PATHS = [MIG_DIR / "025_ops_reporting.sql", MIG_DIR / "027_ops_instrumentation.sql"]
 OWNER_PY = REPO_ROOT / "lanesight-core" / "lanesight_core" / "owner.py"
 
 # Views with no per-user staged concept to filter: metadata views, and the pseudonymous/infra-level tables
@@ -64,7 +64,7 @@ def validate() -> list[str]:
     # 1. definitions views exist in the SQL with the columns they claim.
     for vname, v in views.items():
         if vname not in blocks:
-            errors.append(f"view '{vname}' in definitions.json is not CREATEd as ops.{vname} in 025+026 migrations")
+            errors.append(f"view '{vname}' in definitions.json is not CREATEd as ops.{vname} in 025+027 migrations")
             continue
         body = blocks[vname]
         for col in v["columns"]:
@@ -154,7 +154,7 @@ def main() -> int:
             print(f"  - {e}")
         return 1
     defs = json.loads(DEFS_PATH.read_text())
-    print(f"OK — {len(defs['views'])} views, {len(defs['metrics'])} metrics; definitions.json <-> 025+026 migrations "
+    print(f"OK — {len(defs['views'])} views, {len(defs['metrics'])} metrics; definitions.json <-> 025+027 migrations "
           f"consistent; honesty + owner-RPC security invariants hold.")
     return 0
 
