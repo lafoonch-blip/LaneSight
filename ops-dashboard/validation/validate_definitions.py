@@ -25,14 +25,19 @@ HERE = Path(__file__).resolve()
 APP_DIR = HERE.parents[1]
 REPO_ROOT = HERE.parents[2]
 DEFS_PATH = APP_DIR / "definitions.json"
-SQL_PATH = REPO_ROOT / "lanesight-core" / "lanesight_core" / "models" / "migrations" / "025_ops_reporting.sql"
+MIG_DIR = REPO_ROOT / "lanesight-core" / "lanesight_core" / "models" / "migrations"
+SQL_PATHS = [MIG_DIR / "025_ops_reporting.sql", MIG_DIR / "026_ops_instrumentation.sql"]
 OWNER_PY = REPO_ROOT / "lanesight-core" / "lanesight_core" / "owner.py"
 
-CANONICAL_NON_REAL_VIEWS = {"freshness", "coverage_status"}
+# Views with no per-user staged concept to filter: metadata views, and the pseudonymous/infra-level tables
+# (api_request / product_event / storage_snapshot) where staged scope is handled upstream in app.py.
+CANONICAL_NON_REAL_VIEWS = {"freshness", "coverage_status", "api_daily", "event_daily", "funnel",
+                            "storage_latest"}
 
 
 def _load():
-    return json.loads(DEFS_PATH.read_text()), SQL_PATH.read_text()
+    sql = "\n".join(p.read_text() for p in SQL_PATHS if p.exists())
+    return json.loads(DEFS_PATH.read_text()), sql
 
 
 def _view_blocks(sql: str) -> dict[str, str]:
@@ -59,7 +64,7 @@ def validate() -> list[str]:
     # 1. definitions views exist in the SQL with the columns they claim.
     for vname, v in views.items():
         if vname not in blocks:
-            errors.append(f"view '{vname}' in definitions.json is not CREATEd as ops.{vname} in {SQL_PATH.name}")
+            errors.append(f"view '{vname}' in definitions.json is not CREATEd as ops.{vname} in 025+026 migrations")
             continue
         body = blocks[vname]
         for col in v["columns"]:
@@ -149,7 +154,7 @@ def main() -> int:
             print(f"  - {e}")
         return 1
     defs = json.loads(DEFS_PATH.read_text())
-    print(f"OK — {len(defs['views'])} views, {len(defs['metrics'])} metrics; definitions.json <-> {SQL_PATH.name} "
+    print(f"OK — {len(defs['views'])} views, {len(defs['metrics'])} metrics; definitions.json <-> 025+026 migrations "
           f"consistent; honesty + owner-RPC security invariants hold.")
     return 0
 

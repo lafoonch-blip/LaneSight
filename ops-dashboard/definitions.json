@@ -57,15 +57,35 @@
     "coverage_status": {
       "rpc": "ops_rpc_coverage_status", "owner_only": true, "real_only": false, "grain": "one row per observability domain",
       "columns": ["domain","status","data_source","backing_view"]
+    },
+    "cost_daily": {
+      "rpc": "ops_rpc_cost_daily", "owner_only": true, "real_only": true, "grain": "day x env (§2 M1)",
+      "columns": ["day","env","attempts","vcpu_s","gib_s","egress_mb","est_usd","est_usd_per_success"]
+    },
+    "api_daily": {
+      "rpc": "ops_rpc_api_daily", "owner_only": true, "real_only": false, "grain": "day x env x status_class (§2 M2)",
+      "columns": ["day","env","status_class","requests","errors_5xx","errors_4xx","error_rate_5xx","p50_ms","p95_ms"]
+    },
+    "event_daily": {
+      "rpc": "ops_rpc_event_daily", "owner_only": true, "real_only": false, "grain": "day x env x event_name (§2 M3)",
+      "columns": ["day","env","event_name","events","users"]
+    },
+    "funnel": {
+      "rpc": "ops_rpc_funnel", "owner_only": true, "real_only": false, "grain": "one row per env (§2 M3)",
+      "columns": ["env","opened","started_session","first_shot"]
+    },
+    "storage_latest": {
+      "rpc": "ops_rpc_storage_latest", "owner_only": true, "real_only": false, "grain": "latest snapshot per bucket (§2 M5)",
+      "columns": ["bucket","bytes","objects","aged_objects","db_bytes","captured_at"]
     }
   },
   "domains": [
     {"domain": "01 Executive", "availability": "partial"},
-    {"domain": "02 Customer Journey", "availability": "partial"},
+    {"domain": "02 Customer Journey", "availability": "available"},
     {"domain": "03 Video & AI Trust", "availability": "available"},
-    {"domain": "04 App/API Performance", "availability": "partial"},
-    {"domain": "05 Storage & DB", "availability": "no_data"},
-    {"domain": "06 Financial Operations", "availability": "no_data"},
+    {"domain": "04 App/API Performance", "availability": "available"},
+    {"domain": "05 Storage & DB", "availability": "available"},
+    {"domain": "06 Financial Operations", "availability": "available"},
     {"domain": "07 Security & Controls", "availability": "partial"},
     {"domain": "08 Release & Regression", "availability": "available"}
   ],
