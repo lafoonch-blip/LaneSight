@@ -264,8 +264,8 @@ class MemoryStore:
         return []
 
     # Storage (clip upload path). MemoryStore simulates a bucket on local disk so the endpoints can be
-    # exercised offline; PgStore talks to real Supabase Storage. The clip never persists — it's downloaded,
-    # analyzed, then deleted.
+    # exercised offline; PgStore talks to real Supabase Storage. Clips are kept for the DEC-100 diagnostic window
+    # (default 7 days, newest 40 per user), then purged.
     def _local_storage_path(self, bucket, path):
         import tempfile
         return os.path.join(tempfile.gettempdir(), 'ls_storage', bucket, path)
@@ -284,6 +284,22 @@ class MemoryStore:
             os.remove(self._local_storage_path(bucket, path))
         except OSError:
             pass
+
+    def purge_old_clips(self, bucket, user_id, days, keep_max):
+        """DEC-100: delete this user's clips older than `days`, and any beyond the newest `keep_max`."""
+        root = os.path.dirname(self._local_storage_path(bucket, f'{user_id}/x'))
+        if not os.path.isdir(root):
+            return 0
+        files = sorted((os.path.join(root, f) for f in os.listdir(root)), key=os.path.getmtime, reverse=True)
+        cutoff = time.time() - days * 86400
+        gone = 0
+        for i, f in enumerate(files):
+            if i >= keep_max or os.path.getmtime(f) < cutoff:
+                try:
+                    os.remove(f); gone += 1
+                except OSError:
+                    pass
+        return gone
 
     def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
         p = self._local_storage_path(bucket, path)
@@ -1561,7 +1577,7 @@ class PgStore(MemoryStore):
             return r.read()
 
     def storage_delete(self, bucket, path):
-        """Delete a clip after analysis (clips are never retained — DEC-019 replay deferred)."""
+        """Delete a clip (dedupe hits, retention off, or purge). Retention window: DEC-100."""
         import urllib.request
         url = f'{self._storage_base()}/object/{bucket}/{path}'
         req = urllib.request.Request(url, method='DELETE', headers=self._storage_headers())
@@ -1569,6 +1585,49 @@ class PgStore(MemoryStore):
             urllib.request.urlopen(req, timeout=30)
         except Exception as e:
             print(f'storage_delete {path} skipped ({e})')
+
+    def storage_list(self, bucket, prefix, limit=1000):
+        """List objects under `prefix/` (service role), newest first: [{name, created_at, ...}]."""
+        import json, urllib.request
+        url = f'{self._storage_base()}/object/list/{bucket}'
+        body = json.dumps({'prefix': prefix, 'limit': limit, 'offset': 0,
+                           'sortBy': {'column': 'created_at', 'order': 'desc'}}).encode()
+        req = urllib.request.Request(url, method='POST', data=body,
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read()) or []
+
+    def purge_old_clips(self, bucket, user_id, days, keep_max):
+        """DEC-100: delete this user's retained clips older than `days`, and any beyond the newest `keep_max`."""
+        import json, urllib.request, datetime as _dt
+        items = [it for it in self.storage_list(bucket, user_id) if it.get('id')]   # folders have no id
+        cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
+        doomed = []
+        for i, it in enumerate(items):
+            created = it.get('created_at') or ''
+            try:
+                ts = _dt.datetime.fromisoformat(created.replace('Z', '+00:00'))
+            except ValueError:
+                ts = None
+            if i >= keep_max or (ts is not None and ts < cutoff):
+                doomed.append(f"{user_id}/{it['name']}")
+        if not doomed:
+            return 0
+        req = urllib.request.Request(f'{self._storage_base()}/object/{bucket}', method='DELETE',
+                                     data=json.dumps({'prefixes': doomed}).encode(),
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        urllib.request.urlopen(req, timeout=30)
+        return len(doomed)
+
+    def storage_signed_download_url(self, bucket, path, expires_in=3600):
+        """Short-lived signed GET URL for a retained clip (owner diagnostics)."""
+        import json, urllib.request
+        url = f'{self._storage_base()}/object/sign/{bucket}/{path}'
+        req = urllib.request.Request(url, method='POST', data=json.dumps({'expiresIn': expires_in}).encode(),
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            rel = json.loads(r.read())['signedURL'].lstrip('/')
+        return f'{self._storage_base()}/{rel}'
 
     def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
         """Upload bytes to Storage with the service role (create-or-overwrite via x-upsert). For durable images

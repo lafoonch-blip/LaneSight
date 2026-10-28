@@ -685,6 +685,27 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: fileURL)
             if uploadURL != fileURL { try? FileManager.default.removeItem(at: uploadURL) }
         } catch {
+            // DEC-100: the server never logged this one — report it so no failed attempt is invisible.
+            let stage: String
+            switch pipeline {
+            case .creatingSession: stage = "session"
+            case .trimming: stage = "trim"
+            case .uploading: stage = "upload"
+            case .analyzing: stage = "analyze_request"
+            case .fetching: stage = "fetch_result"
+            default: stage = "unknown"
+            }
+            var report: [String: Any] = [
+                "stage": stage, "error": String(String(describing: error).prefix(500)),
+                "source": source, "capture_mode": captureMode,
+                "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"]
+            if source == "live", let sid = sessionId { report["session_id"] = sid }
+            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
+                report["clip_bytes"] = b
+            }
+            if let json = try? JSONSerialization.data(withJSONObject: report), let client = try? makeClient() {
+                Task { try? await client.reportClientFailure(json) }    // best effort; never blocks the UI
+            }
             pipeline = .failed(error.localizedDescription)
         }
     }

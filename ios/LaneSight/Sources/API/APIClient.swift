@@ -603,6 +603,15 @@ struct APIClient {
         return try await send(req, as: ArsenalBall.self)
     }
 
+    /// DEC-100: report an analysis that failed on the phone before the server saw it (trim / signed URL /
+    /// upload / dropped analyze request), so every attempt is visible in analysis_attempt.
+    func reportClientFailure(_ json: Data) async throws {
+        var req = makeRequest("analysis/client-failure", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = json
+        _ = try await send(req, as: [String: Bool].self)
+    }
+
     /// Makes `id` the one current ball (server unsets the others). PATCH is_current:true.
     @discardableResult
     func setCurrentBall(id: String) async throws -> ArsenalBall {

@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.60  
+Version: 1.61  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.59
+Supersedes: v1.60
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1164,6 +1164,14 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 **Why:** Shayne's 2026-10-28 test pass: tabs filled in piece by piece; pushed screens stayed open under other tabs; the retention row was unclear (server vs phone) and isn't the user's call; no way to set a default ball; names couldn't be saved; the Form card compared against a baseline that couldn't be set; Upload re-asked Shot vs Form.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** in part DEC-096 (tab-switch-away bullet); the "Raw video retention" Settings row (v3.7 Figma 434:6174); in part DEC-087 (DOB gate scope — create only).
 **Deploy order:** apply migration `026_arsenal_default_ball.sql` to live Supabase BEFORE deploying the API (the arsenal select now reads `is_default`).
+
+### DEC-100 — Every analysis is reproducible: clips retained 7 days for diagnostics, phone-side failures logged, failures get a root cause
+**Decision (Shayne, 2026-10-28):**
+- **Retain every analyzed clip for 7 days** (private `shot-clips` bucket, newest 40 per user; `LANESIGHT_CLIP_RETENTION_DAYS` / `LANESIGHT_CLIP_KEEP_MAX` override; 0 = delete). The path is recorded on the attempt (`analysis_attempt.clip.storage_path`). Old clips are purged on each analysis. Owner-only access via the service role (`ops/fetch_clip.py` downloads and re-runs). This is LaneSight's diagnostic retention under DEC-099 (LaneSight sets server retention); the Privacy Policy must state it before Beta.
+- **Phone-side failures are logged** (`POST /analysis/client-failure` → `analysis_attempt`, code `CLIENT_<STAGE>`, stage `client`), so no attempt is invisible.
+- **Every failure gets a root-cause pass**, tracked in `02_RESEARCH/ANALYSIS_FAILURE_RCA_<date>.md`, with experiments on the retained clip and a validated fix (DEC-062/094 gates apply to CV changes).
+**Why:** Tonight's 4–5 failed uploads couldn't be diagnosed. The clip was deleted on analysis and phone-side failures left no trace. Uploaded Shot clips have never produced a result (0/6), Form uploads return empty cards, and the same failing clips were being re-run with no way to find out why.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** "clips are not retained" (the storage-upload path comment of 2026-10-26; `LANESIGHT_KEEP_CLIPS` debug flag).
 
 ## Superseded decisions
 - DEC-096 — "leaving the Lab tab doesn't end the session" superseded in part by DEC-099 (the tab bar is hidden on the Active Session; End session is the way out).

@@ -582,3 +582,60 @@ def test_arsenal_default_ball_is_separate_from_current():
     client.patch(f"/me/arsenal/{a['id']}", json={'is_default': True}, headers=hh)
     client.patch(f"/me/arsenal/{a['id']}", json={'retired': True}, headers=hh)
     assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+
+
+def test_clips_are_retained_and_linked_to_the_attempt(monkeypatch):
+    # DEC-100: an analyzed clip stays in Storage for the diagnostic window and its path is on the attempt row.
+    from lanesight_api.store import get_store
+    store = get_store()
+    hh = {'X-Dev-User': 'keep1'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    with open(up['upload_url'][len('file://'):], 'wb') as f:
+        f.write(b'not-a-video')                            # the job fails; retention must still hold
+    r = client.post('/shots/analyze', headers=hh,
+                    json={'storage_path': up['path'], 'metadata': {'capture_mode': 'shot'}})
+    assert r.status_code == 200
+    assert store.storage_download('shot-clips', up['path']) == b'not-a-video'      # NOT deleted
+    import time as _t
+    for _ in range(100):                                    # the job may run on the serial worker
+        if client.get(f"/jobs/{r.json()['job_id']}", headers=hh).json().get('state') in ('done', 'failed'):
+            break
+        _t.sleep(0.1)
+    att = [a for a in getattr(store, 'analysis_attempts', []) if a.get('user_id') == 'keep1']
+    assert att and att[-1]['clip']['storage_path'] == up['path']
+
+
+def test_clip_retention_zero_deletes(monkeypatch):
+    monkeypatch.setenv('LANESIGHT_CLIP_RETENTION_DAYS', '0')
+    from lanesight_api.store import get_store
+    import os as _os
+    hh = {'X-Dev-User': 'keep0'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    p = up['upload_url'][len('file://'):]
+    with open(p, 'wb') as f:
+        f.write(b'x')
+    client.post('/shots/analyze', headers=hh, json={'storage_path': up['path'], 'metadata': {}})
+    assert not _os.path.exists(p)
+
+
+def test_purge_keeps_only_newest(tmp_path):
+    from lanesight_api.store import MemoryStore
+    import os as _os, time as _t
+    s = MemoryStore()
+    for i in range(5):
+        s.storage_upload('shot-clips', f'purge_u/{i}.mov', b'x')
+        p = s._local_storage_path('shot-clips', f'purge_u/{i}.mov')
+        _os.utime(p, (_t.time() - (100 - i), _t.time() - (100 - i)))
+    assert s.purge_old_clips('shot-clips', 'purge_u', days=7, keep_max=2) == 3
+    left = sorted(_os.listdir(_os.path.dirname(s._local_storage_path('shot-clips', 'purge_u/x'))))
+    assert left == ['3.mov', '4.mov']
+
+
+def test_client_failure_is_logged():
+    from lanesight_api.store import get_store
+    r = client.post('/analysis/client-failure', headers={'X-Dev-User': 'cf1'},
+                    json={'stage': 'upload', 'error': 'The request timed out.', 'source': 'upload',
+                          'capture_mode': 'shot', 'clip_bytes': 51000000})
+    assert r.status_code == 200
+    att = [a for a in getattr(get_store(), 'analysis_attempts', []) if a.get('user_id') == 'cf1']
+    assert att[-1]['failure_code'] == 'CLIENT_UPLOAD' and att[-1]['failure_stage'] == 'client'
