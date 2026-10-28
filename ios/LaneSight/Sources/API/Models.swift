@@ -1062,6 +1062,9 @@ struct ShotMetadata {
     /// Current ball's `ball_configuration_id` and arsenal row `id` (sent so the analyzer knows the ball).
     var ballConfigurationId: String?
     var userBallId: String?
+    /// DEC-097: the oil pattern for THIS shot, locked at record time (the session's current oil, including any
+    /// mid-session change). Sent for live shots so oil is stored per shot, not only per session.
+    var oilPatternId: String? = nil
 
     /// Builds the exact JSON string the API expects for the `metadata` multipart field.
     /// Intent values are emitted explicitly as `null` when absent (matches the contract); the ball ids
@@ -1084,6 +1087,7 @@ struct ShotMetadata {
         if let suggested { dict["suggested"] = Self.boardDict(suggested) }
         if let ballConfigurationId { dict["ball_configuration_id"] = ballConfigurationId }
         if let userBallId { dict["user_ball_id"] = userBallId }
+        if let oilPatternId { dict["oil_pattern_id"] = oilPatternId }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let str = String(data: data, encoding: .utf8) else {
             return "{}"

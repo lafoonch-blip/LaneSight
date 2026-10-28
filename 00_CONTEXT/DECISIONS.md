@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.57  
+Version: 1.58  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.56
+Supersedes: v1.57
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1126,6 +1126,18 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Why:** a live practice session is a continuous loop (record → review → record next); bouncing back to Setup or out of the session after each shot breaks the rhythm and risks losing the session. One clear landing point (the Active Session) with one explicit exit (End session) makes the loop predictable and the session durable across failures, tab changes and relaunches.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — clarifies DEC-080/081 and extends them to failures and Form.
+
+### DEC-097 — Ball and oil pattern are editable on the Active Session (live Shot sessions)
+**Decision (Shayne, 2026-10-28):** the Active Session shows the current **Ball** and **Oil pattern**, each with a Change control, next to the target line (DEC-071). Live Shot sessions only — Form sessions have no ball/oil (DEC-081).
+- **Defaults:** the values chosen at Setup, which default to last used ("From your last session", DEC-079). Changing them does **not** require returning to Setup.
+- **Ball picker:** the bowler's arsenal (same list + card style as Setup), current ball marked; "Add a ball" opens the existing add-from-catalog flow and returns to the Active Session with the new ball selected.
+- **Oil picker:** the oil-pattern library (DEC-052), same search/list as Setup, current pattern marked.
+- **A change applies to the NEXT shot only.** Ball and oil are **locked per clip at record time**, so a shot already recorded or analyzing keeps the ball/oil it was thrown with.
+- **Per-shot provenance:** each shot row and shot card shows the ball used. When ball or oil changes mid-session, the shot list shows a small divider ("Switched to <ball>", "Oil: <pattern>").
+- **Recommendations + ball-reaction (DEC-044) use the ball/oil stored on that shot**, never the session's current value.
+
+**Backend:** ball and oil are stored **per shot**. Oil was per-session; a per-shot `oil_pattern_id` is added (additive migration, pending apply) and new shots backfill it from the session value at record time. "From your last session" returns the last values actually used, including mid-session changes.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — extends DEC-071/079/052/044 and DEC-096.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.

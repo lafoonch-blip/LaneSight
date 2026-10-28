@@ -102,3 +102,19 @@ Layout top to bottom (390 pt screen, 16 pt side padding, 12 pt between blocks, b
   - A note row under the Shot read card: "Uploaded clip · analyzed on its own. Doesn't count toward Stats, your LaneSight Score or achievements."
   - The primary button is **Done**. Done and ✕ return to Lab.
 - Throw comparisons still use the bowler's baseline when one exists. The upload is never added to it.
+
+---
+
+## Active Session — flow + ball/oil rows (DEC-096, DEC-097) — needs Figma update
+
+The Active Session (Figma 413:3804 Shot / 464:7377 Form) is now the live hub every analysis returns to
+(DEC-096), and it carries editable **Ball** and **Oil pattern** rows next to the Target Line (DEC-097). The
+v3.7 Figma should be updated to reflect:
+- The Active Session is reached from Setup on **Start session** (no longer lands on the camera first), and every
+  shot/form analysis returns here until **End session**. Removed the "Change → Setup" arrow (the session never
+  returns to Setup). **No other v3.7 flow arrow pointed back to Setup after an analysis.**
+- Failure state gains **Retry** (no re-recording) + **Back to session**.
+- New **Ball** and **Oil pattern** rows under Target Line, each with a **Change** control (same picker views as
+  Setup). A change applies to the next shot only.
+- **Not yet built (flagged):** shot-list dividers "Switched to <ball>" / "Oil: <pattern>" and per-row/shot-card
+  ball display.

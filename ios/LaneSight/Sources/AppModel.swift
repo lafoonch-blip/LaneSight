@@ -542,7 +542,8 @@ final class AppModel: ObservableObject {
                 intent: sessionTarget,
                 suggested: sessionSuggested,
                 ballConfigurationId: ball?.ball_configuration_id,
-                userBallId: ball?.id
+                userBallId: ball?.id,
+                oilPatternId: source == "live" ? selectedOilPatternId : nil   // DEC-097: lock oil per live shot
             )
             // Upload the clip straight to Supabase Storage (no API request-size cap), then analyze from there.
             let tUrl = Date()

@@ -497,3 +497,49 @@ def test_score_breakdown_shape_building():
     assert b['accuracy']['n_total'] == 0
     assert b['accuracy']['avg_arrow_miss'] is None
     assert b['consistency']['spreads'] == {}
+
+
+# --- DEC-097: ball + oil locked per shot at record time; mid-session changes affect only later shots ---
+
+def test_oil_backfills_from_session_and_locks_on_the_shot():
+    store = get_store()
+    sid = store.create_session('u_oilA', {'mode': 'practice', 'oil_pattern_id': 'oilA'})['id']
+    s1 = store.create_shot('u_oilA', sid, {'source': 'live', 'user_ball_id': 'ballA'})
+    assert s1['oil_pattern_id'] == 'oilA'                       # backfilled from the session at record time
+
+
+def test_explicit_per_shot_oil_wins_over_session():
+    store = get_store()
+    sid = store.create_session('u_oilB', {'mode': 'practice', 'oil_pattern_id': 'oilSession'})['id']
+    sh = store.create_shot('u_oilB', sid, {'source': 'live', 'oil_pattern_id': 'oilExplicit'})
+    assert sh['oil_pattern_id'] == 'oilExplicit'
+
+
+def test_mid_session_oil_change_affects_only_later_shots():
+    store = get_store()
+    sid = store.create_session('u_oilC', {'mode': 'practice', 'oil_pattern_id': 'oil1'})['id']
+    s1 = store.create_shot('u_oilC', sid, {'source': 'live', 'user_ball_id': 'ball1'})
+    store.sessions[sid]['oil_pattern_id'] = 'oil2'              # bowler switches oil mid-session
+    s2 = store.create_shot('u_oilC', sid, {'source': 'live', 'user_ball_id': 'ball2', 'oil_pattern_id': 'oil2'})
+    assert store.shots[s1['id']]['oil_pattern_id'] == 'oil1'   # earlier shot keeps what it was thrown with
+    assert store.shots[s2['id']]['oil_pattern_id'] == 'oil2'
+    assert store.shots[s1['id']]['user_ball_id'] == 'ball1' and store.shots[s2['id']]['user_ball_id'] == 'ball2'
+
+
+def test_last_setup_reads_per_shot_oil_not_session_current():
+    # DEC-097/044: recommendations/ball-reaction read the oil ON the shot, never the session's current value.
+    store = get_store()
+    sid = store.create_session('u_oilD', {'mode': 'practice', 'oil_pattern_id': 'oilThrown'})['id']
+    store.create_shot('u_oilD', sid, {'source': 'live', 'user_ball_id': 'ballThrown'})
+    store.sessions[sid]['oil_pattern_id'] = 'oilLater'         # session changes AFTER the shot was thrown
+    ctx = store.last_setup('u_oilD')
+    assert ctx['oil_pattern_id'] == 'oilThrown' and ctx['user_ball_id'] == 'ballThrown'
+
+
+def test_old_shot_without_per_shot_oil_falls_back_to_session():
+    store = get_store()
+    sid = store.create_session('u_oilE', {'mode': 'practice', 'oil_pattern_id': 'oilSess'})['id']
+    sh = store.create_shot('u_oilE', sid, {'source': 'live', 'user_ball_id': 'ballE'})
+    store.shots[sh['id']]['oil_pattern_id'] = None             # simulate a pre-DEC-097 row
+    ctx = store.last_setup('u_oilE')
+    assert ctx['oil_pattern_id'] == 'oilSess'                  # read-time fallback to the session's oil

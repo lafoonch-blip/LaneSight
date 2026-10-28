@@ -577,7 +577,7 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
     shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                          'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
                                          'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
-                                         'ball_configuration_id': cfg, 'user_ball_id': ub})
+                                         'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     dest = DATA_ROOT / 'sessions' / sid
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"
@@ -1070,7 +1070,7 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     shot = store.create_shot(user, None, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                           'source': 'upload', 'sensor_used': meta.get('sensor_used'),
                                           'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
-                                          'ball_configuration_id': cfg, 'user_ball_id': ub})
+                                          'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     if hasattr(store, 'set_content_hash'):
         store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / 'uploads'
@@ -1128,7 +1128,7 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
                              {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                               'source': 'upload' if is_upload else meta.get('source', 'live'),
                               'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id'),
-                              'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub})
+                              'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     if hasattr(store, 'set_content_hash'):                  # live shots too, so a retry can dedupe (above)
         store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / ('uploads' if is_upload else 'sessions')

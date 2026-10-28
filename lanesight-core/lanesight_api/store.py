@@ -173,7 +173,9 @@ class MemoryStore:
         sess = self.sessions.get(shot.get('session_id')) or {}
         return {'user_ball_id': shot.get('user_ball_id'),
                 'ball_configuration_id': shot.get('ball_configuration_id'),
-                'oil_pattern_id': sess.get('oil_pattern_id'),
+                # DEC-097: recommendations/ball-reaction read the oil stored ON the shot (fallback: the session's,
+                # for shots recorded before per-shot oil existed) — never the session's current value.
+                'oil_pattern_id': shot.get('oil_pattern_id') or sess.get('oil_pattern_id'),
                 'intent': self.get_shot_intent(user_id, shot['id'])}
 
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
@@ -290,6 +292,11 @@ class MemoryStore:
 
     # shots
     def create_shot(self, user_id, session_id, meta):
+        meta = dict(meta)
+        # DEC-097: lock the oil pattern on the shot at record time. Prefer the value the app sent for THIS clip;
+        # otherwise backfill from the session's current oil so the shot keeps a concrete pattern.
+        if meta.get('oil_pattern_id') is None and session_id:
+            meta['oil_pattern_id'] = (self.sessions.get(session_id) or {}).get('oil_pattern_id')
         sh = dict(id=_new_id(), user_id=user_id, session_id=session_id, created_at=time.time(),
                   record=None, result=None, **meta)
         self.shots[sh['id']] = sh
@@ -490,7 +497,7 @@ class MemoryStore:
             sess = self.sessions.get(sh.get('session_id')) or {}
             out.append(dict(shot_id=sh['id'], created_at=sh.get('created_at'), session_id=sh.get('session_id'),
                             ball=sh.get('ball_configuration_id') or sh.get('user_ball_id'),
-                            pattern=sess.get('oil_pattern_id'), record=rec))
+                            pattern=sh.get('oil_pattern_id') or sess.get('oil_pattern_id'), record=rec))  # DEC-097 per-shot oil
         return out
 
     def read_form_records(self, user_id, window_days=None):
@@ -884,7 +891,8 @@ class PgStore(MemoryStore):
                   'record': {}, 'handed': meta.get('handed'), 'capture_mode': meta.get('capture_mode'),
                   'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
                   'sensor_id': meta.get('sensor_id'),
-                  'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id')})
+                  'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id'),
+                  'oil_pattern_id': sh.get('oil_pattern_id')})     # DEC-097 per-shot oil (backfilled from session above)
         # per-shot intent actually USED (feet/laydown/arrows/breakpoint) + the SUGGESTED boards it came from
         # (if "Apply this move" was used, before any edit). created_at defaults so the Accuracy engine can
         # require "intent set before the shot".
