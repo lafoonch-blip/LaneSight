@@ -99,6 +99,8 @@ struct ShotResponse: Codable {
     let sequence: Int?          // 1-based shot number within its session (for the "Shot N" header)
     let capture_mode: String?
     let source: String?
+    let ball_name: String?      // DEC-097: the ball this shot was thrown with (resolved server-side)
+    let oil_name: String?
 }
 
 struct ShotRecord: Codable {
@@ -481,8 +483,17 @@ struct SessionShotRow: Codable, Identifiable, Equatable {
     let classification: String?  // e.g. pocket / light / high (from insights)
     let source: String?          // live | upload
     let metrics: ShotRowMetrics?
+    // DEC-097: the ball + oil this shot was thrown with (names, resolved server-side) — for the shot list +
+    // the mid-session "Switched to …" dividers. nil when the server doesn't supply them (older response).
+    let user_ball_id: String?
+    let oil_pattern_id: String?
+    let ball_name: String?
+    let oil_name: String?
 
-    enum CodingKeys: String, CodingKey { case id, state, created_at, classification, source, metrics }
+    enum CodingKeys: String, CodingKey {
+        case id, state, created_at, classification, source, metrics
+        case user_ball_id, oil_pattern_id, ball_name, oil_name
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -492,6 +503,10 @@ struct SessionShotRow: Codable, Identifiable, Equatable {
         classification = try? c.decodeIfPresent(String.self, forKey: .classification)
         source = try? c.decodeIfPresent(String.self, forKey: .source)
         metrics = try? c.decodeIfPresent(ShotRowMetrics.self, forKey: .metrics)
+        user_ball_id = try? c.decodeIfPresent(String.self, forKey: .user_ball_id)
+        oil_pattern_id = try? c.decodeIfPresent(String.self, forKey: .oil_pattern_id)
+        ball_name = try? c.decodeIfPresent(String.self, forKey: .ball_name)
+        oil_name = try? c.decodeIfPresent(String.self, forKey: .oil_name)
     }
 }
 

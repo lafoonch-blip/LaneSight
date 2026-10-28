@@ -37,6 +37,9 @@ struct ShotResult: Equatable {
     var coachThrow: CoachThrow?
     var coachLane: CoachLane?
     var coachAction: CoachAction?
+    // DEC-097: the ball this shot was thrown with (shown on the card). Live shots set it from the current ball;
+    // a loaded shot from its stored per-shot ball.
+    var ballName: String? = nil
     // Capture-quality banner (B): shown above "Target vs actual" when the far lane was limited.
     var captureFarLaneLimited: Bool = false
     var captureReason: String?
@@ -616,6 +619,7 @@ final class AppModel: ObservableObject {
                                    formView: record?.view,
                                    formStatus: record?.status,
                                    formVersion: record?.form_version)
+            built.ballName = currentBall?.displayName    // DEC-097: live shot uses the ball at record time
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
             result = built
@@ -668,6 +672,7 @@ final class AppModel: ObservableObject {
                                    formStatus: record?.status,
                                    formVersion: record?.form_version)
             built.shotNumber = shot.sequence
+            built.ballName = shot.ball_name          // DEC-097: the ball this shot was thrown with
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
             result = built

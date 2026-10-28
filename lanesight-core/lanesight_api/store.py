@@ -545,8 +545,22 @@ class MemoryStore:
     def arsenal_count(self, user_id):
         return len(self.list_arsenal(user_id))
 
+    def _ball_oil_names(self, user_id):
+        """(ball_names, oil_names): id -> display name, for annotating shot rows with the ball/oil used
+        (DEC-097). Ball keyed by both user_ball_id and ball_configuration_id; oil by pattern id."""
+        oil = {p['id']: p.get('name') for p in (self.oil_patterns() or []) if p.get('id')}
+        ball = {}
+        for b in (self.list_arsenal(user_id) or []):
+            label = b.get('name') or b.get('nickname') or b.get('model_name')
+            for k in (b.get('ball_configuration_id'), b.get('id')):
+                if k:
+                    ball[k] = label
+        return ball, oil
+
     def session_shots(self, user_id, session_id):
-        """Rows for the live Session screen: id, state, key metrics, status."""
+        """Rows for the live Session screen: id, state, key metrics, status, and the ball/oil used (DEC-097)."""
+        ball_names, oil_names = self._ball_oil_names(user_id)
+        sess_oil = (self.sessions.get(session_id) or {}).get('oil_pattern_id')
         out = []
         for sh in sorted(self.shots_for_session(session_id), key=lambda s: s.get('created_at') or 0):
             if sh.get('user_id') != user_id:
@@ -561,9 +575,13 @@ class MemoryStore:
                 state = 'failed'
             else:
                 state = 'pending'
+            ball_id = sh.get('user_ball_id') or sh.get('ball_configuration_id')
+            oil_id = sh.get('oil_pattern_id') or sess_oil          # pre-DEC-097 shots fall back to the session oil
             out.append(dict(id=sh['id'], state=state, created_at=sh.get('created_at'),
                             classification=(rec.get('insights') or {}).get('classification'),
-                            source=sh.get('source'), metrics=key))
+                            source=sh.get('source'), metrics=key,
+                            user_ball_id=sh.get('user_ball_id'), oil_pattern_id=oil_id,
+                            ball_name=ball_names.get(ball_id), oil_name=oil_names.get(oil_id)))
         return out
 
     def session_records(self, user_id, session_id):
@@ -1284,16 +1302,24 @@ class PgStore(MemoryStore):
 
     def session_shots(self, user_id, session_id):
         rows = self._get('shots', f'user_id=eq.{user_id}&session_id=eq.{session_id}'
-                                  '&select=id,created_at,classification,source,record&order=created_at')
+                                  '&select=id,created_at,classification,source,record,user_ball_id,'
+                                  'ball_configuration_id,oil_pattern_id&order=created_at')
+        ball_names, oil_names = self._ball_oil_names(user_id)       # DEC-097: ball/oil used, per shot
+        sess = self._get('sessions', f'id=eq.{session_id}&select=oil_pattern_id') or [{}]
+        sess_oil = (sess[0] or {}).get('oil_pattern_id')
         out = []
         for sh in rows:
             rec = sh.get('record') or {}
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
+            ball_id = sh.get('user_ball_id') or sh.get('ball_configuration_id')
+            oil_id = sh.get('oil_pattern_id') or sess_oil           # pre-DEC-097 rows fall back to the session oil
             out.append(dict(id=sh['id'], state='analyzed' if metrics else 'pending',
                             created_at=sh.get('created_at'), classification=sh.get('classification'),
-                            source=sh.get('source'), metrics=key))
+                            source=sh.get('source'), metrics=key,
+                            user_ball_id=sh.get('user_ball_id'), oil_pattern_id=oil_id,
+                            ball_name=ball_names.get(ball_id), oil_name=oil_names.get(oil_id)))
         return out
 
     def session_records(self, user_id, session_id):

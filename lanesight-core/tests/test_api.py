@@ -543,3 +543,18 @@ def test_old_shot_without_per_shot_oil_falls_back_to_session():
     store.shots[sh['id']]['oil_pattern_id'] = None             # simulate a pre-DEC-097 row
     ctx = store.last_setup('u_oilE')
     assert ctx['oil_pattern_id'] == 'oilSess'                  # read-time fallback to the session's oil
+
+
+def test_session_shots_carry_per_shot_ball_and_oil():
+    # DEC-097 follow-up: each shot row carries the ball + oil it was thrown with (for the list + dividers).
+    store = get_store()
+    sid = store.create_session('u_rows', {'mode': 'practice', 'oil_pattern_id': 'oilR1'})['id']
+    a = store.create_shot('u_rows', sid, {'source': 'live', 'user_ball_id': 'ballR1'})
+    store.shots[a['id']]['record'] = {'metrics': {'ball_speed': {'value': 17.0, 'status': 'ok'}}}
+    store.sessions[sid]['oil_pattern_id'] = 'oilR2'              # switch oil mid-session
+    b = store.create_shot('u_rows', sid, {'source': 'live', 'user_ball_id': 'ballR2', 'oil_pattern_id': 'oilR2'})
+    store.shots[b['id']]['record'] = {'metrics': {'ball_speed': {'value': 16.0, 'status': 'ok'}}}
+    rows = store.session_shots('u_rows', sid)
+    assert [r['user_ball_id'] for r in rows] == ['ballR1', 'ballR2']
+    assert [r['oil_pattern_id'] for r in rows] == ['oilR1', 'oilR2']   # first backfilled to the session oil at record
+    assert all('ball_name' in r and 'oil_name' in r for r in rows)     # name fields present (None offline)

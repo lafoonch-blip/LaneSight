@@ -237,6 +237,7 @@ struct SessionSummaryView: View {
             }
             .font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.textSecondary)
             ForEach(Array(shown.enumerated()), id: \.element.id) { i, s in
+                if i > 0 { switchDivider(prev: shown[i - 1], cur: s) }   // DEC-097: ball/oil change mid-session
                 let num = rows.count - shown.count + i + 1
                 HStack {
                     Text("\(num)").frame(width: 24, alignment: .leading).foregroundStyle(LS.textSecondary)
@@ -256,6 +257,22 @@ struct SessionSummaryView: View {
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+    }
+
+    /// DEC-097: a small divider between shots where the ball or oil changed mid-session.
+    @ViewBuilder private func switchDivider(prev: SessionShotRow, cur: SessionShotRow) -> some View {
+        let ballChanged = cur.ball_name != nil && cur.ball_name != prev.ball_name
+        let oilChanged = cur.oil_name != nil && cur.oil_name != prev.oil_name
+        if ballChanged || oilChanged {
+            let parts = [ballChanged ? "Switched to \(cur.ball_name!)" : nil,
+                         oilChanged ? "Oil: \(cur.oil_name!)" : nil].compactMap { $0 }
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .semibold))
+                Text(parts.joined(separator: " · ")).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(LS.link).padding(.vertical, 3)
+        }
     }
 
     private func cell(_ v: Double?, _ fmt: String) -> some View {

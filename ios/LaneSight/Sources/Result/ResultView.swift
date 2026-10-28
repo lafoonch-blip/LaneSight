@@ -502,8 +502,10 @@ struct ShotCardView: View {
     // subtitle. For a form clip it reads "Form Analysis".
     private var headerTitle: some View {
         let title = result.isForm ? "Form Analysis" : (result.shotNumber.map { "Shot \($0)" } ?? "Shot")
-        let subtitle = result.isForm ? "Form Analysis"
+        // DEC-097: the ball used appears in the subtitle for a ball shot (never on a form clip — form has no ball).
+        let base = result.isForm ? "Form Analysis"
             : (result.isUpload ? "Uploaded clip · Shot Analysis" : "Shot Analysis")
+        let subtitle = (!result.isForm && result.ballName?.isEmpty == false) ? "\(base) · \(result.ballName!)" : base
         return VStack(spacing: 1) {
             Text(title).font(.lsRoboto(20, weight: .semibold)).foregroundStyle(LS.textPrimary)
             Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary)

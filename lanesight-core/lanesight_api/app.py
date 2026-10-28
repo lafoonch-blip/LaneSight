@@ -651,10 +651,19 @@ def _shot_card_enrich(store, user, sh: dict) -> dict:
 
 @app.get('/shots/{shot_id}')
 def get_shot(shot_id: str, user=Depends(current_user)):
-    sh = get_store().get_shot(user, shot_id)
+    store = get_store()
+    sh = store.get_shot(user, shot_id)
     if not sh:
         raise HTTPException(404, 'shot not found')
-    return _shot_card_enrich(get_store(), user, sh)
+    sh = _shot_card_enrich(store, user, sh)
+    # DEC-097: the shot card shows the ball used (and the oil it was thrown on), resolved per shot.
+    try:
+        ball_names, oil_names = store._ball_oil_names(user)
+        sh['ball_name'] = ball_names.get(sh.get('user_ball_id') or sh.get('ball_configuration_id'))
+        sh['oil_name'] = oil_names.get(sh.get('oil_pattern_id'))
+    except Exception as e:
+        print(f'shot ball/oil name resolve skipped ({type(e).__name__}: {e})')
+    return sh
 
 @app.patch('/shots/{shot_id}')
 def patch_shot(shot_id: str, body: dict, user=Depends(current_user)):
