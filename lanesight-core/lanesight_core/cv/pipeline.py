@@ -4,7 +4,7 @@ from __future__ import annotations
 import os, json, pickle, argparse, time, numpy as np
 from contextlib import contextmanager
 from .stabilize import stabilize
-from .lanes import find_lanes, classify_capture_view
+from .lanes import find_lanes, classify_capture_view, foul_corners, lane_x
 from .track import extract_blobs, candidates, link, detect_impact, extend_back, extend_forward, touchdown
 from .metrics import compute, lane_homography
 from .refine import refine
@@ -137,6 +137,10 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                               'lane not detected: lane edges/foul line not found in the stabilized background',
                               stage='lane', diagnostics={'candidates_tried': len(G.get('lanes') or [])})
     _, lane, T, B = best
+    # Record which lane was selected among those detected (transparency — a mounted down-lane POV between two
+    # lanes can lock onto the wrong one): the chosen lane's lateral centre at the foul line + the detected count.
+    _F = foul_corners(lane); _yf = float(_F[:, 1].max()); _xa, _xb = lane_x(lane, _yf)
+    chosen_lane = {'center_x_px': round((_xa + _xb) / 2, 1), 'lanes_detected': len(G['lanes'])}
     pickle.dump(dict(G=G, lane=lane, B=B), open(bcache, 'wb'))
     if len(T) < 10:
         raise AnalysisFailure('BALL_TRACK_NOT_FOUND', 'ball track not found', stage='track',
@@ -256,7 +260,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                      events=dict(t_release=M['t_release'], t_touchdown=M.get('t_touchdown'), t_impact=t_imp,
                                  release_source=M['release_source']),
                      measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {},
-                     capture_quality={'far_lane': 'limited' if cq_limited else 'ok',
+                     capture_quality={'far_lane': 'limited' if cq_limited else 'ok', 'lane': chosen_lane,
                                       **({'reason': cq_reason} if cq_reason else {})})
     shot_view = {x.metric: x.value for x in meas}
     shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence

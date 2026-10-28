@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.53  
-Last Updated: 2026-10-27  
+Version: 1.54  
+Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.51
+Supersedes: v1.53
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1065,6 +1065,17 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** A phone-trimmed shot still took ~280 s of server analysis on 2026-10-27, and a framing failure took 140 s to fail. The pipeline decodes the clip ~9 times, but per-stage timings aren't persisted, so the biggest cost must be measured before the CV changes.
 **Date:** 2026-10-27 · **Status:** ACCEPTED · **Supersedes:** none
+
+### DEC-093 — CV robustness from the IMG_8929/8930 review: honesty gates, crash guard; the mounted down-lane POV stays an honest failure
+**Decision (2026-10-28, gated by DEC-092 benchmark; CV change under the DEC-062 ablation discipline):**
+- **Speed honesty gate (shipped):** the ball-speed sanity check was upper-bound only (>30 mph). It now rejects the full implausible range — outside **8–30 mph**, negative, or non-finite → coded `IMPOSSIBLE_SPEED_SCALE`, never surfaced as `ok`. Per-segment speeds (`speed_early/late/release`) that come out ≤0 become `unavailable` with a reason. (The IMG_8929 pre-fix "6.1 mph ok / STRIKE" can no longer happen; that symptom was already gone once the trim fix picked the right window — this closes the gap for good.)
+- **Least-squares/SVD crash guard (shipped):** a degenerate low-angle/off-axis geometry (IMG_8930) could raise an uncaught `LinAlgError: SVD did not converge`. The vanishing-point solve is validated (`_vp_solve`) and raises the coded `LANE_GEOMETRY_UNUSABLE`; `core.py` converts any pipeline `LinAlgError` into that coded failure as a backstop. No analysis can crash the job now.
+- **Record the chosen lane (shipped):** `capture_quality.lane = {center_x_px, lanes_detected}` so a review can see which lane was measured.
+- **Mounted down-lane POV (IMG_8929) stays an honest failure — accepted, not a regression.** Investigated end-to-end: the bowler's lane (lane 9) is paler than the return-side lane (lane 10), so `find_lanes` — which stops at the first saturation floor that yields a lane — detects only lane 10; the ball on lane 9 is never in lane 10's search region. Even when lane 9 is forced to be detected (multi-floor scan), its foul-line fit is numerically degenerate (the SVD failure above) and the ball is untrackable through the mid/back lane. A multi-floor detection change was built and reverted: it helped no clip in the test set (lane 9 remains unmeasurable) and added risk to the frozen core for zero demonstrated benefit. So IMG_8929 meets its acceptance via "**unavailable with a reason**" — and the reason is now accurate, never a fabricated number or a crash.
+- **The real unlock is the frontier, deferred:** detecting a paler non-primary lane AND dense back-half ball tracking on a far/foreshortened lane. High-regression-risk CV work; not attempted now beyond the gated experiment above.
+
+**Why:** Accuracy over coverage (DEC-026/027/061): an impossible number must fail honestly, and no clip may crash the job. The down-lane POV is Shayne's intended capture (see memory `lanesight-8929-capture-style`), but it isn't measurable with the current detector/tracker; the honest failure is the correct behaviour until the frontier work lands.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none · **Gate:** full manifest PASS (validation clips byte-identical, no new failures); 303 tests green.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
