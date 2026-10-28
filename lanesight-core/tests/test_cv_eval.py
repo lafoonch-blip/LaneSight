@@ -92,6 +92,18 @@ def test_clear_ball():
     assert bl.find_ball(L, 17.1) is None
 
 
+def test_clear_before_wipes_pre_shot_frames():
+    # The reported workflow bug: dozens of pre-shot frames marked occluded. clear_before drops them in one go.
+    L = bl.empty_labels('IMG_X.MOV', 60.0)
+    for t in (2.0, 5.0, 10.0, 16.9):
+        bl.upsert_ball(L, t, occluded=True)        # junk pre-shot frames
+    bl.upsert_ball(L, 17.1, center=(412, 1300))    # the real roll starts here
+    bl.upsert_ball(L, 17.2, center=(410, 1280))
+    removed = bl.clear_before(L, 17.0)
+    assert removed == 4
+    assert [b['t'] for b in L['balls']] == [17.1, 17.2]
+
+
 def test_label_roundtrip(tmp_path):
     L = bl.empty_labels('IMG_X.MOV', 60.0)
     bl.upsert_ball(L, 17.1, center=(412, 1300), contact=(412, 1316))

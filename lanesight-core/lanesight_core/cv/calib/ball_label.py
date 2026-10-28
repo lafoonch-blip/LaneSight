@@ -13,8 +13,12 @@ Writes `validation/cv_eval/labels/<id>.json` in the schema documented in `valida
 
 GUI run (needs a display):
   python -m lanesight_core.cv.calib.ball_label CLIP --id IMG_8929 [--labels-dir validation/cv_eval/labels]
-       [--step 0.1] [--t0 16.5 --t1 21.0]     # restrict sampling to the shot window
-Keys: n/p next/prev sample · clicks: 1st = center, 2nd = contact · o toggle occluded · c clear · s save · q quit.
+       [--step 0.1] [--t0 16.5 --t1 21.0]     # --t0/--t1 restrict sampling to the shot window (skip dead frames)
+Keys: n/space +.1s · p -.1s · . +1s · , -1s (scrub past pre-shot frames fast) · clicks 1st=center 2nd=contact ·
+      o occluded (ONLY for an in-roll frame where the ball is briefly hidden) · c clear this sample ·
+      x clear every sample before here (wipe pre-shot frames you labeled by mistake) · s save · q save+quit.
+Only label frames from release to the pins. Frames before the ball is thrown are NOT part of the track — scrub
+past them, don't mark them occluded. The live view redraws continuously, so a marker appears the instant you click.
 
 The pure functions below (sampling + label I/O + upsert) carry the logic and are unit-tested headlessly; the GUI
 loop is a thin shell over them.
@@ -79,6 +83,15 @@ def clear_ball(labels: dict, t: float) -> None:
     labels['balls'] = [b for b in labels.get('balls', []) if abs(b.get('t', -1) - _key(t)) >= 5e-4]
 
 
+def clear_before(labels: dict, t: float) -> int:
+    """Drop every ball sample strictly before time t — the pre-shot frames that aren't part of the roll and
+    should never have been labeled. Returns how many were removed."""
+    balls = labels.get('balls', [])
+    kept = [b for b in balls if b.get('t', 0) >= _key(t) - 5e-4]
+    labels['balls'] = kept
+    return len(balls) - len(kept)
+
+
 def observed_count(labels: dict) -> int:
     """How many samples have a real (non-occluded) center — the ground-truth observation count."""
     return sum(1 for b in labels.get('balls', []) if not b.get('occluded') and b.get('center') is not None)
@@ -113,7 +126,9 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
     times = sample_times(t0, min(t1, dur), step_s)
     labels = load(labels_dir, shot_id) or empty_labels(os.path.basename(clip), fps)
     view = {'ox': 0.0, 'oy': 0.0, 'zoom': 1.0}
+    jump = max(1, int(round(1.0 / step_s)))            # ~1 s in samples, for skipping dead pre-shot frames fast
     state = {'i': 0, 'click': 'center'}
+    cache = {'i': -1, 'img': None}                     # decode a frame only when the sample changes (live redraw)
 
     def on_mouse(event, x, y, flags, _):
         if event != cv2.EVENT_LBUTTONDOWN:
@@ -121,7 +136,7 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
         ix, iy = view_to_image(x, y, view)
         t = times[state['i']]
         b = find_ball(labels, t) or {}
-        center = b.get('center'); contact = b.get('contact')
+        center, contact = b.get('center'), b.get('contact')
         if state['click'] == 'center':
             center = (ix, iy); state['click'] = 'contact'
         else:
@@ -129,32 +144,48 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
         upsert_ball(labels, t, center=center, contact=contact, occluded=False)
 
     cv2.namedWindow('ball'); cv2.setMouseCallback('ball', on_mouse)
+    HELP = ["click: 1st=center 2nd=contact (only where the ball is visible)",
+            "n/space +.1s  p -.1s  . +1s  , -1s   |   o occluded(in-roll only)  c clear  x clear-all-before",
+            "scrub past pre-shot frames — do NOT mark them; s save; q save+quit"]
     while True:
-        t = times[state['i']]
-        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
-        ok, frame = cap.read()
-        if ok:
+        i = state['i']; t = times[i]
+        if cache['i'] != i:                            # (re)decode only on move -> clicks redraw instantly
+            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
+            ok, f = cap.read(); cache.update(i=i, img=f if ok else None)
+        if cache['img'] is not None:
+            frame = cache['img'].copy()
             b = find_ball(labels, t)
             if b and b.get('center'):
-                cv2.circle(frame, tuple(int(v) for v in b['center']), 10, (0, 255, 0), 2)
+                cv2.circle(frame, tuple(int(v) for v in b['center']), 12, (0, 255, 0), 2)
+                cv2.drawMarker(frame, tuple(int(v) for v in b['center']), (0, 255, 0), cv2.MARKER_CROSS, 18, 1)
             if b and b.get('contact'):
-                cv2.circle(frame, tuple(int(v) for v in b['contact']), 5, (0, 200, 255), 2)
-            tag = 'OCCLUDED' if (b and b.get('occluded')) else (f"obs {observed_count(labels)}")
-            cv2.putText(frame, f"{shot_id} t={t:.2f} [{state['i']+1}/{len(times)}] next-click={state['click']} {tag}",
-                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                cv2.circle(frame, tuple(int(v) for v in b['contact']), 6, (0, 200, 255), 2)
+            tag = 'OCCLUDED' if (b and b.get('occluded')) else f"obs {observed_count(labels)}"
+            cv2.putText(frame, f"{shot_id} t={t:.2f}s [{i+1}/{len(times)}] next-click={state['click']} {tag}",
+                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0) if (b and b.get('center')) else (255, 255, 255), 2)
+            for j, line in enumerate(HELP):
+                cv2.putText(frame, line, (20, 72 + 26 * j), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 200), 1)
             cv2.imshow('ball', frame)
-        k = cv2.waitKey(0) & 0xFF
+        k = cv2.waitKey(20) & 0xFF                     # live loop: redraw ~50fps so a click's marker shows at once
+        if k == 255:
+            continue
         if k in (ord('q'), 27):
             break
-        elif k == ord('n'):
-            state['i'] = min(state['i'] + 1, len(times) - 1); state['click'] = 'center'
+        elif k in (ord('n'), ord(' ')):
+            state['i'] = min(i + 1, len(times) - 1); state['click'] = 'center'
         elif k == ord('p'):
-            state['i'] = max(state['i'] - 1, 0); state['click'] = 'center'
+            state['i'] = max(i - 1, 0); state['click'] = 'center'
+        elif k == ord('.'):
+            state['i'] = min(i + jump, len(times) - 1); state['click'] = 'center'
+        elif k == ord(','):
+            state['i'] = max(i - jump, 0); state['click'] = 'center'
         elif k == ord('o'):
             cur = find_ball(labels, t)
             upsert_ball(labels, t, occluded=not (cur and cur.get('occluded')))
         elif k == ord('c'):
             clear_ball(labels, t); state['click'] = 'center'
+        elif k == ord('x'):
+            n = clear_before(labels, t); print(f"cleared {n} pre-shot sample(s) before {t:.2f}s")
         elif k == ord('s'):
             print('saved', save(labels_dir, shot_id, labels))
     save(labels_dir, shot_id, labels)
