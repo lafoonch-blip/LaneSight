@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.54  
+Version: 1.55  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.53
+Supersedes: v1.54
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1076,6 +1076,36 @@ with DEC-062's geometry-first spine; no decision withdrawn.
 
 **Why:** Accuracy over coverage (DEC-026/027/061): an impossible number must fail honestly, and no clip may crash the job. The down-lane POV is Shayne's intended capture (see memory `lanesight-8929-capture-style`), but it isn't measurable with the current detector/tracker; the honest failure is the correct behaviour until the frontier work lands.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none · **Gate:** full manifest PASS (validation clips byte-identical, no new failures); 303 tests green.
+
+### DEC-094 — CV accuracy architecture: detection first, shadow tracking, uncertainty contract
+**Decision (Shayne, 2026-10-28):** the program for making the CV accurate (not just non-crashing). Full handoff: `03_ENGINEERING/CV_ACCURACY_ARCHITECTURE_HANDOFF.md`.
+
+**1. Development order**
+1. **Done — DEC-093:** speed honesty gate, SVD / least-squares crash guard, chosen lane recorded on the shot.
+2. **Phase-2 camera validation** (`CV_PHASE2_CAMERA_VALIDATION_PROTOCOL`) + a labeled test set covering more camera positions, lighting and lanes.
+3. **Correct-lane detection and density.**
+   - **3a. Correct-lane detection + stable foul-line geometry in multi-lane views.** On IMG_8929, `find_lanes` stops at the first saturation floor and finds only the lane by the ball return; the bowler's lane 9 is never detected, and its foul-line fit is numerically degenerate even when forced. Density work can't help until this is solved.
+   - **3b. Detection density:** detect more real ball positions, especially from 40 to 60 ft.
+4. **Physics-constrained tracking,** as a shadow experiment on top of the better detection.
+5. **Isolate the release-speed bias** (see item 4).
+6. **DEC-092 latency work,** in its existing order.
+
+Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness and the coaching uncertainty contract (item 5) can start now: Phase-2 needs the first three, and item 5 needs no new CV.
+
+**2. Detection is evaluated independently of tracking.** Every detector reports ball-detection recall, positional error, false positives, and observations per lane region (**0–15 / 15–40 / 40–60 ft**). A predicted/interpolated position never counts as a detection or a measured position. **`observed_fraction` does not exist yet** — it is a **new, additive** per-metric field (the share of the metric's span observed rather than predicted). Until it exists the rule binds to what does: `Measurement.status`/`confidence` + the far-lane plausibility gate.
+
+**3. Promotion rule — accuracy, coverage and runtime measured separately.** A candidate runs in **shadow** against the current engine on a locked test split, promoted only when ALL hold: metric accuracy no worse on any metric beyond tolerance; coverage no worse (better where claimed); the **plausible-but-wrong rate** (a metric shown measured/ok whose error exceeds tolerance vs ground truth) does not rise; runtime/cost within DEC-043 caps. Finding more points is not enough — if extra detections make the trajectory worse, it's rejected. **Partial promotion is allowed** per lane region or per metric (e.g. the new detector 40–60 ft, baseline elsewhere), provided: the routing is fixed by region/metric (not chosen per shot); each promoted region/metric meets every condition on its own; the plausible-but-wrong rate does not rise in ANY region. Two tolerance sets stay separate: accuracy-vs-ground-truth (this DEC's harness, `validation/cv_eval/tolerances.json`) and don't-regress-the-current-engine (DEC-092 `ops/perf_benchmark.py`).
+
+**4. No unvalidated correction factors.** The ~9%-low release-speed bias is isolated one cause at a time against the same reference (contact-point vs visible-center · longitudinal calibration · event-timing definitions). No universal multiplier. The existing ×1.12 rev factor (`REV_SENSOR_FACTOR`) gets blind validation against independent reference data, or it's removed and rev reported unavailable where unsupported.
+
+**5. Uncertainty is a shared contract between measurement and coaching.** Each metric's `status`/`source`/`uncertainty` drives Score inputs, insights, recommendations and the coach takeaway. Each coaching adjustment declares the tolerance it needs (e.g. a 1-board move needs arrows-board uncertainty ≤0.5 board); if the measurement falls short the adjustment is suppressed and the shot card says why. Statuses map to Measured / Estimated (only where approved + labeled) / Unavailable-with-a-reason. Sensor source parked under DEC-070. Additive schema only.
+
+**6. ML models must be license-safe.** Only Apache-2.0 / MIT / BSD code AND weights, verified from the actual LICENSE + weights. AGPL excluded (e.g. Ultralytics YOLO, **including Ultralytics' RT-DETR port**) unless a later DEC approves a commercial license. Apache-2.0 implementations (e.g. RT-DETR from lyuwenyu/PaddleDetection or HF-transformers) are eligible after their LICENSE files are checked.
+
+**Preserved:** DEC-062/065 (geometry first; far-lane unavailable until Phase-2 passes) · DEC-070 (Ruby validation-only) · DEC-092 (latency order) · DEC-043 (cost caps) · DEC-093 (lane selection recorded on the shot) · existing measurement schema (changes additive only; `observed_fraction` is one such addition).
+
+**Why:** Far-lane failures are a detection problem first — on IMG_8929 the bowler's lane isn't detected at all, and the ball gets only 3–11 observations on the lane that is; a tracker can bridge a few misses but can't rebuild a path from that few observations without large uncertainty. A believable wrong number hurts coaching more than an honest "unavailable." Correction factors hide calibration errors that vary by camera setup.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** none
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
