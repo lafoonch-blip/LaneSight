@@ -3,7 +3,7 @@
 Owner-only production reporting for LaneSight. Signs the owner in with **Supabase Auth**, reads data **only
 through owner-checked `public.ops_rpc_*` RPCs** over views in the private `ops` schema (migration 025), and
 renders real signals with honest `HEALTHY / NO DATA / NO ACCESS` states. **No mock numbers** — every tile
-traces to a defined view column (`definitions.json` / `OPS_REPORTING_DEFINITIONS.md`). **No service_role /
+traces to a defined view column (`definitions.json` / `../03_ENGINEERING/OPS_REPORTING_DEFINITIONS.md`). **No service_role /
 JWT secret / DB password anywhere** — only the owner's own session reaches the data.
 
 ## Architecture

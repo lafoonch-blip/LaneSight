@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.58  
+Version: 1.59  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.57
+Supersedes: v1.58
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1138,6 +1138,19 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Backend:** ball and oil are stored **per shot**. Oil was per-session; a per-shot `oil_pattern_id` is added (additive migration, pending apply) and new shots backfill it from the session value at record time. "From your last session" returns the last values actually used, including mid-session changes.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — extends DEC-071/079/052/044 and DEC-096.
+
+### DEC-098 — Owner-only ops reporting: honest views in a private schema, read via owner-checked RPCs, with a Supabase-Auth dashboard; instrumentation held
+**Decision (2026-10-28):** build production ops reporting as a thin, honest layer over the signals LaneSight already records — the retained `analysis_attempt` log (DEC-086/092) plus `feedback`/`shots`/`sessions`/`profiles` — a concrete first slice of `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md`. Four parts shipped; §2 instrumentation held.
+- **Definitions (§3):** `ops-dashboard/definitions.json` (machine-readable single source of truth) + `03_ENGINEERING/OPS_REPORTING_DEFINITIONS.md` (human). Every metric names its real source column, formula, denominator, honesty rule, and observability domain.
+- **Owner-only views + RPCs (§4):** migration `025_ops_reporting.sql` — ten aggregate views in a **private `ops` schema** (not exposed by PostgREST; `usage` revoked from anon/authenticated), read **only** through SECURITY DEFINER RPCs `public.ops_rpc_*` that raise `42501` unless `ops.is_owner()` (auth.uid() == the id in `ops.app_owner`). No service_role, no per-user RLS trickery — the owner's own JWT is the sole key.
+- **Dashboard (§5):** Next.js app `ops-dashboard/` (Vercel project `lanesight-ops`) that signs the owner in with **Supabase Auth** and calls the RPCs with their JWT. Two-layer owner gate: Next middleware (`user.id === OPS_OWNER_ID`, else 403) + the DB RPC check. Renders `HEALTHY / NO DATA / NO ACCESS` per tile; env is non-secret only (URL + publishable key + owner id).
+- **Validation (§1):** `validation/validate_definitions.py` (static defs↔SQL + honesty + owner-RPC security invariants) + `validation/assertions.sql` (post-apply DB checks).
+- **Owner identity** single-sourced as `owner.py OWNER_USER_ID = 551bc775-dee4-41bd-a19c-116e8691d053` (lafoonch@gmail.com), mirrored by `ops.app_owner` and the dashboard's `OPS_OWNER_ID`.
+- **Honesty:** staged `ls_*` accounts (DEC-063) excluded from every canonical view; `nullif` denominators (empty window → NULL → NO DATA, never 0); the two uninstrumented domains (Storage, FinOps) are NO DATA via `ops.coverage_status`, never faked.
+- **§2 held** (`ops-dashboard/SECTION2_INSTRUMENTATION_PATCH_PLAN.md`, M1–M5): product events, cost metering, API middleware, user_ref pseudonymisation, storage snapshot — edits `app.py`/`store.py`/iOS; build after this merge settles.
+- **Advisor note:** the 9 `ops_rpc_*` definer functions trip lint `0029` (authenticated-executable definer) — intentional and safe (each checks `ops.is_owner()`); see `03_ENGINEERING/OPS_REPORTING_DEFINITIONS.md` §6.
+
+**Date:** 2026-10-28 · **Status:** ACCEPTED (migration 025 applied live `europwryibstnmipbvam`; security proven: anon/authenticated denied on `ops`, non-owner RPC → 42501, owner RPC → correct KPIs) · **Supersedes:** nothing — additive to DEC-086/092.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.

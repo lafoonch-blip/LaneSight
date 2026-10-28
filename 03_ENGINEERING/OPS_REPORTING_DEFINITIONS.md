@@ -1,7 +1,7 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
-Status: DRAFT (worktree `ops-dashboard`) — relocate to `03_ENGINEERING/` at merge
-Version: 1.0
+Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
+Version: 1.1
 Last Updated: 2026-10-28
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
@@ -77,3 +77,13 @@ Each metric: **source view.column** — definition — honesty rule.
 ## 5. Change control
 
 A view column cannot change in only one place. If you add/rename a column in `025_ops_reporting.sql`, update `definitions.json` (and this doc). `validation/validate_definitions.py` fails CI on any drift between them. The dashboard reads only columns named here.
+
+## 6. Known advisor warnings (intentional)
+
+Supabase's security advisor flags the **9 `public.ops_rpc_*` functions** under `authenticated_security_definer_function_executable` — "signed-in users can execute a SECURITY DEFINER function via `/rest/v1/rpc/…`" (lint `0029`). **This is intentional and safe:**
+
+- Each RPC's first statement is `if not ops.is_owner() then raise 42501 ('not authorized')`, so a signed-in **non-owner** gets permission-denied, not data. Proven on live 2026-10-28: non-owner call → `42501: not authorized`; owner call → correct rows.
+- SECURITY DEFINER is **required**, not optional: the underlying views live in the private `ops` schema (usage revoked from anon/authenticated), so a SECURITY INVOKER function would fail even for the owner. The definer + in-function `ops.is_owner()` check is the sanctioned owner-only RPC pattern.
+- `EXECUTE` is granted only to `authenticated` (revoked from `anon`/`public`); the owner must be signed in.
+
+No action needed. If Supabase adds a lint-suppression comment mechanism, annotate there; until then this note is the record. (The advisor's other findings — `rls_enabled_no_policy` on `intel.*`/rule tables, leaked-password protection, unindexed-FK/unused-index performance lints — are pre-existing and unrelated to DEC-098.)
