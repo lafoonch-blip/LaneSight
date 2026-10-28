@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.58  
+Version: 1.59  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.57
+Supersedes: v1.58
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1138,6 +1138,16 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Backend:** ball and oil are stored **per shot**. Oil was per-session; a per-shot `oil_pattern_id` is added (additive migration, pending apply) and new shots backfill it from the session value at record time. "From your last session" returns the last values actually used, including mid-session changes.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — extends DEC-071/079/052/044 and DEC-096.
+
+### DEC-098 — Industry intelligence: Supabase opportunity registry + weekly Claude opportunity analyzer
+**Decision (Shayne, 2026-10-28):** bowling-industry intelligence moves from reports-only to a persistent, scored registry.
+- **Store:** Supabase project `europwryibstnmipbvam`, separate schema `intel` (migration 025, applied live 2026-10-28): `run`, `opportunity`, `score_history`, `decision`, `theme`. Owner/service-role only; app API roles have no access. Nothing is deleted (Archive is a band).
+- **Scoring:** the strategy-doc 0–100 rubric (fit 25, impact 25, urgency 15, feasibility 15, confidence 10, differentiation 10). `score` and `band` are generated in the DB: ≥80 Act, 60–79 Investigate, 40–59 Monitor, <40 Archive; `risk_critical` keeps an item at Investigate or above. Every re-score is logged to `score_history`.
+- **Pillars:** product, engineering_technology, marketing_growth, partnerships, finance, competitive_strategy.
+- **Weekly analyzer:** a Claude scheduled task, Mondays ~7:51 a.m. ET, collects → verifies → dedupes → scores → stores → spots themes → recommends top 3 actions, and sends a short push + email brief. It **replaces the ChatGPT Weekly Industry Brief**; the ChatGPT daily exception watch stays for now (not connected to the registry). Runbook: `02_RESEARCH/intel/WEEKLY_OPPORTUNITY_ANALYZER.md`.
+- **Human in the loop:** the analyzer proposes only — no outreach, publishing, spend or partnership claims. Shayne's decisions and measured outcomes go in `intel.decision`; strategy-changing ones also get a DEC.
+- **Not built yet:** dashboard (later, when volume warrants).
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — implements `00_CONTEXT/BOWLING_INDUSTRY_INTELLIGENCE_STRATEGY.md` §3–§5 (now v1.1).
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
