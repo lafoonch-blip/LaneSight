@@ -1,5 +1,5 @@
 # Analysis failure RCA: every logged attempt since attempt logging began
-Status: ACTIVE · Version: 1.0 · Last Updated: 2026-10-28 · Owner: Shayne
+Status: ACTIVE · Version: 1.1 · Last Updated: 2026-10-28 · Owner: Shayne
 Source: live `analysis_attempt` (the full table: 12 rows, 2026-10-27 16:14 → 2026-10-28 18:51 ET). Decision: DEC-100.
 
 ## 1. Scorecard
@@ -32,6 +32,14 @@ Source: live `analysis_attempt` (the full table: 12 rows, 2026-10-27 16:14 → 2
 7. **The Shot/Form choice can't be verified from the clip.**
    - A side-view form clip was analyzed as Shot (finding 1).
    - Since DEC-099 the mode is picked up front. But the server never checks that the clip matches the mode: Form Analysis detects the camera view (DEC-076), and nothing stops a form clip going through the ball CV.
+
+## 2a. Shipped on `fix/clip-retention-diagnostics` (deploy pending)
+- Clips retained 7 days and linked to the attempt; `ops/fetch_clip.py`.
+- Each failed attempt stores 4 snapshot frames (`clip.frames`), viewable from the database.
+- Phone timings record `orig_duration_s` / `upload_duration_s` / `orig_bytes`. These test H1 on the next failure without the original clip.
+- Phone-side failures are logged (`CLIENT_<STAGE>`).
+- Form: a fully gated delivery fails as `FORM_DELIVERY_NOT_ISOLATED` (with the gate numbers) instead of an empty card. Form clips are no longer motion-trimmed (H3).
+- Originals of the 10-27/10-28 clips aren't available. E1–E3 run on the **next failing uploads** instead, using the retained clip + frames + trim durations.
 
 ## 3. Root-cause experiments (run on the Mac, where the clips and validation set live)
 Run these in order. Each one must report numbers.

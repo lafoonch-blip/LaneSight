@@ -93,6 +93,11 @@ FAILURE_COPY: dict[str, dict] = {
         'user_message': "The clip's frames and timing didn't match, so we couldn't measure it accurately.",
         'tip': "Re-export the clip as H.264 / Most Compatible and try again.",
     },
+    'FORM_DELIVERY_NOT_ISOLATED': {
+        'user_title': "We couldn't find your whole delivery",
+        'user_message': "The swing timing didn't add up, so none of the key positions could be trusted.",
+        'tip': "Start recording before your first step and keep your whole approach, swing and release in frame.",
+    },
     'FORM_POSE_BACKEND_UNAVAILABLE': {
         'user_title': "Form analysis isn't available",
         'user_message': "We couldn't run form analysis on our side for this clip.",

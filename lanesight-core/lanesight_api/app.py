@@ -84,6 +84,52 @@ def _probe_clip(src: str) -> dict:
     return info
 
 
+def _snapshot_frames(src: str, n: int = 4, width: int = 480) -> list[dict]:
+    """DEC-100: a few small JPEG frames (base64) spread across the clip, stored on a FAILED attempt so the framing
+    can be inspected straight from the database (no clip download needed). ~20–30 KB each. Never raises."""
+    out = []
+    try:
+        import base64, cv2
+        cap = cv2.VideoCapture(src)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        if total <= 0:
+            return out
+        for frac in [(i + 0.5) / n for i in range(n)]:
+            idx = min(total - 1, int(total * frac))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, fr = cap.read()
+            if not ok:
+                continue
+            h, w = fr.shape[:2]
+            scale = width / max(w, h)
+            if scale < 1:
+                fr = cv2.resize(fr, (int(w * scale), int(h * scale)))
+            ok, buf = cv2.imencode('.jpg', fr, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            if ok:
+                out.append({'t': round(idx / fps, 2) if fps else None, 'frame': idx,
+                            'jpg_b64': base64.b64encode(buf.tobytes()).decode()})
+        cap.release()
+    except Exception as e:
+        out.append({'error': f'{type(e).__name__}: {e}'[:200]})
+    return out
+
+
+def _form_not_isolated(rec) -> dict | None:
+    """DEC-100: a form record whose swing events were ALL dropped by the DEC-095 gates (no ball start, top or
+    release, no key frames) isn't a result — it's a failure the bowler should see, with the gate numbers."""
+    ev = rec.get('events') or {}
+    if rec.get('key_frames') or any(ev.get(k) is not None for k in ('E2', 'E4', 'E7')):
+        return None
+    m = rec.get('metrics') or {}
+    def mv(k):
+        v = m.get(k)
+        return v.get('value') if isinstance(v, dict) else None
+    return {'swing_time_s': mv('swing_time'), 'step_count': mv('step_count'), 'view': rec.get('view'),
+            'gate': 'DEC-095 ball-start→release 1.3–2.5 s / release within −0.10…+0.15 s of slide stop',
+            'events_kept': {k: v for k, v in ev.items() if v is not None}}
+
+
 def _quality(rec) -> dict | None:
     """Capture-quality + headline-geometry signals from a successful record (DEC-086), so we can correlate
     camera framing with what analysis could measure. Defensive: missing fields are simply omitted."""
@@ -170,6 +216,11 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                 from lanesight_core.form.pose import pose_backend
                 rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
                 rec['shot_id'] = shot_id
+                gated = _form_not_isolated(rec)
+                if gated:
+                    from lanesight_core.failures import AnalysisFailure as _AF
+                    raise _AF('FORM_DELIVERY_NOT_ISOLATED', 'every swing event failed the DEC-095 sanity gates',
+                              stage='form_pose', diagnostics=gated)
                 # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
                 # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
                 for fkey in (rec.get('key_frames') or []):
@@ -228,6 +279,8 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                 store.mark_shot_failed(shot_id, fail.code, fail.stage)
             except Exception as me:
                 print(f'mark_shot_failed skipped ({me})')
+            # DEC-100: keep what we need to diagnose it — snapshot frames of what the camera saw.
+            attempt['clip'] = {**(attempt.get('clip') or {}), 'frames': _snapshot_frames(src)}
             _log('failed', failure=fail)
             raise
 

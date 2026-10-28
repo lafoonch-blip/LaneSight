@@ -25,11 +25,20 @@ enum VideoTrimmer {
     /// loss; only if the trimmed clip is still too large (e.g. a long 120 fps delivery) do we re-encode to fit,
     /// and that reduces bitrate only — frame rate and resolution are preserved so rev/loft stay measurable. The
     /// server re-trims precisely; this just has to contain the shot and fit the cap.
-    nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes) async -> URL {
-        let trimmed = await trimToShotWindow(sourceURL)
+    /// `windowTrim: false` (DEC-100: Form clips) skips the motion-window cut — it's tuned to the ball and can cut
+    /// the start of the approach — and only fits the clip under the size cap.
+    nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes,
+                                          windowTrim: Bool = true) async -> URL {
+        let trimmed = windowTrim ? await trimToShotWindow(sourceURL) : sourceURL
         if fileSize(trimmed) <= maxBytes { return trimmed }
         if let fitted = await reencodeToFit(trimmed, maxBytes: maxBytes) { return fitted }
         return trimmed   // best effort — if even this is over, the upload surfaces the error to the user
+    }
+
+    /// Duration in seconds (nil if unreadable) — recorded on the attempt so a failure shows what the trim cut.
+    nonisolated static func duration(_ url: URL) async -> Double? {
+        guard let d = try? await AVURLAsset(url: url).load(.duration), d.seconds.isFinite else { return nil }
+        return d.seconds
     }
 
     nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4) async -> URL {

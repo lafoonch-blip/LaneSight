@@ -573,8 +573,14 @@ final class AppModel: ObservableObject {
             // re-trims precisely afterwards.
             pipeline = .trimming
             let tTrim = Date()
-            let uploadURL = await VideoTrimmer.trimForUpload(fileURL)
+            let uploadURL = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
             ct["trim_s"] = Date().timeIntervalSince(tTrim)
+            // DEC-100: record what the phone trim kept, so a failure shows whether the trim cut the shot.
+            if let d = await VideoTrimmer.duration(fileURL) { ct["orig_duration_s"] = d }
+            if let d = await VideoTrimmer.duration(uploadURL) { ct["upload_duration_s"] = d }
+            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
+                ct["orig_bytes"] = Double(b)
+            }
             if let b = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path))?[.size] as? Int {
                 ct["upload_bytes"] = Double(b)
             }

@@ -639,3 +639,27 @@ def test_client_failure_is_logged():
     assert r.status_code == 200
     att = [a for a in getattr(get_store(), 'analysis_attempts', []) if a.get('user_id') == 'cf1']
     assert att[-1]['failure_code'] == 'CLIENT_UPLOAD' and att[-1]['failure_stage'] == 'client'
+
+
+def test_form_record_with_every_event_gated_is_a_failure():
+    # DEC-100: tonight's form uploads came back "analyzed" with every swing event dropped (empty card).
+    from lanesight_api.app import _form_not_isolated
+    gated = {'events': {'E2': None, 'E4': None, 'E5': 4.1, 'E7': None, 'E8': 5.3}, 'key_frames': [],
+             'metrics': {'swing_time': {'value': 1.135}, 'step_count': {'value': 3}}, 'view': 'down_lane'}
+    d = _form_not_isolated(gated)
+    assert d and d['swing_time_s'] == 1.135 and d['step_count'] == 3
+    ok = {'events': {'E2': 1.0, 'E4': 1.6, 'E7': 2.6}, 'key_frames': ['release']}
+    assert _form_not_isolated(ok) is None
+
+
+def test_snapshot_frames_from_a_real_video(tmp_path):
+    import cv2, numpy as np
+    from lanesight_api.app import _snapshot_frames
+    p = str(tmp_path / 'c.mp4')
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 30, (640, 360))
+    for i in range(60):
+        w.write(np.full((360, 640, 3), i * 4, np.uint8))
+    w.release()
+    fr = _snapshot_frames(p, n=4)
+    assert len(fr) == 4 and all(f.get('jpg_b64') for f in fr)
+    assert _snapshot_frames(str(tmp_path / 'missing.mp4')) == []
