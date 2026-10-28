@@ -34,6 +34,18 @@
      "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
     {"id": "IMG_8817", "clip": "IMG_8817.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
      "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
+     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
+    {"id": "IMG_8808", "clip": "IMG_8808.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
+     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
+     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
+    {"id": "IMG_8810", "clip": "IMG_8810.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
+     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
+     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
+    {"id": "IMG_8815", "clip": "IMG_8815.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
+     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
+     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
+    {"id": "IMG_8819", "clip": "IMG_8819.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
+     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
      "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}}
   ]
 }
