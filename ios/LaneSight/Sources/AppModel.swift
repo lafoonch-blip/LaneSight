@@ -441,6 +441,12 @@ final class AppModel: ObservableObject {
     }
 
     private func runPipeline(fileURL: URL, source: String) async {
+        // Keep the upload + analyze request running if the user switches apps mid-analysis (iOS otherwise
+        // suspends the app in a few seconds and the request dies). This buys the background-execution window;
+        // the result is also durable server-side, so Lab › Uploads / the session still has it on return.
+        var bgTask = UIApplication.shared.beginBackgroundTask(withName: "ls-analyze")
+        func endBG() { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid } }
+        defer { endBG() }
         do {
             let client = try makeClient()
             // Snapshot the capture mode for THIS shot up front so detection later can't be confused by a
