@@ -1,5 +1,5 @@
 import type { FreshnessRow } from "@/lib/queries";
-import type { ViewResult } from "@/lib/supabase";
+import type { ViewResult } from "@/lib/types";
 import { StateBadge } from "./State";
 
 function ago(iso: string | null): string {

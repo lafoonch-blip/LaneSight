@@ -1,59 +1,61 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "title": "LaneSight ops reporting definitions",
-  "description": "Single source of truth for the owner ops dashboard. The Next.js app renders panels/tiles from this file; validation/validate_definitions.py checks it against the SQL in migration 0XX_ops_reporting.sql. Changing a view column means changing BOTH the migration and this file (the validator fails otherwise).",
-  "generated_from": "lanesight-core/lanesight_core/models/migrations/0XX_ops_reporting.sql",
+  "description": "Single source of truth for the owner ops dashboard. Views live in the private `ops` schema (migration 025); the dashboard reads them ONLY via owner-checked SECURITY DEFINER RPCs public.ops_rpc_*. The Next.js app renders panels/tiles from this file; validation/validate_definitions.py checks it against 025_ops_reporting.sql.",
+  "generated_from": "lanesight-core/lanesight_core/models/migrations/025_ops_reporting.sql",
+  "owner_source": "lanesight_core/owner.py OWNER_USER_ID == ops.app_owner == OPS_OWNER_ID env",
   "honesty_states": {
     "HEALTHY": "A real, measured value is present.",
     "NO_DATA": "The source exists but has no rows in scope, or a rate's denominator is 0 (value is NULL). Render 'NO DATA', never 0.",
-    "NO_ACCESS": "The dashboard could not reach the DB (missing/invalid service_role env, query error). Render 'NO ACCESS', never a guess."
+    "NO_ACCESS": "The RPC could not be reached or returned an error (not signed in as owner, network). Render 'NO ACCESS', never a guess."
   },
   "rules": [
     "No mock/placeholder/fallback numbers. A metric that cannot be measured is NO_DATA with a reason.",
     "Every rate divides by nullif(denominator,0): NULL means NO_DATA.",
     "Staged test accounts (profiles.is_staged, DEC-063) are excluded from every canonical view (real_only=true).",
     "env (dev|beta|live) is a selectable dimension; production scope is live+beta.",
-    "Domains with availability=no_data have NO backing view and MUST render NO_DATA pending §2 instrumentation."
+    "Domains with availability=no_data have NO backing view and MUST render NO_DATA pending §2 instrumentation.",
+    "Views are owner-only: private `ops` schema, revoked from anon/authenticated, read only through public.ops_rpc_* which raise 42501 for non-owners."
   ],
   "views": {
-    "ops_attempt": {
-      "owner_only": true, "real_only": true, "grain": "one row per analysis attempt (all users)",
+    "attempt": {
+      "rpc": null, "owner_only": true, "real_only": true, "grain": "one row per analysis attempt (all users)",
       "columns": ["id","created_at","env","source","capture_mode","status","failure_code","failure_stage","algorithm_version","api_revision","user_id","shot_id","session_id","content_hash","is_staged","attempt_seconds","server_analyze_s","decode_s","decode_passes","phone_pre_analyze_s","phone_trim_s","phone_upload_s","hdr_convert_s","cold_start","width","height","short_side_px","rotation_deg","fps","hdr","bit_depth","variable_frame_rate","clip_seconds","clip_mb","precheck_ok","precheck_code","probe_error","far_lane","capture_reason","entry_board","ball_speed","rev_rate","n_measured","form_view"]
     },
-    "ops_analysis_daily": {
-      "owner_only": true, "real_only": true, "grain": "day x env x capture_mode",
+    "analysis_daily": {
+      "rpc": "ops_rpc_analysis_daily", "owner_only": true, "real_only": true, "grain": "day x env x capture_mode",
       "columns": ["day","env","capture_mode","attempts","analyzed","failures","failure_rate","distinct_users","p50_attempt_seconds","p90_attempt_seconds","p95_attempt_seconds"]
     },
-    "ops_failure_breakdown": {
-      "owner_only": true, "real_only": true, "grain": "day x env x capture_mode x stage x code x engine",
+    "failure_breakdown": {
+      "rpc": "ops_rpc_failure_breakdown", "owner_only": true, "real_only": true, "grain": "day x env x capture_mode x stage x code x engine",
       "columns": ["day","env","capture_mode","failure_stage","failure_code","algorithm_version","failures"]
     },
-    "ops_cv_coverage": {
-      "owner_only": true, "real_only": true, "grain": "day x env (ball/shot attempts)",
+    "cv_coverage": {
+      "rpc": "ops_rpc_cv_coverage", "owner_only": true, "real_only": true, "grain": "day x env (ball/shot attempts)",
       "columns": ["day","env","attempts","far_lane_read","far_lane_read_rate","avg_metrics_measured","hdr_clips","vfr_clips","cold_start_attempts","precheck_rejects","precheck_evaluated","probe_errors"]
     },
-    "ops_latency_stages": {
-      "owner_only": true, "real_only": true, "grain": "day x env (analyzed attempts)",
+    "latency_stages": {
+      "rpc": "ops_rpc_latency_stages", "owner_only": true, "real_only": true, "grain": "day x env (analyzed attempts)",
       "columns": ["day","env","analyzed","p50_total_s","p90_total_s","p50_server_analyze_s","p50_decode_s","p50_hdr_convert_s","p50_phone_trim_s","p50_phone_upload_s","p50_phone_pre_analyze_s","cold_start_rate"]
     },
-    "ops_release_health": {
-      "owner_only": true, "real_only": true, "grain": "algorithm_version x api_revision x env",
+    "release_health": {
+      "rpc": "ops_rpc_release_health", "owner_only": true, "real_only": true, "grain": "algorithm_version x api_revision x env",
       "columns": ["algorithm_version","api_revision","env","attempts","failures","failure_rate","p50_attempt_seconds","avg_metrics_measured","distinct_users","first_seen","last_seen"]
     },
-    "ops_feedback_summary": {
-      "owner_only": true, "real_only": true, "grain": "day x app_phase x source",
+    "feedback_summary": {
+      "rpc": "ops_rpc_feedback_summary", "owner_only": true, "real_only": true, "grain": "day x app_phase x source",
       "columns": ["day","app_phase","source","total","thumbs_up","thumbs_down","untriaged","avg_rating"]
     },
-    "ops_usage_daily": {
-      "owner_only": true, "real_only": true, "grain": "day",
+    "usage_daily": {
+      "rpc": "ops_rpc_usage_daily", "owner_only": true, "real_only": true, "grain": "day",
       "columns": ["day","shots","active_users_shots","sessions_started"]
     },
-    "ops_freshness": {
-      "owner_only": true, "real_only": false, "grain": "one row per source",
+    "freshness": {
+      "rpc": "ops_rpc_freshness", "owner_only": true, "real_only": false, "grain": "one row per source",
       "columns": ["source","last_ingested","rows"]
     },
-    "ops_coverage_status": {
-      "owner_only": true, "real_only": false, "grain": "one row per observability domain",
+    "coverage_status": {
+      "rpc": "ops_rpc_coverage_status", "owner_only": true, "real_only": false, "grain": "one row per observability domain",
       "columns": ["domain","status","data_source","backing_view"]
     }
   },
@@ -68,27 +70,27 @@
     {"domain": "08 Release & Regression", "availability": "available"}
   ],
   "metrics": [
-    {"id": "attempts", "label": "Analysis attempts", "view": "ops_analysis_daily", "column": "attempts", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "count(*) per day x env x capture_mode", "denominator": null, "honesty": "0 attempts is a real 0; empty window is NO_DATA"},
-    {"id": "failure_rate", "label": "Analysis failure rate", "view": "ops_analysis_daily", "column": "failure_rate", "unit": "ratio", "domain": "03 Video & AI Trust", "availability": "available", "formula": "failures / nullif(attempts,0)", "denominator": "attempts", "honesty": "NULL when attempts=0 -> NO_DATA"},
-    {"id": "distinct_users", "label": "Distinct bowlers", "view": "ops_analysis_daily", "column": "distinct_users", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(distinct user_id)", "denominator": null, "honesty": "real"},
-    {"id": "p90_attempt_seconds", "label": "Attempt time p90", "view": "ops_analysis_daily", "column": "p90_attempt_seconds", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.9) of attempt_seconds", "denominator": null, "honesty": "NULL when no timed attempts -> NO_DATA"},
-    {"id": "far_lane_read_rate", "label": "Far-lane read rate", "view": "ops_cv_coverage", "column": "far_lane_read_rate", "unit": "ratio", "domain": "03 Video & AI Trust", "availability": "available", "formula": "far_lane_read / nullif(attempts with far_lane recorded,0)", "denominator": "attempts with far_lane recorded", "honesty": "NULL -> NO_DATA"},
-    {"id": "avg_metrics_measured", "label": "Avg metrics measured", "view": "ops_cv_coverage", "column": "avg_metrics_measured", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "avg(n_measured)", "denominator": null, "honesty": "NULL when none -> NO_DATA"},
-    {"id": "precheck_rejects", "label": "Shadow-precheck rejects", "view": "ops_cv_coverage", "column": "precheck_rejects", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "count where precheck_ok is false", "denominator": null, "honesty": "real"},
-    {"id": "p50_server_analyze_s", "label": "Server analyze p50", "view": "ops_latency_stages", "column": "p50_server_analyze_s", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.5) of server_analyze_s", "denominator": null, "honesty": "NULL when stage never timed -> NO_DATA"},
-    {"id": "p50_hdr_convert_s", "label": "HDR convert p50", "view": "ops_latency_stages", "column": "p50_hdr_convert_s", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.5) of hdr_convert_s", "denominator": null, "honesty": "NULL when no HDR clips -> NO_DATA"},
-    {"id": "cold_start_rate", "label": "Cold-start rate", "view": "ops_latency_stages", "column": "cold_start_rate", "unit": "ratio", "domain": "04 App/API Performance", "availability": "partial", "formula": "cold_start attempts / nullif(analyzed,0)", "denominator": "analyzed", "honesty": "NULL -> NO_DATA"},
-    {"id": "release_failure_rate", "label": "Failure rate by release", "view": "ops_release_health", "column": "failure_rate", "unit": "ratio", "domain": "08 Release & Regression", "availability": "available", "formula": "failures / nullif(attempts,0) per version x revision", "denominator": "attempts", "honesty": "NULL -> NO_DATA"},
-    {"id": "feedback_untriaged", "label": "Untriaged feedback", "view": "ops_feedback_summary", "column": "untriaged", "unit": "count", "domain": "07 Security & Controls", "availability": "partial", "formula": "count where triage_status='new'", "denominator": null, "honesty": "real; staged feedback excluded"},
-    {"id": "shots", "label": "Shots", "view": "ops_usage_daily", "column": "shots", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(shots) real accounts", "denominator": null, "honesty": "real"},
-    {"id": "sessions_started", "label": "Sessions started", "view": "ops_usage_daily", "column": "sessions_started", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(sessions) real accounts", "denominator": null, "honesty": "real"}
+    {"id": "attempts", "label": "Analysis attempts", "view": "analysis_daily", "column": "attempts", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "count(*) per day x env x capture_mode", "denominator": null, "honesty": "0 attempts is a real 0; empty window is NO_DATA"},
+    {"id": "failure_rate", "label": "Analysis failure rate", "view": "analysis_daily", "column": "failure_rate", "unit": "ratio", "domain": "03 Video & AI Trust", "availability": "available", "formula": "failures / nullif(attempts,0)", "denominator": "attempts", "honesty": "NULL when attempts=0 -> NO_DATA"},
+    {"id": "distinct_users", "label": "Distinct bowlers", "view": "analysis_daily", "column": "distinct_users", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(distinct user_id)", "denominator": null, "honesty": "real"},
+    {"id": "p90_attempt_seconds", "label": "Attempt time p90", "view": "analysis_daily", "column": "p90_attempt_seconds", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.9) of attempt_seconds", "denominator": null, "honesty": "NULL when no timed attempts -> NO_DATA"},
+    {"id": "far_lane_read_rate", "label": "Far-lane read rate", "view": "cv_coverage", "column": "far_lane_read_rate", "unit": "ratio", "domain": "03 Video & AI Trust", "availability": "available", "formula": "far_lane_read / nullif(attempts with far_lane recorded,0)", "denominator": "attempts with far_lane recorded", "honesty": "NULL -> NO_DATA"},
+    {"id": "avg_metrics_measured", "label": "Avg metrics measured", "view": "cv_coverage", "column": "avg_metrics_measured", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "avg(n_measured)", "denominator": null, "honesty": "NULL when none -> NO_DATA"},
+    {"id": "precheck_rejects", "label": "Shadow-precheck rejects", "view": "cv_coverage", "column": "precheck_rejects", "unit": "count", "domain": "03 Video & AI Trust", "availability": "available", "formula": "count where precheck_ok is false", "denominator": null, "honesty": "real"},
+    {"id": "p50_server_analyze_s", "label": "Server analyze p50", "view": "latency_stages", "column": "p50_server_analyze_s", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.5) of server_analyze_s", "denominator": null, "honesty": "NULL when stage never timed -> NO_DATA"},
+    {"id": "p50_hdr_convert_s", "label": "HDR convert p50", "view": "latency_stages", "column": "p50_hdr_convert_s", "unit": "seconds", "domain": "04 App/API Performance", "availability": "partial", "formula": "percentile_cont(0.5) of hdr_convert_s", "denominator": null, "honesty": "NULL when no HDR clips -> NO_DATA"},
+    {"id": "cold_start_rate", "label": "Cold-start rate", "view": "latency_stages", "column": "cold_start_rate", "unit": "ratio", "domain": "04 App/API Performance", "availability": "partial", "formula": "cold_start attempts / nullif(analyzed,0)", "denominator": "analyzed", "honesty": "NULL -> NO_DATA"},
+    {"id": "release_failure_rate", "label": "Failure rate by release", "view": "release_health", "column": "failure_rate", "unit": "ratio", "domain": "08 Release & Regression", "availability": "available", "formula": "failures / nullif(attempts,0) per version x revision", "denominator": "attempts", "honesty": "NULL -> NO_DATA"},
+    {"id": "feedback_untriaged", "label": "Untriaged feedback", "view": "feedback_summary", "column": "untriaged", "unit": "count", "domain": "07 Security & Controls", "availability": "partial", "formula": "count where triage_status='new'", "denominator": null, "honesty": "real; staged feedback excluded"},
+    {"id": "shots", "label": "Shots", "view": "usage_daily", "column": "shots", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(shots) real accounts", "denominator": null, "honesty": "real"},
+    {"id": "sessions_started", "label": "Sessions started", "view": "usage_daily", "column": "sessions_started", "unit": "count", "domain": "02 Customer Journey", "availability": "partial", "formula": "count(sessions) real accounts", "denominator": null, "honesty": "real"}
   ],
   "panels": [
-    {"id": "overview", "title": "Overview", "views": ["ops_freshness", "ops_coverage_status", "ops_analysis_daily", "ops_usage_daily"]},
-    {"id": "reliability", "title": "Analysis reliability", "views": ["ops_analysis_daily", "ops_failure_breakdown"]},
-    {"id": "cv_trust", "title": "Video & CV trust", "views": ["ops_cv_coverage"]},
-    {"id": "latency", "title": "Latency by stage", "views": ["ops_latency_stages"]},
-    {"id": "releases", "title": "Release & regression", "views": ["ops_release_health"]},
-    {"id": "feedback", "title": "Feedback & support", "views": ["ops_feedback_summary"]}
+    {"id": "overview", "title": "Overview", "views": ["freshness", "coverage_status", "analysis_daily", "usage_daily"]},
+    {"id": "reliability", "title": "Analysis reliability", "views": ["analysis_daily", "failure_breakdown"]},
+    {"id": "cv_trust", "title": "Video & CV trust", "views": ["cv_coverage"]},
+    {"id": "latency", "title": "Latency by stage", "views": ["latency_stages"]},
+    {"id": "releases", "title": "Release & regression", "views": ["release_health"]},
+    {"id": "feedback", "title": "Feedback & support", "views": ["feedback_summary"]}
   ]
 }

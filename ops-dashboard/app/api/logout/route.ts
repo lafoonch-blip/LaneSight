@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { COOKIE_NAME } from "@/lib/auth";
+import { createClient } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const res = NextResponse.redirect(new URL("/login", req.url), { status: 303 });
-  res.cookies.set(COOKIE_NAME, "", { httpOnly: true, path: "/", maxAge: 0 });
-  return res;
+  const supabase = createClient();
+  await supabase.auth.signOut(); // clears the session cookies
+  return NextResponse.redirect(new URL("/login", req.url), { status: 303 });
 }

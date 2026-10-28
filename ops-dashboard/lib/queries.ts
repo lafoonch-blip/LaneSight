@@ -1,12 +1,13 @@
-// Typed fetchers, one per ops view. Row shapes mirror the columns in definitions.json / 0XX_ops_reporting.sql.
-// All filtering is pushed to PostgREST; staged exclusion + nullif honesty live in the views themselves.
-import { selectView, sinceFilter, envFilter, type ViewResult } from "./supabase";
+// Typed fetchers, one per ops view, read via owner-checked RPCs (public.ops_rpc_*). Row shapes mirror the
+// ops.* views in migration 025. Staged exclusion + nullif honesty live in the views; owner enforcement is
+// in the RPC (and the server gate). Never throws: an RPC error -> NO_ACCESS (e.g. not signed in as owner).
+import { createClient } from "./supabaseServer";
+import type { ViewResult } from "./types";
 
 export interface Scope {
-  envs: string[]; // e.g. ["live","beta"]
-  days: number; // lookback window
+  envs: string[];
+  days: number;
 }
-
 export const DEFAULT_SCOPE: Scope = { envs: ["live", "beta"], days: 14 };
 
 export interface AnalysisDailyRow {
@@ -43,49 +44,56 @@ export interface UsageRow { day: string; shots: number; active_users_shots: numb
 export interface FreshnessRow { source: string; last_ingested: string | null; rows: number; }
 export interface CoverageRow { domain: string; status: string; data_source: string; backing_view: string | null; }
 
-const scoped = (s: Scope, dayCol = "day") => `${sinceFilter(dayCol, s.days)}&${envFilter(s.envs)}`;
+function sinceDate(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
-export const getAnalysisDaily = (s: Scope): Promise<ViewResult<AnalysisDailyRow>> =>
-  selectView<AnalysisDailyRow>("ops_analysis_daily", `${scoped(s)}&order=day.desc`);
+async function callRpc<T>(fn: string, args: Record<string, unknown>, sortBy?: keyof T): Promise<ViewResult<T>> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc(fn, args);
+    if (error) return { state: "NO_ACCESS", rows: [], error: `${fn}: ${error.message}` };
+    let rows = (data ?? []) as T[];
+    if (sortBy) {
+      rows = [...rows].sort((a, b) => {
+        const av = a[sortBy] as unknown, bv = b[sortBy] as unknown;
+        if (typeof av === "number" && typeof bv === "number") return bv - av; // desc
+        return String(bv ?? "").localeCompare(String(av ?? "")); // desc
+      });
+    }
+    return { state: rows.length ? "HEALTHY" : "NO_DATA", rows };
+  } catch (e) {
+    return { state: "NO_ACCESS", rows: [], error: `${fn} failed: ${(e as Error).message}` };
+  }
+}
 
-export const getFailures = (s: Scope): Promise<ViewResult<FailureRow>> =>
-  selectView<FailureRow>("ops_failure_breakdown", `${scoped(s)}&order=failures.desc`);
+export const getAnalysisDaily = (s: Scope) =>
+  callRpc<AnalysisDailyRow>("ops_rpc_analysis_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getFailures = (s: Scope) =>
+  callRpc<FailureRow>("ops_rpc_failure_breakdown", { p_envs: s.envs, p_since: sinceDate(s.days) }, "failures");
+export const getCvCoverage = (s: Scope) =>
+  callRpc<CvCoverageRow>("ops_rpc_cv_coverage", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getLatency = (s: Scope) =>
+  callRpc<LatencyRow>("ops_rpc_latency_stages", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getReleases = (s: Scope) =>
+  callRpc<ReleaseRow>("ops_rpc_release_health", { p_envs: s.envs, p_since: sinceDate(s.days) }, "last_seen");
+export const getFeedback = (s: Scope) =>
+  callRpc<FeedbackRow>("ops_rpc_feedback_summary", { p_since: sinceDate(s.days) }, "day");
+export const getUsage = (s: Scope) =>
+  callRpc<UsageRow>("ops_rpc_usage_daily", { p_since: sinceDate(s.days) }, "day");
+export const getFreshness = () => callRpc<FreshnessRow>("ops_rpc_freshness", {}, "source");
+export const getCoverage = () => callRpc<CoverageRow>("ops_rpc_coverage_status", {}, "domain");
 
-export const getCvCoverage = (s: Scope): Promise<ViewResult<CvCoverageRow>> =>
-  selectView<CvCoverageRow>("ops_cv_coverage", `${scoped(s)}&order=day.desc`);
-
-export const getLatency = (s: Scope): Promise<ViewResult<LatencyRow>> =>
-  selectView<LatencyRow>("ops_latency_stages", `${scoped(s)}&order=day.desc`);
-
-export const getReleases = (s: Scope): Promise<ViewResult<ReleaseRow>> =>
-  // ops_release_health has no `day`; filter env + last_seen window.
-  selectView<ReleaseRow>("ops_release_health", `${sinceFilter("last_seen", s.days)}&${envFilter(s.envs)}&order=last_seen.desc`);
-
-export const getFeedback = (s: Scope): Promise<ViewResult<FeedbackRow>> =>
-  // feedback is phased (app_phase), not env; filter by day only.
-  selectView<FeedbackRow>("ops_feedback_summary", `${sinceFilter("day", s.days)}&order=day.desc`);
-
-export const getUsage = (s: Scope): Promise<ViewResult<UsageRow>> =>
-  selectView<UsageRow>("ops_usage_daily", `${sinceFilter("day", s.days)}&order=day.desc`);
-
-export const getFreshness = (): Promise<ViewResult<FreshnessRow>> =>
-  selectView<FreshnessRow>("ops_freshness", "order=source.asc");
-
-export const getCoverage = (): Promise<ViewResult<CoverageRow>> =>
-  selectView<CoverageRow>("ops_coverage_status", "order=domain.asc");
-
-// Sum a numeric column across scoped daily rows (for headline tiles). Returns null when there are no rows
-// (NO DATA), never 0-as-fake.
+// Sum a numeric column across rows; null (NO DATA) when there are no rows, never 0-as-fake.
 export function sumCol<T>(rows: T[], col: keyof T): number | null {
   if (!rows.length) return null;
   return rows.reduce((acc, r) => acc + (Number(r[col]) || 0), 0);
 }
 
-// Attempt-weighted mean of a rate column across daily rows (so a global failure_rate is honest, not a
-// mean-of-means). Returns null when the denominator is 0 (NO DATA).
-export function weightedRate<T>(
-  rows: T[], numeratorCol: keyof T, denomCol: keyof T,
-): number | null {
+// Weighted rate: numerator / denominator across rows; null when denominator is 0 (NO DATA).
+export function weightedRate<T>(rows: T[], numeratorCol: keyof T, denomCol: keyof T): number | null {
   const denom = rows.reduce((a, r) => a + (Number(r[denomCol]) || 0), 0);
   if (denom === 0) return null;
   const num = rows.reduce((a, r) => a + (Number(r[numeratorCol]) || 0), 0);

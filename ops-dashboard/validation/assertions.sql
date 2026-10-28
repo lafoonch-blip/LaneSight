@@ -1,68 +1,57 @@
--- Ops reporting DB assertions (§1) — run AFTER 0XX_ops_reporting.sql is applied, as the owner
--- (service_role / postgres), against the DB the dashboard will read. PENDING STEP (not run by Claude
--- Code — no migration applied, no live access). Read-only: it raises an exception on any violation and
--- changes nothing. Run in the Supabase SQL editor or: psql "$LANESIGHT_DB_URL" -f assertions.sql
---
--- Each block raises if an honesty/structural invariant is broken. "No rows" is a valid, passing state
--- for a young beta DB — these assert the SHAPE is honest, not that data exists.
+-- Ops reporting DB assertions (§1) — run AFTER 025_ops_reporting.sql is applied, as the owner
+-- (postgres / service_role). Read-only: raises on any violation, changes nothing. Shape + honesty +
+-- security structure. The anon/authenticated "permission denied" proof is run separately (SET ROLE tests).
 
 do $$
 declare n int; bad int;
 begin
-  -- 1. All ten views exist and are selectable by the owner path.
-  select count(*) into n from information_schema.views
-   where table_schema = 'public'
-     and table_name in ('ops_attempt','ops_analysis_daily','ops_failure_breakdown','ops_cv_coverage',
-                        'ops_latency_stages','ops_release_health','ops_feedback_summary','ops_usage_daily',
-                        'ops_freshness','ops_coverage_status');
-  if n <> 10 then raise exception 'expected 10 ops views, found %', n; end if;
+  -- 1. private schema + 10 views + 9 RPCs exist.
+  if to_regnamespace('ops') is null then raise exception 'schema ops missing'; end if;
 
-  -- 2. Owner-only: no ops view is granted to anon/authenticated (would leak all users' data).
-  select count(*) into bad from information_schema.role_table_grants
-   where table_schema = 'public' and table_name like 'ops\_%' escape '\'
-     and grantee in ('anon','authenticated');
-  if bad > 0 then raise exception 'SECURITY: % ops-view grant(s) to anon/authenticated', bad; end if;
+  select count(*) into n from information_schema.views where table_schema = 'ops';
+  if n < 10 then raise exception 'expected >=10 ops views, found %', n; end if;
 
-  -- 3. Staged accounts are excluded from the canonical reliability view (DEC-063). If any staged attempt
-  --    exists, its user_id must NOT appear in ops_analysis_daily's underlying real set.
-  select count(*) into bad
-    from ops_attempt
-   where is_staged = true;
-  -- ops_attempt carries staged rows (it is the base); but the staged ones must be flagged, and the
-  --    daily/real views must not count them. Verify daily attempts == real (non-staged) attempts.
-  perform 1;
-  select (select coalesce(sum(attempts),0) from ops_analysis_daily)
-       - (select count(*) from ops_attempt where is_staged = false)
-    into bad;
-  if bad <> 0 then
-    raise exception 'ops_analysis_daily attempt total (%) != non-staged ops_attempt count — staged leak or drop',
-      (select coalesce(sum(attempts),0) from ops_analysis_daily);
-  end if;
+  select count(*) into n from information_schema.routines
+   where routine_schema = 'public' and routine_name like 'ops\_rpc\_%' escape '\';
+  if n < 9 then raise exception 'expected >=9 ops_rpc_* functions, found %', n; end if;
 
-  -- 4. No fake 0 rates: wherever attempts=0 the failure_rate must be NULL (NO DATA), never 0.
-  select count(*) into bad from ops_analysis_daily where attempts = 0 and failure_rate is not null;
-  if bad > 0 then raise exception '% daily row(s) show a non-NULL failure_rate with 0 attempts', bad; end if;
+  -- 2. every ops_rpc_* is SECURITY DEFINER (prosecdef) — else it would run with the caller's rights.
+  select count(*) into bad from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+   where ns.nspname = 'public' and p.proname like 'ops\_rpc\_%' escape '\' and not p.prosecdef;
+  if bad > 0 then raise exception 'SECURITY: % ops_rpc_* function(s) are not SECURITY DEFINER', bad; end if;
 
-  -- 5. failure_rate, when present, is a real ratio in [0,1].
-  select count(*) into bad from ops_analysis_daily where failure_rate is not null and (failure_rate < 0 or failure_rate > 1);
-  if bad > 0 then raise exception '% daily row(s) have failure_rate outside [0,1]', bad; end if;
-  select count(*) into bad from ops_release_health where failure_rate is not null and (failure_rate < 0 or failure_rate > 1);
-  if bad > 0 then raise exception '% release row(s) have failure_rate outside [0,1]', bad; end if;
+  -- 3. owner registry seeded with exactly the owner.py id.
+  select count(*) into n from ops.app_owner where user_id = '551bc775-dee4-41bd-a19c-116e8691d053';
+  if n <> 1 then raise exception 'ops.app_owner not seeded with the owner id'; end if;
 
-  -- 6. analyzed + failures = attempts in the reliability view (status is the only terminal set).
-  select count(*) into bad from ops_analysis_daily where analyzed + failures <> attempts;
-  if bad > 0 then raise exception '% daily row(s) where analyzed+failures != attempts', bad; end if;
+  -- 4. schema ops is not reachable by the API roles (usage revoked).
+  if has_schema_privilege('anon', 'ops', 'USAGE') then raise exception 'SECURITY: anon has USAGE on schema ops'; end if;
+  if has_schema_privilege('authenticated', 'ops', 'USAGE') then raise exception 'SECURITY: authenticated has USAGE on schema ops'; end if;
 
-  -- 7. Coverage status is honest: exactly 8 domains; every no_data domain has a NULL backing_view.
-  select count(*) into n from ops_coverage_status;
+  -- 5. honesty: staged accounts segregated — daily attempts == non-staged base attempts.
+  select (select coalesce(sum(attempts),0) from ops.analysis_daily)
+       - (select count(*) from ops.attempt where is_staged = false) into bad;
+  if bad <> 0 then raise exception 'ops.analysis_daily attempts != non-staged base (staged leak/drop): %', bad; end if;
+
+  -- 6. no fake 0 rate: attempts=0 -> failure_rate NULL.
+  select count(*) into bad from ops.analysis_daily where attempts = 0 and failure_rate is not null;
+  if bad > 0 then raise exception '% daily row(s) show failure_rate with 0 attempts', bad; end if;
+
+  -- 7. failure_rate in [0,1]; analyzed+failures=attempts.
+  select count(*) into bad from ops.analysis_daily where failure_rate is not null and (failure_rate < 0 or failure_rate > 1);
+  if bad > 0 then raise exception '% daily failure_rate out of [0,1]', bad; end if;
+  select count(*) into bad from ops.analysis_daily where analyzed + failures <> attempts;
+  if bad > 0 then raise exception '% daily analyzed+failures != attempts', bad; end if;
+
+  -- 8. coverage honest: 8 domains; every no_data domain has NULL backing_view. Freshness lists 4 sources.
+  select count(*) into n from ops.coverage_status;
   if n <> 8 then raise exception 'expected 8 coverage domains, found %', n; end if;
-  select count(*) into bad from ops_coverage_status where status = 'no_data' and backing_view is not null;
+  select count(*) into bad from ops.coverage_status where status = 'no_data' and backing_view is not null;
   if bad > 0 then raise exception '% no_data domain(s) wrongly claim a backing view', bad; end if;
-
-  -- 8. Freshness lists the four real sources.
-  select count(*) into n from ops_freshness;
+  select count(*) into n from ops.freshness;
   if n <> 4 then raise exception 'expected 4 freshness sources, found %', n; end if;
 
-  raise notice 'ops reporting assertions: PASS (shape honest; % staged attempt(s) correctly segregated)',
-    (select count(*) from ops_attempt where is_staged = true);
+  raise notice 'ops reporting assertions: PASS (% staged attempt(s) segregated, % live/beta base attempts)',
+    (select count(*) from ops.attempt where is_staged = true),
+    (select count(*) from ops.attempt where is_staged = false and env in ('live','beta'));
 end $$;

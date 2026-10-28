@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { HonestyState } from "@/lib/definitions";
-import type { ViewResult } from "@/lib/supabase";
+import type { ViewResult } from "@/lib/types";
 
 export function StateBadge({ state }: { state: HonestyState }) {
   const label = state === "HEALTHY" ? "LIVE" : state === "NO_DATA" ? "NO DATA" : "NO ACCESS";

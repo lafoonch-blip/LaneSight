@@ -1,5 +1,5 @@
 import type { CoverageRow } from "@/lib/queries";
-import type { ViewResult } from "@/lib/supabase";
+import type { ViewResult } from "@/lib/types";
 import type { HonestyState } from "@/lib/definitions";
 import { StateBadge } from "./State";
 
