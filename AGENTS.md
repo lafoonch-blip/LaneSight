@@ -28,6 +28,7 @@
 - Decisions: add a new DEC; mark the old one superseded. Docs: bump `Version` / `Last Updated`.
 - Commit locally; push to GitHub only when Shayne says so. Then re-sync the claude.ai Project docs (don't update the retired Drive copies).
 - Report what you changed and anything you could not update.
+- Handoffs: to hand work to another session, copy `03_ENGINEERING/HANDOFF_TEMPLATE.md` to `03_ENGINEERING/HANDOFF_<YYYY-MM-DD>_<topic>.md` and fill in every placeholder — don't improvise the format. (Or run `/handoff`.) The template itself never changes.
 
 This repo is the **source of truth** for LaneSight product and engineering context. Read these files first, in this order:
 
