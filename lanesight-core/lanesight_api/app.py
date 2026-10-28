@@ -6,6 +6,7 @@ their DB-backed handlers land, so the OpenAPI contract lists the full surface ho
 from __future__ import annotations
 import json
 import os
+import re
 import uuid
 import time
 from pathlib import Path
@@ -31,6 +32,61 @@ from lanesight_core.form import spot_check
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
 app = FastAPI(title='LaneSight API', version=API_VERSION)
+
+
+# ----------------------------------------------------------------- §2 ops instrumentation (DEC-098)
+_HEXSEG = re.compile(r'^[0-9a-fA-F]{8,}$|^[0-9a-fA-F-]{20,}$')      # uuid/hex id segment
+_METRICS_SKIP = ('/health', '/docs', '/openapi', '/redoc', '/favicon')
+
+
+def _templatize_path(path: str) -> str:
+    """Collapse id-like path segments to ':id' so api_request stays low-cardinality and carries no ids."""
+    return '/'.join(':id' if _HEXSEG.match(seg or '') else seg for seg in path.split('/'))
+
+
+def _attempt_cost(duration_ms: int, clip: dict | None) -> dict | None:
+    """DEC-098 §2 (M1): best_effort compute + egress inputs for cost reporting. Resource-seconds are MEASURED
+    (duration x the Cloud Run vCPU/GiB config); no dollars here — ops.cost_daily applies sourced rates, and
+    returns NULL until the owner enters them. Never raises."""
+    try:
+        compute_s = round((duration_ms or 0) / 1000.0, 2)
+        vcpu = float(os.environ.get('LANESIGHT_VCPU', '4'))
+        gib = float(os.environ.get('LANESIGHT_GIB', '4'))
+        bytes_ = (clip or {}).get('bytes')
+        egress_mb = round(bytes_ / 1048576.0, 2) if bytes_ else None
+        return {k: v for k, v in {
+            'basis': 'best_effort', 'compute_s': compute_s, 'vcpu': vcpu, 'gib': gib,
+            'vcpu_s': round(compute_s * vcpu, 2), 'gib_s': round(compute_s * gib, 2),
+            'egress_mb': egress_mb,
+            'rate_ref': os.environ.get('LANESIGHT_COST_RATE_REF', 'cloud_run_us-east1'),
+        }.items() if v is not None}
+    except Exception:
+        return None
+
+
+@app.middleware('http')
+async def _ops_request_metrics(request, call_next):
+    """DEC-098 §2 (M2): record one api_request per call (best-effort; never fails the request). No bodies,
+    tokens or query strings — only method, templated path, status, latency, env/revision."""
+    t = time.monotonic()
+    response = await call_next(request)
+    try:
+        path = request.url.path
+        if not any(path == s or path.startswith(s) for s in _METRICS_SKIP):
+            get_store().log_api_request({
+                'method': request.method, 'path': _templatize_path(path),
+                'status': response.status_code, 'duration_ms': int((time.monotonic() - t) * 1000),
+                'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+                'api_revision': os.environ.get('K_REVISION'),
+            })
+    except Exception as me:
+        print(f'api_request log skipped ({me})')
+    return response
+
+
+# Consent-aware product events accepted at /events (schema registry — unknown names are dropped).
+_PRODUCT_EVENTS = {'app_opened', 'session_started', 'first_shot_analyzed', 'screen_view',
+                   'upload_started', 'analysis_completed', 'analysis_failed'}
 
 
 # ----------------------------------------------------------------- analysis job
@@ -140,12 +196,15 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
 
         def _log(status, failure=None, diagnostics=None):
             try:
+                dur_ms = int((time.monotonic() - t0) * 1000)
                 store.log_analysis_attempt({**attempt, 'status': status,
                                             'failure_code': getattr(failure, 'code', None),
                                             'failure_stage': getattr(failure, 'stage', None),
                                             # failure numbers, or (on success) capture-quality + geometry signals
                                             'diagnostics': getattr(failure, 'diagnostics', None) or diagnostics,
-                                            'duration_ms': int((time.monotonic() - t0) * 1000),
+                                            'duration_ms': dur_ms,
+                                            # DEC-098 §2 (M1): measured compute/egress for cost reporting
+                                            'cost': _attempt_cost(dur_ms, attempt.get('clip')),
                                             'step_timings': {k: v for k, v in job.timings.items()}})
             except Exception as le:
                 print(f'analysis_attempt log skipped ({le})')
@@ -882,6 +941,31 @@ def submit_feedback(body: dict, user=Depends(current_user)):
     if data.get('session_id') and not store.get_session(user, data['session_id']):
         raise HTTPException(404, 'session not found')
     return store.add_feedback(user, data)
+
+@app.post('/events')
+def post_events(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-098 §2 (M3): ingest consent-aware product events. Body: {"events": [{event_name, occurred_at,
+    client_event_id, app_version, feature, flow_step, status, props}, ...]}. Unknown event_names are dropped
+    (schema registry); the store pseudonymises user_id -> user_ref and dedups on client_event_id. Never
+    accepts raw PII — props should already be masked by the client (strategy §4 exclusions)."""
+    events = body.get('events') if isinstance(body, dict) else None
+    if not isinstance(events, list):
+        raise HTTPException(400, 'events must be a list')
+    env = 'live' if os.environ.get('K_REVISION') else 'dev'
+    rows = []
+    for e in events[:200]:
+        if not isinstance(e, dict):
+            continue
+        name = (e.get('event_name') or '').strip()
+        if name not in _PRODUCT_EVENTS:
+            continue
+        rows.append({'event_name': name, 'user_id': user, 'env': env,
+                     'occurred_at': e.get('occurred_at'), 'app_version': e.get('app_version'),
+                     'feature': e.get('feature'), 'flow_step': e.get('flow_step'),
+                     'status': e.get('status'), 'props': e.get('props'),
+                     'client_event_id': e.get('client_event_id')})
+    inserted = get_store().log_events(rows)
+    return {'received': len(events), 'accepted': inserted}
 
 @app.get('/sessions/{sid}/export.csv')
 def export_csv(sid: str, user=Depends(current_user)):

@@ -1,12 +1,21 @@
-# §2 Instrumentation — Ready Patch Plan (HELD)
+# §2 Instrumentation — Patch Plan + BUILD STATUS
 
-Status: PLAN (worktree `ops-dashboard`) — **do not build yet**
-Version: 1.0
+Status: **BUILT (code + tests) on branch `ops-instrumentation`** — migration apply / API redeploy / merge HELD
+Version: 1.1
 Last Updated: 2026-10-28
 Owner: Shayne
-Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 catalogue, §8 FinOps), DEC-086 (`analysis_attempt`), DEC-092 (latency P0), `ops-dashboard/` (§1/§3/§4/§5).
+Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 catalogue, §8 FinOps), DEC-086 (`analysis_attempt`), DEC-092 (latency P0), `ops-dashboard/` (§1/§3/§4/§5), DEC-098.
 
-> **Why held.** §2 edits `lanesight_api/app.py`, `lanesight_api/store.py` and the iOS app — the exact files the other session is changing during the live run. Building it now would collide. This is the ready patch plan; apply it **after that run merges**, rebase onto the merged `app.py`/`store.py`, then build the matching views + light up the dashboard panels that are `partial`/`no_data` today.
+> **Build status (2026-10-28).** M1–M5 built in worktree branch `ops-instrumentation` (off latest dev-build-v0), **code + tests only**. 356 backend tests pass (9 new in `test_instrumentation.py`); the §1 validator passes against 025+027.
+> - Migration `027_ops_instrumentation.sql` (NOT applied — re-check 027 is free at merge).
+> - `store.py`: `_user_ref` (M4), `log_api_request` (M2), `log_events` (M3), `record_storage_snapshot` (M5); cost carried on the attempt (M1).
+> - `app.py`: API-metrics middleware (M2), `_attempt_cost` on the attempt log (M1), `POST /events` (M3).
+> - iOS: `APIClient.postEvents` + `AppModel.track/flushEvents` (M3). **Emit call-sites** (`track("app_opened"|"session_started"|"first_shot_analyzed")`) are the remaining one-line wiring — add with an Xcode build in the loop (iOS not compiled here).
+> - `ops-dashboard/definitions.json` + validator extended for the new ops views/RPCs; `ops.coverage_status` flips Storage & FinOps to available (data flows after apply + redeploy).
+>
+> **HELD until the parallel backend session parks** (it is still committing to dev-build-v0): then rebase onto the merged `app.py`/`store.py`, re-check migration number 027 is free (renumber if not), and surface **migration apply + Cloud Run redeploy** for the owner's go. Dashboard panels for the new domains (cost/API/events/storage) are a follow-up.
+>
+> **Original plan (for reference) below.**
 
 ## What the dashboard is waiting for
 
