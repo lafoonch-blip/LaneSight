@@ -116,3 +116,41 @@ def test_key_frame_poses_overlay_is_cropnormalized_and_confident_only():
     # a centered joint maps to the crop centre (0.5 -> (0.5-0.2)/0.6 = 0.5)
     assert j[5] == [0.5, 0.5]
     assert sum(1 for p in j if p) >= 6
+
+
+# --- event sanity gates (form shot c9df6ca0: events landed ~1s late) -------------------------
+
+def test_gate_events_all_plausible_pass():
+    # a normal delivery: ball start 1.8s before release, release at the slide stop, in order
+    ev = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8, E8=11.75)
+    ok, reasons = pose.gate_events(ev)
+    assert ok == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons == {}
+
+
+def test_gate_events_release_not_at_slide_stop_drops_all():
+    # the real c9df6ca0 numbers: release 0.57s BEFORE the slide stop -> whole delivery untrusted
+    ev = dict(E2=17.418, E3=17.5, E4=18.1, E6=18.49, E7=18.503, E8=19.072)
+    ok, reasons = pose.gate_events(ev)
+    assert ok == set()                       # nothing survives
+    assert 'E7' in reasons and 'slide stop' in reasons['E7']
+
+
+def test_gate_events_short_ball_start_to_release_drops_start():
+    # release sits at the slide stop, but ball start -> release is only 1.0s (too short)
+    ev = dict(E2=11.0, E3=11.1, E4=11.6, E6=11.95, E7=12.0, E8=11.95)
+    ok, reasons = pose.gate_events(ev)
+    assert 'E2' in reasons and 'E3' in reasons and 'E2' not in ok
+    assert 'E4' in ok and 'E7' in ok         # the trusted back-half events survive
+
+
+def test_gate_events_out_of_order_drops_offender():
+    ev = dict(E2=10.0, E3=10.3, E4=9.9, E6=11.75, E7=11.8, E8=11.75)   # E4 before E3
+    ok, reasons = pose.gate_events(ev)
+    assert 'E4' in reasons and 'E4' not in ok
+
+
+def test_gate_events_missing_slide_stop_is_lenient():
+    # no E8 -> can't anchor release; keep ordering + duration checks only, never crash
+    ev = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8, E8=None)
+    ok, reasons = pose.gate_events(ev)
+    assert 'E7' in ok

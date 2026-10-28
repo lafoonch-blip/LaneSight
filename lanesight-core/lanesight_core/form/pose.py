@@ -555,6 +555,50 @@ def _backswing_display(rel):
 # found are exported, cropped to the bowler (so the thumbnail is the bowler, not the whole lane).
 KEY_FRAME_EVENTS = (('ball_start', 'E2'), ('end_pushaway', 'E3'), ('top_of_swing', 'E4'), ('release', 'E7'))
 
+# Physiological sanity gates on the located events (form shot c9df6ca0: events landed ~1 s late — E7 release
+# read 0.57 s BEFORE the slide stopped, and ball-start→release was only 1.08 s). An event that fails its gate is
+# dropped so it never gets a thumbnail or an Early/Late call (DEC-076: the display follows only trustworthy events).
+RELEASE_VS_STOP_LO, RELEASE_VS_STOP_HI = -0.10, 0.15    # release must sit within this of the slide stop (E8)
+BALL_START_TO_RELEASE_LO, BALL_START_TO_RELEASE_HI = 1.3, 2.5   # a real ball-start→release spans ~1.3–2.5 s
+
+
+def gate_events(ev: dict) -> tuple[set, dict]:
+    """(ok, reasons) for the swing events used by the display (E2 ball-start, E3 end-pushaway, E4 top-of-swing,
+    E7 release). `ev` carries E2..E8 (E5=slide plant, E8=slide stop). `ok` is the set of event keys that are
+    physically plausible; `reasons` maps each DROPPED key -> a user-facing reason. A dropped event must not get a
+    thumbnail, a time, or an Early/Late call. Order of checks: release-vs-stop first (anchors everything), then
+    ball-start→release duration (only if release is trusted), then monotonic ordering of the survivors."""
+    disp = ('E2', 'E3', 'E4', 'E6', 'E7')
+    ok = {k for k in disp if ev.get(k) is not None}
+    reasons: dict = {}
+
+    def drop(keys, why):
+        for k in keys:
+            if k in ok:
+                ok.discard(k)
+                reasons[k] = why
+
+    E2, E6, E7, E8 = ev.get('E2'), ev.get('E6'), ev.get('E7'), ev.get('E8')
+    # 1. release must sit at the slide stop (you release as the slide foot posts). Release is the anchor the whole
+    # delivery is timed from — if it's off, the delivery window was mis-isolated, so NONE of the events can be
+    # trusted (form shot c9df6ca0: release read 0.57s before the slide stop). Drop them all with the reason.
+    if E7 is not None and E8 is not None and not (E8 + RELEASE_VS_STOP_LO <= E7 <= E8 + RELEASE_VS_STOP_HI):
+        drop(list(disp), f"release ({E7:.2f}s) isn't near the slide stop ({E8:.2f}s) — off by {E7 - E8:+.2f}s, so "
+                         f"the delivery couldn't be timed reliably on this clip.")
+        return ok, reasons
+    # 2. ball-start → release duration (release is trusted here)
+    if E2 is not None and E7 is not None:
+        d = E7 - E2
+        if not (BALL_START_TO_RELEASE_LO <= d <= BALL_START_TO_RELEASE_HI):
+            drop(['E2', 'E3'], f"ball start → release measured {d:.2f}s (a real delivery is "
+                               f"{BALL_START_TO_RELEASE_LO:g}–{BALL_START_TO_RELEASE_HI:g}s), so ball start is unreliable.")
+    # 3. monotonic order among the survivors (E2 ≤ E3 ≤ E4 ≤ E6 ≤ E7)
+    order = [(k, ev.get(k)) for k in disp if k in ok and ev.get(k) is not None]
+    for (k0, v0), (k1, v1) in zip(order, order[1:]):
+        if v1 < v0 - 1e-3:
+            drop([k1], f"{k1} ({v1:.2f}s) comes before {k0} ({v0:.2f}s) — the events are out of order.")
+    return ok, reasons
+
 
 def _bowler_crop(lms, idx, pad=0.22):
     """Normalized (x0, y0, x1, y1) bounding box of the visible pose at frame `idx`, padded, clamped 0..1.
@@ -564,7 +608,10 @@ def _bowler_crop(lms, idx, pad=0.22):
     row = lms[idx]
     vis = row[:, 3]
     ok = (vis > MIN_VIS) & ~np.isnan(row[:, 0]) & ~np.isnan(row[:, 1])
-    if ok.sum() < 6:
+    # Require the TORSO (both shoulders + both hips) before cropping — otherwise a partial lower-body pose on a
+    # blurred frame yields a crop zoomed into the thighs (form shot c9df6ca0). No full torso -> keep the full frame.
+    torso_ok = all(vis[j] > MIN_VIS and not np.isnan(row[j, 0]) for j in (L_SHOULDER, R_SHOULDER, L_HIP, R_HIP))
+    if ok.sum() < 6 or not torso_ok:
         return None
     xs, ys = row[ok, 0], row[ok, 1]
     x0, x1 = float(np.min(xs)), float(np.max(xs))
@@ -906,8 +953,17 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                         dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=hold_start,
                              first_step=first_step, slide_plant=slide_plant,
                              hold_start=hold_start, hold_end=hold_end).items()}
+    # Sanity-gate the display events: an implausible one (e.g. release not at the slide stop, or a too-short
+    # ball-start→release) is nulled so it gets NO thumbnail, NO time and NO Early/Late call (form shot c9df6ca0).
+    ok_ev, ev_reasons = gate_events(extras['events'])
+    if ev_reasons:
+        extras['events_gate'] = ev_reasons
+        log('form event gate: ' + '; '.join(f'{k}: {why}' for k, why in ev_reasons.items()))
+        for k in ('E2', 'E3', 'E4', 'E6', 'E7'):
+            if k not in ok_ev:
+                extras['events'][k] = None
     # export the design's four KEY POSITIONS stills at the located event times, cropped to the bowler
-    # (only those the pose found)
+    # (only those the pose found AND that passed the gate above)
     crops = {key: _bowler_crop(lms, int(np.argmin(np.abs(t - float(extras['events'][ev])))))
              for key, ev in KEY_FRAME_EVENTS if extras['events'].get(ev) is not None}
     extras['key_frames'] = export_key_frames(video, out_prefix, extras['events'], crops=crops, log=log)
@@ -917,8 +973,11 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # Form fundamentals v1 measured positions M1–M7 (DEC-057). View-agnostic geometry here; analyze_form_clip
     # applies the capture-view gating. Imported lazily to keep pose import-light and avoid an import cycle.
     from . import fundamentals as _fund
-    pos_events = dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=hold_start,
-                      first_step=first_step, slide_plant=slide_plant,
+    # Use the GATED events (a dropped E2/E3/E4/E6/E7 is now None) so a fundamentals position built on an
+    # untrustworthy event is not surfaced either — consistent with the thumbnails/timings.
+    g = extras['events']
+    pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_plant, E6=g.get('E6'),
+                      E7=g.get('E7'), E8=hold_start, first_step=first_step, slide_plant=slide_plant,
                       hold_start=hold_start, hold_end=hold_end)
     extras['measured_positions'] = _fund.measured_positions(t, lms, pos_events, torso, handed, out)
     extras['strikes'] = [(round(x, 3), lab) for x, lab in seq]
