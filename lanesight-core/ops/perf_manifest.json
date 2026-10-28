@@ -16,6 +16,11 @@
                       "window_must_contain_s": [16.5, 21.0], "fps": 60, "resolution": "1080x1920", "dur_s": 34.2},
      "target": "lane 9; ball_speed within +/-1 mph of 15.5; 9 down / one standing; or unavailable with a reason (never a fabricated number)"},
 
+    {"clip": "IMG_8930.MOV", "expected": "failed", "failure_code": "BALL_TRACK_NOT_FOUND",
+     "note": "2026-10-27 low-approach spare on lane 10 (h264/SDR/120fps as dropped 2026-10-28). Degenerate low-angle geometry: now fails cleanly with a coded AnalysisFailure (no uncaught LinAlgError crash — DEC-093 guard). Ground truth: foul-to-leave ~16.8 mph, 4-7 leave.",
+     "ground_truth": {"release_s": [2.47, 2.50], "touchdown_s": [2.80, 2.84], "ball_at_leave_s": [4.95, 4.98],
+                      "speed_foul_to_leave_mph": 16.8, "leave": "4-7", "strike": false}},
+
     {"clip": "IMG_8807.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort"},
     {"clip": "IMG_8808.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort"},
     {"clip": "IMG_8815.MOV", "expected": "unknown", "note": "2026-10-15 live session cohort (geometry outlier)"},
