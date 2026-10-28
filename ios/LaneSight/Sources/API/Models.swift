@@ -965,6 +965,9 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
     let weight_lb: Double?
     let color_desc: String?
     let is_current: Bool?
+    /// DEC-099: the bowler's default ball — what a NEW session starts with (separate from `is_current`,
+    /// which moves whenever a ball is picked in Setup / the Active Session). At most one per bowler.
+    let is_default: Bool?
     let retired: Bool?
     let ball_configuration_id: String?
     let layout_system: String?
@@ -990,7 +993,7 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
     // Decode leniently: weight can arrive as a number or string; booleans/strings tolerate nulls.
     enum CodingKeys: String, CodingKey {
         case id, name, nickname, ball_model_id, manufacturer, model_name, image_url,
-             weight_lb, color_desc, is_current, retired, ball_configuration_id,
+             weight_lb, color_desc, is_current, is_default, retired, ball_configuration_id,
              layout_system, layout, surface, coverstock, core_type, rg, diff, factory_finish
     }
     init(from decoder: Decoder) throws {
@@ -1007,6 +1010,7 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
         else { weight_lb = nil }
         color_desc = try? c.decodeIfPresent(String.self, forKey: .color_desc)
         is_current = (try? c.decodeIfPresent(Bool.self, forKey: .is_current)) ?? false
+        is_default = (try? c.decodeIfPresent(Bool.self, forKey: .is_default)) ?? false
         retired = (try? c.decodeIfPresent(Bool.self, forKey: .retired)) ?? false
         ball_configuration_id = try? c.decodeIfPresent(String.self, forKey: .ball_configuration_id)
         layout_system = try? c.decodeIfPresent(String.self, forKey: .layout_system)

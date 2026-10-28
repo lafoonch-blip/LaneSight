@@ -34,7 +34,7 @@ struct AnalyzeCards: View {
         .navigationDestination(item: $route) { r in
             switch r {
             case .live(let md): SetupView(initialMode: md)
-            case .upload: UploadView()
+            case .upload(let md): UploadView(mode: md)
             }
         }
     }

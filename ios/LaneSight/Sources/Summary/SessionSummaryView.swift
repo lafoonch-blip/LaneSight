@@ -35,6 +35,7 @@ struct SessionSummaryView: View {
         .background(LSBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .task { await load() }
     }
 

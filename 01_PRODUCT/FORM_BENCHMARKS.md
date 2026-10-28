@@ -1,7 +1,7 @@
 # Foundational Form Metrics & Benchmarks
 Status: DRAFT (for Shayne's review)
-Version: 0.2
-Last Updated: 2026-10-25
+Version: 0.3
+Last Updated: 2026-10-28
 Owner: Shayne
 Builds on: FORM_ANALYSIS_SPEC, BENCHMARKS_AND_RECOMMENDATIONS_SPEC (L0–L3 layers, owner-only rules), DEC-041/046/047
 Code checked: `lanesight-core/lanesight_core/form/pose.py` + `analyze.py` on branch `dev-build-v0` (2026-10-25)
@@ -47,6 +47,7 @@ Phone video can't reliably see these yet, so they appear only as cue/drill text 
 ### 0.4 Swing-timing comparison
 - The Form results swing-timing bar shows **this delivery vs the bowler's baseline** (pushaway, backswing, downswing, release), with the difference per phase.
 - The baseline comes from **Profile › Form baseline**: entered by the bowler or "use my average". If none is set, only this delivery shows, with a prompt to add one.
+- **Baseline values (DEC-099), seconds:** Pushaway `pushaway_time` (ball starts moving → ball at hip, E2→E3) · Backswing `backswing_time` (hip → top of backswing, E3→E4) · Downswing `downswing_time` (top → bottom of the swing, E4→E6) · Release `release_time` (bottom of the swing → release, E6→E7, usually ≤0.10 s) · optional Total (= `swing_time`, ball start → release; otherwise the sum). Modes: `average` | `entered` | none (`null`). Server sanity bound 0 < t ≤ 3 s per value (not a target). Shortcut: "Use this delivery as my baseline" on a Form result saves that delivery's measured phases only.
 
 ## 1. What Form Analysis captures today
 **Method:** MediaPipe pose plus ball/wrist event detection. Every value carries a status (Measured, Best effort, Unavailable + reason) and a confidence.

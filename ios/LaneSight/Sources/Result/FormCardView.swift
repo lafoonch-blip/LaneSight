@@ -10,6 +10,9 @@ struct FormCardView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let result: ShotResult
+    // DEC-099: "Use this delivery as my baseline".
+    @State private var baselineBusy = false
+    @State private var baselineNote: String?
 
     /// Whether the pose backend itself couldn't run (top-level form status). When true the whole analysis
     /// is unavailable; otherwise the per-section honest states carry the story.
@@ -38,6 +41,7 @@ struct FormCardView: View {
             .background(LSBackground())
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
@@ -250,8 +254,47 @@ struct FormCardView: View {
                 Text("Baseline from your Profile. Change it in Profile › Form baseline.")
                     .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
+
+            if let st, Self.measuredPhases(st).count >= 2 {
+                Button { Task { await useAsBaseline(st) } } label: {
+                    HStack(spacing: 6) {
+                        if baselineBusy { ProgressView().tint(LS.link) }
+                        Text("Use this delivery as my baseline").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(LS.link)
+                }
+                .buttonStyle(.plain).disabled(baselineBusy).padding(.top, 2)
+            }
+            if let baselineNote {
+                Text(baselineNote).font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
         }
         .lsCard()
+    }
+
+    /// The measured phase splits of this delivery (seconds), keyed by phase.
+    static func measuredPhases(_ st: SwingTiming) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for ph in FormBaselineView.phases.map(\.key) {
+            if let v = st.this_delivery?[ph]?.value, v > 0 { out[ph] = v }
+        }
+        return out
+    }
+
+    /// DEC-099: save this delivery's measured phase splits as the bowler's entered Form baseline. Only measured
+    /// phases are saved; a phase this clip didn't measure stays unset (never filled in).
+    private func useAsBaseline(_ st: SwingTiming) async {
+        baselineBusy = true; baselineNote = nil
+        var fb: [String: Any] = ["mode": "entered"]
+        for (k, v) in Self.measuredPhases(st) { fb[k] = (v * 100).rounded() / 100 }
+        if let t = st.this_delivery?["total"]?.value, t > 0 { fb["total"] = (t * 100).rounded() / 100 }
+        do {
+            _ = try await model.makeClient().putProfile(["form_baseline": fb])
+            baselineNote = "Saved. Future deliveries compare against this one."
+        } catch {
+            baselineNote = APIClient.fieldError(from: error)?.message ?? "Couldn't save your baseline — try again."
+        }
+        baselineBusy = false
     }
 
     private func phaseDiffGrid(_ st: SwingTiming) -> some View {

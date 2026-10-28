@@ -79,8 +79,11 @@ def _profile_in(data: dict) -> dict:
               'is_staged', 'staged_kind'):
         if d.get(k) is not None:
             out[k] = d[k]
-    # keep only known columns; a cleared field (phone='') is intentionally kept as None below via the store
-    return {k: v for k, v in out.items() if k in _PROFILE_COLS and (v is not None or k == 'phone')}
+    if 'form_baseline' in d and d['form_baseline'] is None:
+        out['form_baseline'] = None              # DEC-099: an explicit null clears the Form baseline
+    # keep only known columns; a cleared field (phone='' / form_baseline=null) is intentionally kept as None
+    return {k: v for k, v in out.items()
+            if k in _PROFILE_COLS and (v is not None or k in ('phone', 'form_baseline'))}
 
 
 def _profile_out(row: dict | None) -> dict | None:
@@ -121,15 +124,28 @@ class MemoryStore:
     def add_ball(self, user_id, data):
         d = dict(data or {})
         make_current = bool(d.pop('make_current', False) or d.pop('is_current', False))
+        make_default = bool(d.pop('make_default', False) or d.pop('is_default', False))
         name = d.get('nickname') or d.get('name')
         b = dict(id=_new_id(), user_id=user_id, ball_configuration_id=_new_id(), is_current=False, retired=False,
+                 is_default=False,
                  ball_model_id=d.get('ball_model_id'), nickname=name, name=name,
                  weight_lb=d.get('weight_lb'), color_desc=d.get('color_desc'),
                  layout_system=d.get('layout_system'), layout=d.get('layout'), surface=d.get('surface'))
         self.arsenal[b['id']] = b
         if make_current:
             self.set_current_ball(user_id, b['id'])
+        if make_default:
+            self.set_default_ball(user_id, b['id'])
         return self.arsenal[b['id']]
+
+    def set_default_ball(self, user_id, ball_id):
+        """DEC-099: the one default ball (what a new session starts with). None clears it."""
+        if ball_id is not None and not (self.arsenal.get(ball_id) or {}).get('user_id') == user_id:
+            return None
+        for b in self.arsenal.values():
+            if b.get('user_id') == user_id:
+                b['is_default'] = (b['id'] == ball_id)
+        return self.arsenal.get(ball_id) if ball_id else None
 
     def set_current_ball(self, user_id, ball_id):
         if not (self.arsenal.get(ball_id) or {}).get('user_id') == user_id:
@@ -146,6 +162,13 @@ class MemoryStore:
         p = dict(patch or {})
         if p.pop('is_current', False) or p.pop('make_current', False):
             self.set_current_ball(user_id, ball_id)
+        if 'is_default' in p or 'make_default' in p:
+            if p.pop('is_default', False) or p.pop('make_default', False):
+                self.set_default_ball(user_id, ball_id)
+            else:
+                b['is_default'] = False
+        if p.get('retired'):
+            b['is_default'] = False                   # a retired ball can't stay the default
         if p.get('name') is not None:
             b['nickname'] = b['name'] = p['name']
         for k in ('nickname', 'weight_lb', 'color_desc', 'ball_model_id', 'layout_system', 'layout', 'surface', 'retired'):
@@ -1097,10 +1120,11 @@ class PgStore(MemoryStore):
                 'coverstock': model.get('coverstock'), 'core_type': model.get('core_type'),
                 'rg': model.get('rg'), 'diff': model.get('diff'), 'factory_finish': model.get('factory_finish'),
                 'is_current': b.get('is_current', False), 'retired': b.get('retired', False),
+                'is_default': b.get('is_default', False),
                 'ball_configuration_id': cfg.get('id'), 'layout_system': cfg.get('layout_system'),
                 'layout': cfg.get('layout'), 'surface': cfg.get('surface')}
 
-    _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,retired,ball_model_id,created_at,'
+    _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,is_default,retired,ball_model_id,created_at,'
                        'ball_models(manufacturer,name,image_url,coverstock,core_type,rg,diff,factory_finish),'
                        'ball_configurations(id,version,layout_system,layout,surface)')
 
@@ -1123,6 +1147,16 @@ class PgStore(MemoryStore):
                   'layout_system': d.get('layout_system'), 'layout': d.get('layout'), 'surface': d.get('surface')})
         if make_current:
             self.set_current_ball(user_id, ball_id)
+        if d.get('make_default') or d.get('is_default'):
+            self.set_default_ball(user_id, ball_id)
+        return self._arsenal_one(user_id, ball_id)
+
+    def set_default_ball(self, user_id, ball_id):
+        """DEC-099: unset the old default first (the partial unique index allows only one), then set this one."""
+        if not self._get('user_balls', f'id=eq.{ball_id}&user_id=eq.{user_id}&select=id'):
+            return None
+        self._req(f'user_balls?user_id=eq.{user_id}&is_default=is.true', 'PATCH', {'is_default': False})
+        self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', {'is_default': True})
         return self._arsenal_one(user_id, ball_id)
 
     def set_current_ball(self, user_id, ball_id):
@@ -1138,7 +1172,14 @@ class PgStore(MemoryStore):
         p = dict(patch or {})
         if p.pop('is_current', False) or p.pop('make_current', False):
             self.set_current_ball(user_id, ball_id)
+        if 'is_default' in p or 'make_default' in p:
+            if p.pop('is_default', False) or p.pop('make_default', False):
+                self.set_default_ball(user_id, ball_id)
+            else:
+                self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', {'is_default': False})
         ball_cols = {k: p[k] for k in ('nickname', 'serial', 'weight_lb', 'color_desc', 'ball_model_id', 'retired') if k in p}
+        if p.get('retired'):
+            ball_cols['is_default'] = False           # a retired ball can't stay the default
         if p.get('name') is not None:
             ball_cols['nickname'] = p['name']
         if ball_cols:
