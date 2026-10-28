@@ -25,8 +25,8 @@ struct FormBaselineView: View {
         Phase(key: "release_time", label: "Release", detail: "Bottom of the swing → the ball leaves your hand (usually under 0.10 s)"),
     ]
 
-    enum Mode: String { case none, average, entered }
-    @State private var mode: Mode = .none
+    enum Mode: String { case off, average, entered }
+    @State private var mode: Mode = .off
     @State private var values: [String: String] = [:]
     @State private var saving = false
     @State private var error: (field: String, message: String)?
@@ -34,7 +34,7 @@ struct FormBaselineView: View {
     init(initial: FormBaseline?, onSaved: @escaping (FormBaseline?) -> Void) {
         self.initial = initial
         self.onSaved = onSaved
-        let m: Mode = initial?.mode == "average" ? .average : (initial?.mode == "entered" ? .entered : .none)
+        let m: Mode = initial?.mode == "average" ? .average : (initial?.mode == "entered" ? .entered : .off)
         _mode = State(initialValue: m)
         var v: [String: String] = [:]
         if let b = initial {
@@ -65,7 +65,7 @@ struct FormBaselineView: View {
                        "LaneSight uses the median of your measured form deliveries once it has enough of them.")
                 option(.entered, "Enter my timing", "Type the time for each phase of your swing, in seconds.")
                 if mode == .entered { entrySection }
-                option(.none, "No baseline", "Form results show only the delivery you just threw.")
+                option(.off, "No baseline", "Form results show only the delivery you just threw.")
 
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lightbulb").foregroundStyle(LS.dataYellow)
@@ -156,7 +156,7 @@ struct FormBaselineView: View {
         let payload: Any
         var saved: FormBaseline?
         switch mode {
-        case .none:
+        case .off:
             payload = NSNull()
         case .average:
             payload = ["mode": "average"]
