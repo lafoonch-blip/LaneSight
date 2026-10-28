@@ -1,0 +1,176 @@
+{
+  "results": [
+    {
+      "clip": "IMG_8751.mov",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8751.mov",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.583,
+        "entry_board": 18.085,
+        "entry_angle": 5.066,
+        "rev_rate": 423.005,
+        "breakpoint_board": 9.445,
+        "laydown_board": 17.864,
+        "breakpoint_distance": 40.056
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 62.76,
+      "cpu_s": 168.46,
+      "peak_rss_mb": 1875.2,
+      "timings": {
+        "probe_s": 0.13,
+        "window_s": 4.28,
+        "convert_s": 38.57,
+        "cv": {
+          "stabilize_s": 14.7,
+          "find_lanes_s": 0.064,
+          "extract_blobs_s": 1.174,
+          "link_s": 0.178,
+          "extend_s": 0.046,
+          "detect_impact_s": 0.538,
+          "refine_s": 0.519,
+          "compute_s": 0.013,
+          "read_pins_s": 2.087,
+          "rev_rate_s": 0.394
+        },
+        "analyze_s": 19.72,
+        "decode": {
+          "passes": 9,
+          "frames": 4001,
+          "seconds": 3.429
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8752.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8752.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.334,
+        "entry_board": 20.813,
+        "entry_angle": 4.582,
+        "rev_rate": 435.14,
+        "breakpoint_board": 11.194,
+        "laydown_board": 17.058,
+        "breakpoint_distance": 36.492
+      },
+      "pins_read": true,
+      "far_lane": "ok",
+      "wall_s": 15.26,
+      "cpu_s": 93.57,
+      "peak_rss_mb": 1988.7,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 1.42,
+        "cv": {
+          "stabilize_s": 8.663,
+          "find_lanes_s": 0.063,
+          "extract_blobs_s": 1.22,
+          "link_s": 0.117,
+          "extend_s": 0.032,
+          "detect_impact_s": 0.552,
+          "refine_s": 0.539,
+          "compute_s": 0.011,
+          "read_pins_s": 2.042,
+          "rev_rate_s": 0.432
+        },
+        "analyze_s": 13.68,
+        "decode": {
+          "passes": 9,
+          "frames": 3893,
+          "seconds": 2.585
+        }
+      },
+      "expected": "analyzed",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8807.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8807.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.71,
+        "entry_board": 19.464,
+        "entry_angle": 5.559,
+        "rev_rate": 446.99,
+        "breakpoint_board": 9.372,
+        "laydown_board": 17.498,
+        "breakpoint_distance": 40.5
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 14.46,
+      "cpu_s": 86.49,
+      "peak_rss_mb": 1988.7,
+      "timings": {
+        "probe_s": 0.11,
+        "window_s": 1.19,
+        "cv": {
+          "stabilize_s": 8.66,
+          "find_lanes_s": 0.076,
+          "extract_blobs_s": 0.984,
+          "link_s": 0.159,
+          "extend_s": 0.089,
+          "detect_impact_s": 0.506,
+          "refine_s": 0.555,
+          "compute_s": 0.011,
+          "read_pins_s": 1.672,
+          "rev_rate_s": 0.395
+        },
+        "analyze_s": 13.11,
+        "decode": {
+          "passes": 9,
+          "frames": 3801,
+          "seconds": 2.971
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    },
+    {
+      "clip": "IMG_8808.MOV",
+      "path": "/Users/shaynel/LaneSightData/training_videos/IMG_8808.MOV",
+      "status": "analyzed",
+      "metrics": {
+        "ball_speed": 17.297,
+        "entry_board": 16.804,
+        "entry_angle": -1.95,
+        "breakpoint_board": 6.347,
+        "breakpoint_distance": 39.552
+      },
+      "pins_read": true,
+      "far_lane": "limited",
+      "wall_s": 3.72,
+      "cpu_s": 14.98,
+      "peak_rss_mb": 1988.7,
+      "timings": {
+        "probe_s": 0.07,
+        "window_s": 0.56,
+        "cv": {
+          "stabilize_s": 0.005,
+          "find_lanes_s": 0.088,
+          "extract_blobs_s": 0.005,
+          "link_s": 0.144,
+          "extend_s": 0.056,
+          "detect_impact_s": 0.404,
+          "refine_s": 0.38,
+          "compute_s": 0.009,
+          "read_pins_s": 1.996
+        },
+        "analyze_s": 3.09,
+        "decode": {
+          "passes": 3,
+          "frames": 1207,
+          "seconds": 0.862
+        }
+      },
+      "expected": "unknown",
+      "expected_failure_code": null
+    }
+  ],
+  "generated_wall": 1793148147.0,
+  "clips_dir": "/Users/shaynel/LaneSightData/training_videos"
+}

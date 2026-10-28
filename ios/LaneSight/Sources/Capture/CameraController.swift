@@ -166,7 +166,10 @@ final class CameraController: NSObject, ObservableObject {
             }
             if best8 != nil || bestAny != nil { break }   // prefer the higher resolution tier
         }
-        return best8 ?? bestAny
+        // Frame rate wins over bit depth: keep 8-bit ONLY if it's available at the top frame rate we found;
+        // otherwise take the higher-fps format even if it's 10-bit (never drop 120→60 just to get SDR).
+        if let b8 = best8, let ba = bestAny, b8.fps >= ba.fps { return b8 }
+        return bestAny ?? best8
     }
 
     // MARK: recording
