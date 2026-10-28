@@ -1,6 +1,8 @@
 import numpy as np
-from lanesight_core.cv.pipeline import far_lane_quality, _unsupported_view_record, _METRIC_CATALOG
-from lanesight_core.cv.lanes import classify_capture_view
+import pytest
+from lanesight_core.cv.pipeline import far_lane_quality, _unsupported_view_record, _METRIC_CATALOG, ball_speed_plausible
+from lanesight_core.cv.lanes import classify_capture_view, _vp_solve
+from lanesight_core.failures import AnalysisFailure
 
 
 # ---- capture-view gate (side-view-misroute handoff / DEC-061) ----
@@ -77,3 +79,51 @@ def test_missing_speeds_and_smooth_path_ok():
     zb = [(z / 2.0, 20.0 - 0.1 * z) for z in range(0, 112)]
     limited, _ = far_lane_quality(dict(), zb)
     assert not limited
+
+
+# ---- headline ball-speed honesty gate (IMG_8929 pre-fix reported 6.1 mph as `ok`) ----
+
+def test_ball_speed_plausible_accepts_real_shots():
+    # Real 60 ft foul->pins averages (validation clips) sit in ~12-22 mph.
+    for v in (12.0, 15.5, 17.4, 22.0):
+        ok, reason = ball_speed_plausible(v)
+        assert ok and reason is None
+
+
+def test_ball_speed_gate_rejects_too_slow():
+    # IMG_8929 off the wrong window produced 6.1 mph "ok" — must now be rejected with a timing reason.
+    ok, reason = ball_speed_plausible(6.1)
+    assert not ok and 'timing' in reason.lower()
+
+
+def test_ball_speed_gate_rejects_negative_and_nonfinite():
+    for v in (-12.6, 0.0, float('nan'), float('inf'), None):
+        ok, reason = ball_speed_plausible(v)
+        assert not ok and reason
+
+
+def test_ball_speed_gate_rejects_too_fast():
+    # Back-half loss stretches the scale -> >30 mph. Keeps the original "lost in the back half" reason.
+    ok, reason = ball_speed_plausible(41.0)
+    assert not ok and 'back half' in reason.lower()
+
+
+def test_ball_speed_gate_boundaries():
+    assert ball_speed_plausible(8.0)[0] and ball_speed_plausible(30.0)[0]      # inclusive band
+    assert not ball_speed_plausible(7.9)[0] and not ball_speed_plausible(30.1)[0]
+
+
+# ---- vanishing-point solve guard (IMG_8930 LinAlgError: SVD did not converge) ----
+
+def test_vp_solve_raises_coded_failure_on_nonfinite():
+    A = np.array([[1.0, -np.nan], [1.0, -0.2]]); b = np.array([10.0, 20.0]); wt = np.array([1.0, 1.0])
+    with pytest.raises(AnalysisFailure) as ei:
+        _vp_solve(A, b, wt)
+    assert ei.value.code == 'LANE_GEOMETRY_UNUSABLE'
+
+
+def test_vp_solve_returns_finite_on_good_system():
+    # Two clean edge lines x = a*y + b intersect at a finite VP.
+    A = np.array([[1.0, -0.10], [1.0, -0.20]]); b = np.array([100.0, 50.0]); wt = np.array([1.0, 1.0])
+    vp = _vp_solve(A, b, wt)
+    assert vp.shape == (2,) and np.all(np.isfinite(vp))

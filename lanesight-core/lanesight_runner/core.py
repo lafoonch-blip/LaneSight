@@ -12,8 +12,19 @@ def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=Non
     """Real analysis: lanesight-core pipeline. Returns the JSON-safe ShotRecord dict.
     cv_timings: optional dict that receives CV sub-stage wall times (profiling only; no effect on results)."""
     from lanesight_core.cv.pipeline import analyze, _json_default
-    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s,
-                  timings=cv_timings)
+    import numpy as np
+    from lanesight_core.failures import AnalysisFailure
+    try:
+        rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s,
+                      timings=cv_timings)
+    except np.linalg.LinAlgError as e:
+        # Backstop (IMG_8930): a degenerate low-angle / off-axis geometry can make a least-squares or SVD fit
+        # diverge anywhere in the pipeline (lane VP, homography, loess). Never let it escape as an uncaught
+        # crash that hangs the job — convert it to a coded, user-friendly failure.
+        raise AnalysisFailure('LANE_GEOMETRY_UNUSABLE',
+                              f'numerical geometry fit failed ({type(e).__name__}: {e}); the lane geometry in '
+                              f'this clip is degenerate for analysis', stage='internal',
+                              diagnostics={'exception': type(e).__name__})
     return json.loads(json.dumps(rec.to_dict(), default=_json_default))
 
 

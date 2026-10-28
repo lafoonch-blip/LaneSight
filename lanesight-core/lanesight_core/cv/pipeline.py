@@ -83,6 +83,20 @@ def far_lane_quality(M, zboard):
                       f"far-lane read is unreliable.{spot}")
     return False, None
 
+def ball_speed_plausible(v, lo=8.0, hi=30.0):
+    """(ok, reason) for the headline 60 ft foul→pins ball speed. A thrown ball's average lives in ~8-30 mph:
+    above ~30 the ball was lost in the back half (distance scale stretched); below ~8 — or negative / non-finite —
+    the release/impact time anchor is corrupt. Outside the band the number is not physical, so the caller fails
+    the shot with the reason rather than surfacing a confidently-wrong speed/entry as `ok` (honesty, DEC-026/027/061)."""
+    if v is not None and np.isfinite(v) and lo <= v <= hi:
+        return True, None
+    if v is not None and np.isfinite(v) and v > hi:
+        return False, (f"ball not tracked to the pins (measured {v:.0f} mph is not physically possible): the ball "
+                       f"was lost in the back half of the lane, so the distance scale is unreliable.")
+    shown = f"{v:.1f} mph" if (v is not None and np.isfinite(v)) else "an invalid value"
+    return False, (f"the shot timing came out implausible (measured {shown} over 60 ft): the ball's release or "
+                   f"pin impact wasn't pinned down, so speed and entry can't be trusted.")
+
 def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
             timing_video=None, core_end_s=None, timings=None):
     # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
@@ -149,14 +163,16 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # clutter defeating the linker), that anchor sits mid-lane and every distance is stretched. A thrown ball
     # tops out near ~22 mph, so a release speed past 30 means the scale is wrong - fail with a clear reason
     # rather than emit confidently-wrong speed/entry/angle numbers (accuracy beats coverage).
+    # A reading below ~8 mph (or negative / non-finite) is the mirror image of >30: the release/impact time
+    # anchor is corrupt, so the number is not physical either. Both ends fail with a clear reason (ball_speed_plausible).
+    SPEED_MIN_MPH, SPEED_MAX_MPH = 8.0, 30.0
     v = M.get('ball_speed_mph')
-    if v is not None and v > 30:
+    ok, why = ball_speed_plausible(v, SPEED_MIN_MPH, SPEED_MAX_MPH)
+    if not ok:
         raise AnalysisFailure(
-            'IMPOSSIBLE_SPEED_SCALE',
-            f"ball not tracked to the pins (measured {v:.0f} mph is not physically possible): the ball was lost "
-            f"in the back half of the lane, so the distance scale is unreliable.",
-            stage='sanity',
-            diagnostics={'measured_mph': round(float(v), 1), 'track_last_ft': M.get('track_last_ft')})
+            'IMPOSSIBLE_SPEED_SCALE', why, stage='sanity',
+            diagnostics={'measured_mph': (round(float(v), 1) if (v is not None and np.isfinite(v)) else None),
+                         'plausible_mph': [SPEED_MIN_MPH, SPEED_MAX_MPH], 'track_last_ft': M.get('track_last_ft')})
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]
@@ -206,6 +222,14 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('axis_rotation', None, 'deg', 0, 'not yet measured from video'), m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
         m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)'),
     ]
+    # Honesty gate: a speed can only be positive. A negative / non-finite segment speed (e.g. a back-half fit
+    # going the wrong way) must never surface as a number — mark it unavailable with the reason. The headline
+    # ball_speed is already hard-gated above, so this covers the per-segment speeds.
+    for x in meas:
+        if x.metric in ('ball_speed', 'speed_release', 'speed_early', 'speed_late') and x.value is not None \
+           and (not np.isfinite(x.value) or x.value <= 0):
+            x.value, x.status, x.confidence = None, 'unavailable', 0.0
+            x.note = (x.note + ' ' if x.note else '') + 'Segment speed came out non-physical (≤0); not reported.'
     # Plausibility gate (DEC-061): if the downlane depth scale is corrupt, keep the far-lane measurements but
     # mark them low_confidence with the reason, and flag capture_quality.far_lane = "limited" for the camera-spot
     # banner. Accuracy over coverage: a mis-calibrated entry board drives a wrong move, so it must not read 'ok'.
