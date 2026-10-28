@@ -164,6 +164,7 @@ struct FormCardView: View {
                         label: pos.label,
                         timeText: eventTimeText(pos.event),
                         available: result.keyFrames.contains(pos.key),
+                        poseJoints: result.keyFramePoses[pos.key],      // skeleton overlay (DEC-082); nil → plain still
                         loader: { await fetchFrame(pos.key) })
                     if result.keyFrames.contains(pos.key) {
                         // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
@@ -398,10 +399,14 @@ private struct KeyPositionTile: View {
     let label: String
     let timeText: String?
     let available: Bool
+    var poseJoints: [[Double]?]? = nil
     let loader: () async -> UIImage?
 
     @State private var image: UIImage?
     @State private var loaded = false
+
+    // Skeleton is drawn only when the pose found confident joints for this still (never guessed).
+    private var hasSkeleton: Bool { (poseJoints?.contains { $0 != nil }) ?? false }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -409,7 +414,14 @@ private struct KeyPositionTile: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(LS.raised)
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1)
                 if let image {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                    // scaledToFit (not fill) so the skeleton overlay's aspect-fit mapping lines up with the
+                    // bowler-cropped still, matching KeyPositionFullView (DEC-082: thumbnails carry the skeleton).
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .overlay {
+                            if let j = poseJoints, hasSkeleton {
+                                SkeletonOverlay(joints: j, imageSize: image.size)
+                            }
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 } else {
                     VStack(spacing: 4) {
