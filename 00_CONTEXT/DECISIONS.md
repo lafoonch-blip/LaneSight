@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.59  
+Version: 1.60  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.58
+Supersedes: v1.59
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1148,6 +1148,12 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 - **Human in the loop:** the analyzer proposes only — no outreach, publishing, spend or partnership claims. Shayne's decisions and measured outcomes go in `intel.decision`; strategy-changing ones also get a DEC.
 - **Not built yet:** dashboard (later, when volume warrants).
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — implements `00_CONTEXT/BOWLING_INDUSTRY_INTELLIGENCE_STRATEGY.md` §3–§5 (now v1.1).
+
+### DEC-099 — Opportunity analyzer: weekly competitor benchmark + SELECT-callable write functions
+**Decision (Shayne, 2026-10-28):**
+- **Weekly competitor benchmark** is part of every analyzer run (runbook §6a). Every tracked competitor (`intel.competitor`), plus new ones found that week, gets one append-only `intel.competitor_snapshot` per run. It records what they publish (platforms, hardware, price, metrics claimed, form/coaching, version and date, rating, downloads), what changed, a labeled LaneSight-gap hypothesis, the sources read, and fields left unverified. Substantive changes become `competitor_threat` opportunities. It's a desk benchmark of published claims only; hands-on accuracy tests stay a recommendation for Shayne. Baseline written 2026-10-28 for LaneTrax, Bowlin, BowlersAI, Specto, BowlSense and Witsee.
+- **Unattended writes:** the Supabase connector asks for an interactive confirmation on `UPDATE`, and a scheduled run has nobody to answer it (run 7b870931 couldn't close twice). Migration 026 (applied live 2026-10-28) adds `intel.finish_run`, `intel.update_opportunity` (allowlisted columns; `add_source_urls` appends; score history stays tagged) and `intel.update_theme`. The analyzer calls them with `SELECT` and never issues raw `UPDATE`. intel schema only; nothing deletes.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing; extends DEC-098.
 
 ## Superseded decisions
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.

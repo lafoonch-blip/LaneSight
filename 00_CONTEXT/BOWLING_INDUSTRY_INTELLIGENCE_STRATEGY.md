@@ -1,6 +1,6 @@
 # LaneSight — Bowling Industry Intelligence & Opportunity Monitoring Strategy
 Status: OPERATING STRATEGY (registry + weekly analyzer implemented, DEC-098)  
-Version: 1.1  
+Version: 1.2  
 Last Updated: 2026-10-28  
 Owner: LaneSight  
 Authority: Strategy context; subordinate to `00_CONTEXT/DECISIONS.md` and `00_CONTEXT/CURRENT_STATE.md`
@@ -60,7 +60,7 @@ Each prospect must have an explicit **owner, next action, due date, status, and 
 
 Lifecycle: `new → triaged → researching → outreach_planned → contacted → evaluating → approved → executing → measured → closed` (with `watchlist` and `rejected` side paths).
 
-**Implemented (DEC-098):** Supabase schema `intel` (migration 025) — `opportunity` (this schema; score and band generated), `score_history`, `decision`, `theme`, `run`. Build a dashboard only when volume warrants it. Never store scraped private personal data or nonpublic information without authorization.
+**Implemented (DEC-098, DEC-099):** Supabase schema `intel` (migrations 025, 026: adds `competitor` + append-only weekly `competitor_snapshot`) — `opportunity` (this schema; score and band generated), `score_history`, `decision`, `theme`, `run`. Build a dashboard only when volume warrants it. Never store scraped private personal data or nonpublic information without authorization.
 
 ## 6. Proposed AI-agent workflow
 1. **Collector:** gather permitted RSS, official announcements, public web updates, authorized APIs and selected public discussions.
