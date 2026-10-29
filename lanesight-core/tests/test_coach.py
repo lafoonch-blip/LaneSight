@@ -100,3 +100,23 @@ def test_accuracy_ring_drops_low_confidence_breakpoint_via_quality():
     q2 = {'arrows_board': {'status': 'ok'}, 'breakpoint_board': {'status': 'ok'}}
     ring2 = coach.classify_throw(m, coach.baseline(base), tgt, quality=q2)['rings']['accuracy']
     assert ring2['status'] == 'ok' and ring2['value'] == round(0.6*100 + 0.4*coach._component_score(4.0, 8.0))
+
+
+def test_lane_move_text_before_after_and_escalation():
+    base = _base()
+    m = {'ball_speed': 12.1, 'rev_rate': 405, 'arrows_board': 10.0}
+    # measured arrows (10) + a 2-and-1 move left -> eyes to the 11 board, from 10; plus the escalation line.
+    out = coach.build(m, MISS, base, recommendation={'direction': 'left', 'move_feet': 2, 'move_target': 1},
+                      quality={'arrows_board': {'status': 'ok'}})
+    txt = out['coach']['text']
+    assert 'feet 2 boards left' in txt and 'eyes to the 11 board (from 10)' in txt
+    assert 'Ball change only if it keeps missing' in txt
+    # right subtracts boards: 10 -> 9
+    outr = coach.build(m, MISS, base, recommendation={'direction': 'right', 'move_feet': 2, 'move_target': 1},
+                       quality={'arrows_board': {'status': 'ok'}})
+    assert 'eyes to the 9 board (from 10)' in outr['coach']['text']
+    # arrows WITHHELD (bad geometry) -> no fabricated board, falls back to the delta phrasing + escalation
+    outw = coach.build(m, MISS, base, recommendation={'direction': 'left', 'move_feet': 2, 'move_target': 1},
+                       quality={'arrows_board': {'status': 'unavailable'}})
+    assert 'from' not in outw['coach']['text'] and 'eyes 1 board the same way' in outw['coach']['text']
+    assert 'Ball change only' in outw['coach']['text']

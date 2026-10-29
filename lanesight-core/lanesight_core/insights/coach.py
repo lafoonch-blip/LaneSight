@@ -154,9 +154,11 @@ def classify_lane(metrics: dict, key_points: dict | None, far_lane: str | None =
             'explanation': f"Entered board {round(entry_board, 1)} vs pocket {POCKET_BOARD} · {side}", **rings}
 
 
-def coach(throw: dict, lane: dict, recommendation: dict | None = None) -> dict:
+def coach(throw: dict, lane: dict, recommendation: dict | None = None, arrows_act=None) -> dict:
     """One action for the pair (the matrix above). `recommendation` is the existing adjust.py move (direction +
-    move_feet) reused for the feet/eyes of a lane move, so the coach never invents a geometry."""
+    move_feet + move_target) reused for the feet/eyes of a lane move, so the coach never invents a geometry.
+    `arrows_act` is the bowler's measured arrows board (already quality-gated by the caller — None when it
+    wasn't measured), used to phrase the eyes move as an honest before→after; never fabricated."""
     t, l = throw.get('status'), lane.get('status')
     if l == 'not_read':
         return {'action': 'no_move_yet', 'text': 'Keep the same line. Move the tripod so your next shot gets '
@@ -164,12 +166,12 @@ def coach(throw: dict, lane: dict, recommendation: dict | None = None) -> dict:
     if t == 'building':
         if l == 'good':
             return {'action': 'keep', 'text': 'Good line — keep repeating it while we learn your normal throw.'}
-        return {'action': 'lane_move', 'text': _lane_move_text(lane, recommendation),
+        return {'action': 'lane_move', 'text': _lane_move_text(lane, recommendation, arrows_act),
                 'move': _move(recommendation)}
     if t == 'good' and l == 'good':
         return {'action': 'keep', 'text': 'Good throw, good read — keep the same line.'}
     if t == 'good' and l == 'miss':
-        return {'action': 'lane_move', 'text': _lane_move_text(lane, recommendation), 'move': _move(recommendation)}
+        return {'action': 'lane_move', 'text': _lane_move_text(lane, recommendation, arrows_act), 'move': _move(recommendation)}
     if t == 'off' and l == 'miss':
         speed = ' speed' if throw.get('off_reason') == 'speed' else ''
         return {'action': 'no_move', 'text': f"That was the throw, not the lane. Stay where you are and repeat "
@@ -179,22 +181,45 @@ def coach(throw: dict, lane: dict, recommendation: dict | None = None) -> dict:
             "Repeat your normal throw and see where it reads."}
 
 
+def _eyes_boards(rec: dict) -> int | None:
+    """Eyes/target board delta for a move: the rule's own move_target when present (e.g. 2-and-1 → 1), else
+    half the feet move. None when neither is known."""
+    tgt = rec.get('move_target')
+    if isinstance(tgt, (int, float)):
+        return int(abs(tgt))
+    feet = rec.get('move_feet')
+    return round(abs(feet) / 2) if isinstance(feet, (int, float)) else None
+
+
 def _move(rec: dict | None) -> dict | None:
     if not rec:
         return None
     feet = rec.get('move_feet')
     if feet is None and rec.get('direction') is None:
         return None
-    # 2-and-1: eyes move half the feet move (rounded), same direction.
-    return {'feet': feet, 'eyes': (round(feet / 2) if isinstance(feet, (int, float)) else None),
-            'direction': rec.get('direction')}
+    return {'feet': feet, 'eyes': _eyes_boards(rec), 'direction': rec.get('direction')}
 
 
-def _lane_move_text(lane: dict, rec: dict | None) -> str:
+def _lane_move_text(lane: dict, rec: dict | None, arrows_act=None) -> str:
+    """Specific lane move (2026-10-29-A B5): feet + eyes in boards, the eyes as a before→after when the arrows
+    board was measured, and the escalation line (don't chase a ball change before moving). Boards count from
+    the right gutter (1) to the left (39), so 'left' adds boards and 'right' subtracts (adjust.py)."""
     base = f"Lane read {lane.get('side', 'off')}."
-    if rec and rec.get('direction') and rec.get('move_feet') is not None:
-        return f"{base} Move your feet {abs(rec['move_feet'])} board(s) {rec['direction']} (eyes half that)."
-    return f"{base} Adjust your feet and eyes toward the pocket (2-and-1)."
+    escalate = " Ball change only if it keeps missing after a move or two."
+    d = (rec or {}).get('direction')
+    feet = (rec or {}).get('move_feet')
+    if not (rec and d in ('left', 'right') and feet is not None):
+        return f"{base} Adjust your feet and eyes toward the pocket (2-and-1).{escalate}"
+    eyes = _eyes_boards(rec)
+    move = f"Move your feet {abs(feet)} board{'s' if abs(feet) != 1 else ''} {d}"
+    if eyes and isinstance(arrows_act, (int, float)):
+        new_arrows = round(arrows_act + (eyes if d == 'left' else -eyes))
+        move += f", eyes to the {new_arrows} board (from {round(arrows_act)})"
+    elif eyes:
+        move += f", eyes {eyes} board{'s' if eyes != 1 else ''} the same way"
+    else:
+        move += " (eyes half that)"
+    return f"{base} {move}.{escalate}"
 
 
 def build(metrics: dict, key_points: dict | None, prior_shots: list[dict],
@@ -205,4 +230,12 @@ def build(metrics: dict, key_points: dict | None, prior_shots: list[dict],
     base = baseline(prior_shots)
     throw = classify_throw(metrics or {}, base, target, quality=quality)
     lane = classify_lane(metrics or {}, key_points, far_lane, quality=quality)
-    return {'throw': throw, 'lane': lane, 'coach': coach(throw, lane, recommendation), 'baseline': base}
+    # Arrows board for the eyes before→after, gated the same way as the Accuracy ring: a withheld / low-
+    # confidence arrows read is dropped so the move never cites a fabricated board.
+    arrows_act = (metrics or {}).get('arrows_board')
+    if quality and arrows_act is not None:
+        from .uncertainty import metric_ok
+        if not metric_ok({'_quality': quality}, 'arrows_board')[0]:
+            arrows_act = None
+    return {'throw': throw, 'lane': lane,
+            'coach': coach(throw, lane, recommendation, arrows_act=arrows_act), 'baseline': base}

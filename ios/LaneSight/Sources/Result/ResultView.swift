@@ -70,7 +70,8 @@ struct ShotCardView: View {
                     if result.isUpload { uploadFooter }
                     ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
                     analyzedFooter
-                    if !result.isUpload && !result.isForm { recordNextCTA }
+                    // Dock (2026-10-29-A B2): live shot → "Record next shot"; upload / pushed review → bottom Done.
+                    if !result.isUpload && !result.isForm { recordNextCTA } else { doneCTA }
                     Color.clear.frame(height: 1).id("ls-bottom")
                 }
                 .padding(16)
@@ -91,12 +92,10 @@ struct ShotCardView: View {
             .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
-                ToolbarItem(placement: .confirmationAction) {
-                    // DEC-096: in a live session, Done returns to the Active Session (collapses the capture
-                    // cover); for an upload / a pushed review it just dismisses in place.
-                    Button("Done") {
-                        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
-                    }
+                // 2026-10-29-A B2: ✕ close top-LEFT (not a top-right Done pill). Done moves to a bottom button.
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { closeCard() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
                 }
             }
             .task { await loadSensors() }
@@ -514,6 +513,19 @@ struct ShotCardView: View {
     }
 
     // Live in-session CTA (Figma 413:4129 bottom): record the next shot. Dismisses back to capture.
+    /// DEC-096 close: in a live session, return to the Active Session (collapse the capture cover); for an
+    /// upload / a pushed review, dismiss in place. Shared by the ✕ (top-left) and the bottom Done.
+    private func closeCard() {
+        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
+    }
+
+    /// Bottom full-width Done for uploads / pushed reviews (2026-10-29-A B2). Done and ✕ both return to Lab.
+    private var doneCTA: some View {
+        Button { closeCard() } label: { Text("Done").frame(maxWidth: .infinity) }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.top, 4)
+    }
+
     private var recordNextCTA: some View {
         Button {
             dismiss(); model.resetPipeline()
