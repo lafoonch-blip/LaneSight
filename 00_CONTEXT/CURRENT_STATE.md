@@ -1,7 +1,7 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.57  
-Last Updated: 2026-10-28  
+Version: 1.58  
+Last Updated: 2026-10-29  
 Owner: Shayne  
 Supersedes: v1.56
 
@@ -15,6 +15,8 @@ Supersedes: v1.56
 **Active workstream: the LaneSight app (one app, built to the v3.7 designs — DEC-089).** The old "Dev Build v0 (now) vs target state (later)" split is retired: there is a single app built to the Figma "Target state – v3.7" designs (DEC-091); every design change is queued in `03_ENGINEERING/APP_DESIGN_CHANGES.md` and built incrementally. Open now: the Shot card redesign (DEC-088/090) and its states and Upload result. It runs on Cloud Run + Supabase (the Mac-over-Tailscale setup from the original dev build, DEC-045…053, is history — see the Dev Build v0 section below for that record). Back-end accuracy/robustness work continues in parallel.
 
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
+
+**Parallel track — On-device / offline-first (DEC-102/103/104, accepted 2026-10-28).** On branch `feat/on-device-analysis`: the app is moving to offline-first with on-device measurement where device capability is validated; the server stays the fallback + reference and remains authoritative for coaching, score, tiers and achievements. Built in **shadow** (device results logged beside server results, not shown/counted) until the ground-truth (DEC-034) + parity gates pass — DEC-062's production CV freeze is lifted for the shadow/validation track only. Spec: `03_ENGINEERING/ON_DEVICE_ANALYSIS_PROPOSAL.md` v0.3; plan: `HANDOFF_2026-10-28_ON_DEVICE_ANALYSIS.md`. This runs alongside the live server-authoritative app so both architectures can be compared (ops dashboard, split by `env`/`source`).
 
 ## Where things stand
 - **Analysis reliability RCA (2026-10-28, DEC-100): retention + client-failure logging BUILT on `fix/clip-retention-diagnostics`; deploy pending.** Uploaded Shot clips 0/6 ever succeeded; Form uploads return empty cards (DEC-095 gate drops the whole delivery); tonight's uploads were byte-identical re-runs of 10-27 failures. RCA + experiments: `02_RESEARCH/ANALYSIS_FAILURE_RCA_2026-10-28.md`. Needs: Cloud Run redeploy (no migration), iOS rebuild, and Shayne's original clips for E1–E3.

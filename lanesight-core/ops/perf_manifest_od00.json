@@ -1,0 +1,173 @@
+{
+  "clips": [
+    {
+      "clip": "IMG_8751.mov",
+      "expected": "analyzed",
+      "note": "validation ground truth (Ruby-matched)"
+    },
+    {
+      "clip": "IMG_8752.MOV",
+      "expected": "analyzed",
+      "note": "validation ground truth"
+    },
+    {
+      "clip": "IMG_8753.MOV",
+      "expected": "analyzed",
+      "note": "validation ground truth"
+    },
+    {
+      "clip": "IMG_8754.mov",
+      "expected": "analyzed",
+      "note": "validation ground truth"
+    },
+    {
+      "clip": "IMG_8831.MOV",
+      "expected": "failed",
+      "failure_code": "FOUL_LINE_NOT_IN_VIEW",
+      "note": "known 120fps framing failure (foul line off the bottom)"
+    },
+    {
+      "clip": "IMG_8929.MOV",
+      "expected": "failed",
+      "failure_code": "PIN_IMPACT_NOT_DETECTED",
+      "note": "2026-10-27 mounted down-lane POV, phone behind the ball return between lanes 9 and 10; bowls on lane 9. Trim now picks the ball-roll window (DEC-062r), but the ball track from this far/foreshortened view is too sparse to measure \u2014 currently fails honestly (PIN_IMPACT_NOT_DETECTED -> TRACK_TOO_SPARSE_FOR_SPEED). This is the acceptance clip for item 2 (lane selection + ball-tracking density).",
+      "ground_truth": {
+        "bowler_lane": 9,
+        "lane_center_x_px": 400,
+        "wrong_lane_x_px_range": [
+          636,
+          664
+        ],
+        "release_s": [
+          17.05,
+          17.12
+        ],
+        "ball_at_headpin_s": [
+          19.7,
+          19.76
+        ],
+        "speed_foul_to_pins_mph": 15.5,
+        "speed_tol_mph": 1.0,
+        "pins_down": 9,
+        "pins_standing": 1,
+        "strike": false,
+        "window_must_contain_s": [
+          16.5,
+          21.0
+        ],
+        "fps": 60,
+        "resolution": "1080x1920",
+        "dur_s": 34.2
+      },
+      "target": "lane 9; ball_speed within +/-1 mph of 15.5; 9 down / one standing; or unavailable with a reason (never a fabricated number)"
+    },
+    {
+      "clip": "IMG_8930.MOV",
+      "expected": "failed",
+      "failure_code": "BALL_TRACK_NOT_FOUND",
+      "note": "2026-10-27 low-approach spare on lane 10 (h264/SDR/120fps as dropped 2026-10-28). Degenerate low-angle geometry: now fails cleanly with a coded AnalysisFailure (no uncaught LinAlgError crash \u2014 DEC-093 guard). Ground truth: foul-to-leave ~16.8 mph, 4-7 leave.",
+      "ground_truth": {
+        "release_s": [
+          2.47,
+          2.5
+        ],
+        "touchdown_s": [
+          2.8,
+          2.84
+        ],
+        "ball_at_leave_s": [
+          4.95,
+          4.98
+        ],
+        "speed_foul_to_leave_mph": 16.8,
+        "leave": "4-7",
+        "strike": false
+      }
+    },
+    {
+      "clip": "IMG_8807.MOV",
+      "expected": "unknown",
+      "note": "2026-10-15 live session cohort"
+    },
+    {
+      "clip": "IMG_8808.MOV",
+      "expected": "unknown",
+      "note": "2026-10-15 live session cohort"
+    },
+    {
+      "clip": "IMG_8815.MOV",
+      "expected": "unknown",
+      "note": "2026-10-15 live session cohort (geometry outlier)"
+    },
+    {
+      "clip": "IMG_8817.MOV",
+      "expected": "unknown",
+      "note": "2026-10-15 live session cohort (centered multi-lane)"
+    },
+    {
+      "clip": "IMG_8819.MOV",
+      "expected": "unknown",
+      "note": "2026-10-15 live session cohort (geometry outlier)"
+    },
+    {
+      "clip": "IMG_8810.MOV",
+      "expected": "unknown",
+      "note": "extreme cross-lane framing"
+    },
+    {
+      "clip": "IMG_8845.MOV",
+      "expected": "unknown",
+      "note": "form clip (pose pipeline \u2014 run with the form analyzer, not analyze_clip)"
+    },
+    {
+      "clip": "IMG_8809.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8811.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8812.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8813.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8814.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8816.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8818.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8820.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8821.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    },
+    {
+      "clip": "IMG_8822.MOV",
+      "expected": null,
+      "note": "OD-00 latency baseline (outcome unlabeled)"
+    }
+  ]
+}

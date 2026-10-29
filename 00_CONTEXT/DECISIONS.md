@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.62  
-Last Updated: 2026-10-28  
+Version: 1.63  
+Last Updated: 2026-10-29  
 Owner: Shayne  
-Supersedes: v1.61
+Supersedes: v1.62
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1181,7 +1181,41 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 - **Deploy only from a line that holds every accepted server change.** Rev 00036 was deployed from `dev-build-v0` without DEC-099/DEC-100, which silently dropped clip retention. `integrate/dec-099-100-with-ops` is that line until it's merged into `dev-build-v0`.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** the `VideoTrimmer` motion-window end (capture spec step 2: "pads ~0.4 s on each side").
 
+### DEC-102 — Offline-first, hybrid measurement architecture
+**Decision (2026-10-28; from `ON_DEVICE_ANALYSIS_PROPOSAL.md` v0.3 §12 DEC-A):**
+- LaneSight adopts an **offline-first** app architecture: losing the connection never blocks the rest of the app.
+- It targets **on-device Shot and Form measurement** where validated device capability permits. The cloud engine stays as the **fallback** (older/unsupported phones) and the **reference** engine for validation and reprocessing.
+- **Coaching intelligence stays server-authoritative and needs a connection:** next-shot moves, insights, form findings and drills, the LaneSight Score, tiers and achievements.
+- **Measurement-validity checks may run on the device; owner-only coaching policy stays on the server** (DEC-046 intact; boundary per proposal §6.3 — e.g. owner-editable form timing windows stay server-side, the device reports raw timings).
+- The app picks its mode from **measured device capability**, not the model name. An older phone never produces lower-quality or estimated metrics just to keep the offline promise.
+- Keeps DEC-055 (uploads never count), DEC-068/080 (blocking Analyzing screen then shot details), and all honesty/accuracy rules.
+**Why:** independence from connectivity (value even at 20–30 s), potential speed (only if measured), and near-zero per-shot server compute (DEC-043). Competitive context: Bowlin ships on-device analysis; LaneSight's moat is trusted, validated measurement + coaching, not the raw metric.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** amends DEC-029 and DEC-033 (server-side-only analysis) and the **long-term scope** of DEC-092. DEC-092's near-term order and its "metric math stays on the server" rule **stay in force until the DEC-103 gates pass**; on-device metric math is the target architecture, not yet an active path. DEC-062 (production CV freeze) is lifted for this work's **shadow/validation** track; production CV behavior is unchanged until the gates pass.
+
+### DEC-103 — Measurement provenance, validation and sync
+**Decision (2026-10-28; proposal §12 DEC-B):**
+- Every measurement carries **engine provenance** (`engine.platform` = `ios` | `server`, `engine.version`, `engine.build`), versioned **`MeasurementEvidence`** (observations layer; observed vs predicted kept separate), and status/uncertainty/calibration info.
+- **Two separate gates** before device results become authoritative: (1) **ground truth** — the device engine meets the applicable DEC-034 accuracy gates vs Ruby/Specto; (2) **parity** — device vs server stay within metric-specific tolerances, with status/unavailable disagreements reviewed and reason codes semantically equivalent. Both must pass.
+- **Offline records sync idempotently** (client UUID + idempotency key, account-scoped, retry with backoff, survive force-quit, no duplicates). Sessions/measurements are immutable or revisioned; arsenal is revisioned (DEC-007/044); last-write-wins only for simple profile fields.
+- **The server validates every device submission** (auth, ownership, schema, plausibility, accepted engine version) before it feeds Stats or the Score. A client-reported engine id is for tracing, not proof.
+- An **engine-version compatibility policy** governs supported versions, deprecated metrics, recalculation where evidence/clips were retained, and quarantine of outdated/rejected engines so stats never quietly mix incompatible measurements.
+**Why:** device-submitted results can't be blindly trusted (risk #5); mixed engine versions would corrupt long-term stats (risk #7); honesty requires measurement validity be separable from coaching policy.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** extends DEC-086 (`analysis_attempt`: device attempts sync with `env`/`source` marking the device), DEC-092 P3 (the "timestamped observation interface" **is** `MeasurementEvidence`, combined with DEC-094 §5's uncertainty contract — one interface, not a second), DEC-093/094 gates (reused on the device), DEC-095 (form event gates), DEC-065 (calibration provenance). No AGPL models (DEC-094 §6) on device or server.
+
+### DEC-104 — Video transmission, contribution and retention
+**Decision (2026-10-28; proposal §12 DEC-C):**
+- Video is **not required** for measurement on a supported device.
+- **Server-fallback** analysis may need an upload; the upload is **disclosed before processing**.
+- **Server retention is set by LaneSight** and will be plan-based (DEC-099/DEC-100: clips retained in the private `shot-clips` bucket for a diagnostic window, default 7 days, then purged). The bowler controls **only** "Save recordings to my phone".
+- Using retained clips for **validation and model improvement** is a **separately disclosed consent** in the Privacy Policy — never silent. Default and opt-in/opt-out wording need a **legal/privacy review before Beta**.
+- Deletion schedules are defined with the retention policy.
+**Why:** on-device measurement removes the need to ship video for supported phones; validation data must not be collected silently; retention is a LaneSight/plan decision, not a per-user toggle.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** builds on DEC-099/DEC-100 (now implemented: 7-day clip retention + `clip.storage_path`, verified live on rev `lanesight-api-00037-r6s`). Clarifies DEC-055 (uploads standalone) for the server-fallback path.
+
 ## Superseded decisions
+- DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
+- DEC-092 — near-term optimize-server-first order and "metric math stays on the server" **stand**; only the **long-term scope** is amended by DEC-102 (on-device metric math becomes the target once the DEC-103 gates pass). DEC-092 P3's observation interface is realized as `MeasurementEvidence` (DEC-103).
+- DEC-062 — production CV freeze **lifted for the shadow/validation track only** (DEC-102); production CV behavior stays frozen until the DEC-103 gates pass.
 - DEC-096 — "leaving the Lab tab doesn't end the session" superseded in part by DEC-099 (the tab bar is hidden on the Active Session; End session is the way out).
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
