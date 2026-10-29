@@ -28,13 +28,15 @@ fi
 PREV="$SERVING"
 echo "== current (serving) revision: $PREV =="
 
-# Build EXPLICITLY with --no-cache (2026-10-29): `gcloud run deploy --source` reused stale cached images more
-# than once (the 00050 reuse; a dep pin that resolved to the wrong opencv). Build the image ourselves, tagged by
-# the git commit, so the deployed artifact provably matches the source; then deploy that exact image by digest.
+# Build EXPLICITLY, tagged by the git commit (2026-10-29): `gcloud run deploy --source` reused stale cached
+# images more than once (the 00050 reuse; a dep pin that resolved to the wrong opencv). The default Cloud Build
+# docker builder (Kaniko off) builds FRESH from the source tar every time — no layer cache — so a per-commit
+# tag + the digest verify below provably tie the deployed artifact to this commit. (--no-cache is a Kaniko-only
+# flag and is unnecessary here.)
 REPO="us-east1-docker.pkg.dev/project-fd28bc3f-a844-43c2-a1c/cloud-run-source-deploy/$SERVICE"
 SHA=$(git rev-parse --short HEAD)
-echo "== building $REPO:$SHA --no-cache =="
-gcloud builds submit --no-cache --tag "$REPO:$SHA" --quiet .
+echo "== building $REPO:$SHA (fresh, non-kaniko) =="
+gcloud builds submit --tag "$REPO:$SHA" --quiet .
 DIGEST=$(gcloud artifacts docker images describe "$REPO:$SHA" --format="value(image_summary.digest)" 2>/dev/null)
 echo "== built digest: $DIGEST =="
 
