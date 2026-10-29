@@ -623,6 +623,14 @@ struct APIClient {
         _ = try await send(req, as: [String: Bool].self)
     }
 
+    /// DEC-106: submit a native on-device "shadow" result (platform='ios'). Never affects the user's result.
+    func postShadow(_ json: Data) async throws {
+        var req = makeRequest("analysis/shadow", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = json
+        _ = try await send(req, as: ShadowAck.self)
+    }
+
     /// Makes `id` the one current ball (server unsets the others). PATCH is_current:true.
     @discardableResult
     func setCurrentBall(id: String) async throws -> ArsenalBall {

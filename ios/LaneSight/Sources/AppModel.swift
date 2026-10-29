@@ -569,6 +569,29 @@ final class AppModel: ObservableObject {
     /// DEC-096: collapse the live capture/analyze/result cover back to the Active Session.
     func exitToSession() { inLiveCapture = false; resetPipeline() }
 
+    /// DEC-106: fire-and-forget native on-device shadow analysis of the just-analysed clip. Copies the clip
+    /// (the upload temp is deleted when the pipeline finishes), runs the engine OFF the main actor, then POSTs
+    /// the result as platform='ios'. Ball shots only; every failure is swallowed — it must never affect the
+    /// user's result, Score or UI.
+    private func launchShadow(clipURL: URL, shotId: String, source: String, sessionId: String?) {
+        guard capturedMode != "form" else { return }           // on-device engine is ball-only
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shadow-\(shotId).mov")
+        try? FileManager.default.removeItem(at: copy)
+        guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let mode = capturedMode
+        Task.detached(priority: .utility) {
+            defer { try? FileManager.default.removeItem(at: copy) }
+            let payload = await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                                   sessionId: sessionId, captureMode: mode, appVersion: appVersion)
+            guard let json = try? JSONSerialization.data(withJSONObject: payload) else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                Task { try? await self.client.postShadow(json) }   // POST on the main actor, like the failure hook
+            }
+        }
+    }
+
     private func runPipeline(fileURL: URL, source: String) async {
         // Keep the upload + analyze request running if the user switches apps mid-analysis (iOS otherwise
         // suspends the app in a few seconds and the request dies). This buys the background-execution window;
@@ -669,6 +692,11 @@ final class AppModel: ObservableObject {
                 sessionId: (source == "upload" ? nil : sid),
                 metadata: metadata,
                 clientTimings: ct)
+
+            // DEC-106 shadow: run the native on-device engine on the same clip in the background and record it
+            // (platform='ios') for engine comparison. Never shown to the user, never scored. Ball shots only.
+            launchShadow(clipURL: uploadURL, shotId: created.shot_id, source: source,
+                         sessionId: (source == "upload" ? nil : sid))
 
             // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
             let last = try await client.job(created.job_id)

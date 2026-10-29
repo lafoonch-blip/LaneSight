@@ -49,6 +49,10 @@ struct FocusResponse: Codable, Equatable {
     let based_on: Int?
 }
 
+struct ShadowAck: Decodable {   // DEC-106 POST /analysis/shadow response (extra keys ignored)
+    let logged: Bool
+}
+
 struct JobResponse: Codable {
     let id: String
     let kind: String?
