@@ -257,10 +257,9 @@ final class AppModel: ObservableObject {
     // Consent-aware, masked product events. The server pseudonymises (user_ref) and dedups on
     // client_event_id, so a resend after an offline gap never double-counts. Fire-and-forget — analytics
     // must never block or fail a user action. Emit sites (call model.track(...)):
-    //   • "app_opened"         — at launch / scene active
-    //   • "session_started"    — when a practice/live session is created
-    //   • "first_shot_analyzed"— on the first successful shot result in a session
-    // (Those three one-line call sites are the remaining wiring; add them with an Xcode build in the loop.)
+    //   • "app_opened"         — once per launch (trackAppOpenedOnce, from the app root's launch task)
+    //   • "session_started"    — when a practice/live session is created (startLiveSession + lazy live create)
+    //   • "first_shot_analyzed"— on the first successful live shot result in a session (runPipeline)
     private var eventQueue: [[String: Any]] = []
 
     func track(_ name: String, props: [String: Any]? = nil, feature: String? = nil, flowStep: String? = nil) {
@@ -280,6 +279,15 @@ final class AppModel: ObservableObject {
         let batch = eventQueue
         eventQueue = []
         Task { await client.postEvents(batch) }   // idempotent server-side; dropped on failure, resent next track
+    }
+
+    /// Fire "app_opened" once per process launch — not on every foreground resume (scenePhase .active can
+    /// fire many times a session). Called from the app root's launch task.
+    private var didTrackAppOpen = false
+    func trackAppOpenedOnce() {
+        guard !didTrackAppOpen else { return }
+        didTrackAppOpen = true
+        track("app_opened")
     }
 
     /// Reload the profile photo (GET /me/avatar) into `avatarImage`. No-ops quietly if the client can't be
@@ -537,6 +545,7 @@ final class AppModel: ObservableObject {
                     let created = try await client.createSession(mode: "practice").id
                     sessionId = created
                     sid = created
+                    track("session_started")   // §2 (DEC-098 M3): session auto-created on first live shot
                 }
             } else {
                 sid = nil
@@ -653,6 +662,8 @@ final class AppModel: ObservableObject {
             else { Self.attachShotCard(&built, record) }
             result = built
             shotCount += 1
+            // §2 (DEC-098 M3): first successful live shot in this session (uploads are standalone, no session).
+            if source == "live", shotCount == 1 { track("first_shot_analyzed") }
             pipeline = .done
             showResult = true
             clearPendingAnalysis()      // delivered in-app; nothing to recover
@@ -848,6 +859,7 @@ final class AppModel: ObservableObject {
         let client = try makeClient()
         let session = try await client.createSessionFull(mode: "practice", lanePair: lane, oilPatternId: oilPatternId)
         sessionId = session.id
+        track("session_started")      // §2 (DEC-098 M3): explicit start from Setup
         shotCount = 0
         endSummary = nil
         captureMode = mode

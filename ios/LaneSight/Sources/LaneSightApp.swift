@@ -41,6 +41,8 @@ struct LaneSightApp: App {
                 }
             }
             .environmentObject(model)
+            // §2 analytics (DEC-098 M3): one "app_opened" per launch (real app only, never previews).
+            .task { if !isPreview { model.trackAppOpenedOnce() } }
             .tint(LS.action)
             .lsAppFont()
             .preferredColorScheme(.dark)
