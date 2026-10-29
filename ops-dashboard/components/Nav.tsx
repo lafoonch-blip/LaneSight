@@ -7,6 +7,10 @@ const LINKS = [
   { href: "/reliability", label: "Reliability" },
   { href: "/cv-trust", label: "CV Trust" },
   { href: "/latency", label: "Latency" },
+  { href: "/api-perf", label: "API" },
+  { href: "/cost", label: "Cost" },
+  { href: "/events", label: "Journey" },
+  { href: "/storage", label: "Storage" },
   { href: "/releases", label: "Releases" },
   { href: "/feedback", label: "Feedback" },
 ];

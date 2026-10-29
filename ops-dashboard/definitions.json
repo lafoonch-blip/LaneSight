@@ -110,6 +110,10 @@
     {"id": "reliability", "title": "Analysis reliability", "views": ["analysis_daily", "failure_breakdown"]},
     {"id": "cv_trust", "title": "Video & CV trust", "views": ["cv_coverage"]},
     {"id": "latency", "title": "Latency by stage", "views": ["latency_stages"]},
+    {"id": "api_perf", "title": "App / API performance", "views": ["api_daily"]},
+    {"id": "cost", "title": "Financial operations", "views": ["cost_daily"]},
+    {"id": "events", "title": "Customer journey", "views": ["funnel", "event_daily"]},
+    {"id": "storage", "title": "Storage & DB", "views": ["storage_latest"]},
     {"id": "releases", "title": "Release & regression", "views": ["release_health"]},
     {"id": "feedback", "title": "Feedback & support", "views": ["feedback_summary"]}
   ]

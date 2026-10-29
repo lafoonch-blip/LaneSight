@@ -43,6 +43,24 @@ export interface FeedbackRow {
 export interface UsageRow { day: string; shots: number; active_users_shots: number; sessions_started: number; }
 export interface FreshnessRow { source: string; last_ingested: string | null; rows: number; }
 export interface CoverageRow { domain: string; status: string; data_source: string; backing_view: string | null; }
+// §2 instrumentation views (DEC-098, migration 027). USD/rate columns are NULL until rates/data exist — the
+// table renders those as the NO DATA dash, never a fabricated number.
+export interface CostDailyRow {
+  day: string; env: string; attempts: number;
+  vcpu_s: number | null; gib_s: number | null; egress_mb: number | null;
+  est_usd: number | null; est_usd_per_success: number | null;
+}
+export interface ApiDailyRow {
+  day: string; env: string; status_class: number; requests: number;
+  errors_5xx: number; errors_4xx: number; error_rate_5xx: number | null;
+  p50_ms: number | null; p95_ms: number | null;
+}
+export interface EventDailyRow { day: string; env: string; event_name: string; events: number; users: number; }
+export interface FunnelRow { env: string; opened: number; started_session: number; first_shot: number; }
+export interface StorageLatestRow {
+  bucket: string; bytes: number | null; objects: number | null; aged_objects: number | null;
+  db_bytes: number | null; captured_at: string | null;
+}
 
 function sinceDate(days: number): string {
   const d = new Date();
@@ -85,6 +103,17 @@ export const getUsage = (s: Scope) =>
   callRpc<UsageRow>("ops_rpc_usage_daily", { p_since: sinceDate(s.days) }, "day");
 export const getFreshness = () => callRpc<FreshnessRow>("ops_rpc_freshness", {}, "source");
 export const getCoverage = () => callRpc<CoverageRow>("ops_rpc_coverage_status", {}, "domain");
+// §2 (DEC-098) — same owner-checked RPC path. funnel takes envs only; storage takes no args.
+export const getCostDaily = (s: Scope) =>
+  callRpc<CostDailyRow>("ops_rpc_cost_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getApiDaily = (s: Scope) =>
+  callRpc<ApiDailyRow>("ops_rpc_api_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getEventDaily = (s: Scope) =>
+  callRpc<EventDailyRow>("ops_rpc_event_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+export const getFunnel = (s: Scope) =>
+  callRpc<FunnelRow>("ops_rpc_funnel", { p_envs: s.envs }, "env");
+export const getStorageLatest = () =>
+  callRpc<StorageLatestRow>("ops_rpc_storage_latest", {}, "bucket");
 
 // Sum a numeric column across rows; null (NO DATA) when there are no rows, never 0-as-fake.
 export function sumCol<T>(rows: T[], col: keyof T): number | null {
