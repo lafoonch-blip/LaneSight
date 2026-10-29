@@ -5,6 +5,8 @@ service must enforce ownership itself).
 """
 from __future__ import annotations
 import csv
+import hashlib
+import hmac
 import io
 import os
 import time
@@ -33,6 +35,18 @@ def _epoch_session(row):
 
 def _new_id():
     return uuid.uuid4().hex
+
+
+# DEC-098 §2 (M4): pseudonymous user id. A server-held salt turns the raw auth user_id into a stable
+# opaque ref the ops layer and exports key on, so the raw id never leaves the owner boundary. The fixed
+# dev fallback keeps MemoryStore/tests deterministic; live sets LANESIGHT_USER_REF_SALT.
+_USER_REF_SALT = os.environ.get('LANESIGHT_USER_REF_SALT') or 'lanesight-dev-user-ref-salt'
+
+
+def _user_ref(user_id):
+    if not user_id:
+        return None
+    return hmac.new(_USER_REF_SALT.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
 
 
 # Home Recent activity scope (DEC-055): only completed practice sessions, achievement unlocks, and
@@ -363,12 +377,61 @@ class MemoryStore:
             sh['analyzed_at'] = time.time()
 
     def log_analysis_attempt(self, row):
-        """DEC-086: append one analysis-attempt row (success or failure). Retained, never FK-cascaded."""
+        """DEC-086: append one analysis-attempt row (success or failure). Retained, never FK-cascaded.
+        DEC-098 §2: fills user_ref (pseudonym) from user_id when the caller didn't."""
         if not hasattr(self, 'analysis_attempts'):
             self.analysis_attempts = []
         r = dict(row); r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+        if r.get('user_ref') is None and r.get('user_id'):
+            r['user_ref'] = _user_ref(r.get('user_id'))
         self.analysis_attempts.append(r)
         return r
+
+    # ----------------------------------------------------------------- §2 instrumentation (DEC-098)
+    def log_api_request(self, row):
+        """DEC-098 §2 (M2): record one API request. Best-effort; pseudonymises user_id -> user_ref and never
+        stores the raw id, bodies or tokens (the caller already excludes those)."""
+        if not hasattr(self, 'api_requests'):
+            self.api_requests = []
+        r = dict(row)
+        if r.get('user_id') is not None:
+            r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+        r.pop('user_id', None)
+        r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+        self.api_requests.append(r)
+        return r
+
+    def log_events(self, rows):
+        """DEC-098 §2 (M3): ingest product events, idempotent on client_event_id (a retried batch never
+        double-counts). Pseudonymises user_id. Returns the number of NEW rows inserted."""
+        if not hasattr(self, 'product_events'):
+            self.product_events = []
+        seen = {e.get('client_event_id') for e in self.product_events if e.get('client_event_id')}
+        inserted = 0
+        for row in (rows or []):
+            cid = row.get('client_event_id')
+            if cid and cid in seen:
+                continue
+            r = dict(row)
+            if r.get('user_id') is not None:
+                r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+            r.pop('user_id', None)
+            r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+            self.product_events.append(r)
+            if cid:
+                seen.add(cid)
+            inserted += 1
+        return inserted
+
+    def record_storage_snapshot(self, rows):
+        """DEC-098 §2 (M5): record storage/DB size snapshot rows (written by ops/storage_snapshot.py)."""
+        if not hasattr(self, 'storage_snapshots'):
+            self.storage_snapshots = []
+        out = []
+        for row in (rows or []):
+            r = dict(row); r.setdefault('id', _new_id()); r.setdefault('captured_at', time.time())
+            self.storage_snapshots.append(r); out.append(r)
+        return out
 
     def get_shot(self, user_id, shot_id):
         sh = self.shots.get(shot_id)
@@ -1018,11 +1081,46 @@ class PgStore(MemoryStore):
 
     def log_analysis_attempt(self, row):
         """DEC-086: one row per analysis attempt (success + failure) in the retained analysis_attempt table.
-        Best-effort — the caller swallows errors so logging can never fail an analysis."""
+        Best-effort — the caller swallows errors so logging can never fail an analysis.
+        DEC-098 §2: fills user_ref (pseudonym) and carries the cost jsonb the API computed."""
         body = {k: v for k, v in (row or {}).items() if v is not None}
         body.setdefault('id', _new_id())
+        if body.get('user_ref') is None and body.get('user_id'):
+            body['user_ref'] = _user_ref(body.get('user_id'))
         self._req('analysis_attempt', 'POST', body, prefer='return=minimal')
         return body
+
+    def log_api_request(self, row):
+        """DEC-098 §2 (M2): POST one api_request row (pseudonymised, no raw user_id/bodies/tokens)."""
+        r = {k: v for k, v in (row or {}).items() if v is not None}
+        if r.get('user_id'):
+            r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+        r.pop('user_id', None)
+        r.setdefault('id', _new_id())
+        self._req('api_request', 'POST', r, prefer='return=minimal')
+        return r
+
+    def log_events(self, rows):
+        """DEC-098 §2 (M3): POST product_event rows, idempotent on client_event_id (ignore-duplicates)."""
+        batch = []
+        for row in (rows or []):
+            r = {k: v for k, v in (row or {}).items() if v is not None}
+            if r.get('user_id'):
+                r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+            r.pop('user_id', None)
+            r.setdefault('id', _new_id())
+            batch.append(r)
+        if batch:
+            self._req('product_event', 'POST', batch, prefer='resolution=ignore-duplicates,return=minimal')
+        return len(batch)
+
+    def record_storage_snapshot(self, rows):
+        """DEC-098 §2 (M5): POST storage_snapshot rows."""
+        batch = [{**{k: v for k, v in r.items() if v is not None}, 'id': r.get('id') or _new_id()}
+                 for r in (rows or [])]
+        if batch:
+            self._req('storage_snapshot', 'POST', batch, prefer='return=minimal')
+        return batch
 
     # --- reads / profile / sensors / catalog (PostgREST) ---
     def _get(self, table, query=''):

@@ -262,6 +262,35 @@ final class AppModel: ObservableObject {
 
     private func authClient() throws -> AuthClient { try AuthClient(baseURLString: apiBaseURL) }
 
+    // MARK: §2 product analytics (DEC-098 M3)
+    // Consent-aware, masked product events. The server pseudonymises (user_ref) and dedups on
+    // client_event_id, so a resend after an offline gap never double-counts. Fire-and-forget — analytics
+    // must never block or fail a user action. Emit sites (call model.track(...)):
+    //   • "app_opened"         — at launch / scene active
+    //   • "session_started"    — when a practice/live session is created
+    //   • "first_shot_analyzed"— on the first successful shot result in a session
+    // (Those three one-line call sites are the remaining wiring; add them with an Xcode build in the loop.)
+    private var eventQueue: [[String: Any]] = []
+
+    func track(_ name: String, props: [String: Any]? = nil, feature: String? = nil, flowStep: String? = nil) {
+        var e: [String: Any] = ["event_name": name,
+                                "client_event_id": UUID().uuidString,
+                                "occurred_at": ISO8601DateFormatter().string(from: Date())]
+        if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String { e["app_version"] = v }
+        if let feature { e["feature"] = feature }
+        if let flowStep { e["flow_step"] = flowStep }
+        if let props { e["props"] = props }
+        eventQueue.append(e)
+        flushEvents()
+    }
+
+    private func flushEvents() {
+        guard !eventQueue.isEmpty, let client = try? makeClient() else { return }
+        let batch = eventQueue
+        eventQueue = []
+        Task { await client.postEvents(batch) }   // idempotent server-side; dropped on failure, resent next track
+    }
+
     /// Reload the profile photo (GET /me/avatar) into `avatarImage`. No-ops quietly if the client can't be
     /// built or the request fails; clears the image on a 404 / empty response.
     func refreshAvatar() async {

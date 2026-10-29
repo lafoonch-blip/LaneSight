@@ -236,6 +236,17 @@ struct APIClient {
         try await send(makeRequest("sessions/\(sid)/end", method: "POST"), as: EndSessionResponse.self)
     }
 
+    /// DEC-098 §2 (M3): best-effort product-event ingest (POST /events). Fire-and-forget — never throws to
+    /// the caller; analytics must not affect a user action. The server validates names, pseudonymises the
+    /// user, and dedups on client_event_id.
+    func postEvents(_ events: [[String: Any]]) async {
+        guard !events.isEmpty else { return }
+        var req = makeRequest("events", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["events": events])
+        _ = try? await sendRaw(req)
+    }
+
     /// Per-shot rows for the live Session screen (GET /sessions/{id}/shots).
     func sessionShots(_ sid: String) async throws -> [SessionShotRow] {
         try await send(makeRequest("sessions/\(sid)/shots"), as: [SessionShotRow].self)
