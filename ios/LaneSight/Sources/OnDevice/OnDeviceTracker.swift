@@ -91,25 +91,27 @@ enum OnDeviceTracker {
                                   maxBgFrames: Int = 12) -> BallTrack {
         let t0 = CFAbsoluteTimeGetCurrent()
         guard let lane = geo.lanes.first, let vp = geo.vanishingPoint,
-              let (w, h, ts, bg) = buildBackground(url: url, maxFrames: maxBgFrames) else {
+              let (sw, sh, stride, ts, bg) = buildBackground(url: url, maxFrames: maxBgFrames) else {
             return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
         }
-        // Pass 2: per-frame foreground → blobs → diameter-gated candidates.
+        // Pass 2: per-frame foreground → blobs (at working res) → scale up → diameter-gated candidates (full-res geo).
         var perFrame: [[Cand]] = []
         var scanned = 0
-        forEachLuma(url: url, w: w, h: h) { i, luma in
+        let s = Float(stride)
+        forEachLuma(url: url, stride: stride, sw: sw, sh: sh) { i, luma in
             scanned += 1
-            let blobs = foregroundBlobs(luma: luma, bg: bg, w: w, h: h, thr: diffThr)
+            let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: diffThr)
             var cs: [Cand] = []
             for b in blobs {
-                let ct = contactRow(lane, top: Float(b.y))
+                let bx = Float(b.x) * s, by = Float(b.y) * s, bw = Float(b.w) * s, bh = Float(b.h) * s, ba = Float(b.area) * s * s
+                let ct = contactRow(lane, top: by)
                 let D = expDiam(lane, ct)
                 if D < 8 { continue }
-                let ratio = Float(b.w) / D
-                if ratio > 0.7 && ratio < 1.35 && Float(b.h) < 3.2 * D && Float(b.area) > 0.25 * D * D {
+                let ratio = bw / D
+                if ratio > 0.7 && ratio < 1.35 && bh < 3.2 * D && ba > 0.25 * D * D {
                     let (xa, xb) = laneX(lane, ct)
-                    let cx = Float(b.x) + Float(b.w) / 2
-                    cs.append(Cand(i: i, t: ts[min(i, ts.count - 1)], cx: cx, ct: ct, frac: (cx - xa) / (xb - xa)))
+                    let cx = bx + bw / 2
+                    cs.append(Cand(i: i, t: i < ts.count ? ts[i] : (ts.last ?? 0), cx: cx, ct: ct, frac: (cx - xa) / (xb - xa)))
                 }
             }
             perFrame.append(cs)
@@ -124,66 +126,68 @@ enum OnDeviceTracker {
     private struct Blob { let x: Int; let y: Int; let w: Int; let h: Int; let area: Int }
     private struct Cand { let i: Int; let t: Double; let cx: Float; let ct: Float; let frac: Float }
 
-    nonisolated private static func buildBackground(url: URL, maxFrames: Int) -> (Int, Int, [Double], [UInt8])? {
-        // First decode: collect luma for all frames' timestamps + sample up to maxFrames evenly for the median.
+    /// ONE decode pass: collect all timestamps + reservoir-sample up to maxFrames DOWNSCALED luma frames for the
+    /// median background. Never holds all frames (that OOM-killed the app). Downscales to ~540p working height
+    /// (stride) → ~stride² less memory + faster; blob coords are scaled back to full-res in track().
+    nonisolated private static func buildBackground(url: URL, maxFrames: Int) -> (Int, Int, Int, [Double], [UInt8])? {
         guard let track = AVURLAsset(url: url).tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: AVURLAsset(url: url)) else { return nil }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false
         reader.add(out); reader.startReading()
-        var ts: [Double] = []; var samples: [[UInt8]] = []; var w = 0, h = 0
-        var all: [[UInt8]] = []
+        var ts: [Double] = []; var samples: [[UInt8]] = []
+        var sw = 0, sh = 0, stride = 1, i = 0
+        var rng: UInt64 = 0x2545F4914F6CDD1D
+        func rnd(_ n: Int) -> Int { rng = rng &* 6364136223846793005 &+ 1442695040888963407; return Int((rng >> 33) % UInt64(max(1, n))) }
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
             ts.append(CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))
-            let l = luma(px, w: &w, h: &h)
-            all.append(l)
+            if sw == 0 {
+                let fw = CVPixelBufferGetWidth(px), fh = CVPixelBufferGetHeight(px)
+                stride = max(1, fh / 540); sw = fw / stride; sh = fh / stride
+            }
+            if samples.count < maxFrames { samples.append(downsampledLuma(px, stride: stride, sw: sw, sh: sh)) }
+            else { let j = rnd(i + 1); if j < maxFrames { samples[j] = downsampledLuma(px, stride: stride, sw: sw, sh: sh) } }
+            i += 1
         }
-        guard !all.isEmpty, w > 0, h > 0 else { return nil }
-        let step = max(1, all.count / maxFrames)
-        var idx = 0
-        while idx < all.count && samples.count < maxFrames { samples.append(all[idx]); idx += step }
-        // per-pixel median across the sampled frames
-        var bg = [UInt8](repeating: 0, count: w * h)
+        guard !samples.isEmpty, sw > 0, sh > 0 else { return nil }
+        var bg = [UInt8](repeating: 0, count: sw * sh)
         let n = samples.count
         var col = [UInt8](repeating: 0, count: n)
-        for p in 0..<(w * h) {
+        for p in 0..<(sw * sh) {
             for k in 0..<n { col[k] = samples[k][p] }
-            col.sort()
-            bg[p] = col[n / 2]
+            col.sort(); bg[p] = col[n / 2]
         }
-        return (w, h, ts, bg)
+        return (sw, sh, stride, ts, bg)
     }
 
-    nonisolated private static func forEachLuma(url: URL, w: Int, h: Int, _ body: (Int, [UInt8]) -> Void) {
+    nonisolated private static func forEachLuma(url: URL, stride: Int, sw: Int, sh: Int, _ body: (Int, [UInt8]) -> Void) {
         guard let track = AVURLAsset(url: url).tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: AVURLAsset(url: url)) else { return }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false
         reader.add(out); reader.startReading()
-        var i = 0; var ww = 0, hh = 0
+        var i = 0
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
-            let l = luma(px, w: &ww, h: &hh)
-            if ww == w && hh == h { body(i, l) }
+            body(i, downsampledLuma(px, stride: stride, sw: sw, sh: sh))
             i += 1
         }
     }
 
-    /// Max-channel "luma" (matches the server's max-across-channels diff basis), one UInt8 per pixel.
-    nonisolated private static func luma(_ px: CVPixelBuffer, w: inout Int, h: inout Int) -> [UInt8] {
+    /// Downscaled max-channel "luma" (server's max-across-channels diff basis), one UInt8 per working pixel.
+    nonisolated private static func downsampledLuma(_ px: CVPixelBuffer, stride: Int, sw: Int, sh: Int) -> [UInt8] {
         CVPixelBufferLockBaseAddress(px, .readOnly); defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
-        w = CVPixelBufferGetWidth(px); h = CVPixelBufferGetHeight(px)
         let rb = CVPixelBufferGetBytesPerRow(px)
-        var l = [UInt8](repeating: 0, count: w * h)
+        var l = [UInt8](repeating: 0, count: sw * sh)
         guard let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return l }
-        for y in 0..<h {
-            let row = y * rb
-            for x in 0..<w {
-                let p = row + x * 4
-                l[y * w + x] = max(base[p], base[p + 1], base[p + 2])
+        for y in 0..<sh {
+            let row = (y * stride) * rb
+            for x in 0..<sw {
+                let p = row + (x * stride) * 4
+                l[y * sw + x] = max(base[p], base[p + 1], base[p + 2])
             }
         }
         return l
