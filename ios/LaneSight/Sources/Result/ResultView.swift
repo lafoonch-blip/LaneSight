@@ -600,8 +600,14 @@ struct ShotCardView: View {
         // Ball speed (headline dynamic).
         if let m = metricDict["ball_speed"] {
             used.insert("ball_speed")
-            rows.append(.init(id: "ball_speed", name: "Ball speed", sublabel: m.note,
+            rows.append(.init(id: "ball_speed", name: "Release speed", sublabel: m.note ?? "front ~4–24 ft",
                               value: fmtVal(m, suffix: "mph"), status: status("ball_speed")))
+        }
+        // 60 ft foul→pins average, secondary (only when the ball was tracked to the pins).
+        if let m = metricDict["speed_avg_60ft"], m.value != nil {
+            used.insert("speed_avg_60ft")
+            rows.append(.init(id: "speed_avg_60ft", name: "60 ft average", sublabel: "foul → pins",
+                              value: fmtVal(m, suffix: "mph"), status: status("speed_avg_60ft")))
         }
         // Positional boards carry their set target as the sublabel.
         if let m = metricDict["arrows_board"] {

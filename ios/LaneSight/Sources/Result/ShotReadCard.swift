@@ -33,7 +33,9 @@ struct ShotReadCard: View {
         return VStack(alignment: .leading, spacing: 10) {
             sectionHeader("YOUR THROW", badge: result.coachThrow?.verdict, color: throwColor)
             HStack(alignment: .top, spacing: 6) {
-                ring("Speed", r?["speed"]?.value, unit: "mph", sub: r?["speed"]?.vs, lo: 8, hi: 24, color: throwColor)
+                // Headline speed is now the EARLY-LANE / release speed (front ~4-24 ft), not the 60 ft average
+                // (2026-10-29) — big sharp ball, always available, doesn't need the pin impact.
+                ring("Release speed", r?["speed"]?.value, unit: "mph", sub: r?["speed"]?.vs, lo: 8, hi: 24, color: throwColor)
                 ring("Rev rate", r?["rev"]?.value, unit: "rpm", sub: r?["rev"]?.vs, lo: 100, hi: 600, color: throwColor)
                 accuracyRing(r?["accuracy"])
             }
