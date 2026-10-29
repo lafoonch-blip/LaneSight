@@ -39,6 +39,16 @@ struct DevPanelView: View {
                 Text("GET /health and /auth/* carry no auth. Every other request sends a real Bearer token unless the dev-user toggle below is on.")
             }
 
+            // OD-01 (DEC-102/103): on-device capability benchmark — the gating evidence for moving measurement
+            // on-device. Isolated, dev-only; no production CV.
+            Section {
+                NavigationLink { DeviceBenchmarkView() } label: {
+                    Label("Device benchmark (OD-01)", systemImage: "gauge.with.dots.needle.67percent")
+                }
+            } footer: {
+                Text("Measures decode + native per-frame processing throughput, memory and thermals on this iPhone. Compare to the server baseline.")
+            }
+
             // Fail visibly: if the service can't reach the database, the app is not actually working.
             if supabaseDown {
                 Section {
