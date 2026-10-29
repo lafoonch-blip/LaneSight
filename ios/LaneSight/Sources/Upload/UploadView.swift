@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// Shot card. One shot per clip. All results are live from the pipeline; nothing is simulated.
 struct UploadView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
     /// DEC-099: the analysis type is chosen BEFORE this screen (Lab › Shot/Form Analysis › Upload video), so
     /// Upload never asks "Shot or Form" again. "shot" | "form".
     let mode: String
@@ -135,7 +136,11 @@ struct UploadView: View {
     private func analyze() async {
         guard let url = pickedURL else { return }
         errorText = nil
-        // processUpload raises the root analyzing cover; the result/failure are shown there, not inline.
+        // Pop this pushed screen FIRST so the root analyzing cover can present: a .fullScreenCover attached
+        // above the NavigationStack won't reliably appear while this navigationDestination is still active
+        // (the DEC-096 routing regression — the user saw only an inline busy state, no cover). After the pop
+        // the cover owns the whole screen from the root (DEC-086: never orphaned), and shows result/failure.
+        dismiss()
         await model.processUpload(fileURL: url)
     }
 }
