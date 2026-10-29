@@ -1,7 +1,7 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.3
+Version: 1.4
 Last Updated: 2026-10-29
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
@@ -75,9 +75,24 @@ Each metric: **source view.column** — definition — honesty rule.
 ### Freshness (`ops.freshness`, per source)
 - **source, last_ingested, rows** — drives the dashboard's last-updated clock and per-source NO DATA.
 
-## 4b. Backlog / future panels (not built)
+### Engine comparison — server vs on-device (`ops.platform_daily`, day × env × platform × capture_mode)
+Migration 028 (DEC-103). Same volume/latency/failure metrics as `analysis_daily` but **split by `platform`**
+(`server` = authoritative Python/Cloud Run; `ios` = native on-device **shadow**, DEC-106). Columns: **attempts,
+analyzed, failures, failure_rate, distinct_users, p50/p90/p95_attempt_seconds, avg_analyze_s**. Rendered on the
+dashboard **Engine A/B** page. On-device rows come from `POST /analysis/shadow` (recorded, never shown/scored).
+This panel is **volume/latency/failure only — NOT an accuracy verdict**: DEC-106 Gate A is accuracy vs **ground
+truth**, not vs the server, so accuracy/bias/plausible-but-wrong + the per-metric flip live with the DEC-094
+harness (`ops/cv_eval.py`), not here.
 
-- **Engine accuracy comparison — Python reference vs Swift vs ground truth** (DEC-106). A per-metric panel comparing the three engines on the **DEC-094 labeled dataset**, broken out **by engine `algorithm_version`** (ties to `ops.release_health` / the `analysis_attempt.engine` provenance from DEC-103). Columns per metric (speed, entry board, entry angle, rev rate, …): **accuracy** (error vs ground truth, per DEC-034 tolerances), **bias** (signed mean error — is the engine systematically high/low), **unavailable rate** (share returned `unavailable` rather than a number), and **latency**. This is the runtime face of the DEC-106 promotion gates (A accuracy / B integrity / C performance) — it lets the owner watch Swift converge on (and pass) the Python reference against ground truth before promotion. **Blocked on:** the DEC-094 eval set existing (labeled ground-truth dataset + harness). Build after DEC-094 lands.
+## 4b. Partially built / future panels
+
+- **Engine accuracy comparison vs ground truth** (DEC-106 Gate A). The per-metric accuracy/bias/unavailable-rate
+  comparison (server vs on-device vs **ground truth**, by `algorithm_version`) is **not a dashboard view yet** —
+  it is produced today by `ops/cv_eval.py` against the **DEC-094** labeled set (file-based, not in the DB). Surface
+  it on the dashboard once the DEC-094 eval set is complete (labels for all manifest clips + Specto lateral truth);
+  the server-vs-on-device *latency/volume* half already ships as `ops.platform_daily` (above). This is the runtime
+  face of the DEC-106 promotion gates (A accuracy / B integrity / C performance) — no metric flips to on-device
+  until it passes A/B/C vs ground truth.
 
 ## 5. Change control
 

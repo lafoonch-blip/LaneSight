@@ -32,6 +32,12 @@ export interface LatencyRow {
   p50_phone_upload_s: number | null; p50_phone_pre_analyze_s: number | null; cold_start_rate: number | null;
   decode_cache_engaged_rate: number | null;
 }
+export interface PlatformRow {
+  day: string; env: string; platform: string; capture_mode: string | null;
+  attempts: number; analyzed: number; failures: number; failure_rate: number | null;
+  distinct_users: number; p50_attempt_seconds: number | null; p90_attempt_seconds: number | null;
+  p95_attempt_seconds: number | null; avg_analyze_s: number | null;
+}
 export interface ReleaseRow {
   algorithm_version: string | null; api_revision: string | null; env: string;
   attempts: number; failures: number; failure_rate: number | null; p50_attempt_seconds: number | null;
@@ -98,6 +104,8 @@ export const getLatency = (s: Scope) =>
   callRpc<LatencyRow>("ops_rpc_latency_stages", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
 export const getReleases = (s: Scope) =>
   callRpc<ReleaseRow>("ops_rpc_release_health", { p_envs: s.envs, p_since: sinceDate(s.days) }, "last_seen");
+export const getPlatformDaily = (s: Scope) =>
+  callRpc<PlatformRow>("ops_rpc_platform_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
 export const getFeedback = (s: Scope) =>
   callRpc<FeedbackRow>("ops_rpc_feedback_summary", { p_since: sinceDate(s.days) }, "day");
 export const getUsage = (s: Scope) =>

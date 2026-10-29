@@ -357,6 +357,29 @@ def test_decode_stats_counts_passes():
         assert np.array_equal(a, b)
 
 
+def test_shadow_attempt_records_ios():
+    """DEC-106: the on-device shadow result is logged as a platform='ios' attempt (never shown/scored);
+    metrics land in diagnostics, device perf under diagnostics.device; 'unavailable' maps to failed."""
+    from lanesight_api.app import get_store
+    h = {'X-Dev-User': 'uShadow'}
+    r = client.post('/analysis/shadow', json={
+        'source': 'live', 'capture_mode': 'shot', 'basis': 'best_effort',
+        'metrics': {'ball_speed': 17.9, 'entry_board': 9.5},
+        'device_perf': {'latency_s': 14.2, 'peak_mem_mb': 68.0, 'thermal_state': 'nominal'},
+        'algorithm_version': 'ios-ondevice-0.1', 'app_version': 'ios-build-123'}, headers=h)
+    assert r.status_code == 200 and r.json() == {'logged': True, 'platform': 'ios', 'status': 'analyzed'}
+    att = [a for a in getattr(get_store(), 'analysis_attempts', [])
+           if a.get('platform') == 'ios' and a.get('user_id') == 'uShadow']
+    assert att, 'shadow attempt not logged'
+    last = att[-1]
+    assert last['status'] == 'analyzed' and last['diagnostics']['ball_speed'] == 17.9
+    assert last['diagnostics']['device']['peak_mem_mb'] == 68.0 and last['duration_ms'] == 14200
+    # a shot the on-device engine couldn't measure → failed, not a fake number
+    r2 = client.post('/analysis/shadow', json={'basis': 'unavailable', 'metrics': {}}, headers=h)
+    assert r2.json()['status'] == 'failed'
+    assert client.post('/analysis/shadow', json={'basis': 'best_effort'}).status_code == 401  # auth required
+
+
 def test_coaching_notify_flag():
     """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
     h = {'X-Dev-User': 'u_notify'}
