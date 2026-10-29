@@ -66,6 +66,7 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .task { await load() }
         .onChange(of: focused) { old, _ in if let old { commit(old) } }   // save a field when it loses focus
         .sheet(isPresented: $showEmailEditor) {
@@ -184,7 +185,7 @@ struct ProfileView: View {
             let entered = [b.pushaway_time, b.backswing_time, b.downswing_time, b.release_time].compactMap { $0 }
             if !entered.isEmpty { return String(format: "%.2f s", entered.reduce(0, +)) }
         }
-        return "Not set"
+        return "Set"
     }
 
     // MARK: v3.7 sections (Figma 434:5981)
@@ -219,6 +220,10 @@ struct ProfileView: View {
                     .focused($focused, equals: field)
                     .onSubmit { commit(field) }
                 if let unit { Text(unit).font(.system(size: 13)).foregroundStyle(LS.textSecondary) }
+                // DEC-099: make it obvious the row is editable (it read as a static label before).
+                Image(systemName: "pencil").font(.system(size: 12))
+                    .foregroundStyle(focused == field ? LS.action : LS.textFaint)
+                    .onTapGesture { focused = field }
             }
             if let hint, fieldErrors[field] == nil {
                 Text(hint).font(.system(size: 11)).foregroundStyle(LS.textFaint)
@@ -291,7 +296,20 @@ struct ProfileView: View {
                 }
                 .padding(.horizontal, 16).frame(height: 54)
                 rowDivider
-                valueRow("Form baseline", baselineSummary)
+                // DEC-099: the Form baseline is now settable (Use my average / Enter my timing / none).
+                NavigationLink {
+                    FormBaselineView(initial: baseline) { baseline = $0 }.environmentObject(model)
+                } label: {
+                    HStack {
+                        Text("Form baseline").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                        Spacer(minLength: 12)
+                        Text(baselineSummary).font(.system(size: 14))
+                            .foregroundStyle(baseline == nil ? LS.link : LS.textSecondary)
+                        Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(LS.textFaint)
+                    }
+                    .padding(.horizontal, 16).frame(height: 54)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -339,6 +357,11 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(ball.displayName).font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                    if ball.is_default == true {
+                        Text("Default").font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.link)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(LS.link.opacity(0.15), in: Capsule())
+                    }
                     if isCurrent {
                         Text("Current ball").font(.system(size: 10, weight: .semibold)).foregroundStyle(LS.positive)
                             .padding(.horizontal, 7).padding(.vertical, 2)
@@ -385,7 +408,8 @@ struct ProfileView: View {
     // MARK: data
 
     private func load() async {
-        profile = .loading
+        // Seamless revisits: keep the loaded page on screen while it refreshes (no spinner flash on Back).
+        if profile.value == nil { profile = .loading }
         ready = false
         do {
             let client = try model.makeClient()
@@ -404,12 +428,16 @@ struct ProfileView: View {
             papOver = p.pap_over_in.map(Self.inchStr) ?? ""
             papUp = p.pap_up_in.map(Self.inchStr) ?? ""
             baseline = p.form_baseline
-            score = try? await client.score()
-            await model.syncArsenal()
-            await model.refreshAvatar()
+            async let sc = try? client.score()
+            async let ars: Void = model.syncArsenal()
+            async let av: Void = model.refreshAvatar()
+            score = await sc
+            _ = await (ars, av)
             profile = .loaded(p)
             ready = true          // enable autosave only after the fields are seeded
-        } catch { profile = .failed(error.localizedDescription) }
+        } catch {
+            if profile.value == nil { profile = .failed(error.localizedDescription) } else { ready = true }
+        }
     }
 
     private static func inchStr(_ v: Double) -> String {

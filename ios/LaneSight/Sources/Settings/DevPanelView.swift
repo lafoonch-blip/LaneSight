@@ -118,6 +118,7 @@ struct DevPanelView: View {
         .navigationTitle("Developer")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
     }
 
     private func row(_ label: String, _ value: String?) -> some View {

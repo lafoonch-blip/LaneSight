@@ -57,6 +57,7 @@ struct MetricDetailView: View {
         .background(LSBackground())
         .navigationBarHidden(true)
         .task { await load() }
+        .lsHidesTabBar()      // DEC-099
     }
 
     private var filterChips: some View {

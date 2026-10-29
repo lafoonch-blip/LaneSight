@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.59  
+Version: 1.62  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.58
+Supersedes: v1.61
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1152,7 +1152,37 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 
 **Date:** 2026-10-28 · **Status:** ACCEPTED (migration 025 applied live `europwryibstnmipbvam`; security proven: anon/authenticated denied on `ops`, non-owner RPC → 42501, owner RPC → correct KPIs) · **Supersedes:** nothing — additive to DEC-086/092.
 
+### DEC-099 — App usability batch: seamless tab loading, tab bar only on the 4 primary tabs, save-to-phone instead of retention, default ball, editable names, settable Form baseline, no Shot/Form re-ask on Upload
+**Decision (Shayne, 2026-10-28):**
+1. **Tabs load seamlessly.** A tab's page appears all at once, not section by section. Home, Stats (all four views) and Lab (sessions, uploads and each card's rings) fetch every section in parallel and publish together; a revisit keeps what's on screen and refreshes silently (a failed refresh never replaces good data with an error); Stats and Lab are prefetched in the background once Home is up. Implementation: `ios/…/Common/TabDataStore.swift`.
+2. **The bottom tab bar shows only on Home · Stats · Lab · Coaching.** Every screen pushed on top of a tab (Profile, Settings, Setup, Active Session, Upload, metric detail, achievements, ball setup, Form baseline, summaries…) hides it, so a pushed screen can't stay open underneath another tab. **Supersedes in part DEC-096**'s "leaving the Lab tab doesn't end the session": with the tab bar hidden on the Active Session, the way out is End session (backgrounding the app still keeps the session).
+3. **Video storage: the bowler chooses only "Save recordings to my phone"** (Settings › Videos, default OFF; adds each live recording to Photos with add-only access, saved before analysis so a failed analysis still keeps the clip). **How long video stays on LaneSight's servers is set by LaneSight, not the user, and will be plan/subscription-based** (policy TBD). The "Raw video retention · 30 days" row is removed. The Privacy Policy must describe server retention when it's defined.
+4. **Default ball.** A bowler can mark one arsenal ball as their **default** — a checkbox on Add ball (on by default when they have no default yet) and on the ball's setup/edit screen; shown as a "Default" tag in Profile › Arsenal and the ball picker. The default is separate from the **current** ball (which moves whenever a ball is picked, DEC-097). **A new session starts with the default ball**; "From your last session" still overrides it. Storage: `user_balls.is_default` (migration 026, one per user by partial unique index); API `make_default` on POST, `is_default` on PATCH; retiring a ball clears its default.
+5. **First and last name are editable from Profile for every account.** Root cause: the DEC-087 "DOB required" gate fired on every name edit for a profile created before the DOB gate, so the save always failed. The gate now applies only when the profile is first created. Phone (optional) stays editable; editable rows now show a pencil so they don't read as static labels.
+6. **The Form baseline is defined and settable** (Profile › Form baseline). The values are the engine's measured swing phases, in seconds: **Pushaway** (ball starts moving → ball at hip, E2→E3), **Backswing** (hip → top of backswing, E3→E4), **Downswing** (top → bottom of the swing, E4→E6), **Release** (bottom of the swing → release, E6→E7); **Total swing** = their sum (= `swing_time`, ball start → release). Modes: **Use my average** (median of the bowler's measured form deliveries once established), **Enter my timing**, or **No baseline**. Plus **"Use this delivery as my baseline"** on a Form result (saves only that delivery's measured phases). Server validates: mode `entered`|`average`, each value 0 < t ≤ 3 s (sanity bound, not a target — DEC-095 puts the whole swing at 1.3–2.5 s), at least one phase when entered; `null` clears it.
+7. **Once the bowler picks Shot or Form Analysis, nothing asks again.** The Upload screen no longer shows "What's in this clip? Shot / Form" — the mode comes from the Shot/Form card (Form uploads also drop the target fields). The Lab header's upload shortcut (an entry with no Shot/Form choice) is removed; the flow is Shot/Form → Live session or Upload video (per the Lab flow decision).
+**Why:** Shayne's 2026-10-28 test pass: tabs filled in piece by piece; pushed screens stayed open under other tabs; the retention row was unclear (server vs phone) and isn't the user's call; no way to set a default ball; names couldn't be saved; the Form card compared against a baseline that couldn't be set; Upload re-asked Shot vs Form.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** in part DEC-096 (tab-switch-away bullet); the "Raw video retention" Settings row (v3.7 Figma 434:6174); in part DEC-087 (DOB gate scope — create only).
+**Deploy order:** apply migration `026_arsenal_default_ball.sql` to live Supabase BEFORE deploying the API (the arsenal select now reads `is_default`).
+
+### DEC-100 — Every analysis is reproducible: clips retained 7 days for diagnostics, phone-side failures logged, failures get a root cause
+**Decision (Shayne, 2026-10-28):**
+- **Retain every analyzed clip for 7 days** (private `shot-clips` bucket, newest 40 per user; `LANESIGHT_CLIP_RETENTION_DAYS` / `LANESIGHT_CLIP_KEEP_MAX` override; 0 = delete). The path is recorded on the attempt (`analysis_attempt.clip.storage_path`). Old clips are purged on each analysis. Owner-only access via the service role (`ops/fetch_clip.py` downloads and re-runs). This is LaneSight's diagnostic retention under DEC-099 (LaneSight sets server retention); the Privacy Policy must state it before Beta.
+- **Phone-side failures are logged** (`POST /analysis/client-failure` → `analysis_attempt`, code `CLIENT_<STAGE>`, stage `client`), so no attempt is invisible.
+- **Every failed attempt stores 4 snapshot frames** (small JPEGs in `analysis_attempt.clip.frames`) so the framing can be inspected straight from the database, and the phone records what its trim kept (`orig_duration_s` / `upload_duration_s` / `orig_bytes` in the client timings).
+- **A Form delivery whose swing events all fail the DEC-095 gates is a coded failure** (`FORM_DELIVERY_NOT_ISOLATED`, with the gate numbers and a "keep your whole approach in frame" tip), not an "analyzed" empty card. **Form clips are no longer motion-trimmed on the phone** (that trim is tuned to the ball and can cut the start of the approach); they're only size-fitted.
+- **Every failure gets a root-cause pass**, tracked in `02_RESEARCH/ANALYSIS_FAILURE_RCA_<date>.md`, with experiments on the retained clip and a validated fix (DEC-062/094 gates apply to CV changes).
+**Why:** Tonight's 4–5 failed uploads couldn't be diagnosed. The clip was deleted on analysis and phone-side failures left no trace. Uploaded Shot clips have never produced a result (0/6), Form uploads return empty cards, and the same failing clips were being re-run with no way to find out why.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** "clips are not retained" (the storage-upload path comment of 2026-10-26; `LANESIGHT_KEEP_CLIPS` debug flag).
+
+### DEC-101 — Phone trim keeps the whole shot; one deploy line
+**Decision (2026-10-28, from the DEC-100 evidence):**
+- **Shot uploads/captures: the phone trim only cuts the dead time BEFORE motion** (keeps 1 s before onset and at least 10 s after onset). The old motion window ended when the bowler stopped moving, before the ball reached the pins. Evidence: a 17.1 s clip was cut to 2.85 s, the ball track ended at 2.74 s and the result was PIN_IMPACT_NOT_DETECTED; a 19.3 s clip was cut to 3.3 s and the far lane was "limited". **Form clips are never window-trimmed.** Re-encode-to-fit (bitrate only, fps and resolution kept) is unchanged.
+- **Deploy only from a line that holds every accepted server change.** Rev 00036 was deployed from `dev-build-v0` without DEC-099/DEC-100, which silently dropped clip retention. `integrate/dec-099-100-with-ops` is that line until it's merged into `dev-build-v0`.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** the `VideoTrimmer` motion-window end (capture spec step 2: "pads ~0.4 s on each side").
+
 ## Superseded decisions
+- DEC-096 — "leaving the Lab tab doesn't end the session" superseded in part by DEC-099 (the tab bar is hidden on the Active Session; End session is the way out).
 - DEC-078 — background analysis withdrawn by DEC-080; DEC-068 (blocking Analyzing screen) reinstated.
 - DEC-053 / DEC-058 — feedback storage and retention superseded by DEC-059 (one retained `feedback` table).
 - DEC-049 — "form from clip" on the Shot card superseded by DEC-056 (shot/form split by mode).

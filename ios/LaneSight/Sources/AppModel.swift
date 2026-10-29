@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 import UIKit
+import Photos
 
 /// Progress of the capture -> upload -> analyze -> result pipeline.
 enum PipelineState: Equatable {
@@ -104,6 +105,10 @@ final class AppModel: ObservableObject {
     /// this to the highest supported rate ≤ the chosen value. Uploads are kept small by trimming the
     /// clip on-device (VideoTrimmer), NOT by lowering fps.
     @Published var preferredFPS: Int { didSet { defaults.set(preferredFPS, forKey: Keys.preferredFPS) } }
+    /// DEC-099: also keep a copy of every live recording in the phone's Photos library. OFF by default.
+    /// This is the ONLY video-storage choice the bowler makes; how long video stays on LaneSight's servers
+    /// is set by LaneSight (plan-based), not by the user.
+    @Published var saveVideosToPhone: Bool { didSet { defaults.set(saveVideosToPhone, forKey: Keys.saveVideosToPhone) } }
 
     /// The bowler's profile photo (served by GET /me/avatar; nil when none set). Shown in the tab header
     /// and on Profile. Refreshed on load and after an upload/remove.
@@ -145,6 +150,8 @@ final class AppModel: ObservableObject {
     // the one row with is_current == true (server-enforced single current ball).
     @Published private(set) var arsenal: [ArsenalBall] = []
     var currentBall: ArsenalBall? { arsenal.first { $0.is_current == true } }
+    /// DEC-099: the bowler's default ball (what a NEW session starts with). Nil until they set one.
+    var defaultBall: ArsenalBall? { arsenal.first { $0.is_default == true && $0.retired != true } }
 
     /// The session's carry-forward target. Seeded from Setup, held across shots, edited by the capture
     /// chip, and updated by "Apply this move". Every live shot sends this as its `intent` (the boards
@@ -206,6 +213,7 @@ final class AppModel: ObservableObject {
         static let preferredFPS = "ls.preferredFPS"
         static let arsenalMigrated = "ls.arsenalMigrated"
         static let seenIntro = "ls.hasSeenIntro"
+        static let saveVideosToPhone = "ls.saveVideosToPhone"
     }
 
     init() {
@@ -227,6 +235,7 @@ final class AppModel: ObservableObject {
         speedUnit = defaults.string(forKey: Keys.speedUnit) ?? "mph"
         speakAdjustments = defaults.bool(forKey: Keys.speak)
         preferredFPS = (defaults.object(forKey: Keys.preferredFPS) as? Int) ?? 120
+        saveVideosToPhone = defaults.bool(forKey: Keys.saveVideosToPhone)
 
         // Restore a persisted Keychain session (tokens survive relaunch; cleared on sign out).
         if let access = Keychain.get(Keychain.Account.accessToken) {
@@ -408,12 +417,29 @@ final class AppModel: ObservableObject {
     /// Adds a ball (catalog via `ballModelId`, or custom via `name`) and re-syncs the arsenal.
     func addBall(ballModelId: String? = nil, name: String? = nil, nickname: String? = nil,
                  weightLb: Double? = nil, colorDesc: String? = nil, layoutSystem: String? = nil,
-                 layout: String? = nil, surface: String? = nil, makeCurrent: Bool = false) async throws {
+                 layout: String? = nil, surface: String? = nil, makeCurrent: Bool = false,
+                 makeDefault: Bool = false) async throws {
         let client = try makeClient()
         _ = try await client.addBall(ballModelId: ballModelId, name: name, nickname: nickname,
                                      weightLb: weightLb, colorDesc: colorDesc, layoutSystem: layoutSystem,
-                                     layout: layout, surface: surface, makeCurrent: makeCurrent)
+                                     layout: layout, surface: surface, makeCurrent: makeCurrent,
+                                     makeDefault: makeDefault)
         await syncArsenal()
+    }
+
+    /// DEC-099: make `id` the bowler's one default ball (`isDefault: false` clears it) and re-sync.
+    func setDefaultBall(id: String, isDefault: Bool = true) async throws {
+        let client = try makeClient()
+        try await client.updateBall(id: id, patch: ["is_default": isDefault])
+        await syncArsenal()
+    }
+
+    /// DEC-099: a NEW session starts with the default ball. Called when Setup opens for a fresh session;
+    /// no-op when there's no default or it's already the current ball. "From your last session" still
+    /// overrides it afterwards.
+    func applyDefaultBallForNewSession() async {
+        guard let d = defaultBall, currentBall?.id != d.id else { return }
+        try? await setCurrentBall(id: d.id)
     }
 
     /// Makes `id` the one current ball (PATCH is_current) and re-syncs.
@@ -493,7 +519,34 @@ final class AppModel: ObservableObject {
 
     func processShot(fileURL: URL) async {
         lastCaptureURL = fileURL; lastSource = "live"
+        // DEC-099: save the ORIGINAL recording to Photos first (before trimming/cleanup), so the bowler keeps
+        // the clip even if the analysis fails. Never blocks the analysis on a Photos error.
+        if saveVideosToPhone { _ = await Self.saveVideoToPhotos(fileURL) }
         await runPipeline(fileURL: fileURL, source: "live")
+    }
+
+    /// Asks for add-only Photos access (no read access to the library). Returns true when granted.
+    static func requestPhotosAddAccess() async -> Bool {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        return status == .authorized || status == .limited
+    }
+
+    /// Adds the video at `url` to the Photos library. Returns false (quietly) if access is missing or the
+    /// save fails — the recording still goes to analysis either way.
+    static func saveVideoToPhotos(_ url: URL) async -> Bool {
+        guard await requestPhotosAddAccess() else { return false }
+        do {
+            try await PHPhotoLibrary.shared().performChanges(photosAddVideo(url))
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Built in a nonisolated context so the change block is NOT main-actor isolated: Photos runs it on its
+    /// own background queue (a main-actor-inferred closure would trip the executor check there).
+    nonisolated private static func photosAddVideo(_ url: URL) -> @Sendable () -> Void {
+        { _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url) }
     }
 
     /// Analyze a clip picked from Photos/Files (POST /uploads) through the same job pipeline + Shot card.
@@ -558,8 +611,16 @@ final class AppModel: ObservableObject {
             // re-trims precisely afterwards.
             pipeline = .trimming
             let tTrim = Date()
-            let uploadURL = await VideoTrimmer.trimForUpload(fileURL)
+            // DEC-101: Form clips are never window-trimmed (the start of the approach matters); Shot clips use the
+            // head-only trim in VideoTrimmer (the tail always runs ≥10 s past motion onset so the ball reaches the pins).
+            let uploadURL = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
             ct["trim_s"] = Date().timeIntervalSince(tTrim)
+            // DEC-100: record what the phone trim kept, so a failure shows whether the trim cut the shot.
+            if let d = await VideoTrimmer.duration(fileURL) { ct["orig_duration_s"] = d }
+            if let d = await VideoTrimmer.duration(uploadURL) { ct["upload_duration_s"] = d }
+            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
+                ct["orig_bytes"] = Double(b)
+            }
             if let b = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path))?[.size] as? Int {
                 ct["upload_bytes"] = Double(b)
             }
@@ -672,6 +733,27 @@ final class AppModel: ObservableObject {
             try? FileManager.default.removeItem(at: fileURL)
             if uploadURL != fileURL { try? FileManager.default.removeItem(at: uploadURL) }
         } catch {
+            // DEC-100: the server never logged this one — report it so no failed attempt is invisible.
+            let stage: String
+            switch pipeline {
+            case .creatingSession: stage = "session"
+            case .trimming: stage = "trim"
+            case .uploading: stage = "upload"
+            case .analyzing: stage = "analyze_request"
+            case .fetching: stage = "fetch_result"
+            default: stage = "unknown"
+            }
+            var report: [String: Any] = [
+                "stage": stage, "error": String(String(describing: error).prefix(500)),
+                "source": source, "capture_mode": captureMode,
+                "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"]
+            if source == "live", let sid = sessionId { report["session_id"] = sid }
+            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
+                report["clip_bytes"] = b
+            }
+            if let json = try? JSONSerialization.data(withJSONObject: report), let client = try? makeClient() {
+                Task { try? await client.reportClientFailure(json) }    // best effort; never blocks the UI
+            }
             pipeline = .failed(error.localizedDescription)
         }
     }

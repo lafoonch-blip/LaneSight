@@ -3,6 +3,8 @@ import SwiftUI
 @main
 struct LaneSightApp: App {
     @StateObject private var model = AppModel()
+    /// DEC-099: shared Home/Stats/Lab data (parallel loads, one publish per page, silent revalidation).
+    @StateObject private var tabData = TabDataStore()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -41,6 +43,9 @@ struct LaneSightApp: App {
                 }
             }
             .environmentObject(model)
+            .environmentObject(tabData)
+            // Never show one account's data to the next: drop the tab cache on sign-in/out.
+            .onChange(of: model.isAuthenticated) { _, _ in tabData.reset() }
             // §2 analytics (DEC-098 M3): one "app_opened" per launch (real app only, never previews).
             .task { if !isPreview { model.trackAppOpenedOnce() } }
             .tint(LS.action)

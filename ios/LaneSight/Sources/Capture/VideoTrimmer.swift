@@ -25,12 +25,24 @@ enum VideoTrimmer {
     /// loss; only if the trimmed clip is still too large (e.g. a long 120 fps delivery) do we re-encode to fit,
     /// and that reduces bitrate only — frame rate and resolution are preserved so rev/loft stay measurable. The
     /// server re-trims precisely; this just has to contain the shot and fit the cap.
-    nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes) async -> URL {
-        let trimmed = await trimToShotWindow(sourceURL)
+    /// `windowTrim: false` (DEC-100: Form clips) skips the motion-window cut — it's tuned to the ball and can cut
+    /// the start of the approach — and only fits the clip under the size cap.
+    nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes,
+                                          windowTrim: Bool = true) async -> URL {
+        let trimmed = windowTrim ? await trimToShotWindow(sourceURL) : sourceURL
         if fileSize(trimmed) <= maxBytes { return trimmed }
         if let fitted = await reencodeToFit(trimmed, maxBytes: maxBytes) { return fitted }
         return trimmed   // best effort — if even this is over, the upload surfaces the error to the user
     }
+
+    /// Duration in seconds (nil if unreadable) — recorded on the attempt so a failure shows what the trim cut.
+    nonisolated static func duration(_ url: URL) async -> Double? {
+        guard let d = try? await AVURLAsset(url: url).load(.duration), d.seconds.isFinite else { return nil }
+        return d.seconds
+    }
+
+    /// Seconds kept after motion onset: approach (~2–3 s) + ball travel to the pins (~2.5–3 s) + pin action, with margin.
+    nonisolated static let tailKeep: Double = 10.0
 
     nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4) async -> URL {
         let asset = AVURLAsset(url: sourceURL)
@@ -38,9 +50,16 @@ enum VideoTrimmer {
         let total = duration.seconds
         guard total.isFinite, total > 1.2 else { return sourceURL }   // too short to bother
 
-        guard let range = await motionWindow(asset: asset, total: total, pad: pad) else {
+        guard let motion = await motionWindow(asset: asset, total: total, pad: pad) else {
             return sourceURL   // no confident motion → send the full tap-window clip
         }
+        // DEC-101: cut only the dead time BEFORE motion. The motion window used to END when the bowler's motion
+        // stopped — before the ball reached the pins (2026-10-28: a 17.1 s clip trimmed to 2.85 s, the ball track
+        // ended at 2.74 s → PIN_IMPACT_NOT_DETECTED). Keep ≥1 s before onset and ≥`tailKeep` s after it.
+        let start = max(0, motion.start.seconds - 0.6)              // + the 0.4 s pad already applied = 1 s
+        let end = min(total, max(motion.end.seconds, motion.start.seconds + tailKeep))
+        let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                                end: CMTime(seconds: end, preferredTimescale: 600))
         // Skip the export if trimming would barely shrink the clip.
         if range.duration.seconds > total * 0.85 { return sourceURL }
 

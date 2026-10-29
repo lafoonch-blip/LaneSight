@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.0 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: ACTIVE · Version: 1.1 · Last Updated: 2026-10-28 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -118,3 +118,15 @@ v3.7 Figma should be updated to reflect:
   Setup). A change applies to the next shot only.
 - **Not yet built (flagged):** shot-list dividers "Switched to <ball>" / "Oil: <pattern>" and per-row/shot-card
   ball display.
+
+
+## 2026-10-28 · Usability batch (DEC-099) — BUILT in code; needs Figma update
+Built from Shayne's 2026-10-28 test notes (no new Figma frames yet). The v3.7 Figma should be updated to match:
+- **Bottom tab bar** only on Home · Stats · Lab · Coaching; hidden on every pushed screen (Profile, Settings, Setup, Active Session, Upload, metric detail, achievements, ball setup, Form baseline, summaries).
+- **Settings (434:6174):** "Privacy · Raw video retention 30 days" row removed → new **Videos** section with a **"Save recordings to my phone"** toggle (default off) and footer copy about server storage.
+- **Ball setup (437:6000 add / 437:6083 edit):** new **"Make this my default ball"** checkbox row under the header (add: on when no default exists; edit: saves on tap). **Profile › Arsenal** cards and the **ball picker** show a "Default" tag.
+- **Profile (434:5981):** "Form baseline" row now opens a new **Form baseline** screen (Use my average / Enter my timing with Pushaway · Backswing · Downswing · Release + total / No baseline; Save). Editable text rows show a pencil.
+- **Form result:** swing-timing card gains **"Use this delivery as my baseline"**.
+- **Upload screen:** the "What's in this clip? Shot / Form" picker is removed (title shows the chosen mode; Form uploads have no target fields). Lab header upload shortcut removed.
+- **Loading:** a tab's first load shows one page-level spinner, then the whole page; revisits never show spinners.
+Status: **BUILT** (branch `fix/ux-batch-2026-10-28`). DIFFERS: no Figma frames exist yet for the new Form baseline screen and the default-ball row — built in the existing card style.

@@ -140,6 +140,52 @@ def _probe_clip(src: str) -> dict:
     return info
 
 
+def _snapshot_frames(src: str, n: int = 4, width: int = 480) -> list[dict]:
+    """DEC-100: a few small JPEG frames (base64) spread across the clip, stored on a FAILED attempt so the framing
+    can be inspected straight from the database (no clip download needed). ~20–30 KB each. Never raises."""
+    out = []
+    try:
+        import base64, cv2
+        cap = cv2.VideoCapture(src)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        if total <= 0:
+            return out
+        for frac in [(i + 0.5) / n for i in range(n)]:
+            idx = min(total - 1, int(total * frac))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, fr = cap.read()
+            if not ok:
+                continue
+            h, w = fr.shape[:2]
+            scale = width / max(w, h)
+            if scale < 1:
+                fr = cv2.resize(fr, (int(w * scale), int(h * scale)))
+            ok, buf = cv2.imencode('.jpg', fr, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            if ok:
+                out.append({'t': round(idx / fps, 2) if fps else None, 'frame': idx,
+                            'jpg_b64': base64.b64encode(buf.tobytes()).decode()})
+        cap.release()
+    except Exception as e:
+        out.append({'error': f'{type(e).__name__}: {e}'[:200]})
+    return out
+
+
+def _form_not_isolated(rec) -> dict | None:
+    """DEC-100: a form record whose swing events were ALL dropped by the DEC-095 gates (no ball start, top or
+    release, no key frames) isn't a result — it's a failure the bowler should see, with the gate numbers."""
+    ev = rec.get('events') or {}
+    if rec.get('key_frames') or any(ev.get(k) is not None for k in ('E2', 'E4', 'E7')):
+        return None
+    m = rec.get('metrics') or {}
+    def mv(k):
+        v = m.get(k)
+        return v.get('value') if isinstance(v, dict) else None
+    return {'swing_time_s': mv('swing_time'), 'step_count': mv('step_count'), 'view': rec.get('view'),
+            'gate': 'DEC-095 ball-start→release 1.3–2.5 s / release within −0.10…+0.15 s of slide stop',
+            'events_kept': {k: v for k, v in ev.items() if v is not None}}
+
+
 def _quality(rec) -> dict | None:
     """Capture-quality + headline-geometry signals from a successful record (DEC-086), so we can correlate
     camera framing with what analysis could measure. Defensive: missing fields are simply omitted."""
@@ -163,7 +209,7 @@ def _quality(rec) -> dict | None:
 
 def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
                  mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
-                 client_timings: dict | None = None):
+                 client_timings: dict | None = None, clip_storage_path: str | None = None):
     def run(job):
         t0 = time.monotonic()
         if client_timings:                       # DEC-092 P0 (M1): phone-side stage times onto the same row
@@ -183,6 +229,11 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                    # (DEC-092 P0) rides in the clip jsonb so no schema change is needed.
                    'clip': {**_probe_clip(src),
                             'cold_start': (time.monotonic() - _PROCESS_START) < _COLD_START_WINDOW_S}}
+        # DEC-100: where the retained clip lives, so any attempt (failed or "succeeded" but empty) can be
+        # re-run on the exact bytes the server saw (ops/fetch_clip.py <shot_id>).
+        if clip_storage_path:
+            attempt['clip']['storage_path'] = clip_storage_path
+            attempt['clip']['retained_days'] = clip_retention_days()
 
         # DEC-092 P0: ~2 s framing precheck. SHADOW by default — record the verdict, never block — until the
         # benchmark shows it rejects zero clips the full pipeline passes. Set LANESIGHT_PRECHECK_ENFORCE=1 to
@@ -224,6 +275,11 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                 from lanesight_core.form.pose import pose_backend
                 rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
                 rec['shot_id'] = shot_id
+                gated = _form_not_isolated(rec)
+                if gated:
+                    from lanesight_core.failures import AnalysisFailure as _AF
+                    raise _AF('FORM_DELIVERY_NOT_ISOLATED', 'every swing event failed the DEC-095 sanity gates',
+                              stage='form_pose', diagnostics=gated)
                 # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
                 # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
                 for fkey in (rec.get('key_frames') or []):
@@ -282,6 +338,8 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                 store.mark_shot_failed(shot_id, fail.code, fail.stage)
             except Exception as me:
                 print(f'mark_shot_failed skipped ({me})')
+            # DEC-100: keep what we need to diagnose it — snapshot frames of what the camera saw.
+            attempt['clip'] = {**(attempt.get('clip') or {}), 'frames': _snapshot_frames(src)}
             _log('failed', failure=fail)
             raise
 
@@ -1186,11 +1244,56 @@ def create_upload_url(user=Depends(current_user)):
     return store.storage_signed_upload_url('shot-clips', path)
 
 
+def clip_retention_days() -> int:
+    """DEC-100: days a clip stays in the private `shot-clips` bucket after analysis (diagnostics). LaneSight sets
+    this, not the user (DEC-099). LANESIGHT_CLIP_RETENTION_DAYS overrides; 0 = delete right after analysis.
+    The legacy LANESIGHT_KEEP_CLIPS=1 still means "retain"."""
+    raw = os.environ.get('LANESIGHT_CLIP_RETENTION_DAYS')
+    if raw is not None:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return 7
+
+
+def clip_keep_max() -> int:
+    """Per-user cap on retained clips (newest kept) so the Storage quota can't fill during heavy testing."""
+    try:
+        return max(1, int(os.environ.get('LANESIGHT_CLIP_KEEP_MAX', '40')))
+    except ValueError:
+        return 40
+
+
+@app.post('/analysis/client-failure')
+def client_failure(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-100: the phone reports an analysis that failed BEFORE it reached the server (trim, signed URL,
+    upload, or the analyze request itself dropping). Logged to analysis_attempt so no attempt is invisible."""
+    b = dict(body or {})
+    stage = str(b.get('stage') or 'unknown')[:40]
+    row = {'user_id': user, 'session_id': b.get('session_id'), 'shot_id': None,
+           'source': b.get('source') if b.get('source') in ('live', 'upload') else None,
+           'capture_mode': b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else None,
+           'status': 'failed', 'failure_code': f'CLIENT_{stage.upper()}', 'failure_stage': 'client',
+           'diagnostics': {'error': str(b.get('error') or '')[:500], 'stage': stage,
+                           'app_version': b.get('app_version'), 'clip_bytes': b.get('clip_bytes'),
+                           'clip_duration_s': b.get('clip_duration_s')},
+           'step_timings': {'client': b.get('client_timings')} if b.get('client_timings') else None,
+           'algorithm_version': ALGO_VERSION, 'api_revision': os.environ.get('K_REVISION'),
+           'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+    try:
+        get_store().log_analysis_attempt(row)
+    except Exception as e:
+        print(f'client-failure log skipped ({e})')
+    return {'logged': True}
+
+
 @app.post('/shots/analyze')
 async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user)):
     """Analyze a clip already uploaded to Storage. body: {storage_path, session_id?, metadata?}. With a
     session_id it's a live session shot (feeds Score/Stats); without, a standalone upload (DEC-055). The clip
-    is downloaded (service role), analyzed on the same serial path, then DELETED (clips aren't retained)."""
+    is downloaded (service role), analyzed on the same serial path, then RETAINED for the diagnostic window
+    (DEC-100, default 7 days) — or deleted right away when retention is 0."""
     store = get_store()
     storage_path = body.get('storage_path')
     if not storage_path or not storage_path.startswith(f'{user}/'):
@@ -1229,13 +1332,21 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     local = dest / f"{shot['id']}.mov"
     with open(local, 'wb') as f:
         f.write(data)
+    days = clip_retention_days()
     job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
                        mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash,
-                       client_timings=body.get('client_timings'))
-    if os.environ.get('LANESIGHT_KEEP_CLIPS') == '1':     # debug: retain the clip in Storage for inspection
-        print(f'KEEP_CLIPS: retained {storage_path}')
+                       client_timings=body.get('client_timings'),
+                       clip_storage_path=storage_path if days > 0 else None)
+    if days > 0:
+        # DEC-100: keep the clip for a short diagnostic window (default 7 days, newest CLIP_KEEP_MAX per user)
+        # so every analysis can be reproduced and debugged. Owner-only access via the service role; the
+        # bucket is private. Old clips are purged here, best effort, on every analysis.
+        try:
+            store.purge_old_clips('shot-clips', user, days=days, keep_max=clip_keep_max())
+        except Exception as pe:
+            print(f'clip purge skipped ({type(pe).__name__}: {pe})')
     else:
-        store.storage_delete('shot-clips', storage_path)  # clip analyzed; don't retain it
+        store.storage_delete('shot-clips', storage_path)  # retention off: clip analyzed; don't retain it
     try:
         os.remove(local)
     except OSError:

@@ -558,3 +558,108 @@ def test_session_shots_carry_per_shot_ball_and_oil():
     assert [r['user_ball_id'] for r in rows] == ['ballR1', 'ballR2']
     assert [r['oil_pattern_id'] for r in rows] == ['oilR1', 'oilR2']   # first backfilled to the session oil at record
     assert all('ball_name' in r and 'oil_name' in r for r in rows)     # name fields present (None offline)
+
+
+def test_arsenal_default_ball_is_separate_from_current():
+    # DEC-099: one default ball per bowler (what a new session starts with), independent of is_current.
+    hh = {'X-Dev-User': 'ars_def'}
+    a = client.post('/me/arsenal', json={'name': 'Phaze II', 'make_current': True, 'make_default': True},
+                    headers=hh).json()
+    assert a['is_default'] is True and a['is_current'] is True
+    b = client.post('/me/arsenal', json={'name': 'Spare Ball'}, headers=hh).json()
+    assert b['is_default'] is False
+    # picking another ball for the session moves CURRENT, never the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_current': True}, headers=hh)
+    by_id = {x['id']: x for x in client.get('/me/arsenal', headers=hh).json()}
+    assert by_id[b['id']]['is_current'] and by_id[a['id']]['is_default'] and not by_id[b['id']]['is_default']
+    # setting a new default unsets the old one
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': True}, headers=hh)
+    lst = client.get('/me/arsenal', headers=hh).json()
+    assert [x['id'] for x in lst if x['is_default']] == [b['id']]
+    # clearing / retiring removes the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': False}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+    client.patch(f"/me/arsenal/{a['id']}", json={'is_default': True}, headers=hh)
+    client.patch(f"/me/arsenal/{a['id']}", json={'retired': True}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+
+
+def test_clips_are_retained_and_linked_to_the_attempt(monkeypatch):
+    # DEC-100: an analyzed clip stays in Storage for the diagnostic window and its path is on the attempt row.
+    from lanesight_api.store import get_store
+    store = get_store()
+    hh = {'X-Dev-User': 'keep1'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    with open(up['upload_url'][len('file://'):], 'wb') as f:
+        f.write(b'not-a-video')                            # the job fails; retention must still hold
+    r = client.post('/shots/analyze', headers=hh,
+                    json={'storage_path': up['path'], 'metadata': {'capture_mode': 'shot'}})
+    assert r.status_code == 200
+    assert store.storage_download('shot-clips', up['path']) == b'not-a-video'      # NOT deleted
+    import time as _t
+    for _ in range(100):                                    # the job may run on the serial worker
+        if client.get(f"/jobs/{r.json()['job_id']}", headers=hh).json().get('state') in ('done', 'failed'):
+            break
+        _t.sleep(0.1)
+    att = [a for a in getattr(store, 'analysis_attempts', []) if a.get('user_id') == 'keep1']
+    assert att and att[-1]['clip']['storage_path'] == up['path']
+
+
+def test_clip_retention_zero_deletes(monkeypatch):
+    monkeypatch.setenv('LANESIGHT_CLIP_RETENTION_DAYS', '0')
+    from lanesight_api.store import get_store
+    import os as _os
+    hh = {'X-Dev-User': 'keep0'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    p = up['upload_url'][len('file://'):]
+    with open(p, 'wb') as f:
+        f.write(b'x')
+    client.post('/shots/analyze', headers=hh, json={'storage_path': up['path'], 'metadata': {}})
+    assert not _os.path.exists(p)
+
+
+def test_purge_keeps_only_newest(tmp_path):
+    from lanesight_api.store import MemoryStore
+    import os as _os, time as _t
+    s = MemoryStore()
+    for i in range(5):
+        s.storage_upload('shot-clips', f'purge_u/{i}.mov', b'x')
+        p = s._local_storage_path('shot-clips', f'purge_u/{i}.mov')
+        _os.utime(p, (_t.time() - (100 - i), _t.time() - (100 - i)))
+    assert s.purge_old_clips('shot-clips', 'purge_u', days=7, keep_max=2) == 3
+    left = sorted(_os.listdir(_os.path.dirname(s._local_storage_path('shot-clips', 'purge_u/x'))))
+    assert left == ['3.mov', '4.mov']
+
+
+def test_client_failure_is_logged():
+    from lanesight_api.store import get_store
+    r = client.post('/analysis/client-failure', headers={'X-Dev-User': 'cf1'},
+                    json={'stage': 'upload', 'error': 'The request timed out.', 'source': 'upload',
+                          'capture_mode': 'shot', 'clip_bytes': 51000000})
+    assert r.status_code == 200
+    att = [a for a in getattr(get_store(), 'analysis_attempts', []) if a.get('user_id') == 'cf1']
+    assert att[-1]['failure_code'] == 'CLIENT_UPLOAD' and att[-1]['failure_stage'] == 'client'
+
+
+def test_form_record_with_every_event_gated_is_a_failure():
+    # DEC-100: tonight's form uploads came back "analyzed" with every swing event dropped (empty card).
+    from lanesight_api.app import _form_not_isolated
+    gated = {'events': {'E2': None, 'E4': None, 'E5': 4.1, 'E7': None, 'E8': 5.3}, 'key_frames': [],
+             'metrics': {'swing_time': {'value': 1.135}, 'step_count': {'value': 3}}, 'view': 'down_lane'}
+    d = _form_not_isolated(gated)
+    assert d and d['swing_time_s'] == 1.135 and d['step_count'] == 3
+    ok = {'events': {'E2': 1.0, 'E4': 1.6, 'E7': 2.6}, 'key_frames': ['release']}
+    assert _form_not_isolated(ok) is None
+
+
+def test_snapshot_frames_from_a_real_video(tmp_path):
+    import cv2, numpy as np
+    from lanesight_api.app import _snapshot_frames
+    p = str(tmp_path / 'c.mp4')
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 30, (640, 360))
+    for i in range(60):
+        w.write(np.full((360, 640, 3), i * 4, np.uint8))
+    w.release()
+    fr = _snapshot_frames(p, n=4)
+    assert len(fr) == 4 and all(f.get('jpg_b64') for f in fr)
+    assert _snapshot_frames(str(tmp_path / 'missing.mp4')) == []
