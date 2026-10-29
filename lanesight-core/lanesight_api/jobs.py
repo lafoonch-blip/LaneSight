@@ -27,9 +27,17 @@ class Job:
     failure: dict | None = None     # {code, stage, user_title, user_message, tip} for the app
 
     def public(self) -> dict:
+        # The app decodes `timings` as a flat {String: Double}. Expose ONLY numeric step times there; the
+        # nested/structured detail (cv, decode, client, windowed_error, …) goes under `timings_detail` so a new
+        # nested timing field can never again break the client's post-analysis fetch (P0 2026-10-29).
+        flat, detail = {}, {}
+        for k, v in self.timings.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                flat[k] = round(float(v), 3)
+            else:
+                detail[k] = v
         return dict(id=self.id, kind=self.kind, state=self.state, reason=self.reason,
-                    timings={k: (round(v, 3) if isinstance(v, (int, float)) else v)
-                             for k, v in self.timings.items()},   # cv is a nested dict, windowed_error a str
+                    timings=flat, timings_detail=(detail or None),
                     result=self.result, failure=self.failure)     # failure is None on success
 
 

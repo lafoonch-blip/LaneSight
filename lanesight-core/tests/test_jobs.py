@@ -61,3 +61,27 @@ def test_sync_failure_exposes_friendly_block_to_the_app():
         assert pub2['failure']['code'] == 'TRACK_TOO_SPARSE_FOR_SPEED' and pub2['failure']['stage'] == 'metrics'
     finally:
         del os.environ['LANESIGHT_SYNC_JOBS']
+
+
+def test_public_timings_are_flat_numeric_for_the_app():
+    """P0 2026-10-29 contract: the app decodes job.timings as a flat {str: float}. public() must therefore emit
+    ONLY numeric step times in `timings`; any nested/structured timing (cv/decode/client) or string goes under
+    `timings_detail` so a new nested server field can never again break the client's post-analysis fetch."""
+    from lanesight_api.jobs import Job
+    j = Job(id='j1', kind='analyze')
+    j.state = 'done'
+    j.timings = {
+        'analyze': 12.3456, 'window': 2.0, 'convert': 0,
+        'decode': {'passes': 9, 'seconds': 3.5},            # nested (DEC-092)
+        'cv': {'stabilize_s': 14.8},                        # nested
+        'client': {'trim_s': 1.1},                          # nested (DEC-092 M1)
+        'windowed_error': 'no sustained burst',             # string
+    }
+    pub = j.public()
+    # every value the app reads is a number
+    assert all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in pub['timings'].values()), pub['timings']
+    assert set(pub['timings']) == {'analyze', 'window', 'convert'}
+    assert pub['timings']['analyze'] == 12.346                 # rounded to 3dp
+    # the nested / non-numeric detail is preserved, just out of the app's path
+    assert pub['timings_detail']['decode']['passes'] == 9
+    assert pub['timings_detail']['windowed_error'] == 'no sustained burst'
