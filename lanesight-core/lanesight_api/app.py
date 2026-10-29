@@ -29,6 +29,17 @@ from lanesight_core.score import SCORE_VERSION
 from lanesight_core.benchmarks import BENCHMARK_VERSION
 from lanesight_core.form import spot_check
 
+# DEC-106 Phase 0: Cloud Run reports os.cpu_count()=8 but allocates only 4 vCPUs, so OpenCV defaults to 8
+# threads on 4 vCPUs → 2x oversubscription that dominates the stabilize/warp stages (OpenCV is NOT controlled
+# by OMP/OPENBLAS env). Cap OpenCV threads to the allocated vCPUs when the cap env is set. No-op locally.
+_cpu_cap = os.environ.get('LANESIGHT_CPU_THREADS') or os.environ.get('LANESIGHT_CV_WORKERS')
+if _cpu_cap:
+    try:
+        import cv2 as _cv2
+        _cv2.setNumThreads(max(1, int(_cpu_cap)))
+    except Exception:
+        pass
+
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
 app = FastAPI(title='LaneSight API', version=API_VERSION)
