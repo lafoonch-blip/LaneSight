@@ -1,7 +1,7 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.2
+Version: 1.5
 Last Updated: 2026-10-29
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
@@ -37,6 +37,7 @@ LaneSight already records one rich production signal: the retained **`analysis_a
 
 - **Real accounts only.** Every canonical view excludes `profiles.is_staged = true` (DEC-063 — staged `ls_*` accounts MAY hold fabricated data). Only `ops.freshness` and `ops.coverage_status` are not row-level real-only (they are metadata). Deleted accounts (no `profiles` row) are treated as real, since staged status is then unknowable; staged accounts are long-lived, so this is a safe, documented edge.
 - **Environment.** `env ∈ {dev, beta, live}` is a selectable dimension, not a hidden filter. Production scope is **live + beta**; `dev` is local test traffic and is shown only when explicitly selected.
+- **Server engine only (production KPIs).** Every KPI view that aggregates attempts filters `platform = 'server'` (migration 030, DEC-106) so on-device **shadow** (`platform='ios'`) rows never double-count shots or inflate failure rates. The only views that keep shadow rows are the raw `ops.attempt` and `ops.platform_daily` (Engine A/B). `validate_definitions.py` enforces this: any attempt-reading view outside the exempt set that lacks a `platform` constraint fails CI.
 
 ## 4. Metric glossary
 
@@ -61,6 +62,7 @@ Each metric: **source view.column** — definition — honesty rule.
 - **p50_server_analyze_s, p50_decode_s, p50_hdr_convert_s** — server stages (DEC-092 P0 timings).
 - **p50_phone_trim_s, p50_phone_upload_s, p50_phone_pre_analyze_s** — phone-side stages (`step_timings.client`, DEC-092 P0 M1).
 - **cold_start_rate** — `cold_start / nullif(analyzed,0)`. NULL → NO DATA. A stage percentile is NULL when that stage was never timed in the window (NO DATA, not 0) — e.g. HDR convert on an all-SDR day.
+- **decode_cache_engaged_rate** (DEC-092 P1, migration 029) — share of attempts where the decode-once frame cache held the whole clip and every later pass was served from cache: `count(decode_cache_complete) / nullif(count(attempts that recorded the field),0)`. Denominator excludes attempts analysed before the cache shipped (field absent) → NULL → NO DATA until real post-deploy traffic. Tells us whether the cache ever fires in production (it only fits short/lower-fps/lower-res windows; see `DECODE_ONCE_FINDINGS.md`). Per-attempt detail: `ops.attempt.decode_cache_complete` / `decode_cached_passes`.
 
 ### Release & regression (`ops.release_health`, algorithm_version × api_revision × env)
 - **attempts, failure_rate, p50_attempt_seconds, avg_metrics_measured, distinct_users, first_seen, last_seen** — per release, for regression comparison (DEC-092 promotion discipline: accuracy/coverage/runtime compared separately; this view is the runtime/failure side).
@@ -74,9 +76,24 @@ Each metric: **source view.column** — definition — honesty rule.
 ### Freshness (`ops.freshness`, per source)
 - **source, last_ingested, rows** — drives the dashboard's last-updated clock and per-source NO DATA.
 
-## 4b. Backlog / future panels (not built)
+### Engine comparison — server vs on-device (`ops.platform_daily`, day × env × platform × capture_mode)
+Migration 028 (DEC-103). Same volume/latency/failure metrics as `analysis_daily` but **split by `platform`**
+(`server` = authoritative Python/Cloud Run; `ios` = native on-device **shadow**, DEC-106). Columns: **attempts,
+analyzed, failures, failure_rate, distinct_users, p50/p90/p95_attempt_seconds, avg_analyze_s**. Rendered on the
+dashboard **Engine A/B** page. On-device rows come from `POST /analysis/shadow` (recorded, never shown/scored).
+This panel is **volume/latency/failure only — NOT an accuracy verdict**: DEC-106 Gate A is accuracy vs **ground
+truth**, not vs the server, so accuracy/bias/plausible-but-wrong + the per-metric flip live with the DEC-094
+harness (`ops/cv_eval.py`), not here.
 
-- **Engine accuracy comparison — Python reference vs Swift vs ground truth** (DEC-106). A per-metric panel comparing the three engines on the **DEC-094 labeled dataset**, broken out **by engine `algorithm_version`** (ties to `ops.release_health` / the `analysis_attempt.engine` provenance from DEC-103). Columns per metric (speed, entry board, entry angle, rev rate, …): **accuracy** (error vs ground truth, per DEC-034 tolerances), **bias** (signed mean error — is the engine systematically high/low), **unavailable rate** (share returned `unavailable` rather than a number), and **latency**. This is the runtime face of the DEC-106 promotion gates (A accuracy / B integrity / C performance) — it lets the owner watch Swift converge on (and pass) the Python reference against ground truth before promotion. **Blocked on:** the DEC-094 eval set existing (labeled ground-truth dataset + harness). Build after DEC-094 lands.
+## 4b. Partially built / future panels
+
+- **Engine accuracy comparison vs ground truth** (DEC-106 Gate A). The per-metric accuracy/bias/unavailable-rate
+  comparison (server vs on-device vs **ground truth**, by `algorithm_version`) is **not a dashboard view yet** —
+  it is produced today by `ops/cv_eval.py` against the **DEC-094** labeled set (file-based, not in the DB). Surface
+  it on the dashboard once the DEC-094 eval set is complete (labels for all manifest clips + Specto lateral truth);
+  the server-vs-on-device *latency/volume* half already ships as `ops.platform_daily` (above). This is the runtime
+  face of the DEC-106 promotion gates (A accuracy / B integrity / C performance) — no metric flips to on-device
+  until it passes A/B/C vs ground truth.
 
 ## 5. Change control
 

@@ -7,7 +7,7 @@ import UIKit
 /// on-device vs server (and, once the DEC-094 ground-truth set exists, vs truth) data so each metric can be
 /// promoted per the DEC-106 gates. No flip happens on device.
 enum OnDeviceShadow {
-    static let engineVersion = "ios-ondevice-0.1"
+    nonisolated static let engineVersion = "ios-ondevice-0.1"
 
     /// Runs stabilise-free chain referenceFrame → detect → track → speed and measures device cost. Returns a
     /// JSON-ready body for POST /analysis/shadow. `nonisolated` + value-type output so it runs off the main

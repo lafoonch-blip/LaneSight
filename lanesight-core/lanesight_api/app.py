@@ -469,10 +469,13 @@ def health():
 
 
 @app.get('/debug/env')
-def debug_env():
-    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Read-only, no auth
-    (no secrets). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off) matches the
-    allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+def debug_env(user=Depends(current_user)):
+    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Owner-only (no
+    secrets, but not public). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off)
+    matches the allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+    from lanesight_core.owner import OWNER_USER_ID
+    if user != OWNER_USER_ID:
+        raise HTTPException(403, 'owner only')
     info = {'os_cpu_count': os.cpu_count(),
             'env': {k: os.environ.get(k) for k in
                     ('LANESIGHT_CV_WORKERS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
@@ -1323,6 +1326,51 @@ def client_failure(body: dict = Body(...), user=Depends(current_user)):
     except Exception as e:
         print(f'client-failure log skipped ({e})')
     return {'logged': True}
+
+
+@app.post('/analysis/shadow')
+def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-106 Phase-6 prep: the phone's native on-device engine analyses each shot in the BACKGROUND (shadow)
+    and submits its result here. Recorded as an analysis_attempt with platform='ios' (DEC-103) — it is NEVER
+    shown to the user and NEVER feeds Score/coaching; the server stays authoritative. This lets us compare
+    on-device vs server (and, once the DEC-094 ground-truth set exists, vs truth) in the ops layer BEFORE any
+    per-metric flip. No flip happens here — ingestion only."""
+    b = dict(body or {})
+    m = b.get('metrics') or {}
+    perf = b.get('device_perf') or {}
+    basis = str(b.get('basis') or '')[:20]
+    # Map the on-device outcome to the attempt status CHECK (analyzed | failed).
+    measured = basis != 'unavailable' and (m.get('ball_speed') is not None or m.get('entry_board') is not None)
+    # Metric keys mirror the server's diagnostics so ops.attempt surfaces them, split by platform.
+    diag = {k: m.get(k) for k in ('ball_speed', 'entry_board', 'entry_angle', 'rev_rate', 'n_measured')
+            if m.get(k) is not None}
+    diag['basis'] = basis or None
+    diag['note'] = (str(b.get('note'))[:300] if b.get('note') else None)
+    dev = {k: perf.get(k) for k in ('latency_s', 'peak_mem_mb', 'thermal_state', 'thermal_transitions',
+                                    'battery_delta', 'decode_fps') if perf.get(k) is not None}
+    if dev:
+        diag['device'] = dev
+    lat = perf.get('latency_s')
+    row = {'user_id': user,
+           'shot_id': b.get('shot_id'),                 # correlate with the server shot (same clip)
+           'session_id': b.get('session_id'),
+           'source': b.get('source') if b.get('source') in ('live', 'upload') else None,
+           'capture_mode': b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else 'shot',
+           'status': 'analyzed' if measured else 'failed',
+           'failure_code': None if measured else 'SHADOW_UNAVAILABLE',
+           'failure_stage': None if measured else 'track',
+           'platform': 'ios',                           # DEC-103: the on-device shadow engine
+           'algorithm_version': str(b.get('algorithm_version') or 'ios-ondevice')[:60],
+           'api_revision': (str(b.get('app_version'))[:60] if b.get('app_version') else None),
+           'duration_ms': int(lat * 1000) if isinstance(lat, (int, float)) else None,
+           'diagnostics': {k: v for k, v in diag.items() if v is not None},
+           'step_timings': {'client': b.get('timings')} if b.get('timings') else None,
+           'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+    try:
+        get_store().log_analysis_attempt(row)
+    except Exception as e:
+        print(f'shadow attempt log skipped ({e})')
+    return {'logged': True, 'platform': 'ios', 'status': row['status']}
 
 
 @app.post('/shots/analyze')

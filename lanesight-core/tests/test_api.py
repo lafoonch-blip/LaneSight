@@ -329,25 +329,55 @@ def test_precheck_is_safe_on_a_bad_path():
 
 
 def test_decode_stats_counts_passes():
-    """DEC-092 P0: the decode generator counts passes/frames so repeated decoding is measurable."""
+    """DEC-092 P0 counters + P1 decode-once: the first pass decodes and populates the bounded frame cache; a
+    second pass over a clip that fits the budget is served from the cache (no decode) with byte-identical frames."""
+    from lanesight_core.cv import stabilize as _stab
     from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats, frames
     import numpy as np, cv2, tempfile, os
+    _stab._FRAME_CACHE_MB = 100          # enough for the tiny clip regardless of the prod default
     reset_decode_stats()
-    assert decode_stats() == {'passes': 0, 'frames': 0, 'seconds': 0.0}
-    # write a tiny 5-frame clip and decode it twice
+    s0 = decode_stats()
+    assert s0['passes'] == 0 and s0['frames'] == 0 and s0['cached_passes'] == 0
+    # write a tiny 6-frame clip with distinct content per frame, then decode it twice
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, 't.mp4')
         w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 10, (32, 32))
-        for _ in range(5):
-            w.write(np.zeros((32, 32, 3), np.uint8))
+        for k in range(6):
+            w.write(np.full((32, 32, 3), k * 20, np.uint8))
         w.release()
         if not os.path.exists(p) or os.path.getsize(p) == 0:
             return  # no mp4 encoder available in this env; the counter contract is still covered above
-        for _ in range(2):
-            for _ in frames(p):
-                pass
+        first = [f.copy() for _, f in frames(p)]      # pass 1: decodes + populates cache
+        second = [f.copy() for _, f in frames(p)]      # pass 2: served from cache (fits the budget)
     s = decode_stats()
-    assert s['passes'] == 2 and s['frames'] >= 2
+    assert s['passes'] == 1, f"second pass should be cached, not decoded: {s}"
+    assert s['cached_passes'] == 1 and s['cache_complete'] is True
+    assert len(first) == len(second) and len(first) >= 2
+    for a, b in zip(first, second):                    # decode-once must be byte-identical (accuracy unchanged)
+        assert np.array_equal(a, b)
+
+
+def test_shadow_attempt_records_ios():
+    """DEC-106: the on-device shadow result is logged as a platform='ios' attempt (never shown/scored);
+    metrics land in diagnostics, device perf under diagnostics.device; 'unavailable' maps to failed."""
+    from lanesight_api.app import get_store
+    h = {'X-Dev-User': 'uShadow'}
+    r = client.post('/analysis/shadow', json={
+        'source': 'live', 'capture_mode': 'shot', 'basis': 'best_effort',
+        'metrics': {'ball_speed': 17.9, 'entry_board': 9.5},
+        'device_perf': {'latency_s': 14.2, 'peak_mem_mb': 68.0, 'thermal_state': 'nominal'},
+        'algorithm_version': 'ios-ondevice-0.1', 'app_version': 'ios-build-123'}, headers=h)
+    assert r.status_code == 200 and r.json() == {'logged': True, 'platform': 'ios', 'status': 'analyzed'}
+    att = [a for a in getattr(get_store(), 'analysis_attempts', [])
+           if a.get('platform') == 'ios' and a.get('user_id') == 'uShadow']
+    assert att, 'shadow attempt not logged'
+    last = att[-1]
+    assert last['status'] == 'analyzed' and last['diagnostics']['ball_speed'] == 17.9
+    assert last['diagnostics']['device']['peak_mem_mb'] == 68.0 and last['duration_ms'] == 14200
+    # a shot the on-device engine couldn't measure → failed, not a fake number
+    r2 = client.post('/analysis/shadow', json={'basis': 'unavailable', 'metrics': {}}, headers=h)
+    assert r2.json()['status'] == 'failed'
+    assert client.post('/analysis/shadow', json={'basis': 'best_effort'}).status_code == 401  # auth required
 
 
 def test_coaching_notify_flag():

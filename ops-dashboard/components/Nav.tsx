@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/storage", label: "Storage" },
   { href: "/architecture", label: "Architecture" },
   { href: "/releases", label: "Releases" },
+  { href: "/engine-compare", label: "Engine A/B" },
   { href: "/feedback", label: "Feedback" },
 ];
 
