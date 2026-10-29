@@ -21,6 +21,7 @@ export default async function Latency({ searchParams }: { searchParams: SearchPa
     { key: "p50_phone_upload_s", label: "Upload p50", num: true },
     { key: "p50_phone_pre_analyze_s", label: "Phone pre p50", num: true },
     { key: "cold_start_rate", label: "Cold start", num: true, render: (r) => pct(r.cold_start_rate) },
+    { key: "decode_cache_engaged_rate", label: "Decode cache", num: true, render: (r) => pct(r.decode_cache_engaged_rate) },
   ];
 
   return (

@@ -30,6 +30,7 @@ export interface LatencyRow {
   p50_total_s: number | null; p90_total_s: number | null; p50_server_analyze_s: number | null;
   p50_decode_s: number | null; p50_hdr_convert_s: number | null; p50_phone_trim_s: number | null;
   p50_phone_upload_s: number | null; p50_phone_pre_analyze_s: number | null; cold_start_rate: number | null;
+  decode_cache_engaged_rate: number | null;
 }
 export interface ReleaseRow {
   algorithm_version: string | null; api_revision: string | null; env: string;
