@@ -357,6 +357,259 @@
         "source": "label",
         "file": "validation/cv_eval/labels/IMG_8848.json"
       }
+    },
+    {
+      "id": "form_rear_1",
+      "clip": "Form Videos/Form Rear 1.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 30.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_1.json"
+      }
+    },
+    {
+      "id": "form_left_side_rear",
+      "clip": "Form Videos/Form left side rear.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_left_side_rear.json"
+      }
+    },
+    {
+      "id": "form_rear_view_5",
+      "clip": "Form Videos/Form rear view 5.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_view_5.json"
+      }
+    },
+    {
+      "id": "form_sid_view_2",
+      "clip": "Form Videos/Form sid view 2.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_sid_view_2.json"
+      }
+    },
+    {
+      "id": "form_side_view_1",
+      "clip": "Form Videos/Form side view 1.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_side_view_1.json"
+      }
+    },
+    {
+      "id": "form_side_view_3",
+      "clip": "Form Videos/Form side view 3.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_side_view_3.json"
+      }
+    },
+    {
+      "id": "form_side_view_4",
+      "clip": "Form Videos/Form side view 4.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_side_view_4.json"
+      }
+    },
+    {
+      "id": "form_rear_view_2",
+      "clip": "Form Videos/form rear view 2.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_view_2.json"
+      }
+    },
+    {
+      "id": "form_rear_view_3",
+      "clip": "Form Videos/form rear view 3.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_view_3.json"
+      }
+    },
+    {
+      "id": "form_rear_view_4",
+      "clip": "Form Videos/form rear view 4.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_view_4.json"
+      }
+    },
+    {
+      "id": "form_rear_view_6_blocked_steps",
+      "clip": "Form Videos/form rear view 6 blocked steps.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_rear_view_6_blocked_steps.json"
+      },
+      "label_note": "blocked steps (step-count edge case)"
+    },
+    {
+      "id": "form_side_view_5",
+      "clip": "Form Videos/form side view 5.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/form_side_view_5.json"
+      }
     }
   ]
 }

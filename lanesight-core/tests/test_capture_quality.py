@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from lanesight_core.cv.pipeline import far_lane_quality, _unsupported_view_record, _METRIC_CATALOG, ball_speed_plausible
+from lanesight_core.cv.pipeline import far_lane_quality, _unsupported_view_record, _METRIC_CATALOG, ball_speed_plausible, speed_withhold_reasons
 from lanesight_core.cv.lanes import classify_capture_view, _vp_solve
 from lanesight_core.failures import AnalysisFailure
 
@@ -157,3 +157,19 @@ def test_precheck_no_edges_and_foul_line_are_inconclusive():
     for code in ('LANE_NOT_DETECTED_NO_EDGES', 'FOUL_LINE_NOT_IN_VIEW', 'LANE_GEOMETRY_UNUSABLE'):
         e = AnalysisFailure(code, 'x', stage='lane')
         assert _confident_reject(e, 'bt709')[0] is False      # never reject on doubt (incl. low-camera foul miss)
+
+
+def test_speed_withhold_reasons_catches_the_real_over_reads():
+    """2026-10-29 soft gate: withhold a speed that passed the 8-30 hard band but is internally inconsistent.
+    Replicates the three field over-reads (IMG_8815, IMG_8819, the 26.25 mph clip) + a good control."""
+    # good control (IMG_8752): decelerates slightly, breakpoint mid-lane -> consistent, no reasons
+    assert speed_withhold_reasons(18.197, 16.951, 36.492) == []
+    # IMG_8819: back-half (21.99) FASTER than release (17.08) -> impossible
+    assert any('only decelerates' in r for r in speed_withhold_reasons(17.079, 21.99, 43.25))
+    # IMG_8815: release(21) vs late(14.67) diverge 6.3 mph AND breakpoint 15.2 ft out of range
+    r8815 = speed_withhold_reasons(20.998, 14.668, 15.237)
+    assert any('diverge' in x for x in r8815) and any('breakpoint' in x for x in r8815)
+    # 26.25 mph clip: breakpoint 15.2 ft out of range (depth scale compressed)
+    assert any('breakpoint' in x for x in speed_withhold_reasons(29.648, 25.461, 15.171))
+    # missing segment speeds -> can't judge divergence (no crash, no false withhold on that axis)
+    assert speed_withhold_reasons(None, None, 40.0) == []

@@ -98,6 +98,24 @@ def ball_speed_plausible(v, lo=8.0, hi=30.0):
     return False, (f"the shot timing came out implausible (measured {shown} over 60 ft): the ball's release or "
                    f"pin impact wasn't pinned down, so speed and entry can't be trusted.")
 
+
+def speed_withhold_reasons(speed_release, speed_late, breakpoint_ft,
+                           seg_noise=2.0, max_decel=5.0, bp_min=25.0, bp_max=55.0):
+    """Internal-consistency reasons to WITHHOLD a ball speed even when it's inside the 8-30 hard band — the
+    headline can still be confidently wrong when the track/geometry is internally inconsistent (wrong burst,
+    compressed depth scale). A real roll decelerates monotonically, and a real breakpoint sits mid-lane. Returns
+    a list of human reasons (empty = internally consistent). Pure + unit-tested; the pipeline acts on it."""
+    r = []
+    if speed_release is not None and speed_late is not None:
+        if speed_late > speed_release + seg_noise:
+            r.append(f'back-half speed {speed_late:.1f} exceeds release speed {speed_release:.1f} mph — a ball only decelerates')
+        elif speed_release - speed_late > max_decel:
+            r.append(f'release vs back-half speed diverge {speed_release - speed_late:.1f} mph — beyond physical deceleration')
+    if breakpoint_ft is not None and not (bp_min <= breakpoint_ft <= bp_max):
+        r.append(f'breakpoint distance {breakpoint_ft:.0f} ft outside the plausible {bp_min:.0f}-{bp_max:.0f} ft range — depth scale likely wrong')
+    return r
+
+
 def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
             timing_video=None, core_end_s=None, timings=None):
     # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
@@ -205,7 +223,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         rev_note = f'too few ball frames to read spin ({len(big)}<24)'
     # confidences
     lat_c = float(np.clip(1 - M['lateral_res_boards'] / 1.5, 0, 1))
-    speed_c = 0.9 if M['release_source'] == 'first_free_ball_detection' else 0.6
+    # Release-anchor confidence (2026-10-29): 'first_free_ball_detection' is the first ON-LANE ball, a reliable
+    # RELEASE proxy ONLY when a near-lane laydown is actually anchored — the ball can be visible well before
+    # release (esp. two-handed), so first-appearance ≠ release. Drop the old flat 0.9: require the laydown anchor
+    # for a confident speed (the consistency gate below withholds it entirely when the track is inconsistent).
+    _ffd = M['release_source'] == 'first_free_ball_detection'
+    speed_c = (0.75 if M.get('board_at_0ft') is not None else 0.45) if _ffd else 0.6
     meas = [
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, '60 ft foul→pins average (Ruby-comparable); ball tracked to the pins via far-lane recovery'),
         m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
@@ -235,6 +258,25 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
            and (not np.isfinite(x.value) or x.value <= 0):
             x.value, x.status, x.confidence = None, 'unavailable', 0.0
             x.note = (x.note + ' ' if x.note else '') + 'Segment speed came out non-physical (≤0); not reported.'
+    # Speed consistency gate (2026-10-29): the headline passed the 8-30 hard band but can still be confidently
+    # wrong when the track/geometry is internally inconsistent. WITHHOLD the speed (unavailable + reason) on a
+    # clear physical/geometry impossibility; mark it low_confidence when only the near-lane laydown anchor is
+    # missing (release extrapolated). Accuracy over coverage — never surface a confidently-wrong speed.
+    _SPEED_METRICS = ('ball_speed', 'speed_release', 'speed_early', 'speed_late')
+    withhold = speed_withhold_reasons(M.get('speed_release_mph'), M.get('speed_late_mph'), M.get('breakpoint_extreme_ft'))
+    if withhold:
+        why2 = 'Speed withheld — ' + '; '.join(withhold) + '.'
+        for x in meas:
+            if x.metric in _SPEED_METRICS:
+                x.value, x.status, x.confidence = None, 'unavailable', 0.0
+                x.note = why2
+        log('speed consistency gate: ' + why2)
+    elif M.get('board_at_0ft') is None:            # no near-lane laydown -> release extrapolated, trust less
+        for x in meas:
+            if x.metric in _SPEED_METRICS and x.value is not None and x.status not in ('unavailable',):
+                x.status = 'low_confidence'
+                x.confidence = min(x.confidence, 0.4)
+                x.note = (x.note + ' ' if x.note else '') + 'No near-lane laydown detected; release extrapolated.'
     # Plausibility gate (DEC-061): if the downlane depth scale is corrupt, keep the far-lane measurements but
     # mark them low_confidence with the reason, and flag capture_quality.far_lane = "limited" for the camera-spot
     # banner. Accuracy over coverage: a mis-calibrated entry board drives a wrong move, so it must not read 'ok'.

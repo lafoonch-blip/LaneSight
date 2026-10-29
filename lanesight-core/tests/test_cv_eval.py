@@ -193,3 +193,18 @@ def test_form_label_helpers(tmp_path):
     assert fl.form_event_count(L) == 2
     fl.bl.save(str(tmp_path), 'IMG_8846', L)                   # 8846 labeled; 8847 not
     assert fl.unlabeled_form_clips(man, str(tmp_path)) == ['IMG_8847']  # ball clip excluded
+
+
+def test_form_event_errors_scores_mapped_events():
+    from ops.cv_eval import form_event_errors
+    detected = {'E2': 1.00, 'E3': 1.40, 'E4': 1.90, 'E7': 2.45, 'E8': 2.30, 'first_step': 0.5}
+    labeled = {'ball_start_s': 1.05, 'pushaway_end_s': 1.40, 'top_of_swing_s': 2.10,
+               'release_s': 2.46, 'slide_stop_s': 2.33}
+    e = form_event_errors(detected, labeled, tol_s=0.10)
+    assert e['ball_start_s'] == {'err_s': 0.05, 'within': True}
+    assert e['pushaway_end_s']['err_s'] == 0.0 and e['pushaway_end_s']['within'] is True
+    assert e['top_of_swing_s']['err_s'] == 0.2 and e['top_of_swing_s']['within'] is False  # 1.90 vs 2.10
+    assert e['release_s']['within'] is True and e['slide_stop_s']['within'] is True
+    # a missing detection or label just drops that event — never an error
+    assert form_event_errors({'E2': 1.0}, {'top_of_swing_s': 2.0}) == {}
+    assert form_event_errors({}, {}) == {}

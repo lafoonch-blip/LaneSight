@@ -801,6 +801,16 @@ def _shot_card_enrich(store, user, sh: dict) -> dict:
         ins = rec.setdefault('insights', {})
         ins['throw'], ins['lane'], ins['coach'] = cb['throw'], cb['lane'], cb['coach']
         rec['baseline'] = cb['baseline']
+        # Speed vs the bowler's OWN baseline (≥20 prior shots): a speed far from their norm is suspect even when
+        # internally consistent — mark it low_confidence, never a silent 'ok' (2026-10-29). Serve-time only.
+        base_sp = (cb['baseline'] or {}).get('speed'); base_n = (cb['baseline'] or {}).get('n') or 0
+        spm = _mq.get('ball_speed') if isinstance(_mq.get('ball_speed'), dict) else None
+        if base_sp and base_n >= 20 and spm and spm.get('value') is not None and spm.get('status') == 'ok' \
+           and abs(spm['value'] - base_sp) > max(3.0, 0.25 * base_sp):
+            spm['status'] = 'low_confidence'
+            spm['confidence'] = min(spm.get('confidence') or 1.0, 0.4)
+            spm['note'] = ((spm.get('note') + ' ') if spm.get('note') else '') + \
+                f"{spm['value']:.1f} mph is far from your {base_sp:.1f} mph average ({base_n} shots) — read with caution."
     except Exception as e:
         print(f'shot-card enrich skipped ({type(e).__name__}: {e})')
     return sh

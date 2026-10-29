@@ -133,6 +133,49 @@ def _run_engine(path):
     return out
 
 
+# DEC-094 Form Gate A: map the engine's swing-event codes to the ground-truth label keys (form_label.py).
+FORM_EVENT_MAP = {'ball_start_s': 'E2', 'pushaway_end_s': 'E3', 'top_of_swing_s': 'E4',
+                  'slide_stop_s': 'E8', 'release_s': 'E7'}
+
+
+def form_event_errors(detected, labeled, tol_s=0.10):
+    """Per-event timing error |detected - labeled| (seconds) for the mapped swing events, with a within-tolerance
+    flag. `detected` = the form engine's events (E2…E8); `labeled` = ground truth {ball_start_s, …}. Scores only
+    events present in BOTH (so a missing detection or label just drops that event). Pure + unit-tested — this is
+    the Form Gate A comparison; the server Python engine is the reference, the on-device shadow is scored the same."""
+    out = {}
+    for lk, ek in FORM_EVENT_MAP.items():
+        lv, dv = (labeled or {}).get(lk), (detected or {}).get(ek)
+        if lv is None or dv is None:
+            continue
+        err = abs(float(dv) - float(lv))
+        out[lk] = {'err_s': round(err, 3), 'within': err <= tol_s}
+    return out
+
+
+def _run_form_engine(path):
+    """Run the Python form reference on one clip; capture detected events + runtime. Best-effort: a missing pose
+    model / MediaPipe is reported as a skipped status, never a crash (the Form eval set can be assembled before
+    the model is wired into this environment)."""
+    out = {'path': path, 'mode': 'form'}
+    if not os.path.exists(path):
+        return {**out, 'status': 'missing'}
+    cpu0, wall0 = time.process_time(), time.perf_counter()
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            from lanesight_core.form import analyze_form_clip
+            from lanesight_core.form.pose import pose_backend
+            rec = analyze_form_clip(path, os.path.join(td, 'form'), None, pose_backend())
+            out.update(status='analyzed', events=(rec.get('events') or {}), view=rec.get('view'),
+                       form_status=rec.get('status'))
+        except Exception as e:
+            out.update(status='failed', failure_code=(getattr(e, 'code', None) or type(e).__name__),
+                       error=str(e)[:200])
+        out['wall_s'] = round(time.perf_counter() - wall0, 2)
+        out['cpu_s'] = round(time.process_time() - cpu0, 2)
+    return out
+
+
 def _load_labels(labels_dir, shot_id):
     p = Path(labels_dir) / f"{shot_id}.json"
     return json.load(open(p)) if p.exists() else None
@@ -248,6 +291,19 @@ def run(manifest, clips_dir, labels_dir, tolerances, only=None, base_dir=None):
             results.append({'id': s['id'], 'status': 'not_present', 'camera_class': s.get('camera_class')})
             continue
         print(f"[cv_eval] {s['id']} …", flush=True)
+        if s.get('mode') == 'form':                  # DEC-094 Form Gate A: event-timing vs the form labels
+            r = _run_form_engine(str(Path(clips_dir) / s['clip']))
+            r['id'] = s['id']; r['camera_class'] = s.get('camera_class'); r['split'] = s.get('split')
+            labels = _load_labels(labels_dir, s['id'])
+            r['has_labels'] = labels is not None
+            tol = (tolerances.get('form_event_tol_s') or 0.10)
+            if labels and r.get('events'):
+                r['event_errors'] = form_event_errors(r['events'], labels.get('events'), tol_s=tol)
+            results.append(r)
+            print(f"[cv_eval]   {r.get('status')} (form) in {r.get('wall_s')}s"
+                  + (f" · events scored {len(r.get('event_errors') or {})}/5" if r.get('event_errors') else ''),
+                  flush=True)
+            continue
         r = _run_engine(str(Path(clips_dir) / s['clip']))
         r['id'] = s['id']; r['camera_class'] = s.get('camera_class'); r['split'] = s.get('split')
         labels = _load_labels(labels_dir, s['id'])
@@ -275,6 +331,20 @@ def summarize(results, manifest, tolerances):
     # plausible-but-wrong rate = plausible-wrong metric-instances / measured metric-instances that had a truth
     measured_with_truth = sum(1 for r in results for k in (tolerances.get('metrics') or {})
                               if (r.get('metrics') or {}).get(k) is not None and (r.get('gt_metrics') or {}).get(k) is not None)
+    # DEC-094 Form Gate A: per-event timing error + within-tolerance (pass) rate over labeled form clips.
+    form_results = [r for r in results if r.get('mode') == 'form']
+    scored = [r['event_errors'] for r in form_results if r.get('event_errors')]
+    form_gate = None
+    if form_results:
+        per = {}
+        for lk in FORM_EVENT_MAP:
+            errs = [d[lk]['err_s'] for d in scored if lk in d]
+            if errs:
+                per[lk] = {'n': len(errs), 'mae_s': round(sum(errs) / len(errs), 3),
+                           'within_rate': round(sum(1 for d in scored if d.get(lk, {}).get('within')) / len(errs), 3)}
+        form_gate = {'n_form': len(form_results), 'n_scored': len(scored), 'tol_s': 0.10, 'per_event': per,
+                     'form_labels_needed': [r['id'] for r in form_results
+                                            if r.get('status') == 'analyzed' and not r.get('has_labels')]}
     return {
         'n_shots': len(results),
         'n_analyzed': len(analyzed),
@@ -287,6 +357,7 @@ def summarize(results, manifest, tolerances):
         'plausible_but_wrong_rate': (round(len(plausible_wrong) / measured_with_truth, 3) if measured_with_truth else None),
         'labels_needed': [r['id'] for r in results if r.get('status') == 'analyzed' and not r.get('has_labels')],
         'thin_camera_classes': thin_camera_classes(manifest),
+        'form_gate': form_gate,
         'runtime': {'total_wall_s': round(sum(r.get('wall_s', 0) for r in results), 1),
                     'total_cpu_s': round(sum(r.get('cpu_s', 0) for r in results), 1)},
     }
