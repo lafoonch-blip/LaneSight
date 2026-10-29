@@ -329,25 +329,32 @@ def test_precheck_is_safe_on_a_bad_path():
 
 
 def test_decode_stats_counts_passes():
-    """DEC-092 P0: the decode generator counts passes/frames so repeated decoding is measurable."""
+    """DEC-092 P0 counters + P1 decode-once: the first pass decodes and populates the bounded frame cache; a
+    second pass over a clip that fits the budget is served from the cache (no decode) with byte-identical frames."""
+    from lanesight_core.cv import stabilize as _stab
     from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats, frames
     import numpy as np, cv2, tempfile, os
+    _stab._FRAME_CACHE_MB = 100          # enough for the tiny clip regardless of the prod default
     reset_decode_stats()
-    assert decode_stats() == {'passes': 0, 'frames': 0, 'seconds': 0.0}
-    # write a tiny 5-frame clip and decode it twice
+    s0 = decode_stats()
+    assert s0['passes'] == 0 and s0['frames'] == 0 and s0['cached_passes'] == 0
+    # write a tiny 6-frame clip with distinct content per frame, then decode it twice
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, 't.mp4')
         w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 10, (32, 32))
-        for _ in range(5):
-            w.write(np.zeros((32, 32, 3), np.uint8))
+        for k in range(6):
+            w.write(np.full((32, 32, 3), k * 20, np.uint8))
         w.release()
         if not os.path.exists(p) or os.path.getsize(p) == 0:
             return  # no mp4 encoder available in this env; the counter contract is still covered above
-        for _ in range(2):
-            for _ in frames(p):
-                pass
+        first = [f.copy() for _, f in frames(p)]      # pass 1: decodes + populates cache
+        second = [f.copy() for _, f in frames(p)]      # pass 2: served from cache (fits the budget)
     s = decode_stats()
-    assert s['passes'] == 2 and s['frames'] >= 2
+    assert s['passes'] == 1, f"second pass should be cached, not decoded: {s}"
+    assert s['cached_passes'] == 1 and s['cache_complete'] is True
+    assert len(first) == len(second) and len(first) >= 2
+    for a, b in zip(first, second):                    # decode-once must be byte-identical (accuracy unchanged)
+        assert np.array_equal(a, b)
 
 
 def test_coaching_notify_flag():

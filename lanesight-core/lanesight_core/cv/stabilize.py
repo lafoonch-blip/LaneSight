@@ -1,6 +1,6 @@
 """Stage 1: register every frame to a reference frame (static tripod, handheld, or head-mounted)
 and build a clean background plate in reference coordinates. Streaming: frames are never all held."""
-import cv2, numpy as np, subprocess, threading
+import cv2, numpy as np, subprocess, threading, os
 from concurrent.futures import ThreadPoolExecutor
 from ._parallel import workers
 from ..failures import AnalysisFailure
@@ -14,16 +14,36 @@ def pts(path):
 # that repeated full decodes — not the metric math — are the bottleneck before committing to decode-once (P1).
 # Module-level counters; the pipeline is serial so one frames() generator is active at a time.
 import time as _time
-_DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0}
+_DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0, 'cached_passes': 0, 'cached_frames': 0}
+
+# DEC-092 P1 decode-once: a memory-bounded frame cache. The pipeline decodes the clip ~9× (streaming, to keep
+# memory low). For a clip that fits the byte budget — the common case, since real shots are trimmed to a short
+# window — the FIRST full pass populates this cache and the remaining ~8 passes are served from it with no
+# decode. The frames served are byte-identical to a fresh decode (we store/serve independent copies), so metrics
+# are UNCHANGED — the only new resource is RAM, hard-capped by LANESIGHT_FRAME_CACHE_MB. A clip that would exceed
+# the budget (e.g. a long/no-trim clip) transparently falls back to today's re-decode, and any partial cache is
+# freed immediately, so peak RSS never exceeds (working set + budget). Set the budget to 0 to disable entirely.
+_FRAME_CACHE_MB = int(os.environ.get('LANESIGHT_FRAME_CACHE_MB', '1000'))   # hard RSS bound (well under 4 GiB:
+# peak ≈ working set ~2 GB + this ≈ 3 GB). Fits short / lower-fps / lower-res windows; a long 1080p60 window
+# (~9 s ≈ 3.3 GB) exceeds it and transparently falls back to re-decode. Set 0 to disable. See
+# 03_ENGINEERING/DECODE_ONCE_FINDINGS.md.
+_FCACHE = {'path': None, 'frames': {}, 'bytes': 0, 'complete': False, 'too_big': False}
+
+
+def reset_frame_cache():
+    _FCACHE.update(path=None, frames={}, bytes=0, complete=False, too_big=False)
 
 
 def reset_decode_stats():
-    _DECODE.update(passes=0, frames=0, seconds=0.0)
+    _DECODE.update(passes=0, frames=0, seconds=0.0, cached_passes=0, cached_frames=0)
+    reset_frame_cache()                               # free any held frames between analyses (memory hygiene)
 
 
 def decode_stats():
     return {'passes': _DECODE['passes'], 'frames': _DECODE['frames'],
-            'seconds': round(_DECODE['seconds'], 3)}
+            'seconds': round(_DECODE['seconds'], 3),
+            'cached_passes': _DECODE['cached_passes'], 'cached_frames': _DECODE['cached_frames'],
+            'cache_complete': _FCACHE['complete'], 'cache_mb': round(_FCACHE['bytes'] / 1048576, 1)}
 
 
 def open_capture(path):
@@ -39,15 +59,48 @@ def open_capture(path):
 
 
 def frames(path):
+    budget = _FRAME_CACHE_MB * 1048576
+    # Serve a fully-populated cache without touching the decoder (DEC-092 P1 decode-once). Each pass gets an
+    # independent copy, exactly as a fresh decode would — so results are byte-identical.
+    if budget > 0 and _FCACHE['path'] == path and _FCACHE['complete']:
+        _DECODE['cached_passes'] += 1
+        fr = _FCACHE['frames']
+        for i in range(len(fr)):
+            _DECODE['cached_frames'] += 1
+            yield i, fr[i].copy()
+        return
+    # Decode pass. Also populate the cache up to the budget (unless this path is already known too big).
     _DECODE['passes'] += 1
+    caching = budget > 0 and not _FCACHE['too_big']
+    if caching and _FCACHE['path'] != path:
+        reset_frame_cache(); _FCACHE['path'] = path       # (re)start population for this clip
+    elif caching:
+        _FCACHE.update(frames={}, bytes=0, complete=False)  # re-populate from scratch this pass
     cap = open_capture(path); i = 0
-    while True:
-        t = _time.perf_counter()
-        ok, f = cap.read()
-        _DECODE['seconds'] += _time.perf_counter() - t
-        if not ok: return
-        _DECODE['frames'] += 1
-        yield i, f; i += 1
+    nframes_hint = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)   # cheap upfront size check (0 if codec won't say)
+    try:
+        while True:
+            t = _time.perf_counter()
+            ok, f = cap.read()
+            _DECODE['seconds'] += _time.perf_counter() - t
+            if not ok:
+                if caching:
+                    _FCACHE['complete'] = True              # reached EOF within budget → cache is whole
+                return
+            _DECODE['frames'] += 1
+            if caching and i == 0 and nframes_hint > 0 and nframes_hint * f.nbytes > budget:
+                _FCACHE.update(frames={}, bytes=0, too_big=True)   # known too big up front → never populate (no waste)
+                caching = False
+            if caching:
+                if _FCACHE['bytes'] + f.nbytes > budget:    # would exceed the cap → give up caching this clip,
+                    _FCACHE.update(frames={}, bytes=0, too_big=True)   # free the partial cache, fall back to decode
+                    caching = False
+                else:
+                    _FCACHE['frames'][i] = f.copy()         # copy: cv2 reuses its read buffer across read() calls
+                    _FCACHE['bytes'] += f.nbytes
+            yield i, f; i += 1
+    finally:
+        cap.release()
 
 def wood_mask(bgr):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
