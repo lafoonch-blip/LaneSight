@@ -1,12 +1,11 @@
 {
-  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py). The smoke asserts the live API reproduces these values within the DEC-092 don't-regress tolerance (ball_speed +/-0.2 mph), so it catches metric DRIFT between revisions, not just breakage. Values are the SERVER's stable output (not the local/validation figure): the server analyzes the untrimmed clip and its impact-timing-sensitive 60 ft average reads ~1.9 mph below the local pipeline + Ruby (17.84/17.8) on IMG_8753 -- a Cloud-Run-vs-local CV reproducibility gap (FLAGGED, not a deploy regression). When a deploy intentionally changes a value, update it here with the reason.",
+  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py); asserts the live API reproduces ball_speed within the DEC-092 don't-regress tolerance (+/-0.2 mph) -- catches DRIFT, not just breakage. 2026-10-29: ball_speed is now the EARLY-LANE (release) speed (reverts DEC-064 -> DEC-030). Server early speed for IMG_8753 = 16.04; local = ~18.7 -- a systematic ~12% server-vs-local speed-scale gap (container ffmpeg/decode vs Mac) affects ALL speed definitions equally, FLAGGED separately. Update here when a deploy intentionally changes a value.",
   "clips": {
     "IMG_8753.MOV": {
-      "ball_speed": 15.98,
+      "ball_speed": 16.04,
       "tol_mph": 0.2,
-      "server_rev_captured": "lanesight-api-00049-m7g",
-      "local_and_ruby": 17.84,
-      "discrepancy": "server 60ft-average reads ~1.9 mph low vs local/Ruby (impact-timing reproducibility gap on the untrimmed clip); release speed (front-half, also stored) is robust to this -- headline definition decision deferred (store-both, show-both after design update)."
+      "definition": "early-lane (release) speed, 4-24ft regression fit",
+      "server_vs_local": "server 16.04 vs local ~18.7 -- systematic ~12% ffmpeg/decode gap (flagged, not a deploy regression)"
     }
   }
 }

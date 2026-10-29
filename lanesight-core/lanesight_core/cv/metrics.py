@@ -112,10 +112,18 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     # half of the track -- so it is immune to back-half fade that otherwise inflates a fixed 60 ft / interval by up
     # to ~12% when the track stops short of the pins (DEC-022r). The 60 ft average (foul->pins) is kept as a
     # secondary metric; it varies with ball/friction and needs the ball tracked to the pins.
-    out['ball_speed_mph'] = mph(60.0 / (t_impact - release_t))     # 60 ft foul->pins average; reliable again now
-    out['speed_release_mph'] = mph(early[0])                       # that far-lane recovery (extend_forward) tracks
-    # the ball to the pins. speed_release is the front-half skid speed: robust when the back half is lost, but it
-    # reads ~9% low from a near-field homography Z-scale residual, to be settled against Specto (DEC-030r).
+    # Headline = EARLY-LANE (release) speed: a regression fit of velocity over the skid (~4-24 ft) through ALL
+    # observed front-lane positions, where the ball is big, sharp and seen in many frames. Unlike the 60 ft
+    # average it does NOT need the ball tracked to the pins / the pin impact, so it is AVAILABLE on exactly the
+    # clips the average fails (BALL_TRACK_NOT_FOUND / TRACK_TOO_SPARSE / PIN_IMPACT_NOT_DETECTED). The 60 ft
+    # foul->pins average is kept as a LABELED SECONDARY when the pins are reached. (Shayne 2026-10-29 — reverses
+    # DEC-064's 60-ft-average headline back to DEC-030's release-speed headline; a DEC follows.) KNOWN ISSUE: a
+    # systematic ~12% server-vs-local speed-scale gap (container ffmpeg/decode vs Mac) affects ALL definitions
+    # equally — tracked separately; switching the headline neither causes nor fixes it.
+    out['ball_speed_mph'] = mph(early[0])                          # headline = early-lane / release speed (always available)
+    out['speed_release_mph'] = mph(early[0])                       # same value; explicit name kept for existing callers
+    out['speed_avg_60ft_mph'] = (mph(60.0 / (t_impact - release_t))
+                                 if (t_impact is not None and release_t is not None) else None)  # secondary (needs pins)
     # loft: release -> touchdown (blob h/w step), times early-lane speed. 60 fps limits this to about +/-0.45 ft
     if src == 'first_free_ball_detection' and t_touch is not None and t_touch > release_t:
         out['loft_ft'] = float(early[0] * (t_touch - release_t)); out['t_touchdown'] = float(t_touch)
