@@ -1,8 +1,8 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.1
-Last Updated: 2026-10-28
+Version: 1.2
+Last Updated: 2026-10-29
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
 
@@ -73,6 +73,10 @@ Each metric: **source view.column** — definition — honesty rule.
 
 ### Freshness (`ops.freshness`, per source)
 - **source, last_ingested, rows** — drives the dashboard's last-updated clock and per-source NO DATA.
+
+## 4b. Backlog / future panels (not built)
+
+- **Engine accuracy comparison — Python reference vs Swift vs ground truth** (DEC-106). A per-metric panel comparing the three engines on the **DEC-094 labeled dataset**, broken out **by engine `algorithm_version`** (ties to `ops.release_health` / the `analysis_attempt.engine` provenance from DEC-103). Columns per metric (speed, entry board, entry angle, rev rate, …): **accuracy** (error vs ground truth, per DEC-034 tolerances), **bias** (signed mean error — is the engine systematically high/low), **unavailable rate** (share returned `unavailable` rather than a number), and **latency**. This is the runtime face of the DEC-106 promotion gates (A accuracy / B integrity / C performance) — it lets the owner watch Swift converge on (and pass) the Python reference against ground truth before promotion. **Blocked on:** the DEC-094 eval set existing (labeled ground-truth dataset + harness). Build after DEC-094 lands.
 
 ## 5. Change control
 

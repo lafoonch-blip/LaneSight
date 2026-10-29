@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.65  
+Version: 1.66  
 Last Updated: 2026-10-29  
 Owner: Shayne  
-Supersedes: v1.64
+Supersedes: v1.65
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1234,7 +1234,7 @@ entries stand as record (never edited); their *Ruby-validation* basis is no long
 - **No wholesale port** of the current classical pipeline while DEC-062/065/094 work is in progress. Experimental Swift prototypes/benchmarks continue, labeled non-production (the current `feat/on-device-analysis` engine is exactly this). New detection models are built Core ML-ready.
 - **Phases:** 0. Explain the Cloud Run vs Mac latency gap. · 1. Finalize detection/geometry/metric definitions in the Python reference. · 2. Labeled dataset + accuracy harness (DEC-094). · 3. Core ML models, validated. · 4. Port the stable geometry + metric layer to Swift. · 5. Full iPhone pipeline validation. · 6. Promote Swift to production after shadow comparison. (0–2 may overlap.)
 - **Promotion gates for any production engine (ground truth, not Python parity):** A — Accuracy (DEC-034 + per-metric tolerances vs ground truth); B — Integrity (confidence, unavailable states, observed-vs-predicted, geometry validity, plausible-but-wrong rate, DEC-094); C — Performance (latency, battery, memory, thermals, sustained full sessions). Python/Swift agreement is diagnostic only.
-- **Server stays authoritative** for coaching, scoring, achievements, history and sync. Offline at the lane: the phone shows measured metrics immediately. Coaching advice shows when the server responds, or is computed on-device from the same versioned rules — **open question for Shayne before Phase 6**.
+- **Server stays authoritative** for the official LaneSight Score, tiers, achievements, history and sync. **Offline behavior (decided):** the phone shows measured ball/form metrics immediately; the **official Score/tiers/achievements are NOT computed on-device** — the app shows the **last synced score labeled "Updates when online"**, computes **session stats locally** (per-session averages/trends from this session's measured shots), and **queues shots for sync** so the authoritative score/tiers/achievements recompute server-side on reconnect. **Next-shot coaching advice offline remains an open question** (current lean: **show it on reconnect** rather than compute advice on-device) — **decide before Phase 6**.
 **Why:** on-device is feasible and fast on iPhone 17 Pro Max (~550 fps decode, peak memory ~68 MB, no throttling over 30 shots); it enables offline, instant feedback at ~$0/shot; a portable CPU core would give up the Apple accelerators that make on-device worthwhile; porting a mid-redesign pipeline would mean porting it twice.
 **Date:** 2026-10-29 · **Status:** ACCEPTED · **Supersedes:** makes decisive **DEC-102** (offline-first hybrid → the on-device engine is specifically native Swift/Vision/Core ML and is THE production target) and **DEC-103** (its two gates are the ground-truth promotion gates above); refines DEC-043 hosting assumptions for the long term; DEC-092 server work continues meanwhile.
 
