@@ -25,6 +25,11 @@ struct OnDeviceShadowView: View {
                 } label: {
                     HStack { Text("Run on-device stabilization"); if running { Spacer(); ProgressView() } }
                 }.disabled(running || clipURL == nil)
+                Button {
+                    Task { await runLanes() }
+                } label: {
+                    HStack { Text("Run lane detection (stage 2)"); if running { Spacer(); ProgressView() } }
+                }.disabled(running || clipURL == nil)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled) }
             } header: { Text("On-device analysis — Stage 1 (shadow)") } footer: {
                 Text("Ports the server's stabilization (frame→reference homography) to Vision on-device. Streams frames (memory-safe). Compare timing/quality to the server's cv.stabilize_s (~15s/clip).")
@@ -70,6 +75,33 @@ struct OnDeviceShadowView: View {
             in the parity gate. Transforms are the stage-1 input for tracking (not yet ported).
             """
         } catch { self.error = "stabilize failed: \(error.localizedDescription)" }
+        running = false
+    }
+
+    private func runLanes() async {
+        guard let url = clipURL else { return }
+        running = true; error = nil; report = ""
+        // Detect on a steady early frame (stage-1 reference stand-in). Off the main actor (CV work).
+        let geo: ODLaneGeometry? = await Task.detached {
+            guard let px = OnDeviceLaneDetector.referenceFrame(url: url, at: 30) else { return nil }
+            return OnDeviceLaneDetector.detect(pixelBuffer: px)
+        }.value
+        if let g = geo {
+            func f(_ v: Float, _ n: Int = 1) -> String { String(format: "%.\(n)f", v) }
+            let vp = g.vanishingPoint.map { "(\(f($0.x)), \(f($0.y)))" } ?? "— (unsolvable)"
+            var lines = """
+            On-device lane detection (Stage 2, first pass)
+            Image: \(g.imageSize.x)x\(g.imageSize.y)   sat floor used: S>\(g.satFloorUsed)
+            Lanes found (VP-agreeing): \(g.lanes.count)
+            Vanishing point: \(vp)
+            Foul line y: \(g.foulLineY.map(String.init) ?? "—")
+            """
+            for (i, l) in g.lanes.prefix(4).enumerated() {
+                lines += "\n  lane \(i): left x=\(f(l.left.a,3))·y+\(f(l.left.b,1))  right x=\(f(l.right.a,3))·y+\(f(l.right.b,1))  nearWidth \(f(l.widthNearPx))px  y[\(l.yFar)…\(l.yNear)]"
+            }
+            lines += "\n\nFirst pass (port of cv/lanes.py). Eyeball: VP should sit above the lane, foul line near the\nbottom of the lane surface, nearWidth plausible. Mis-detections → threshold tuning (next)."
+            report = lines
+        } else { error = "lane detection: could not read a frame" }
         running = false
     }
 }
