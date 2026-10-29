@@ -130,8 +130,9 @@ enum OnDeviceTracker {
     /// median background. Never holds all frames (that OOM-killed the app). Downscales to ~540p working height
     /// (stride) → ~stride² less memory + faster; blob coords are scaled back to full-res in track().
     nonisolated private static func buildBackground(url: URL, maxFrames: Int) -> (Int, Int, Int, [Double], [UInt8])? {
-        guard let track = AVURLAsset(url: url).tracks(withMediaType: .video).first,
-              let reader = try? AVAssetReader(asset: AVURLAsset(url: url)) else { return nil }
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false
@@ -163,8 +164,9 @@ enum OnDeviceTracker {
     }
 
     nonisolated private static func forEachLuma(url: URL, stride: Int, sw: Int, sh: Int, _ body: (Int, [UInt8]) -> Void) {
-        guard let track = AVURLAsset(url: url).tracks(withMediaType: .video).first,
-              let reader = try? AVAssetReader(asset: AVURLAsset(url: url)) else { return }
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false

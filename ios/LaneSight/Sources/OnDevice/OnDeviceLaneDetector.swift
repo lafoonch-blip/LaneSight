@@ -213,8 +213,9 @@ enum OnDeviceLaneDetector {
 
     // MARK: convenience — grab a steady frame from a clip for a standalone run
     nonisolated static func referenceFrame(url: URL, at index: Int = 30) -> CVPixelBuffer? {
-        guard let track = AVURLAsset(url: url).tracks(withMediaType: .video).first,
-              let reader = try? AVAssetReader(asset: AVURLAsset(url: url)) else { return nil }
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = true

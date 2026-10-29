@@ -51,6 +51,26 @@ struct LaneSightApp: App {
                 }
             }
             .task { connectivity.start() }
+            #if DEBUG
+            // Diagnostic: run the on-device pipeline on a clip path at launch (sim repro). Stage-by-stage
+            // prints so a crash shows the last stage reached. Set LS_ONDEVICE_TEST=<path to a .mov>.
+            .task {
+                guard let p = ProcessInfo.processInfo.environment["LS_ONDEVICE_TEST"] else { return }
+                await Task.detached {
+                    let url = URL(fileURLWithPath: p)
+                    print("ONDEV: start \(p)")
+                    guard let px = OnDeviceLaneDetector.referenceFrame(url: url, at: 30) else { print("ONDEV: no reference frame"); return }
+                    print("ONDEV: got reference frame")
+                    let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
+                    print("ONDEV: lanes=\(geo.lanes.count) vp=\(String(describing: geo.vanishingPoint)) foul=\(String(describing: geo.foulLineY))")
+                    let tr = OnDeviceTracker.track(url: url, geo: geo)
+                    print("ONDEV: track pts=\(tr.points.count) scanned=\(tr.framesScanned) cand=\(tr.candidateFrames)")
+                    let sp = OnDeviceTracker.speed(track: tr, foulLineY: geo.foulLineY)
+                    print("ONDEV: speed=\(String(describing: sp.mph)) basis=\(sp.basis) note=\(sp.note)")
+                    print("ONDEV: DONE")
+                }.value
+            }
+            #endif
             .environmentObject(model)
             .environmentObject(tabData)
             // Never show one account's data to the next: drop the tab cache on sign-in/out.
