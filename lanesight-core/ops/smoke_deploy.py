@@ -112,15 +112,21 @@ def main():
     mets = rec.get('metrics') or {}
     bs = (mets.get('ball_speed') or {})
     val, status = bs.get('value'), bs.get('status')
+    early = (mets.get('speed_release') or {}).get('value')
     ref = json.load(open(REFERENCE))['clips'][CLIP_KEY]
     exp, tol = ref['ball_speed'], ref['tol_mph']
-    print(f'smoke: shot={shot_id} ball_speed={val} status={status} (reference {exp}±{tol} mph)')
+    print(f'smoke: shot={shot_id} ball_speed={val} speed_release={early} status={status} (reference {exp}±{tol} mph)')
     if status != 'ok' or val is None:
         raise SystemExit(f'SMOKE FAIL: ball_speed not measured (status={status})')
     if abs(val - exp) > tol:
         raise SystemExit(f'SMOKE FAIL: ball_speed {val} drifted from reference {exp} by '
                          f'{val - exp:+.2f} (> ±{tol}). If intentional, update ops/smoke_reference.json.')
-    print('SMOKE PASS')
+    # DEC-107: the headline MUST be the early-lane (release) speed, not the 60 ft average. Assert equality so a
+    # revision still on the old 60-ft headline fails (the two values are too close on IMG_8753 for the band alone).
+    if early is None or abs(val - early) > 0.05:
+        raise SystemExit(f'SMOKE FAIL: headline ball_speed ({val}) is not the early-lane speed '
+                         f'(speed_release={early}) — revision is on the OLD 60 ft-average headline.')
+    print('SMOKE PASS (headline = early-lane speed)')
 
 
 if __name__ == '__main__':
