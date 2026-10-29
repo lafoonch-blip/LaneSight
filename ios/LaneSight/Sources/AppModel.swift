@@ -574,16 +574,20 @@ final class AppModel: ObservableObject {
     /// the result as platform='ios'. Ball shots only; every failure is swallowed — it must never affect the
     /// user's result, Score or UI.
     private func launchShadow(clipURL: URL, shotId: String, source: String, sessionId: String?) {
-        guard captureMode != "form" else { return }            // on-device engine is ball-only
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shadow-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return }
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let mode = captureMode
+        let hand = handed
         Task.detached(priority: .utility) {
             defer { try? FileManager.default.removeItem(at: copy) }
-            let payload = await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
-                                                   sessionId: sessionId, captureMode: mode, appVersion: appVersion)
+            // Ball shots -> the CV shadow; Form -> the Vision body-pose shadow. Both post platform='ios'.
+            let payload: [String: Any] = (mode == "form")
+                ? await OnDeviceFormShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                               sessionId: sessionId, handed: hand, appVersion: appVersion)
+                : await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                           sessionId: sessionId, captureMode: mode, appVersion: appVersion)
             guard let json = try? JSONSerialization.data(withJSONObject: payload) else { return }
             await MainActor.run { [weak self] in
                 guard let self, let client = try? self.makeClient() else { return }
