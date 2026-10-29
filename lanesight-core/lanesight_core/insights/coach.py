@@ -29,6 +29,42 @@ SPEED_BAND_MPH = 0.7         # within ± this of your median = "= your avg"
 SPEED_OFF_MPH = 1.0          # beyond ± this = an off throw (faster/slower than usual)
 ARROWS_BAND = 1.0            # boards at the arrows vs the target line
 ANGLE_TARGET_LO, ANGLE_TARGET_HI = 4.0, 6.0   # entry-angle window that carries (DEC-064)
+ARROW_SCALE = 5.0            # DEC-031: a full arrow miss (score 0) at >= this many boards off intent
+BP_SCALE = 8.0               # DEC-031: a full breakpoint miss (score 0) at >= this many boards off intent
+
+
+def _component_score(err: float, scale: float) -> float:
+    """DEC-031 component: 100 at zero error, linearly to 0 at `scale` boards off, clamped."""
+    return 100.0 * max(0.0, 1.0 - min(err / scale, 1.0))
+
+
+def accuracy_score(arrows_act, arrows_tgt, bp_act=None, bp_tgt=None) -> dict:
+    """DEC-031 per-shot Accuracy (0-100): how closely the shot followed the bowler's intended line at the
+    arrows and breakpoint. Never uses pinfall (DEC-031). Returns {value, status, vs, note, components}.
+
+    Honest by construction — `value` is None whenever Accuracy can't be measured, never 0 (a 0 would read as a
+    measured total miss):
+      - no intended line               -> unavailable, 'Set a target line to measure accuracy'
+      - no measured arrows board        -> unavailable, reason
+      - breakpoint missing/low-conf     -> ARROWS-ONLY score, low_confidence (NOT blended as a 0-board bp miss;
+                                           breakpoint is a far-lane metric gated under DEC-065 until Phase-2)
+      - both arrows + breakpoint present -> full 0.60·arrow + 0.40·breakpoint, status ok
+    `vs` is the arrows board vs target line the card shows under the ring (DEC-090)."""
+    if arrows_tgt is None:
+        return {'value': None, 'status': 'unavailable', 'vs': None,
+                'note': 'Set a target line to measure accuracy'}
+    if arrows_act is None:
+        return {'value': None, 'status': 'unavailable', 'vs': None,
+                'note': 'The arrows board was not measured on this shot'}
+    arrow_sc = _component_score(abs(arrows_act - arrows_tgt), ARROW_SCALE)
+    vs = f"{round(arrows_act, 1)} vs {round(arrows_tgt, 1)}"
+    if bp_act is None or bp_tgt is None:
+        return {'value': round(arrow_sc), 'status': 'low_confidence', 'vs': vs,
+                'note': "From your arrows only — the breakpoint isn't measured from this camera yet.",
+                'components': {'arrow': round(arrow_sc)}}
+    bp_sc = _component_score(abs(bp_act - bp_tgt), BP_SCALE)
+    return {'value': round(0.60 * arrow_sc + 0.40 * bp_sc), 'status': 'ok', 'vs': vs,
+            'components': {'arrow': round(arrow_sc), 'breakpoint': round(bp_sc)}}
 
 
 def baseline(shots: list[dict]) -> dict:
@@ -50,20 +86,33 @@ def _vs_avg(value, avg, band):
     return s, within
 
 
-def classify_throw(metrics: dict, base: dict, target: dict | None = None) -> dict:
+def classify_throw(metrics: dict, base: dict, target: dict | None = None, quality: dict | None = None) -> dict:
     """Throw status from speed/rev vs the bowler's normal + the line rolled vs the target. Below the baseline
-    minimum there is no 'normal', so the status is 'building' and the coach uses lane-only advice."""
+    minimum there is no 'normal', so the status is 'building' and the coach uses lane-only advice. `quality`
+    (DEC-094 §5/§6) gates the Accuracy inputs so a low-confidence arrows/breakpoint read never produces a
+    confident score."""
     speed, rev, arrows = metrics.get('ball_speed'), metrics.get('rev_rate'), metrics.get('arrows_board')
     tgt_arrows = (target or {}).get('arrows_board')
     building = base.get('n', 0) < BASELINE_MIN_N
 
     speed_s, speed_ok = _vs_avg(speed, base.get('speed'), SPEED_BAND_MPH)
     rev_s, _ = _vs_avg(rev, base.get('rev'), 25.0)
-    # Accuracy ring compares the rolled line to the TARGET line when set, else to the bowler's normal line.
+    # Accuracy ring = DEC-031 execution-against-intent score (0-100), NOT the raw arrows board (DEC-090). Gate
+    # each input on its quality: a low-confidence / unavailable arrows or breakpoint read is dropped so the
+    # score is unavailable or arrows-only rather than confidently wrong.
+    qshot = {'_quality': quality} if quality else {}
+    if quality:
+        from .uncertainty import metric_ok
+        arrows_q = arrows if metric_ok(qshot, 'arrows_board')[0] else None
+        bp_q = metrics.get('breakpoint_board') if metric_ok(qshot, 'breakpoint_board')[0] else None
+    else:
+        arrows_q, bp_q = arrows, metrics.get('breakpoint_board')
+    accuracy = accuracy_score(arrows_q, tgt_arrows, bp_q, (target or {}).get('breakpoint_board'))
+    # The off/good VERDICT still compares the rolled line to the target when set, else to the bowler's normal.
     arrows_ref = tgt_arrows if tgt_arrows is not None else base.get('arrows')
-    arrows_s, arrows_ok = _vs_avg(arrows, arrows_ref, ARROWS_BAND)
+    _, arrows_ok = _vs_avg(arrows, arrows_ref, ARROWS_BAND)
     rings = {'speed': {'value': speed, 'vs': speed_s}, 'rev': {'value': rev, 'vs': rev_s},
-             'accuracy': {'value': arrows, 'vs': arrows_s}}
+             'accuracy': accuracy}
 
     if building:
         return {'status': 'building', 'verdict': f"Building your normal ({base.get('n', 0)}/{BASELINE_MIN_N})",
@@ -154,6 +203,6 @@ def build(metrics: dict, key_points: dict | None, prior_shots: list[dict],
     """Full coach block for the shot card: {throw, lane, coach, baseline}. `quality` is the per-metric
     status/uncertainty map (DEC-094 §5/§6); when given, the lane verdict is gated on entry-board quality."""
     base = baseline(prior_shots)
-    throw = classify_throw(metrics or {}, base, target)
+    throw = classify_throw(metrics or {}, base, target, quality=quality)
     lane = classify_lane(metrics or {}, key_points, far_lane, quality=quality)
     return {'throw': throw, 'lane': lane, 'coach': coach(throw, lane, recommendation), 'baseline': base}

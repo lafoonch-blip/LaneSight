@@ -124,7 +124,7 @@
       "clip": "precheck_foul_offbottom.mov",
       "expected": "failed",
       "failure_code": "FOUL_LINE_NOT_IN_VIEW",
-      "note": "wide oblique low POV beside the ball return; multiple lanes, bowler lane/approach runs off the bottom, no single lane framed foul->pins, ~623px camera motion. Pipeline correctly fails; precheck false-passed (ok=true) -> 2-min wait then fail. precheck should warn on this framing upfront."
+      "note": "wide oblique low POV beside the ball return; multiple lanes, bowler lane/approach runs off the bottom, no single lane framed foul->pins, ~623px camera motion. Pipeline correctly fails. FIXED 2026-10-29: precheck now confident-rejects FOUL_LINE_NOT_IN_VIEW (ok=false) so the app warns upfront instead of a 2-min wait; gated on ops/precheck_vs_pipeline.py = 0 false rejections (8751-8754 reach ok=true)."
     }
   ]
 }

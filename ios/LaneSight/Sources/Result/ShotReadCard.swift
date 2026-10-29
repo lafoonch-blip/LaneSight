@@ -35,7 +35,7 @@ struct ShotReadCard: View {
             HStack(alignment: .top, spacing: 6) {
                 ring("Speed", r?["speed"]?.value, unit: "mph", sub: r?["speed"]?.vs, lo: 8, hi: 24, color: throwColor)
                 ring("Rev rate", r?["rev"]?.value, unit: "rpm", sub: r?["rev"]?.vs, lo: 100, hi: 600, color: throwColor)
-                ring("Accuracy", r?["accuracy"]?.value, unit: "bd", sub: r?["accuracy"]?.vs, lo: 1, hi: 39, color: throwColor)
+                accuracyRing(r?["accuracy"])
             }
         }
     }
@@ -101,6 +101,18 @@ struct ShotReadCard: View {
                     .lineLimit(1).minimumScaleFactor(0.7)
             }
         }
+    }
+
+    /// Accuracy ring = DEC-031 execution-against-intent score (0-100), NOT the raw arrows board (DEC-090). The
+    /// arrows-board-vs-target line sits under it. Honest: a low-confidence score (arrows only — breakpoint
+    /// isn't read from this camera) is drawn in the muted color so it never reads as a confident result; an
+    /// unavailable score shows "—" with the server's one-line reason, never a number.
+    private func accuracyRing(_ a: CoachRing?) -> some View {
+        let unavailable = a?.value == nil
+        let lowConf = a?.status == "low_confidence"
+        let color: Color = (unavailable || lowConf) ? LS.textSecondary : throwColor
+        let sub = a?.vs ?? a?.note ?? (unavailable ? "Set a target to measure" : nil)
+        return ring("Accuracy", a?.value, unit: "", sub: sub, lo: 0, hi: 100, color: color)
     }
 
     private func ring(_ label: String, _ value: Double?, unit: String, sub: String?, lo: Double, hi: Double, color: Color) -> some View {

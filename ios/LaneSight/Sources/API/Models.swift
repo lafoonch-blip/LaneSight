@@ -347,7 +347,12 @@ struct CoachThrow: Codable, Equatable {
     let verdict: String?
     let rings: [String: CoachRing]?   // speed | rev | accuracy
 }
-struct CoachRing: Codable, Equatable { let value: Double?; let vs: String? }
+struct CoachRing: Codable, Equatable {
+    let value: Double?          // the ring number (Accuracy = DEC-031 0-100 score; nil when not measured)
+    let vs: String?             // comparison line under the ring ("= your avg", "12.2 vs 12")
+    let status: String?         // ok | low_confidence | unavailable (Accuracy; absent on speed/rev)
+    let note: String?           // one-line reason when unavailable / low-confidence (never a bare number)
+}
 struct CoachLane: Codable, Equatable {
     let status: String?        // good | miss | not_read
     let explanation: String?

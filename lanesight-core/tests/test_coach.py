@@ -58,3 +58,45 @@ def test_baseline_medians_and_count():
     b = coach.baseline(_base(n=5, speed=12.0) + [{'ball_speed': 20.0, 'rev_rate': None, 'arrows_board': None}])
     assert b['n'] == 6 and b['speed'] == 12.0        # median robust to the one outlier
     assert b['rev'] == 400.0 and b['arrows'] == 10.0
+
+
+# --- DEC-031 per-shot Accuracy score (0-100), wired into the throw accuracy ring (DEC-090) ---
+
+def test_accuracy_score_exact_dec031():
+    # On line at both: arrow err 0 -> 100, bp err 0 -> 100 -> 0.6*100+0.4*100 = 100.
+    assert coach.accuracy_score(12.0, 12.0, 40.0, 40.0)['value'] == 100
+    # Arrow 2 boards off (score 100*(1-2/5)=60), breakpoint 4 off (100*(1-4/8)=50): 0.6*60+0.4*50 = 56.
+    a = coach.accuracy_score(14.0, 12.0, 44.0, 40.0)
+    assert a['value'] == 56 and a['status'] == 'ok'
+    assert a['components'] == {'arrow': 60, 'breakpoint': 50}
+    # Full miss beyond both scales clamps to 0 (a measured total miss is a real 0 only when both inputs exist).
+    assert coach.accuracy_score(20.0, 12.0, 60.0, 40.0)['value'] == 0
+
+
+def test_accuracy_unavailable_without_target_is_never_zero():
+    a = coach.accuracy_score(12.0, None)
+    assert a['value'] is None and a['status'] == 'unavailable' and 'target line' in a['note']
+    # measured arrows missing -> unavailable, not 0
+    assert coach.accuracy_score(None, 12.0)['value'] is None
+
+
+def test_accuracy_arrows_only_when_breakpoint_missing_is_low_confidence():
+    # Breakpoint is a far-lane metric gated under DEC-065: with no bp, score is arrows-only + low_confidence,
+    # NOT blended as a 0-board breakpoint hit.
+    a = coach.accuracy_score(13.0, 12.0, None, 40.0)      # arrow 1 off -> 80
+    assert a['value'] == 80 and a['status'] == 'low_confidence' and 'arrows only' in a['note']
+    assert a['vs'] == '13.0 vs 12.0'
+
+
+def test_accuracy_ring_drops_low_confidence_breakpoint_via_quality():
+    base = _base()
+    m = {'ball_speed': 12.1, 'rev_rate': 405, 'arrows_board': 12.0, 'breakpoint_board': 44.0}
+    tgt = {'arrows_board': 12.0, 'breakpoint_board': 40.0}
+    # breakpoint measured but low_confidence -> dropped -> arrows-only score (100 on line), low_confidence.
+    q = {'arrows_board': {'status': 'ok'}, 'breakpoint_board': {'status': 'low_confidence'}}
+    ring = coach.classify_throw(m, coach.baseline(base), tgt, quality=q)['rings']['accuracy']
+    assert ring['value'] == 100 and ring['status'] == 'low_confidence'
+    # both ok -> full DEC-031 score
+    q2 = {'arrows_board': {'status': 'ok'}, 'breakpoint_board': {'status': 'ok'}}
+    ring2 = coach.classify_throw(m, coach.baseline(base), tgt, quality=q2)['rings']['accuracy']
+    assert ring2['status'] == 'ok' and ring2['value'] == round(0.6*100 + 0.4*coach._component_score(4.0, 8.0))

@@ -791,7 +791,12 @@ def _shot_card_enrich(store, user, sh: dict) -> dict:
             prior.append({'ball_speed': pm.get('ball_speed'), 'rev_rate': pm.get('rev_rate'),
                           'arrows_board': pm.get('arrows_board')})
         intent = sh.get('intent') or {}
-        target = {'arrows_board': intent.get('arrows_board')} if intent.get('arrows_board') is not None else None
+        # Target line for the coach + DEC-031 Accuracy: carry both the arrows and breakpoint intent (Accuracy
+        # uses both; breakpoint is dropped honestly downstream when it isn't measured from this camera).
+        target = None
+        if intent.get('arrows_board') is not None or intent.get('breakpoint_board') is not None:
+            target = {'arrows_board': intent.get('arrows_board'),
+                      'breakpoint_board': intent.get('breakpoint_board')}
         rec0 = ((rec.get('insights') or {}).get('recommendations') or [{}])[0] or {}
         far = 'not_read' if (rec.get('capture_quality') or {}).get('far_lane') in ('limited', 'not_read') else None
         _mq = rec.get('metrics') or {}
