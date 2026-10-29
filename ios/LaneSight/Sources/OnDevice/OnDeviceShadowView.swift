@@ -131,9 +131,18 @@ struct OnDeviceShadowView: View {
             """
             if let a = tr.points.first, let b = tr.points.last {
                 lines += "\n  span: frac \(f(a.frac, 2)) → \(f(b.frac, 2))   t \(f(Float(a.t), 2))s → \(f(Float(b.t), 2))s"
-                lines += "\n  entry lateral fraction (last): \(f(b.frac, 2)) (0=left edge, 1=right edge)"
             }
-            lines += "\n\nFirst pass (median-bg, no handheld warp). Eyeball: track points should rise smoothly down\nthe lane and the lateral fraction should match where the ball actually went. Tune diff/area/diameter next."
+            // Stage 4 — first end-to-end metric: ball speed.
+            let sp = OnDeviceTracker.speed(track: tr, foulLineY: geo.foulLineY)
+            lines += "\n\n── Ball speed (stage 4, \(sp.basis)) ──"
+            if let mph = sp.mph {
+                lines += "\n  \(f(mph, 1)) mph   (release t=\(f(Float(sp.tRelease ?? 0), 2))s → impact t=\(f(Float(sp.tImpact ?? 0), 2))s)"
+                if let ef = sp.entryFrac { lines += "\n  entry lateral fraction: \(f(ef, 2))  (0=left edge, 1=right edge)" }
+            } else {
+                lines += "\n  unavailable — \(sp.note)"
+            }
+            lines += "\n  \(sp.note)"
+            lines += "\n\nFirst end-to-end metric on-device. Compare the mph to the server for the same clip (DEC-103 parity).\nIf it reads low/unavailable the track is short of the pins — next brick is pin-impact detection + the\n15 ft arrow anchor for a proper distance calibration. Eyeball the track too (diff/area/diameter are the levers)."
             report = lines
         } else { error = "tracking: could not read a frame" }
         running = false

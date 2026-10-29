@@ -14,6 +14,19 @@ import simd
 // track on real clips — thresholds (diff/area/diameter) are the tuning levers.
 
 struct TrackPoint: Equatable { let i: Int; let t: Double; let cx: Float; let contactRow: Float; let frac: Float }
+
+/// First end-to-end metric. ball_speed = 60 ft / (t_impact − t_release) (cv/metrics.py headline). t_release =
+/// foul-line crossing − 0.068 s learned offset; t_impact approximated by the last track point (the ball nearest
+/// the pins) — labeled best_effort because true impact needs pin-motion detection (next brick). entryFrac is
+/// the lateral fraction at the last point (0 = left edge, 1 = right edge) → maps to board with calibration.
+struct SpeedEstimate: Equatable {
+    let mph: Float?
+    let tRelease: Double?
+    let tImpact: Double?
+    let entryFrac: Float?
+    let basis: String          // "best_effort" | "unavailable"
+    let note: String
+}
 struct BallTrack: Equatable {
     let points: [TrackPoint]
     let framesScanned: Int
@@ -38,6 +51,40 @@ enum OnDeviceTracker {
     nonisolated private static func contactRow(_ l: ODDetectedLane, top: Float) -> Float {
         let k = BALL_IN / LANE_IN
         return (top + k * (l.right.b - l.left.b)) / (1 - k * (l.right.a - l.left.a))
+    }
+
+    /// Ball speed from the track + the detected foul line. Headline = 60 ft / (t_impact − t_release).
+    nonisolated static func speed(track: BallTrack, foulLineY: Int?) -> SpeedEstimate {
+        let pts = track.points.sorted { $0.t < $1.t }
+        guard pts.count >= 6, let foulY = foulLineY else {
+            return SpeedEstimate(mph: nil, tRelease: nil, tImpact: nil, entryFrac: nil, basis: "unavailable",
+                                  note: "need ≥6 track points and a detected foul line")
+        }
+        // Ball travels foul → pins, so contactRow DECREASES over time. Foul crossing = where contactRow ≈ foulY.
+        var tFoul: Double? = nil
+        for k in 1..<pts.count {
+            let a = pts[k - 1], b = pts[k]
+            if (a.contactRow - Float(foulY)) * (b.contactRow - Float(foulY)) <= 0 && a.contactRow != b.contactRow {
+                let f = (Float(foulY) - a.contactRow) / (b.contactRow - a.contactRow)
+                tFoul = a.t + Double(f) * (b.t - a.t); break
+            }
+        }
+        // If the track starts already past the foul line, use the first point as a floor (labeled).
+        let release = (tFoul ?? pts.first!.t) - 0.068     // RELEASE_OFFSET_S (cv/metrics.py)
+        let impact = pts.last!.t                          // best_effort: last point ≈ ball at the pins
+        let dt = impact - release
+        guard dt > 0.1 && dt < 5 else {
+            return SpeedEstimate(mph: nil, tRelease: release, tImpact: impact, entryFrac: pts.last!.frac,
+                                  basis: "unavailable", note: "implausible foul→impact interval (\(String(format: "%.2f", dt))s)")
+        }
+        let fps = 60.0 / dt
+        let mph = Float(fps * 3600.0 / 5280.0)
+        guard mph > 5 && mph < 30 else {     // >30 mph sanity guard (cv/metrics.py)
+            return SpeedEstimate(mph: nil, tRelease: release, tImpact: impact, entryFrac: pts.last!.frac,
+                                  basis: "unavailable", note: "speed out of plausible range (\(String(format: "%.1f", mph)) mph) — track likely short")
+        }
+        return SpeedEstimate(mph: mph, tRelease: release, tImpact: impact, entryFrac: pts.last!.frac, basis: "best_effort",
+                             note: "t_impact ≈ last track point (not pin-motion detection yet); 60 ft foul→pins average")
     }
 
     nonisolated static func track(url: URL, geo: ODLaneGeometry, diffThr: Int = 35,
