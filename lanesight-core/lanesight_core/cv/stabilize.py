@@ -23,6 +23,9 @@ _DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0, 'cached_passes': 0, 'cached
 # are UNCHANGED — the only new resource is RAM, hard-capped by LANESIGHT_FRAME_CACHE_MB. A clip that would exceed
 # the budget (e.g. a long/no-trim clip) transparently falls back to today's re-decode, and any partial cache is
 # freed immediately, so peak RSS never exceeds (working set + budget). Set the budget to 0 to disable entirely.
+STATIC_CAM_PX = 1.0   # max probed camera shift (full-res px) below which pass-B registration is skipped (tripod).
+                      # Conservative: validated within DEC-092 tolerance at 0.2-0.3 px (8751/8752/8754, Δ ≤ 0.13
+                      # mph); clips with any real camera motion take the full registration path unchanged.
 _FRAME_CACHE_MB = int(os.environ.get('LANESIGHT_FRAME_CACHE_MB', '1000'))   # hard RSS bound (well under 4 GiB:
 # peak ≈ working set ~2 GB + this ≈ 3 GB). Fits short / lower-fps / lower-res windows; a long 1080p60 window
 # (~9 s ≈ 3.3 GB) exceeds it and transparently falls back to re-decode. Set 0 to disable. See
@@ -148,7 +151,8 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         g = cv2.cvtColor(sm, cv2.COLOR_BGR2GRAY).astype(np.float32)
         mot.append(0.0 if prevg is None else np.hypot(*cv2.phaseCorrelate(prevg, g)[0]) * 8)
         woodf.append(wood_mask(sm).mean()); prevg = g
-    mot = np.convolve(np.array(mot), np.ones(15) / 15, 'same'); woodf = np.array(woodf)
+    mot_raw = np.array(mot)                                     # per-frame camera translation (full-res px), unsmoothed
+    mot = np.convolve(mot_raw, np.ones(15) / 15, 'same'); woodf = np.array(woodf)
     cm = np.array([core(i) for i in range(len(mot))])          # thresholds over core frames only, so the settle
     thr = max(3.0, np.percentile(mot[cm], 40)); wmax = woodf[cm].max()   # tail never shifts the reference choice
     steady = (mot < thr) & (woodf > 0.5 * wmax) & cm
@@ -158,10 +162,39 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         if run > best[0]: best = (run, i - run + 1, i)
     ref = (best[1] + best[2]) // 2
     R = Registrar()
-    # pass B: homographies (direct to reference; chain through previous frame when direct match is weak)
-    Hs = []; inl = []; kr = dr = None; prev = None
+    # reference features (needed by both the static probe and the full pass B)
+    kr = dr = ref_img = None
     for i, f in frames(path):
         if i == ref: kr, dr = R.feats(f); ref_img = f.copy(); break
+    n = len(ts); c = np.array([540., 960., 1.])
+    # DEC-092 P2 static-camera shortcut: a tripod clip has ~0–1 px camera motion, so every per-frame homography is
+    # ~identity and the ORB registration (pass B) — ~65% of the whole analysis — is pure cost. We can't read the
+    # true camera motion from the cheap phase-correlation pass (the moving ball/bowler contaminate it), so PROBE:
+    # register ~30 frames spread across the clip against the reference using the SAME registrar as the full pass
+    # (so it's as reliable as the real camera-motion read, ~0.5 s). If the max shift is below STATIC_CAM_PX, skip
+    # pass B and use identity homographies — the downstream warps become sub-pixel no-ops, so the lane/ball/pin
+    # reads are unchanged (gated on the benchmark). Handheld clips (shift ≥ threshold) take the full path.
+    probe_idx = set(range(0, n, max(1, n // 30)))
+    probe_sh = []
+    for i, f in frames(path):
+        if i in probe_idx and i != ref:
+            kf, df = R.feats(f); H, cnt = R.H(kf, df, kr, dr)
+            if H is not None and cnt >= min_inliers:
+                probe_sh.append(float(np.linalg.norm((H @ c / (H @ c)[2])[:2] - c[:2])))
+    cam_px = max(probe_sh) if len(probe_sh) >= 8 else 999.0     # too few confident probes → don't risk the shortcut
+    if cam_px < STATIC_CAM_PX:
+        Hs = np.array([np.eye(3) for _ in range(n)]); inl = [min_inliers] * n
+        h, w = ref_img.shape[:2]
+        core_idx = [i for i in range(n) if core(i)]; step = max(1, len(core_idx) // 80)
+        sample = set(core_idx[::step]); stack = []
+        for i, f in frames(path):
+            if i in sample: stack.append(f)                    # identity warp = the raw frame
+        bg = np.median(np.stack(stack), axis=0).astype(np.uint8)
+        log(f'ref frame {ref} (t={ts[ref]:.2f}s); static camera ({cam_px:.1f}px ≤ {STATIC_CAM_PX}px, {len(probe_sh)} probes) '
+            f'— skipped registration')
+        return dict(ts=ts[:n], Hs=Hs, ref=ref, bg=bg, inliers=np.array(inl), shift=np.zeros(n))
+    # pass B: homographies (direct to reference; chain through previous frame when direct match is weak)
+    Hs = []; inl = []; prev = None
     # Two phases per chunk so BOTH halves use the cores. ORB feature extraction is per-frame independent (the heavy
     # part here) and scales only when each cv2 call is single-threaded, so it is fanned across worker threads with
     # cv2 threads forced to 1 (each worker gets its own deterministic Registrar -> bit-identical features). The
