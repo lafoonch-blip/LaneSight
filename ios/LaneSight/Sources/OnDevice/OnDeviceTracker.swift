@@ -32,6 +32,7 @@ struct BallTrack: Equatable {
     let framesScanned: Int
     let candidateFrames: Int
     let seconds: Double
+    var impactT: Double? = nil          // detected pin-deck arrival time (preferred t_impact)
     var spanFrac: Float { (points.first.map { p in (points.last!.frac - p.frac) }) ?? 0 }
 }
 
@@ -74,7 +75,8 @@ enum OnDeviceTracker {
         let intc = (su - slope * st) / n
         guard slope > 0 else { return fail("non-monotonic track (ball not clearly moving toward the pins)") }
         let tFoulCross = (Double(u(Float(foulY))) - intc) / slope     // ball crosses the foul line
-        let tImpact = (Double(u(Float(lane.yFar))) - intc) / slope    // ball reaches the lane far extent (≈ pins)
+        // t_impact: detected pin-deck arrival if available (exact), else extrapolate to the lane far extent.
+        let tImpact = track.impactT ?? ((Double(u(Float(lane.yFar))) - intc) / slope)
         let release = tFoulCross - 0.068                              // RELEASE_OFFSET_S (cv/metrics.py)
         let dt = tImpact - release
         guard dt > 0.5 && dt < 5 else { return fail("implausible foul→impact interval (\(String(format: "%.2f", dt))s)") }
@@ -92,6 +94,11 @@ enum OnDeviceTracker {
             return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
         }
         // Pass 2: per-frame foreground → blobs (at working res) → scale up → diameter-gated candidates (full-res geo).
+        // Physical gates (match the roll, reject the bowler/approach + the ball return):
+        //   • ON the lane laterally: 0 ≤ frac ≤ 1 (+ small margin)
+        //   • up-lane from the foul: contactRow between the VP and the foul line (not behind the foul in the approach)
+        let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
+        let vpY = vp.y
         var perFrame: [[Cand]] = []
         var scanned = 0
         let s = Float(stride)
@@ -104,19 +111,26 @@ enum OnDeviceTracker {
                 let ct = contactRow(lane, top: by)
                 let D = expDiam(lane, ct)
                 if D < 8 { continue }
+                if ct > foulY + 40 || ct < vpY + 10 { continue }   // on the lane surface (up-lane from the foul)
                 let ratio = bw / D
                 if ratio > 0.7 && ratio < 1.35 && bh < 3.2 * D && ba > 0.25 * D * D {
                     let (xa, xb) = laneX(lane, ct)
                     let cx = bx + bw / 2
-                    cs.append(Cand(i: i, t: i < ts.count ? ts[i] : (ts.last ?? 0), cx: cx, ct: ct, frac: (cx - xa) / (xb - xa)))
+                    let frac = (cx - xa) / (xb - xa)
+                    if frac < -0.05 || frac > 1.05 { continue }    // on the lane laterally (rejects the ball return)
+                    cs.append(Cand(i: i, t: i < ts.count ? ts[i] : (ts.last ?? 0), cx: cx, ct: ct, frac: frac))
                 }
             }
             perFrame.append(cs)
         }
         let candFrames = perFrame.filter { !$0.isEmpty }.count
         let pts = ransacLink(perFrame, vpY: vp.y)
-        return BallTrack(points: pts, framesScanned: scanned, candidateFrames: candFrames,
-                         seconds: CFAbsoluteTimeGetCurrent() - t0)
+        var result = BallTrack(points: pts, framesScanned: scanned, candidateFrames: candFrames,
+                               seconds: CFAbsoluteTimeGetCurrent() - t0)
+        if let first = pts.first {
+            result.impactT = detectImpact(url: url, lane: lane, vpY: vpY, foulY: foulY, afterT: first.t)
+        }
+        return result
     }
 
     // MARK: background = per-pixel median of up to maxFrames evenly-sampled luma frames
@@ -190,6 +204,61 @@ enum OnDeviceTracker {
             }
         }
         return l
+    }
+
+    /// Pin-deck arrival = t_impact. Watches the far quarter of the lane (where the pins stand); the first
+    /// sustained motion spike there after the ball is rolling is the ball reaching the pins (cf. cv/track.py
+    /// detect_impact, simplified for a tripod clip: reference = median of the first frames, no warp).
+    nonisolated private static func detectImpact(url: URL, lane: ODDetectedLane, vpY: Float, foulY: Float, afterT: Double) -> Double? {
+        let rTop = max(0, Int(vpY) + 5), rBot = Int(vpY + 0.30 * (foulY - vpY))
+        guard rBot > rTop + 8 else { return nil }
+        let (xaF, xbF) = laneX(lane, Float(rBot)); let padX = 0.5 * (xbF - xaF)
+        let cL = max(0, Int(xaF - padX)), cR = Int(xbF + padX)
+        guard cR > cL + 8 else { return nil }
+        let asset = AVURLAsset(url: url)
+        guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
+        let bw = cR - cL, bh = rBot - rTop
+        var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(Double, Float)] = []
+        while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
+            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+            CVPixelBufferLockBaseAddress(px, .readOnly)
+            let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
+            var band = [Float](repeating: 0, count: bw * bh)
+            if let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) {
+                for yy in 0..<bh { let y = rTop + yy; if y < 0 || y >= H { continue }
+                    for xx in 0..<bw { let x = cL + xx; if x < 0 || x >= W { continue }
+                        let p = y * rb + x * 4; band[yy * bw + xx] = Float(max(base[p], base[p + 1], base[p + 2])) } }
+            }
+            CVPixelBufferUnlockBaseAddress(px, .readOnly)
+            if refs.count < 10 { refs.append(band) }
+            else {
+                if ref == nil {
+                    var r = [Float](repeating: 0, count: bw * bh); var col = [Float](repeating: 0, count: refs.count)
+                    for p in 0..<(bw * bh) { for k in 0..<refs.count { col[k] = refs[k][p] }; col.sort(); r[p] = col[col.count / 2] }
+                    ref = r
+                }
+                var acc: Float = 0; let rr = ref!
+                for p in 0..<(bw * bh) { acc += abs(band[p] - rr[p]) }
+                series.append((t, acc / Float(bw * bh)))
+            }
+        }
+        guard series.count > 10 else { return nil }
+        let quiet = series.filter { $0.0 < afterT }.map { $0.1 }
+        let base = quiet.isEmpty ? (series.map { $0.1 }.min() ?? 0) : quiet.reduce(0, +) / Float(quiet.count)
+        let sd = quiet.count > 2 ? (quiet.map { ($0 - base) * ($0 - base) }.reduce(0, +) / Float(quiet.count)).squareRoot() : base * 0.5 + 1
+        let thr = base + max(5 * sd, 8)
+        let peakT = series.max(by: { $0.1 < $1.1 })?.0 ?? 0
+        #if DEBUG
+        print("ONDEV: impact band rows[\(rTop)-\(rBot)] cols[\(cL)-\(cR)] frames=\(series.count) base=\(String(format: "%.1f", base)) sd=\(String(format: "%.1f", sd)) thr=\(String(format: "%.1f", thr)) peak=\(String(format: "%.1f", series.map { $0.1 }.max() ?? 0))@\(String(format: "%.2f", peakT))s afterT=\(String(format: "%.2f", afterT))")
+        #endif
+        for k in 0..<(series.count - 3) {
+            if series[k].0 < afterT { continue }
+            if series[k].1 > thr && series[k..<min(k + 4, series.count)].filter({ $0.1 > thr }).count >= 2 { return series[k].0 }
+        }
+        return nil
     }
 
     // MARK: foreground blobs — diff vs bg, threshold, 3x3 open, connected components (union-find)

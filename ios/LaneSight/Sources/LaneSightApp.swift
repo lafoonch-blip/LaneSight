@@ -67,6 +67,10 @@ struct LaneSightApp: App {
                     print("ONDEV: track pts=\(tr.points.count) scanned=\(tr.framesScanned) cand=\(tr.candidateFrames)")
                     let sp = OnDeviceTracker.speed(track: tr, geo: geo)
                     print("ONDEV: speed=\(String(describing: sp.mph)) basis=\(sp.basis) note=\(sp.note)")
+                    print("ONDEV: tRelease=\(String(describing: sp.tRelease)) tImpact=\(String(describing: sp.tImpact)) (server: 9.26 / 11.555)")
+                    if let f = tr.points.first, let l = tr.points.last {
+                        print("ONDEV: track t[\(String(format: "%.2f", f.t))→\(String(format: "%.2f", l.t))]  row[\(Int(f.contactRow))→\(Int(l.contactRow))]  frac[\(String(format: "%.2f", f.frac))→\(String(format: "%.2f", l.frac))]")
+                    }
                     print("ONDEV: DONE")
                 }.value
             }
