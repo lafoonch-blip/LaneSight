@@ -1,7 +1,7 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.2
+Version: 1.3
 Last Updated: 2026-10-29
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
@@ -61,6 +61,7 @@ Each metric: **source view.column** — definition — honesty rule.
 - **p50_server_analyze_s, p50_decode_s, p50_hdr_convert_s** — server stages (DEC-092 P0 timings).
 - **p50_phone_trim_s, p50_phone_upload_s, p50_phone_pre_analyze_s** — phone-side stages (`step_timings.client`, DEC-092 P0 M1).
 - **cold_start_rate** — `cold_start / nullif(analyzed,0)`. NULL → NO DATA. A stage percentile is NULL when that stage was never timed in the window (NO DATA, not 0) — e.g. HDR convert on an all-SDR day.
+- **decode_cache_engaged_rate** (DEC-092 P1, migration 029) — share of attempts where the decode-once frame cache held the whole clip and every later pass was served from cache: `count(decode_cache_complete) / nullif(count(attempts that recorded the field),0)`. Denominator excludes attempts analysed before the cache shipped (field absent) → NULL → NO DATA until real post-deploy traffic. Tells us whether the cache ever fires in production (it only fits short/lower-fps/lower-res windows; see `DECODE_ONCE_FINDINGS.md`). Per-attempt detail: `ops.attempt.decode_cache_complete` / `decode_cached_passes`.
 
 ### Release & regression (`ops.release_health`, algorithm_version × api_revision × env)
 - **attempts, failure_rate, p50_attempt_seconds, avg_metrics_measured, distinct_users, first_seen, last_seen** — per release, for regression comparison (DEC-092 promotion discipline: accuracy/coverage/runtime compared separately; this view is the runtime/failure side).

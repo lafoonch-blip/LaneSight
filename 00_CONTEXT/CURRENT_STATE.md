@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.58  
+Version: 1.59  
 Last Updated: 2026-10-29  
 Owner: Shayne  
-Supersedes: v1.56
+Supersedes: v1.58
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -19,6 +19,8 @@ The back end (DEC-017), stage by stage: metrics engine → moving camera → sco
 **Engine architecture DECIDED (DEC-106, 2026-10-29): native iOS is the production engine (Option B).** Swift/AVFoundation/Vision/Core ML; Python stays the permanent non-production reference (research/eval/reprocessing/ground-truth). No wholesale port until the pipeline stabilizes (DEC-062/065/094); phased promotion behind ground-truth gates. Brief: `03_ENGINEERING/ENGINE_ARCHITECTURE_DECISION.md`. Phase 0 (Cloud Run vs Mac latency root-cause) in `03_ENGINEERING/CLOUD_RUN_PERF_INVESTIGATION.md`.
 
 **Parallel track — On-device / offline-first (DEC-102/103/104, accepted 2026-10-28).** On branch `feat/on-device-analysis`: the app is moving to offline-first with on-device measurement where device capability is validated; the server stays the fallback + reference and remains authoritative for coaching, score, tiers and achievements. Built in **shadow** (device results logged beside server results, not shown/counted) until the ground-truth (DEC-034) + parity gates pass — DEC-062's production CV freeze is lifted for the shadow/validation track only. Spec: `03_ENGINEERING/ON_DEVICE_ANALYSIS_PROPOSAL.md` v0.3; plan: `HANDOFF_2026-10-28_ON_DEVICE_ANALYSIS.md`. This runs alongside the live server-authoritative app so both architectures can be compared (ops dashboard, split by `env`/`source`).
+
+**Reconcile rule (Shayne, 2026-10-29):** when `feat/on-device-analysis` is reconciled with mainline, **take mainline's server code over the feature branch's** — specifically the owner-gated `/debug/env` and the decode-once frame cache (`cv/stabilize.py`), which live only on `dev-build-v0`. Note two migration gaps on mainline to close in the same reconcile: the **platform-provenance migration** (DEC-103; adds `analysis_attempt.platform` and exposes it on `ops.attempt` — live but its file is on feat), which **migration 029** (`ops.decode_cache` metrics) depends on; bring the platform migration to mainline as the next number before 029 on a fresh DB. On the live DB both are already applied.
 
 ## Where things stand
 - **Analysis reliability RCA (2026-10-28, DEC-100): retention + client-failure logging BUILT on `fix/clip-retention-diagnostics`; deploy pending.** Uploaded Shot clips 0/6 ever succeeded; Form uploads return empty cards (DEC-095 gate drops the whole delivery); tonight's uploads were byte-identical re-runs of 10-27 failures. RCA + experiments: `02_RESEARCH/ANALYSIS_FAILURE_RCA_2026-10-28.md`. Needs: Cloud Run redeploy (no migration), iOS rebuild, and Shayne's original clips for E1–E3.
