@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.2 · Last Updated: 2026-10-29 · Owner: Shayne
+Status: ACTIVE · Version: 1.3 · Last Updated: 2026-10-29 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -21,7 +21,7 @@ Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; eve
 | 7 | **Shot card states**: off throw → no move; far lane not read | DEC-088, DEC-090 | **BUILT** — see 2026-10-27-B |
 | 8 | **Upload result (Shot)** on the same layout | DEC-088 | **BUILT** — see 2026-10-27-C |
 | 9 | Primary button "Record next shot" | DEC-088 | **BUILT** (ResultView now shows "Record next shot") |
-| 10 | **Shot card: design-parity + data-honesty correction** — the live card (upload 2026-10-29) doesn't match `upload_result_shot.png`/`shot_card.png` and shows gated far-lane metrics + a coach move from them | DEC-065/088/090/094 | **NOT BUILT** — see 2026-10-29-A |
+| 10 | **Shot card: design-parity + data-honesty correction** — the live card (upload 2026-10-29) doesn't match `upload_result_shot.png`/`shot_card.png` and shows gated far-lane metrics + a coach move from them | DEC-065/088/090/094 | **PARTIAL** — A (data honesty) + B4 (DEC-031 Accuracy ring) BUILT; B1/B2/B5/C remain — see 2026-10-29-A |
 
 ---
 
@@ -160,3 +160,13 @@ Status: **BUILT** (branch `fix/ux-batch-2026-10-28`). DIFFERS: no Figma frames e
 - Update this file + report docs changed for the Project re-sync.
 
 **Notes for the builder:** the speed-consistency gate + far-lane withhold live in `lanesight-core/lanesight_core/cv/pipeline.py` (2026-10-29). The ring/lane iOS is `ShotReadCard.swift` / `ShotLaneView.swift` / `ResultView.swift`. Accuracy-score definition: check `METRIC_TO_SCREEN_SPEC` / DEC-031 (a per-shot 0–100 score may still be unbuilt server-side — if so, that's a prerequisite, flag it, don't fabricate).
+
+### Progress — 2026-10-29 (Claude Code)
+- **A. Data honesty — BUILT + DEPLOYED** (prod rev `lanesight-api-00045`, commit on dev-build-v0). `pipeline.py` now withholds EVERY geometry-derived metric (entry board/angle, breakpoint, laydown, arrows, launch) when the speed-consistency gate flags implausible depth scale, forces the far-lane-not-read state, and normalizes `-0.0`. The coach obeys the uncertainty contract (no move off withheld metrics). iOS already renders unavailable→"—"/no-arc, "Not read" badges, "No move this shot". Verified on IMG_8815: all geometry unavailable, insights `no_reliable_data`.
+- **B4. Accuracy ring = DEC-031 0–100 score — BUILT** (server + iOS, `BUILD SUCCEEDED`; prod deploy in flight). The per-shot 0–100 score (the flagged prerequisite) is now computed server-side (`coach.accuracy_score`, 0.60·arrow + 0.40·breakpoint, 5/8-board scales), honesty-gated via the DEC-094 quality map: no target → unavailable (never 0); breakpoint not measured (far lane, DEC-065) → arrows-only **low_confidence**; bad geometry (A) → unavailable. The ring shows the score with "arrows vs target" underneath; low-confidence/unavailable render muted + reason (`accuracyRing` in `ShotReadCard.swift`). 4 unit tests.
+- **Still NOT BUILT (remaining B — a focused visual pass, verify with the DEBUG preview harness `LS_PREVIEW=shot LS_PREVIEW_ID=<id>` vs the PNGs):**
+  - **B1 lane view:** right-side callouts with **leader lines** from the path dots (SceneKit 3D→2D projection), fix the Entry-label top clipping, keep the legend off the approach dots. Far-lane-unavailable already routes to the not-read lane state.
+  - **B2 header:** ✕ close **top-LEFT** + grab handle; **Done at the BOTTOM** (full width) rather than the top-right pill (currently `.confirmationAction`). Subtitle copy is already correct.
+  - **B5 coach card:** specific move with arrow numbers (before→after) + the escalation line (engine currently emits feet/eyes/direction; needs the board-number phrasing).
+  - **C verify:** render this shot's real data + a good-throw fixture in the sim, screenshot side-by-side with `upload_result_shot.png` / `shot_card.png`, list residual diffs.
+  - B3 (status chips + summaries) and B6 (upload notice / All-metrics / notes rows) are already built from 2026-10-27-A/B/C.
