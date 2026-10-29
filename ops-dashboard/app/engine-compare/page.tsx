@@ -12,8 +12,7 @@ export default async function EngineCompare({ searchParams }: { searchParams: Se
   const plat = await getPlatformDaily(scope);
 
   const cols: Column<PlatformRow>[] = [
-    { key: "day", label: "Day" }, { key: "env", label: "Env" },
-    { key: "platform", label: "Engine" }, { key: "capture_mode", label: "Mode" },
+    { key: "day", label: "Day" }, { key: "env", label: "Env" }, { key: "platform", label: "Engine" },
     { key: "attempts", label: "Attempts", num: true }, { key: "analyzed", label: "Analyzed", num: true },
     { key: "failure_rate", label: "Failure", num: true, render: (r) => pct(r.failure_rate) },
     { key: "distinct_users", label: "Users", num: true },
@@ -21,6 +20,8 @@ export default async function EngineCompare({ searchParams }: { searchParams: Se
     { key: "p90_attempt_seconds", label: "p90 s", num: true },
     { key: "avg_analyze_s", label: "Avg analyze s", num: true },
   ];
+  const shot = plat.rows.filter((r) => r.capture_mode === "shot");
+  const form = plat.rows.filter((r) => r.capture_mode === "form");
 
   return (
     <Shell>
@@ -28,14 +29,17 @@ export default async function EngineCompare({ searchParams }: { searchParams: Se
       <p className="sub">
         Scope: {scope.envs.join(" + ")} · last {scope.days} days · real accounts only. Rows split by
         <b> engine</b> (<code>server</code> = authoritative Python/Cloud Run; <code>ios</code> = native on-device
-        <b> shadow</b>, DEC-103/106). The on-device engine runs in the background on every shot and records here;
-        it is <b>never shown to the user and never feeds Score/coaching</b>. This panel is latency/volume/failure
-        only. <b>Accuracy is NOT judged server-vs-ios</b> — DEC-106 Gate A is vs <b>ground truth</b> (the DEC-094
-        eval set), not vs the server; per-metric accuracy/bias/plausible-but-wrong + the flip decision live with
-        the DEC-094 harness (<code>ops/cv_eval.py</code>), not here. No metric is flipped to on-device until it
+        <b> shadow</b>, DEC-103/106) and by <b>capture type</b> below. The on-device engine runs in the background
+        on every shot and records here; it is <b>never shown to the user and never feeds Score/coaching</b>. This
+        is latency/volume/failure only. <b>Accuracy is NOT judged server-vs-ios</b> — DEC-106 Gate A is vs
+        <b> ground truth</b> (the DEC-094 eval set), per-metric for Shot and per-event-time for Form; it lives with
+        the DEC-094 harness (<code>ops/cv_eval.py</code>), not here. No metric/event flips to on-device until it
         passes Gates A/B/C against ground truth.
       </p>
-      <Panel result={plat}><DataTable columns={cols} rows={plat.rows} /></Panel>
+      <h2>Ball shots</h2>
+      <Panel result={plat}><DataTable columns={cols} rows={shot} /></Panel>
+      <h2 style={{ marginTop: 28 }}>Form</h2>
+      <Panel result={plat}><DataTable columns={cols} rows={form} /></Panel>
     </Shell>
   );
 }

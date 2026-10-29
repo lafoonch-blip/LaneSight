@@ -172,9 +172,24 @@ def test_parse_pins():
 
 
 def test_unlabeled_clips(tmp_path):
-    man = {'clips': [{'clip': 'IMG_8751.mov'}, {'clip': 'IMG_8752.MOV'}, {'clip': 'IMG_8753.MOV'}]}
+    man = {'clips': [{'clip': 'IMG_8751.mov'}, {'clip': 'IMG_8752.MOV'}, {'clip': 'IMG_8753.MOV'},
+                     {'clip': 'IMG_8846.MOV', 'mode': 'form'}]}
     labeled = bl.empty_labels('IMG_8751.mov', 60.0)
     bl.upsert_ball(labeled, 17.1, center=(400, 1200))          # one real observation -> counts as labeled
     bl.save(str(tmp_path), 'IMG_8751', labeled)
     bl.save(str(tmp_path), 'IMG_8752', bl.empty_labels('IMG_8752.MOV', 60.0))  # file but 0 obs -> still unlabeled
+    # ball labeler skips form clips; form labeler lists only them
     assert bl.unlabeled_clips(man, str(tmp_path)) == ['IMG_8752', 'IMG_8753']
+
+
+def test_form_label_helpers(tmp_path):
+    from lanesight_core.cv.calib import form_label as fl
+    man = {'clips': [{'clip': 'IMG_8751.mov'}, {'clip': 'IMG_8846.MOV', 'mode': 'form'},
+                     {'clip': 'IMG_8847.MOV', 'mode': 'form'}]}
+    L = fl.empty_form_labels('IMG_8846.MOV', 30.0)
+    assert L['mode'] == 'form' and fl.form_event_count(L) == 0
+    bl.set_event(L, 'release_s', 2.4)                          # shared event-stamp primitive
+    bl.set_event(L, 'top_of_swing_s', 1.9)
+    assert fl.form_event_count(L) == 2
+    fl.bl.save(str(tmp_path), 'IMG_8846', L)                   # 8846 labeled; 8847 not
+    assert fl.unlabeled_form_clips(man, str(tmp_path)) == ['IMG_8847']  # ball clip excluded

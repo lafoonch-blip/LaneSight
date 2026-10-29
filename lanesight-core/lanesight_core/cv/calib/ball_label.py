@@ -132,6 +132,8 @@ def unlabeled_clips(manifest: dict, labels_dir) -> list:
     ball samples. Returned in manifest order, so the labeler can print what's left to do at startup."""
     out = []
     for entry in (manifest.get('clips') or []):
+        if entry.get('mode') == 'form':           # form clips are listed by form_label, not the ball labeler
+            continue
         sid = Path(str(entry.get('clip') or '')).stem
         lab = load(labels_dir, sid)
         if lab is None or observed_count(lab) == 0:

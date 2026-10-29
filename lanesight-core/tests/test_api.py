@@ -380,6 +380,25 @@ def test_shadow_attempt_records_ios():
     assert client.post('/analysis/shadow', json={'basis': 'best_effort'}).status_code == 401  # auth required
 
 
+def test_shadow_attempt_form_mode():
+    """DEC-106: a Form shadow records event TIMES + pose confidence under platform='ios', capture_mode='form'."""
+    from lanesight_api.app import get_store
+    h = {'X-Dev-User': 'uShadowForm'}
+    r = client.post('/analysis/shadow', json={
+        'source': 'live', 'capture_mode': 'form', 'basis': 'best_effort',
+        'events': {'ball_start_s': 1.1, 'top_of_swing_s': 1.9, 'slide_stop_s': 2.3, 'release_s': 2.45},
+        'metrics': {'backswing_time': 0.4, 'downswing_time': 0.22, 'step_count': 5},
+        'device_perf': {'latency_s': 3.1, 'peak_mem_mb': 90.0, 'pose_confidence': 0.82},
+        'algorithm_version': 'ios-form-0.1'}, headers=h)
+    assert r.status_code == 200 and r.json()['status'] == 'analyzed'
+    att = [a for a in getattr(get_store(), 'analysis_attempts', [])
+           if a.get('platform') == 'ios' and a.get('user_id') == 'uShadowForm']
+    assert att and att[-1]['capture_mode'] == 'form'
+    d = att[-1]['diagnostics']
+    assert d['events']['release_s'] == 2.45 and d['metrics']['step_count'] == 5
+    assert d['device']['pose_confidence'] == 0.82 and 'ball_speed' not in d
+
+
 def test_coaching_notify_flag():
     """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
     h = {'X-Dev-User': 'u_notify'}

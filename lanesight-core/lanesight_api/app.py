@@ -1337,17 +1337,26 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
     per-metric flip. No flip happens here — ingestion only."""
     b = dict(body or {})
     m = b.get('metrics') or {}
+    events = b.get('events') or {}                    # form: per-event TIMES (ball_start_s, release_s, …)
     perf = b.get('device_perf') or {}
     basis = str(b.get('basis') or '')[:20]
-    # Map the on-device outcome to the attempt status CHECK (analyzed | failed).
-    measured = basis != 'unavailable' and (m.get('ball_speed') is not None or m.get('entry_board') is not None)
-    # Metric keys mirror the server's diagnostics so ops.attempt surfaces them, split by platform.
+    mode = b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else 'shot'
+    # Measured = the engine produced something (a metric value or, for form, an event time) and didn't
+    # self-report unavailable. Works for both ball shots and form.
+    measured = basis != 'unavailable' and (
+        any(v is not None for v in m.values()) or any(v is not None for v in events.values()))
+    # Ball metric keys go to top-level diagnostics so ops.attempt surfaces them (split by platform); the full
+    # metric + event dicts are kept for DEC-094 Gate A (per-metric for shot, per-event-time for form).
     diag = {k: m.get(k) for k in ('ball_speed', 'entry_board', 'entry_angle', 'rev_rate', 'n_measured')
             if m.get(k) is not None}
     diag['basis'] = basis or None
     diag['note'] = (str(b.get('note'))[:300] if b.get('note') else None)
+    if m:
+        diag['metrics'] = m
+    if events:
+        diag['events'] = events
     dev = {k: perf.get(k) for k in ('latency_s', 'peak_mem_mb', 'thermal_state', 'thermal_transitions',
-                                    'battery_delta', 'decode_fps') if perf.get(k) is not None}
+                                    'battery_delta', 'decode_fps', 'pose_confidence') if perf.get(k) is not None}
     if dev:
         diag['device'] = dev
     lat = perf.get('latency_s')
@@ -1355,10 +1364,10 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
            'shot_id': b.get('shot_id'),                 # correlate with the server shot (same clip)
            'session_id': b.get('session_id'),
            'source': b.get('source') if b.get('source') in ('live', 'upload') else None,
-           'capture_mode': b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else 'shot',
+           'capture_mode': mode,
            'status': 'analyzed' if measured else 'failed',
            'failure_code': None if measured else 'SHADOW_UNAVAILABLE',
-           'failure_stage': None if measured else 'track',
+           'failure_stage': None if measured else ('form_pose' if mode == 'form' else 'track'),
            'platform': 'ios',                           # DEC-103: the on-device shadow engine
            'algorithm_version': str(b.get('algorithm_version') or 'ios-ondevice')[:60],
            'api_revision': (str(b.get('app_version'))[:60] if b.get('app_version') else None),

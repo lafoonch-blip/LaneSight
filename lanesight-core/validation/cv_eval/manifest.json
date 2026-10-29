@@ -1,51 +1,360 @@
 {
-  "_note": "DEC-094 §1 CV-accuracy eval set. Clips + labels/<id>.json are NOT committed. Splits hold out by session+center, never by shot. Starting set = the IMG_8751-8754 validation clips + IMG_8929/8930; the 2026-10-15 live-session cohort is listed for breadth. Fill ground truth via the ball-labeling tool (see README). Thin camera classes are reported by the harness so Shayne knows what to film.",
+  "_note": "DEC-094 \u00a71 CV-accuracy eval set. Clips + labels/<id>.json are NOT committed. Splits hold out by session+center, never by shot. Starting set = the IMG_8751-8754 validation clips + IMG_8929/8930; the 2026-10-15 live-session cohort is listed for breadth. Fill ground truth via the ball-labeling tool (see README). Thin camera classes are reported by the harness so Shayne knows what to film.",
   "clips": [
-    {"id": "IMG_8751", "clip": "IMG_8751.mov", "session": "validation", "bowler": "shayne", "center": "validation", "lane": null,
-     "camera_class": "rear-centered", "orientation": "landscape", "fps": 60, "codec": "hevc", "resolution": "1920x1080", "dynamic_range": "hdr",
-     "occlusions": [], "split": "test", "ground_truth": {"source": "ruby", "file": "validation/IMG_8751_ruby.json"}},
-    {"id": "IMG_8752", "clip": "IMG_8752.MOV", "session": "validation", "bowler": "shayne", "center": "validation", "lane": null,
-     "camera_class": "rear-centered", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "test", "ground_truth": {"source": "ruby", "file": "validation/IMG_8752_ruby.json"}},
-    {"id": "IMG_8753", "clip": "IMG_8753.MOV", "session": "validation", "bowler": "shayne", "center": "validation", "lane": null,
-     "camera_class": "rear-centered", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "test", "ground_truth": {"source": "ruby", "file": "validation/IMG_8753_ruby.json"}},
-    {"id": "IMG_8754", "clip": "IMG_8754.mov", "session": "validation", "bowler": "shayne", "center": "validation", "lane": null,
-     "camera_class": "rear-centered", "orientation": "landscape", "fps": 60, "codec": "hevc", "resolution": "1920x1080", "dynamic_range": "hdr",
-     "occlusions": [], "split": "test", "ground_truth": {"source": "ruby", "file": "validation/IMG_8754_ruby.json"}},
-
-    {"id": "IMG_8929", "clip": "IMG_8929.MOV", "session": "2026-10-27-pov", "bowler": "shayne", "center": "home", "lane": 9,
-     "camera_class": "ball-return-POV", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": ["bowler's body occludes lane 9 ~18.6-19.6s", "a head crosses the lens ~17.2-18.2s"],
-     "split": "test",
-     "ground_truth": {"bowler_lane": 9, "release_s": [17.05, 17.12], "ball_at_headpin_s": [19.70, 19.76],
-                      "speed_foul_to_pins_mph": 15.5, "pins_down": 9, "pins_standing": 1, "strike": false,
-                      "source": "manual (CLAUDE_CODE_PROMPT_IMG8929_FIX.md)"}},
-    {"id": "IMG_8930", "clip": "IMG_8930.MOV", "session": "2026-10-27-pov", "bowler": "shayne", "center": "home", "lane": 10,
-     "camera_class": "low-approach", "orientation": "portrait", "fps": 120, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": ["bowler's arm/body covers the deck from ~3.7s"],
-     "split": "test",
-     "ground_truth": {"release_s": [2.47, 2.50], "touchdown_s": [2.80, 2.84], "ball_at_leave_s": [4.95, 4.98],
-                      "speed_foul_to_leave_mph": 16.8, "leave": "4-7 (two pins left side lane 10)", "strike": false,
-                      "source": "manual (CLAUDE_CODE_PROMPT_IMG8929_FIX.md); clip pending drop into training_videos"}},
-
-    {"id": "IMG_8807", "clip": "IMG_8807.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
-    {"id": "IMG_8817", "clip": "IMG_8817.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
-    {"id": "IMG_8808", "clip": "IMG_8808.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
-    {"id": "IMG_8810", "clip": "IMG_8810.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
-    {"id": "IMG_8815", "clip": "IMG_8815.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}},
-    {"id": "IMG_8819", "clip": "IMG_8819.MOV", "session": "2026-10-15", "bowler": "shayne", "center": "live-2026-10-15", "lane": null,
-     "camera_class": "rear-oblique-multilane", "orientation": "portrait", "fps": 60, "codec": "h264", "resolution": "1080x1920", "dynamic_range": "sdr",
-     "occlusions": [], "split": "tune", "ground_truth": {"source": "ruby", "file": "validation/ruby_live_session_2026-10-15.json"}}
+    {
+      "id": "IMG_8751",
+      "clip": "IMG_8751.mov",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "camera_class": "rear-centered",
+      "orientation": "landscape",
+      "fps": 60,
+      "codec": "hevc",
+      "resolution": "1920x1080",
+      "dynamic_range": "hdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/IMG_8751_ruby.json"
+      }
+    },
+    {
+      "id": "IMG_8752",
+      "clip": "IMG_8752.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "camera_class": "rear-centered",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/IMG_8752_ruby.json"
+      }
+    },
+    {
+      "id": "IMG_8753",
+      "clip": "IMG_8753.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "camera_class": "rear-centered",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/IMG_8753_ruby.json"
+      }
+    },
+    {
+      "id": "IMG_8754",
+      "clip": "IMG_8754.mov",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "camera_class": "rear-centered",
+      "orientation": "landscape",
+      "fps": 60,
+      "codec": "hevc",
+      "resolution": "1920x1080",
+      "dynamic_range": "hdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/IMG_8754_ruby.json"
+      }
+    },
+    {
+      "id": "IMG_8929",
+      "clip": "IMG_8929.MOV",
+      "session": "2026-10-27-pov",
+      "bowler": "shayne",
+      "center": "home",
+      "lane": 9,
+      "camera_class": "ball-return-POV",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [
+        "bowler's body occludes lane 9 ~18.6-19.6s",
+        "a head crosses the lens ~17.2-18.2s"
+      ],
+      "split": "test",
+      "ground_truth": {
+        "bowler_lane": 9,
+        "release_s": [
+          17.05,
+          17.12
+        ],
+        "ball_at_headpin_s": [
+          19.7,
+          19.76
+        ],
+        "speed_foul_to_pins_mph": 15.5,
+        "pins_down": 9,
+        "pins_standing": 1,
+        "strike": false,
+        "source": "manual (CLAUDE_CODE_PROMPT_IMG8929_FIX.md)"
+      }
+    },
+    {
+      "id": "IMG_8930",
+      "clip": "IMG_8930.MOV",
+      "session": "2026-10-27-pov",
+      "bowler": "shayne",
+      "center": "home",
+      "lane": 10,
+      "camera_class": "low-approach",
+      "orientation": "portrait",
+      "fps": 120,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [
+        "bowler's arm/body covers the deck from ~3.7s"
+      ],
+      "split": "test",
+      "ground_truth": {
+        "release_s": [
+          2.47,
+          2.5
+        ],
+        "touchdown_s": [
+          2.8,
+          2.84
+        ],
+        "ball_at_leave_s": [
+          4.95,
+          4.98
+        ],
+        "speed_foul_to_leave_mph": 16.8,
+        "leave": "4-7 (two pins left side lane 10)",
+        "strike": false,
+        "source": "manual (CLAUDE_CODE_PROMPT_IMG8929_FIX.md); clip pending drop into training_videos"
+      }
+    },
+    {
+      "id": "IMG_8807",
+      "clip": "IMG_8807.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8817",
+      "clip": "IMG_8817.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8808",
+      "clip": "IMG_8808.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8810",
+      "clip": "IMG_8810.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8815",
+      "clip": "IMG_8815.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8819",
+      "clip": "IMG_8819.MOV",
+      "session": "2026-10-15",
+      "bowler": "shayne",
+      "center": "live-2026-10-15",
+      "lane": null,
+      "camera_class": "rear-oblique-multilane",
+      "orientation": "portrait",
+      "fps": 60,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "tune",
+      "ground_truth": {
+        "source": "ruby",
+        "file": "validation/ruby_live_session_2026-10-15.json"
+      }
+    },
+    {
+      "id": "IMG_8824",
+      "clip": "IMG_8824.mov",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "side",
+      "orientation": "portrait",
+      "fps": 59.94,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/IMG_8824.json"
+      }
+    },
+    {
+      "id": "IMG_8846",
+      "clip": "IMG_8846.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 30.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/IMG_8846.json"
+      }
+    },
+    {
+      "id": "IMG_8847",
+      "clip": "IMG_8847.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/IMG_8847.json"
+      }
+    },
+    {
+      "id": "IMG_8848",
+      "clip": "IMG_8848.MOV",
+      "session": "validation",
+      "bowler": "shayne",
+      "center": "validation",
+      "lane": null,
+      "mode": "form",
+      "camera_class": "rear",
+      "orientation": "portrait",
+      "fps": 60.0,
+      "codec": "h264",
+      "resolution": "1080x1920",
+      "dynamic_range": "sdr",
+      "occlusions": [],
+      "split": "test",
+      "ground_truth": {
+        "source": "label",
+        "file": "validation/cv_eval/labels/IMG_8848.json"
+      }
+    }
   ]
 }
