@@ -17,6 +17,9 @@ GUI run (needs a display):
 Keys: n/space +.1s · p -.1s · . +1s · , -1s (scrub past pre-shot frames fast) · clicks 1st=center 2nd=contact ·
       o occluded (ONLY for an in-roll frame where the ball is briefly hidden) · c clear this sample ·
       x clear every sample before here (wipe pre-shot frames you labeled by mistake) · s save · q save+quit.
+      Events (stamp the current frame time; press again to clear): r=release · f=foul_cross · t=touchdown ·
+      i=first_pin_contact — all shown on screen. b/a = type standing pins before/after in the terminal
+      (e.g. "10" or "4 7"; blank = all down / strike). On start, prints which manifest clips are still unlabeled.
 Only label frames from release to the pins. Frames before the ball is thrown are NOT part of the track — scrub
 past them, don't mark them occluded. The live view redraws continuously, so a marker appears the instant you click.
 
@@ -97,6 +100,52 @@ def observed_count(labels: dict) -> int:
     return sum(1 for b in labels.get('balls', []) if not b.get('occluded') and b.get('center') is not None)
 
 
+# event hotkey -> events-dict key (stamped from the current frame time while scrubbing)
+EVENT_KEYS = {'r': 'release_s', 'f': 'foul_cross_s', 't': 'touchdown_s', 'i': 'first_pin_contact_s'}
+
+
+def set_event(labels: dict, event_key: str, t: float):
+    """Stamp an event at time t (rounded to the sample grid). Pressing again on the same frame CLEARS it
+    (toggle), so a mis-stamp is easy to undo. Returns the new value (float or None)."""
+    ev = labels.setdefault('events', {})
+    cur = ev.get(event_key)
+    ev[event_key] = None if (cur is not None and abs(cur - _key(t)) < 5e-4) else _key(t)
+    return ev[event_key]
+
+
+def parse_pins(s):
+    """Parse a standing-pins string into a sorted unique list of 1..10: '10' -> [10], '4 7'/'4,7' -> [4, 7],
+    blank -> [] (all down / strike). Returns None if any token is invalid, so the caller keeps the old value."""
+    s = (s or '').strip()
+    if not s:
+        return []                                    # blank = nothing standing = all down
+    out = set()
+    for tok in s.replace(',', ' ').split():
+        if not tok.isdigit() or not (1 <= int(tok) <= 10):
+            return None
+        out.add(int(tok))
+    return sorted(out)
+
+
+def unlabeled_clips(manifest: dict, labels_dir) -> list:
+    """Manifest clip ids (`Path(clip).stem`) with no usable label yet — no file, or a file with 0 observed
+    ball samples. Returned in manifest order, so the labeler can print what's left to do at startup."""
+    out = []
+    for entry in (manifest.get('clips') or []):
+        sid = Path(str(entry.get('clip') or '')).stem
+        lab = load(labels_dir, sid)
+        if lab is None or observed_count(lab) == 0:
+            out.append(sid)
+    return out
+
+
+def _load_manifest(manifest_path):
+    try:
+        return json.load(open(manifest_path))
+    except Exception:
+        return {'clips': []}
+
+
 def label_path(labels_dir, shot_id: str) -> Path:
     return Path(labels_dir) / f"{shot_id}.json"
 
@@ -146,7 +195,8 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
     cv2.namedWindow('ball'); cv2.setMouseCallback('ball', on_mouse)
     HELP = ["click: 1st=center 2nd=contact (only where the ball is visible)",
             "n/space +.1s  p -.1s  . +1s  , -1s   |   o occluded(in-roll only)  c clear  x clear-all-before",
-            "scrub past pre-shot frames — do NOT mark them; s save; q save+quit"]
+            "events (stamp THIS frame, press again to clear): r release  f foul-cross  t touchdown  i first-pin-contact",
+            "b / a = type standing pins before / after (terminal)   |   s save   q save+quit  (don't mark pre-shot frames)"]
     while True:
         i = state['i']; t = times[i]
         if cache['i'] != i:                            # (re)decode only on move -> clicks redraw instantly
@@ -165,6 +215,16 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
                         (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0) if (b and b.get('center')) else (255, 255, 255), 2)
             for j, line in enumerate(HELP):
                 cv2.putText(frame, line, (20, 72 + 26 * j), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (200, 200, 200), 1)
+            ev = labels.get('events', {})
+            es = lambda k: (f"{ev.get(k):.2f}" if ev.get(k) is not None else "—")
+            estr = (f"R release {es('release_s')}   F foul {es('foul_cross_s')}   "
+                    f"T touchdown {es('touchdown_s')}   I pin-contact {es('first_pin_contact_s')}")
+            pins_after = labels.get('pins_after')
+            pstr = (f"pins: before {labels.get('pins_before')}  after "
+                    f"{'(not set)' if pins_after is None else (pins_after if pins_after else 'STRIKE')}")
+            y0 = 72 + 26 * len(HELP)
+            cv2.putText(frame, estr, (20, y0), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (120, 220, 255), 1)
+            cv2.putText(frame, pstr, (20, y0 + 26), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (120, 220, 255), 1)
             cv2.imshow('ball', frame)
         k = cv2.waitKey(20) & 0xFF                     # live loop: redraw ~50fps so a click's marker shows at once
         if k == 255:
@@ -186,6 +246,19 @@ def run(clip, shot_id, labels_dir='validation/cv_eval/labels', step_s=0.1, t0=No
             clear_ball(labels, t); state['click'] = 'center'
         elif k == ord('x'):
             n = clear_before(labels, t); print(f"cleared {n} pre-shot sample(s) before {t:.2f}s")
+        elif 0 <= k < 128 and chr(k) in EVENT_KEYS:    # r/f/t/i: stamp current frame time as an event (toggle)
+            ek = EVENT_KEYS[chr(k)]
+            v = set_event(labels, ek, t)
+            print(f"{ek} {'= %.2fs' % v if v is not None else 'cleared'}")
+        elif k in (ord('b'), ord('a')):                # type standing pins before/after in the terminal
+            which = 'pins_before' if k == ord('b') else 'pins_after'
+            raw = input(f"standing pins {which.split('_')[1].upper()} (e.g. '10' or '4 7', blank = all down): ")
+            pins = parse_pins(raw)
+            if pins is None:
+                print(f"  invalid pins — keeping {labels.get(which)}")
+            else:
+                labels[which] = pins
+                print(f"  {which} = {pins if pins else 'all down (strike)'}")
         elif k == ord('s'):
             print('saved', save(labels_dir, shot_id, labels))
     save(labels_dir, shot_id, labels)
@@ -198,10 +271,14 @@ def _main():  # pragma: no cover
     ap.add_argument('clip')
     ap.add_argument('--id', required=True)
     ap.add_argument('--labels-dir', default='validation/cv_eval/labels')
+    ap.add_argument('--manifest', default='validation/cv_eval/manifest.json')
     ap.add_argument('--step', type=float, default=0.1)
     ap.add_argument('--t0', type=float, default=None)
     ap.add_argument('--t1', type=float, default=None)
     a = ap.parse_args()
+    todo = unlabeled_clips(_load_manifest(a.manifest), a.labels_dir)
+    print(f"unlabeled manifest clips ({len(todo)}): {', '.join(todo)}" if todo
+          else "all manifest clips have labels.")
     run(a.clip, a.id, a.labels_dir, a.step, a.t0, a.t1)
 
 

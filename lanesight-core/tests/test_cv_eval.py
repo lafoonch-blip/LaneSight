@@ -150,3 +150,31 @@ def test_label_roundtrip(tmp_path):
     back = bl.load(str(tmp_path), 'IMG_X')
     assert back['clip'] == 'IMG_X.MOV' and back['balls'][0]['center'] == [412, 1300]
     assert bl.load(str(tmp_path), 'MISSING') is None
+
+
+def test_set_event_stamps_and_toggles():
+    L = bl.empty_labels('IMG_X.MOV', 60.0)
+    assert bl.set_event(L, 'release_s', 16.5) == 16.5
+    assert L['events']['release_s'] == 16.5
+    assert bl.set_event(L, 'release_s', 16.5) is None          # same frame again -> cleared
+    assert bl.set_event(L, 'foul_cross_s', 16.7) == 16.7       # independent of release
+
+
+def test_parse_pins():
+    assert bl.parse_pins('') == []                             # blank = all down (strike)
+    assert bl.parse_pins('  ') == []
+    assert bl.parse_pins('10') == [10]
+    assert bl.parse_pins('7 4') == [4, 7]                      # sorted + unique
+    assert bl.parse_pins('4,7') == [4, 7]
+    assert bl.parse_pins('4 4 7') == [4, 7]
+    assert bl.parse_pins('11') is None                         # out of range -> invalid, keep old
+    assert bl.parse_pins('x') is None
+
+
+def test_unlabeled_clips(tmp_path):
+    man = {'clips': [{'clip': 'IMG_8751.mov'}, {'clip': 'IMG_8752.MOV'}, {'clip': 'IMG_8753.MOV'}]}
+    labeled = bl.empty_labels('IMG_8751.mov', 60.0)
+    bl.upsert_ball(labeled, 17.1, center=(400, 1200))          # one real observation -> counts as labeled
+    bl.save(str(tmp_path), 'IMG_8751', labeled)
+    bl.save(str(tmp_path), 'IMG_8752', bl.empty_labels('IMG_8752.MOV', 60.0))  # file but 0 obs -> still unlabeled
+    assert bl.unlabeled_clips(man, str(tmp_path)) == ['IMG_8752', 'IMG_8753']
