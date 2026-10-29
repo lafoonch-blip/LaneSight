@@ -46,9 +46,15 @@ def _color_transfer(path: str):
 
 
 def _confident_reject(err, transfer) -> tuple[bool, str]:
-    """(confident, reason). Reject only when we're sure the FULL pipeline would also fail. On this rough plate
-    that's just one case: a non-HDR clip with no lane-coloured wood anywhere (the camera isn't at a lane).
-    Everything else — HDR, NO_EDGES, FOUL_LINE (low-camera miss), geometry — is inconclusive."""
+    """(confident, reason). Reject only when we're sure the FULL pipeline would also fail. Two cases on this
+    rough plate: (1) a non-HDR clip with no lane-coloured wood anywhere (the camera isn't at a lane); and
+    (2) FOUL_LINE_NOT_IN_VIEW — a LATE-stage verdict, so the finder already located lane wood, edges AND a
+    common vanishing point and only then failed to find a foul line, meaning the lane runs off the bottom of
+    the frame (camera too low / wide oblique, no single lane framed foul→pins). That's exactly the framing the
+    full pipeline also rejects, so warn upfront instead of making the user wait ~2 min for the same failure
+    (2026-10-29; gated on ops/precheck_vs_pipeline.py = zero false rejections — the in-view good clips reach
+    ok=True and never hit this branch). NO_EDGES/geometry stay inconclusive: those are early misses the coarse
+    plate can get wrong where the full background succeeds."""
     if transfer in _HDR:
         return False, 'hdr'                       # never confidently reject HDR from a rough plate
     if err.code == 'LANE_NOT_DETECTED_NO_WOOD':
@@ -56,7 +62,9 @@ def _confident_reject(err, transfer) -> tuple[bool, str]:
         if pct is not None and pct < _CONFIDENT_NO_WOOD_PCT:
             return True, ''                        # essentially no lane wood at any floor → not a lane
         return False, 'low_wood_uncertain'
-    return False, err.code.lower()                # NO_EDGES / FOUL_LINE_NOT_IN_VIEW / etc. → inconclusive
+    if err.code == 'FOUL_LINE_NOT_IN_VIEW':
+        return True, ''                            # lane found but foul line off-frame → unusable framing
+    return False, err.code.lower()                # NO_EDGES / geometry / etc. → inconclusive
 
 
 def precheck(path: str) -> dict:

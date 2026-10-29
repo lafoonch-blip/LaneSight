@@ -151,12 +151,18 @@ def test_precheck_confident_reject_only_on_empty_lane_sdr():
     assert _confident_reject(some, 'bt709')[0] is False
 
 
-def test_precheck_no_edges_and_foul_line_are_inconclusive():
+def test_precheck_early_misses_are_inconclusive_but_foul_line_rejects():
     from lanesight_core.cv.precheck import _confident_reject
     from lanesight_core.failures import AnalysisFailure
-    for code in ('LANE_NOT_DETECTED_NO_EDGES', 'FOUL_LINE_NOT_IN_VIEW', 'LANE_GEOMETRY_UNUSABLE'):
+    # early-stage misses the coarse plate can get wrong where the full background succeeds -> inconclusive
+    for code in ('LANE_NOT_DETECTED_NO_EDGES', 'LANE_GEOMETRY_UNUSABLE'):
         e = AnalysisFailure(code, 'x', stage='lane')
-        assert _confident_reject(e, 'bt709')[0] is False      # never reject on doubt (incl. low-camera foul miss)
+        assert _confident_reject(e, 'bt709')[0] is False
+    # FOUL_LINE_NOT_IN_VIEW is a LATE verdict (lane+edges+VP found, foul line off-frame) -> confident reject
+    # on a non-HDR plate (2026-10-29: warn upfront instead of a 2-min wait for the same pipeline failure).
+    foul = AnalysisFailure('FOUL_LINE_NOT_IN_VIEW', 'x', stage='lane')
+    assert _confident_reject(foul, 'bt709')[0] is True
+    assert _confident_reject(foul, 'arib-std-b67')[0] is False   # but never from an HDR (HLG) plate
 
 
 def test_speed_withhold_reasons_catches_the_real_over_reads():
