@@ -17,6 +17,10 @@ shown, not counted) — exactly how Phase 3 is designed to start — and the swi
   either via `apiBaseURL` (Dev panel). Both populations are comparable in the ops dashboard via `env` / `source`.
 
 ## Status log (newest first)
+- OD-01 spike: added a **Vision image-registration pass** to the device harness (the stabilization primitive — the server's dominant CV cost). Installed. Results template: `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`.
+- OD-03: non-blocking **offline banner** + `Connectivity` (NWPathMonitor) at launch. Online/capture path unchanged.
+- Finding: server **already** dedupes offline-retry analyze by `content_hash` (`find_shot_by_hash`, ungated for live) → no separate Idempotency-Key table needed for the analyze path. Documented; skipped the redundant build.
+- OD-02: offline-first local store + outbox (file-based, encrypted, account-scoped) — compiles + installed; NOT wired into `runPipeline` yet (device-gated).
 - OD-00B: `MeasurementEvidence` v1 spec written → `03_ENGINEERING/MEASUREMENT_EVIDENCE_SPEC.md` (DRAFT for review).
 - OD-01: device benchmark harness built, compiles on device, **installed on "Shayne's 17"**. Run it: Settings → Dev panel → "Device benchmark (OD-01)".
 - OD-00A: audit done — real targets are `convert_s` (83s total) + `cv.stabilize_s` (~15s/clip); decode is cheap; peak RSS ~2GB is the iPhone risk.
@@ -50,6 +54,18 @@ Everything above is committed + pushed to `origin/feat/on-device-analysis`. Next
 4. When Shayne has run OD-01 on the iPhone: paste results into `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`.
 
 ## For Shayne in the morning
-- Run the OD-01 device benchmark on your iPhone (instructions will be here when the harness is built).
-- Review the DEC entries (102–104) and the shadow-vs-switch boundary above.
-- Decide whether to merge this branch into `dev-build-v0`.
+1. **Run the OD-01 device benchmark** on your iPhone (Settings → Dev panel → "Device benchmark (OD-01)") and
+   paste the report into `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`. Watch the **stabilization (registered fps)**
+   and **peak memory** lines — those are the Phase-3 go/no-go.
+2. Review **DEC-102/103/104** and the **shadow-not-switch** boundary (top of this doc).
+3. See the architecture comparison: the `/architecture` page + `ops.platform_daily` RPC are live (migration 028).
+   Server rows show now (Cloud Run p50 186–280 s); device rows fill once the shadow engine runs.
+4. New UI vs Figma (DEC-091): the **offline banner** (`OfflineBanner.swift`) is a new element not in v3.7 — a
+   thin top bar shown only when offline. Add to Figma/`APP_DESIGN_CHANGES.md` if keeping.
+5. Decide whether to merge `feat/on-device-analysis` into `dev-build-v0`.
+
+## Device-gated next steps (need your airplane-mode run; not done unattended on purpose)
+- Wire `OfflineStore`/`SyncEngine` into `AppModel.runPipeline`: offline → save `pending` shot + enqueue +
+  "Analysis pending" row (DEC-096 style); online path stays byte-identical (DEC-068/080). Acceptance = the
+  airplane-mode + force-quit tests in `OFFLINE_FIRST_SPEC.md`.
+- The actual on-device CV port (Phase 2/3) remains weeks of work and is gated on OD-01 + the DEC-103 gates.
