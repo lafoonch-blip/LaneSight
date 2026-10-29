@@ -1,5 +1,5 @@
 # Analysis failure RCA: every logged attempt since attempt logging began
-Status: ACTIVE · Version: 1.1 · Last Updated: 2026-10-28 · Owner: Shayne
+Status: ACTIVE · Version: 1.2 · Last Updated: 2026-10-28 · Owner: Shayne
 Source: live `analysis_attempt` (the full table: 12 rows, 2026-10-27 16:14 → 2026-10-28 18:51 ET). Decision: DEC-100.
 
 ## 1. Scorecard
@@ -58,3 +58,24 @@ Run these in order. Each one must report numbers.
 3. **Mode/clip mismatch check:** a fast server-side view check. A side/rear bowler clip sent as Shot (or a lane-only clip sent as Form) gets a coded failure that tells the user to switch mode.
 4. **H2 / framing:** upload-time guidance (show the precheck verdict before the full analysis), then detector work under DEC-094 (shadow, accuracy-gated).
 5. Track the success rate daily from `analysis_attempt` (ops dashboard, DEC-098), split by mode × source, including the `CLIENT_*` rows.
+
+
+## 5. Evening run (20:45–21:35 ET, 5 uploads, rev 00036): findings
+**Process failure first.** Rev 00036 was deployed from `dev-build-v0` (ops instrumentation), which has neither DEC-099 nor DEC-100 server code. So no clips were retained and no snapshot frames were saved, and the Form gate change didn't run. The **iOS** build did have DEC-100, so the phone's trim numbers were recorded. Fix: `integrate/dec-099-100-with-ops` merges both lines (368 tests pass). Deploy from it only.
+
+| Time | Mode | Phone: original → uploaded | Result | Root cause |
+|---|---|---|---|---|
+| 20:45 | Shot | 21.8 s → 13.3 s (lossless trim) | TRACK_TOO_SPARSE_FOR_SPEED: 3 on-lane ball points, 1 in 4–24 ft | **Ball detection density** (DEC-094 3b). The trim kept the shot. Needs the retained clip to see why. |
+| 20:51 | Shot | 26.1 s → 26.1 s (re-encoded 75.9→45.6 MB to fit the cap) | BALL_TRACK_NOT_FOUND: 0 points | Unknown (no clip). Candidates: wrong lane picked in a multi-lane view (DEC-093, IMG_8929 pattern), or the re-encode. |
+| 20:55 | Form | 30.3 s → 30.3 s (not trimmed: DEC-100 phone change worked) | "analyzed", but empty: swing 0.57 s, slide stop (E8) *before* slide start (E5), no key frames | **Delivery mis-isolated by the pose engine** (DEC-095's open root cause). On this server it still showed as an empty card; with DEC-100 it fails as FORM_DELIVERY_NOT_ISOLATED. |
+| 21:33 | Shot | 19.3 s → **3.3 s** | Analyzed, far lane limited (late speed > early speed) | The trim cut the clip near the pins → far-lane read unreliable (likely). |
+| 21:35 | Shot | 17.1 s → **2.85 s** | PIN_IMPACT_NOT_DETECTED: 121 ball points, track ends at 2.74 s of 2.97 s | **CONFIRMED: the phone trim cut the clip before the ball reached the pins.** |
+
+**H1 confirmed for the tail, not the head.** `VideoTrimmer`'s motion window ends when the near-camera motion stops (the bowler), while the ball is still rolling far away (low pixel motion at 160 px), plus a 0.4 s pad. This also explains 10-27/10-28's 2.82 s clip (FOUL_LINE_NOT_IN_VIEW / LANE_NOT_DETECTED): it was cut to a ~3 s window.
+
+**Fix shipped (DEC-101, iOS):** the Shot trim now cuts only the dead time before motion (keeps 1 s before onset) and always keeps ≥10 s after onset. Form clips are never window-trimmed. The re-encode-to-fit path is unchanged (bitrate only); watch whether re-encoded clips track worse (20:51).
+
+**Next, on the first failures after the deploy** (retained clip + frames):
+- 20:45-type sparse tracks → detection-density work (DEC-094 3b, shadow).
+- 20:51-type zero-point tracks → check the chosen lane (`capture_quality.lane`) and the re-encode.
+- Form mis-isolation → run the pose events on the retained clip and fix the delivery-window selection (DEC-095).

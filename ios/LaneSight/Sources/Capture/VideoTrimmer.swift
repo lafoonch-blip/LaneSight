@@ -41,15 +41,25 @@ enum VideoTrimmer {
         return d.seconds
     }
 
+    /// Seconds kept after motion onset: approach (~2–3 s) + ball travel to the pins (~2.5–3 s) + pin action, with margin.
+    nonisolated static let tailKeep: Double = 10.0
+
     nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4) async -> URL {
         let asset = AVURLAsset(url: sourceURL)
         guard let duration = try? await asset.load(.duration) else { return sourceURL }
         let total = duration.seconds
         guard total.isFinite, total > 1.2 else { return sourceURL }   // too short to bother
 
-        guard let range = await motionWindow(asset: asset, total: total, pad: pad) else {
+        guard let motion = await motionWindow(asset: asset, total: total, pad: pad) else {
             return sourceURL   // no confident motion → send the full tap-window clip
         }
+        // DEC-101: cut only the dead time BEFORE motion. The motion window used to END when the bowler's motion
+        // stopped — before the ball reached the pins (2026-10-28: a 17.1 s clip trimmed to 2.85 s, the ball track
+        // ended at 2.74 s → PIN_IMPACT_NOT_DETECTED). Keep ≥1 s before onset and ≥`tailKeep` s after it.
+        let start = max(0, motion.start.seconds - 0.6)              // + the 0.4 s pad already applied = 1 s
+        let end = min(total, max(motion.end.seconds, motion.start.seconds + tailKeep))
+        let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
+                                end: CMTime(seconds: end, preferredTimescale: 600))
         // Skip the export if trimming would barely shrink the clip.
         if range.duration.seconds > total * 0.85 { return sourceURL }
 

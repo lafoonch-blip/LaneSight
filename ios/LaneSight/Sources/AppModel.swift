@@ -602,6 +602,8 @@ final class AppModel: ObservableObject {
             // re-trims precisely afterwards.
             pipeline = .trimming
             let tTrim = Date()
+            // DEC-101: Form clips are never window-trimmed (the start of the approach matters); Shot clips use the
+            // head-only trim in VideoTrimmer (the tail always runs ≥10 s past motion onset so the ball reaches the pins).
             let uploadURL = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
             ct["trim_s"] = Date().timeIntervalSince(tTrim)
             // DEC-100: record what the phone trim kept, so a failure shows whether the trim cut the shot.

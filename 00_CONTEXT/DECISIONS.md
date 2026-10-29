@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.61  
+Version: 1.62  
 Last Updated: 2026-10-28  
 Owner: Shayne  
-Supersedes: v1.60
+Supersedes: v1.61
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1174,6 +1174,12 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 - **Every failure gets a root-cause pass**, tracked in `02_RESEARCH/ANALYSIS_FAILURE_RCA_<date>.md`, with experiments on the retained clip and a validated fix (DEC-062/094 gates apply to CV changes).
 **Why:** Tonight's 4–5 failed uploads couldn't be diagnosed. The clip was deleted on analysis and phone-side failures left no trace. Uploaded Shot clips have never produced a result (0/6), Form uploads return empty cards, and the same failing clips were being re-run with no way to find out why.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** "clips are not retained" (the storage-upload path comment of 2026-10-26; `LANESIGHT_KEEP_CLIPS` debug flag).
+
+### DEC-101 — Phone trim keeps the whole shot; one deploy line
+**Decision (2026-10-28, from the DEC-100 evidence):**
+- **Shot uploads/captures: the phone trim only cuts the dead time BEFORE motion** (keeps 1 s before onset and at least 10 s after onset). The old motion window ended when the bowler stopped moving, before the ball reached the pins. Evidence: a 17.1 s clip was cut to 2.85 s, the ball track ended at 2.74 s and the result was PIN_IMPACT_NOT_DETECTED; a 19.3 s clip was cut to 3.3 s and the far lane was "limited". **Form clips are never window-trimmed.** Re-encode-to-fit (bitrate only, fps and resolution kept) is unchanged.
+- **Deploy only from a line that holds every accepted server change.** Rev 00036 was deployed from `dev-build-v0` without DEC-099/DEC-100, which silently dropped clip retention. `integrate/dec-099-100-with-ops` is that line until it's merged into `dev-build-v0`.
+**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** the `VideoTrimmer` motion-window end (capture spec step 2: "pads ~0.4 s on each side").
 
 ## Superseded decisions
 - DEC-096 — "leaving the Lab tab doesn't end the session" superseded in part by DEC-099 (the tab bar is hidden on the Active Session; End session is the way out).
