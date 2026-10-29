@@ -469,10 +469,13 @@ def health():
 
 
 @app.get('/debug/env')
-def debug_env():
-    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Read-only, no auth
-    (no secrets). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off) matches the
-    allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+def debug_env(user=Depends(current_user)):
+    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Owner-only (no
+    secrets, but not public). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off)
+    matches the allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+    from lanesight_core.owner import OWNER_USER_ID
+    if user != OWNER_USER_ID:
+        raise HTTPException(403, 'owner only')
     info = {'os_cpu_count': os.cpu_count(),
             'env': {k: os.environ.get(k) for k in
                     ('LANESIGHT_CV_WORKERS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
