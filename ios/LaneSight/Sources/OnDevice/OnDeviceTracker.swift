@@ -234,35 +234,43 @@ enum OnDeviceTracker {
             if s[p] == 0 && (s[p-1]==1 || s[p+1]==1 || s[p-w]==1 || s[p+w]==1) { m[p] = 1 } } }
     }
 
-    // MARK: RANSAC link (port of track.py link) — u = 1/(ct - vpY) is ~linear in lane distance; u(t) ~quadratic.
-    nonisolated private static func ransacLink(_ perFrame: [[Cand]], vpY: Float, iters: Int = 2000) -> [TrackPoint] {
+    // MARK: RANSAC link (port of track.py link) — u = 1/(ct - vpY) is ~linear in lane distance; u(t) ~linear
+    // in time for a rolling ball. The DISCRIMINATING constraints (vs the loose first pass): the ball travels
+    // foul→pins, so u INCREASES (slope > 0); the roll is SHORT (≤ ~5 s); it covers real lane distance (u-range).
+    // This rejects the ball return (u decreasing), the bowler (tiny motion), and whole-clip flat fits.
+    nonisolated private static func ransacLink(_ perFrame: [[Cand]], vpY: Float, iters: Int = 6000) -> [TrackPoint] {
         let flat = perFrame.flatMap { $0 }
-        guard flat.count >= 10 else { return [] }
-        func u(_ c: Cand) -> Float { 1 / (c.ct - vpY) }
-        var bestInliers: [Cand] = []
+        guard flat.count >= 8 else { return [] }
+        func u(_ c: Cand) -> Float { 1 / max(c.ct - vpY, 1) }
+        let uRange = (flat.map { u($0) }.max() ?? 1) - (flat.map { u($0) }.min() ?? 0)
         var rng: UInt64 = 0x9E3779B97F4A7C15
         func rnd(_ n: Int) -> Int { rng = rng &* 6364136223846793005 &+ 1442695040888963407; return Int((rng >> 33) % UInt64(max(1, n))) }
+        var best: [Cand] = []
         for _ in 0..<iters {
             let a = flat[rnd(flat.count)], b = flat[rnd(flat.count)]
             if a.i == b.i { continue }
-            let dt = Float(b.t - a.t); if abs(dt) < 1e-4 { continue }
-            let slope = (u(b) - u(a)) / dt                 // linear u(t) seed
+            let dt = Float(b.t - a.t); if abs(dt) < 0.03 { continue }
+            let slope = (u(b) - u(a)) / dt
+            if slope <= 0 { continue }                      // require ball moving foul→pins (u increasing)
             let intc = u(a) - slope * Float(a.t)
-            // one candidate per frame closest to the line, within tolerance
             var chosen: [Int: Cand] = [:]
             for c in flat {
                 let pred = slope * Float(c.t) + intc
-                let tol = 0.02 * abs(u(c)) + 1e-4
+                let tol = 0.012 * abs(u(c)) + 1e-4          // tighter than the first pass
                 if abs(u(c) - pred) < tol {
-                    if let ex = chosen[c.i] {
-                        if abs(u(c) - pred) < abs(u(ex) - pred) { chosen[c.i] = c }
-                    } else { chosen[c.i] = c }
+                    if let ex = chosen[c.i] { if abs(u(c) - pred) < abs(u(ex) - pred) { chosen[c.i] = c } }
+                    else { chosen[c.i] = c }
                 }
             }
-            let inl = Array(chosen.values)
-            if inl.count > bestInliers.count { bestInliers = inl }
+            let inl = chosen.values.sorted { $0.t < $1.t }
+            guard inl.count >= 8, let f = inl.first, let l = inl.last else { continue }
+            let span = l.t - f.t
+            let du = u(l) - u(f)
+            // a real roll: short in time, net motion toward the pins covering a real fraction of the lane
+            guard span >= 0.5, span <= 5.0, du > 0.35 * uRange else { continue }
+            if inl.count > best.count { best = inl }
         }
-        let sorted = bestInliers.sorted { $0.t < $1.t }
-        return sorted.map { TrackPoint(i: $0.i, t: $0.t, cx: $0.cx, contactRow: $0.ct, frac: $0.frac) }
+        return best.sorted { $0.t < $1.t }
+            .map { TrackPoint(i: $0.i, t: $0.t, cx: $0.cx, contactRow: $0.ct, frac: $0.frac) }
     }
 }
