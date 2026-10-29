@@ -56,6 +56,11 @@ REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot cali
 # lane, these are the measurements that can't be trusted (handoff B / DEC-061).
 _FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
                      'entry_board', 'entry_angle', 'entry_angle_52_55'}
+# Every metric read off the lane geometry (depth scale + homography). When the depth scale is proven wrong
+# (plausibility gate: implausible breakpoint distance), NONE of these can be trusted — they're withheld, not
+# shown as measured. DEC-065: far-lane geometry is unvalidated; a broken scale makes it unavailable, not 'ok'.
+_GEOMETRY_METRICS = {'entry_board', 'entry_angle', 'entry_angle_52_55', 'breakpoint_board', 'breakpoint_distance',
+                     'laydown_board', 'board_at_7ft', 'arrows_board', 'launch_angle'}
 
 
 def far_lane_quality(M, zboard):
@@ -264,13 +269,22 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # missing (release extrapolated). Accuracy over coverage — never surface a confidently-wrong speed.
     _SPEED_METRICS = ('ball_speed', 'speed_release', 'speed_early', 'speed_late')
     withhold = speed_withhold_reasons(M.get('speed_release_mph'), M.get('speed_late_mph'), M.get('breakpoint_extreme_ft'))
+    # A breakpoint-distance reason means the DEPTH SCALE itself is wrong — then every geometry-derived metric
+    # (entry board/angle, breakpoint, laydown, arrows, launch) shares the corruption and must be withheld too,
+    # and the far-lane-not-read state shown (A2/DEC-065). A speed-track-only reason withholds just the speeds.
+    geom_bad = any('breakpoint distance' in r for r in withhold)
     if withhold:
         why2 = 'Speed withheld — ' + '; '.join(withhold) + '.'
         for x in meas:
             if x.metric in _SPEED_METRICS:
                 x.value, x.status, x.confidence = None, 'unavailable', 0.0
                 x.note = why2
-        log('speed consistency gate: ' + why2)
+        if geom_bad:
+            for x in meas:
+                if x.metric in _GEOMETRY_METRICS and x.status != 'unavailable':
+                    x.value, x.status, x.confidence = None, 'unavailable', 0.0
+                    x.note = 'Lane depth scale unreliable (breakpoint distance implausible); geometry not reported.'
+        log('speed consistency gate: ' + why2 + (' [geometry withheld]' if geom_bad else ''))
     elif M.get('board_at_0ft') is None:            # no near-lane laydown -> release extrapolated, trust less
         for x in meas:
             if x.metric in _SPEED_METRICS and x.value is not None and x.status not in ('unavailable',):
@@ -281,11 +295,17 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # mark them low_confidence with the reason, and flag capture_quality.far_lane = "limited" for the camera-spot
     # banner. Accuracy over coverage: a mis-calibrated entry board drives a wrong move, so it must not read 'ok'.
     cq_limited, cq_reason = far_lane_quality(M, list(zip(ser['Z'], ser['board'])))
+    if geom_bad:                                   # compromised depth scale ⇒ far-lane-not-read state (A2/A3)
+        cq_limited = True
+        cq_reason = cq_reason or 'The lane depth scale came out implausible, so the far-lane read (entry, breakpoint) is not reliable.'
     if cq_limited:
         for x in meas:
             if x.metric in _FAR_LANE_METRICS and x.value is not None and x.status not in ('unavailable',):
                 x.status = 'low_confidence'
                 x.note = (x.note + ' ' if x.note else '') + 'Far-lane read limited by camera position.'
+    for x in meas:                                 # A4: never surface "-0.0" (a rounding artifact) — normalize it
+        if isinstance(x.value, float) and x.value == 0.0:
+            x.value = 0.0
     traj = dict(lane=[dict(t=round(a, 4), z_ft=round(z, 2), board=round(b, 2)) for a, z, b in zip(ser['t'], ser['Z'], ser['board'])],
                 smoothed=[dict(z_ft=round(z, 2), board=round(b, 2)) for z, b in zip(ser['curve']['Z'], ser['curve']['board'])],
                 pixel=[dict(t=round(a, 4), x=round(p[0], 1), y=round(p[1], 1)) for a, p in zip(ser['t'], ser['px'])])
