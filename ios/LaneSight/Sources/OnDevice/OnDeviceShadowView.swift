@@ -30,6 +30,11 @@ struct OnDeviceShadowView: View {
                 } label: {
                     HStack { Text("Run lane detection (stage 2)"); if running { Spacer(); ProgressView() } }
                 }.disabled(running || clipURL == nil)
+                Button {
+                    Task { await runTrack() }
+                } label: {
+                    HStack { Text("Run ball tracking (stage 3)"); if running { Spacer(); ProgressView() } }
+                }.disabled(running || clipURL == nil)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled) }
             } header: { Text("On-device analysis — Stage 1 (shadow)") } footer: {
                 Text("Ports the server's stabilization (frame→reference homography) to Vision on-device. Streams frames (memory-safe). Compare timing/quality to the server's cv.stabilize_s (~15s/clip).")
@@ -102,6 +107,35 @@ struct OnDeviceShadowView: View {
             lines += "\n\nFirst pass (port of cv/lanes.py). Eyeball: VP should sit above the lane, foul line near the\nbottom of the lane surface, nearWidth plausible. Mis-detections → threshold tuning (next)."
             report = lines
         } else { error = "lane detection: could not read a frame" }
+        running = false
+    }
+
+    private func runTrack() async {
+        guard let url = clipURL else { return }
+        running = true; error = nil; report = ""
+        let result: (ODLaneGeometry, BallTrack)? = await Task.detached {
+            guard let px = OnDeviceLaneDetector.referenceFrame(url: url, at: 30) else { return nil }
+            let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
+            guard geo.vanishingPoint != nil, !geo.lanes.isEmpty else { return (geo, BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: 0)) }
+            return (geo, OnDeviceTracker.track(url: url, geo: geo))
+        }.value
+        if let (geo, tr) = result {
+            func f(_ v: Float, _ n: Int = 1) -> String { String(format: "%.\(n)f", v) }
+            if geo.vanishingPoint == nil || geo.lanes.isEmpty {
+                error = "tracking needs lane geometry — stage 2 found none on this clip"; running = false; return
+            }
+            var lines = """
+            On-device ball tracking (Stage 3, first pass)
+            Frames scanned: \(tr.framesScanned)   frames with a candidate: \(tr.candidateFrames)
+            Track points (RANSAC inliers): \(tr.points.count)   time: \(f(Float(tr.seconds), 2))s
+            """
+            if let a = tr.points.first, let b = tr.points.last {
+                lines += "\n  span: frac \(f(a.frac, 2)) → \(f(b.frac, 2))   t \(f(Float(a.t), 2))s → \(f(Float(b.t), 2))s"
+                lines += "\n  entry lateral fraction (last): \(f(b.frac, 2)) (0=left edge, 1=right edge)"
+            }
+            lines += "\n\nFirst pass (median-bg, no handheld warp). Eyeball: track points should rise smoothly down\nthe lane and the lateral fraction should match where the ball actually went. Tune diff/area/diameter next."
+            report = lines
+        } else { error = "tracking: could not read a frame" }
         running = false
     }
 }
