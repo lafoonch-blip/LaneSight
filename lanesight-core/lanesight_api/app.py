@@ -21,7 +21,7 @@ from . import engines
 from . import userauth
 from .auth import current_user
 from .config import settings
-from .jobs import SerialJobQueue
+from .jobs import SerialJobQueue, AnalysisBusy
 from .store import get_store, session_csv
 from .profile_validation import validate_profile_patch, ProfileValidationError
 from lanesight_core.models.shot import ALGO_VERSION
@@ -43,6 +43,15 @@ if _cpu_cap:
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
 app = FastAPI(title='LaneSight API', version=API_VERSION)
+
+
+@app.exception_handler(AnalysisBusy)
+async def _analysis_busy_handler(request, exc):
+    # This instance already has an analysis running (per-instance memory guard). 409 so the app retries;
+    # the Retry-After hints a sensible backoff. Not an error — just back-pressure (DEC-043 per-session).
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=409, headers={'Retry-After': '20'},
+                        content={'detail': 'An analysis is already running. Please try again in a moment.'})
 
 
 # ----------------------------------------------------------------- §2 ops instrumentation (DEC-098)

@@ -9,6 +9,11 @@ import uuid
 from dataclasses import dataclass, field
 
 
+class AnalysisBusy(Exception):
+    """This instance is already running an analysis (per-instance slot taken). The caller returns HTTP 409 so
+    the app can retry — not an error, just back-pressure. DEC-043 one-at-a-time is per session anyway."""
+
+
 @dataclass
 class Job:
     id: str
@@ -52,18 +57,34 @@ class SerialJobQueue:
         # returns, so a background thread would stall; running inside the request keeps CPU allocated and
         # lets the instance scale to zero afterward. The Mac/local service keeps the async background worker.
         self._sync = os.environ.get('LANESIGHT_SYNC_JOBS') == '1'
+        # Per-INSTANCE cap of one running analysis. With Cloud Run concurrency > 1 (so the light API — home,
+        # score, sessions — is served alongside a running analysis instead of queued behind it), two analyze
+        # requests could otherwise land on the same instance and run two multi-GB analyses at once → OOM. This
+        # non-blocking guard lets the 2nd return a fast BUSY (the app retries) rather than thrash memory. It is
+        # NOT a global lock (DEC-043 one-at-a-time is PER SESSION, and a session's shots are serial in practice);
+        # different instances still analyse different users concurrently.
+        self._analysis_slot = threading.BoundedSemaphore(1)
         if not self._sync:
             self._worker = threading.Thread(target=self._run, name='lanesight-jobs', daemon=True)
             self._worker.start()
 
     def submit(self, kind: str, fn) -> Job:
         """fn(job) -> result dict. fn may record per-step timings via job.timings[...]. Runs serially on the
-        background worker, or INLINE (done when this returns) in sync mode."""
+        background worker, or INLINE (done when this returns) in sync mode. An `analyze` job in sync mode holds
+        the per-instance analysis slot; if one is already running HERE, raises AnalysisBusy (→ HTTP 409)."""
         job = Job(id=uuid.uuid4().hex, kind=kind)
         with self._lock:
             self._jobs[job.id] = job
         if self._sync:
-            self._execute(job, fn)
+            if kind == 'analyze':
+                if not self._analysis_slot.acquire(blocking=False):
+                    raise AnalysisBusy()
+                try:
+                    self._execute(job, fn)
+                finally:
+                    self._analysis_slot.release()
+            else:
+                self._execute(job, fn)
             return job
         with self._lock:
             self._q.append((job, fn))
