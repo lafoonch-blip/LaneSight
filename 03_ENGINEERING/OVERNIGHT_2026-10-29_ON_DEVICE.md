@@ -17,6 +17,7 @@ shown, not counted) — exactly how Phase 3 is designed to start — and the swi
   either via `apiBaseURL` (Dev panel). Both populations are comparable in the ops dashboard via `env` / `source`.
 
 ## Status log (newest first)
+- **OD-01 RESULT IN (Shayne ran it, iPhone 17 Pro Max): STRONG GO.** Stabilization ~3.8 s full clip (~4× faster than server), **peak memory 67.6 MB** (vs server ~2 GB — jetsam risk eliminated via frame streaming), **no thermal throttling** over 30 passes, negligible battery. Caveats: 1080p60 not 120 fps; primitives not the full pipeline. Full read in `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`.
 - OD-01 spike: added a **Vision image-registration pass** to the device harness (the stabilization primitive — the server's dominant CV cost). Installed. Results template: `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`.
 - OD-03: non-blocking **offline banner** + `Connectivity` (NWPathMonitor) at launch. Online/capture path unchanged.
 - Finding: server **already** dedupes offline-retry analyze by `content_hash` (`find_shot_by_hash`, ungated for live) → no separate Idempotency-Key table needed for the analyze path. Documented; skipped the redundant build.
