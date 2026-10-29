@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/cost", label: "Cost" },
   { href: "/events", label: "Journey" },
   { href: "/storage", label: "Storage" },
+  { href: "/architecture", label: "Architecture" },
   { href: "/releases", label: "Releases" },
   { href: "/feedback", label: "Feedback" },
 ];

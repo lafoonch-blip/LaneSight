@@ -223,6 +223,9 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                    'source': 'upload' if is_upload else 'live', 'capture_mode': mode,
                    'content_hash': content_hash, 'algorithm_version': ALGO_VERSION,
                    'api_revision': os.environ.get('K_REVISION'),
+                   # DEC-103: engine provenance. This server path is always 'server'; the on-device engine
+                   # (shadow) submits 'ios'. version/build = algorithm_version/api_revision above.
+                   'platform': 'server',
                    'env': 'live' if os.environ.get('K_REVISION') else 'dev',
                    # Probe up front so a FAILED analysis still records the clip's camera/recording facts
                    # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related. cold_start

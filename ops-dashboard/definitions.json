@@ -77,6 +77,10 @@
     "storage_latest": {
       "rpc": "ops_rpc_storage_latest", "owner_only": true, "real_only": false, "grain": "latest snapshot per bucket (§2 M5)",
       "columns": ["bucket","bytes","objects","aged_objects","db_bytes","captured_at"]
+    },
+    "platform_daily": {
+      "rpc": "ops_rpc_platform_daily", "owner_only": true, "real_only": true, "grain": "day x env x platform x capture_mode (DEC-103)",
+      "columns": ["day","env","platform","capture_mode","attempts","analyzed","failures","failure_rate","distinct_users","p50_attempt_seconds","p90_attempt_seconds","p95_attempt_seconds","avg_analyze_s"]
     }
   },
   "domains": [
@@ -114,6 +118,7 @@
     {"id": "cost", "title": "Financial operations", "views": ["cost_daily"]},
     {"id": "events", "title": "Customer journey", "views": ["funnel", "event_daily"]},
     {"id": "storage", "title": "Storage & DB", "views": ["storage_latest"]},
+    {"id": "architecture", "title": "Architecture (server vs device)", "views": ["platform_daily"]},
     {"id": "releases", "title": "Release & regression", "views": ["release_health"]},
     {"id": "feedback", "title": "Feedback & support", "views": ["feedback_summary"]}
   ]
