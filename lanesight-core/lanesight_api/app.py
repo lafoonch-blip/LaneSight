@@ -457,6 +457,29 @@ def health():
             'config': {**s.redacted(), 'upload_dedupe': _upload_dedupe_on()}}   # DEC-086 flag (default off)
 
 
+@app.get('/debug/env')
+def debug_env():
+    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Read-only, no auth
+    (no secrets). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off) matches the
+    allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+    info = {'os_cpu_count': os.cpu_count(),
+            'env': {k: os.environ.get(k) for k in
+                    ('LANESIGHT_CV_WORKERS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
+                     'NUMEXPR_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'K_SERVICE', 'K_REVISION')},
+            'execution_environment': os.environ.get('CLOUD_RUN_EXECUTION_ENVIRONMENT')}
+    try:
+        import cv2
+        info['cv2_num_threads'] = cv2.getNumThreads()
+    except Exception as e:
+        info['cv2'] = str(e)[:120]
+    try:
+        from lanesight_core.cv._parallel import workers
+        info['cv_workers'] = workers()
+    except Exception as e:
+        info['cv_workers_err'] = str(e)[:120]
+    return info
+
+
 # ----------------------------------------------------------------- auth (email/password, no bearer)
 @app.post('/auth/signup')
 def auth_signup(body: dict):

@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.64  
+Version: 1.65  
 Last Updated: 2026-10-29  
 Owner: Shayne  
-Supersedes: v1.63
+Supersedes: v1.64
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1224,6 +1224,19 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 **Date:** 2026-10-29 · **Status:** ACCEPTED · **Supersedes:** the Ruby-as-validation clauses of DEC-022 and
 DEC-034 and the CLAUDE.md "compare against Ruby values" instruction, going forward. Historical DEC-021/022/030/035
 entries stand as record (never edited); their *Ruby-validation* basis is no longer the active process.
+
+### DEC-106 — Native iOS production engine; Python stays the reference; port only after the engine stabilizes
+**Decision (Shayne, 2026-10-29):**
+- **Production:** the iOS measurement engine becomes native — Swift, AVFoundation, Vision, and Core ML where they help. This is **Option B** (`03_ENGINEERING/ENGINE_ARCHITECTURE_DECISION.md`).
+- **Rejected:** Option A (server-only Python) as the target production architecture; Option C (shared C++/Rust core) for the current roadmap.
+- **Python stays, permanently, as the non-production reference engine:** research, algorithm experiments, evaluation against ground truth, and reprocessing old shots. Results carry `engine` + `algorithm_version` provenance (DEC-103), so reprocessed results are never silently treated as equal to production results.
+- **Cross-platform consistency comes from shared ARTIFACTS, not shared code:** the canonical metric definitions (`CV_MEASUREMENT_DEFINITIONS`), a versioned ShotRecord / measurement contract (`MeasurementEvidence`, DEC-103), the DEC-094 labeled dataset, and its accuracy gates. A future Android engine is native too and must pass the same gates on its own. Converted models (Core ML / TFLite) are validated separately per platform.
+- **No wholesale port** of the current classical pipeline while DEC-062/065/094 work is in progress. Experimental Swift prototypes/benchmarks continue, labeled non-production (the current `feat/on-device-analysis` engine is exactly this). New detection models are built Core ML-ready.
+- **Phases:** 0. Explain the Cloud Run vs Mac latency gap. · 1. Finalize detection/geometry/metric definitions in the Python reference. · 2. Labeled dataset + accuracy harness (DEC-094). · 3. Core ML models, validated. · 4. Port the stable geometry + metric layer to Swift. · 5. Full iPhone pipeline validation. · 6. Promote Swift to production after shadow comparison. (0–2 may overlap.)
+- **Promotion gates for any production engine (ground truth, not Python parity):** A — Accuracy (DEC-034 + per-metric tolerances vs ground truth); B — Integrity (confidence, unavailable states, observed-vs-predicted, geometry validity, plausible-but-wrong rate, DEC-094); C — Performance (latency, battery, memory, thermals, sustained full sessions). Python/Swift agreement is diagnostic only.
+- **Server stays authoritative** for coaching, scoring, achievements, history and sync. Offline at the lane: the phone shows measured metrics immediately. Coaching advice shows when the server responds, or is computed on-device from the same versioned rules — **open question for Shayne before Phase 6**.
+**Why:** on-device is feasible and fast on iPhone 17 Pro Max (~550 fps decode, peak memory ~68 MB, no throttling over 30 shots); it enables offline, instant feedback at ~$0/shot; a portable CPU core would give up the Apple accelerators that make on-device worthwhile; porting a mid-redesign pipeline would mean porting it twice.
+**Date:** 2026-10-29 · **Status:** ACCEPTED · **Supersedes:** makes decisive **DEC-102** (offline-first hybrid → the on-device engine is specifically native Swift/Vision/Core ML and is THE production target) and **DEC-103** (its two gates are the ground-truth promotion gates above); refines DEC-043 hosting assumptions for the long term; DEC-092 server work continues meanwhile.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

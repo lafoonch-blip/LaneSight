@@ -1,5 +1,7 @@
 # LaneSight measurement-engine architecture — decision brief
-Status: OPEN decision (prove-out phase) · 2026-10-29 · For external review
+Status: **DECIDED — Option B (native iOS), DEC-106 (2026-10-29).** Python stays the permanent non-production
+reference; port to Swift only after the engine stabilizes (phased, see DEC-106). Brief retained for the record
+and for external review of the reasoning.
 
 ## 1. Context (for someone with no prior knowledge)
 LaneSight analyzes a phone video of a bowling shot and measures ball metrics (speed, entry board, entry angle,
@@ -90,8 +92,11 @@ accelerators via an abstraction layer (hybrid); and whether improving the *serve
 5. Is there a hybrid (portable core for the math + platform-native frontends for decode/accelerated primitives)
    that captures most of both?
 
-## 8. Current internal lean (not binding)
-Given the evidence that on-device performance is the main prize and that a portable CPU core would forfeit the
-Apple accelerators, the current lean is **Option B (native)** if the platform count stays small — with Option C
-reconsidered if a true multi-platform future with a fast-changing engine emerges. This is exactly what a
-second opinion should pressure-test.
+## 8. Outcome (DEC-106, 2026-10-29)
+**Chosen: Option B — native iOS engine (Swift/AVFoundation/Vision/Core ML).** Python becomes the permanent
+non-production reference (research, evaluation, reprocessing, ground-truth). Cross-platform consistency via
+shared artifacts (metric definitions, measurement contract, labeled dataset + gates), not shared code. No
+wholesale port until the pipeline stabilizes (DEC-062/065/094); phased promotion behind ground-truth gates
+(accuracy / integrity / performance), with Python↔Swift agreement diagnostic only. Option A rejected as the
+target; Option C (shared C++/Rust core) rejected for the current roadmap (reconsider only if a multi-platform,
+fast-changing-engine future emerges). Rationale in §4–§6 above; full decision in `DECISIONS.md` DEC-106.

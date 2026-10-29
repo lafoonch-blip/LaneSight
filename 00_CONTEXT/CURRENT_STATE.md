@@ -16,6 +16,8 @@ Supersedes: v1.56
 
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 
+**Engine architecture DECIDED (DEC-106, 2026-10-29): native iOS is the production engine (Option B).** Swift/AVFoundation/Vision/Core ML; Python stays the permanent non-production reference (research/eval/reprocessing/ground-truth). No wholesale port until the pipeline stabilizes (DEC-062/065/094); phased promotion behind ground-truth gates. Brief: `03_ENGINEERING/ENGINE_ARCHITECTURE_DECISION.md`. Phase 0 (Cloud Run vs Mac latency root-cause) in `03_ENGINEERING/CLOUD_RUN_PERF_INVESTIGATION.md`.
+
 **Parallel track — On-device / offline-first (DEC-102/103/104, accepted 2026-10-28).** On branch `feat/on-device-analysis`: the app is moving to offline-first with on-device measurement where device capability is validated; the server stays the fallback + reference and remains authoritative for coaching, score, tiers and achievements. Built in **shadow** (device results logged beside server results, not shown/counted) until the ground-truth (DEC-034) + parity gates pass — DEC-062's production CV freeze is lifted for the shadow/validation track only. Spec: `03_ENGINEERING/ON_DEVICE_ANALYSIS_PROPOSAL.md` v0.3; plan: `HANDOFF_2026-10-28_ON_DEVICE_ANALYSIS.md`. This runs alongside the live server-authoritative app so both architectures can be compared (ops dashboard, split by `env`/`source`).
 
 ## Where things stand
