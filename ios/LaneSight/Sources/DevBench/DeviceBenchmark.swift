@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Accelerate
+import Vision
 import PhotosUI
 import UIKit
 
@@ -24,6 +25,8 @@ struct DeviceBenchmarkResult {
     var clipSeconds = 0.0
     var decodeSeconds = 0.0            // one decode pass
     var processSeconds = 0.0           // one process pass (decode + native filter)
+    var registrationSeconds = 0.0      // one pass: frame-to-frame Vision image registration (stabilization proxy)
+    var registrationFrames = 0
     var passes = 0
     var sustainedSeconds = 0.0
     var perPassSeconds: [Double] = []
@@ -35,6 +38,7 @@ struct DeviceBenchmarkResult {
     var decodedFPS: Double { decodeSeconds > 0 ? Double(frames) / decodeSeconds : 0 }
     var realtimeFactor: Double { decodeSeconds > 0 ? clipSeconds / decodeSeconds : 0 }   // >1 = faster than realtime
     var processedFPS: Double { processSeconds > 0 ? Double(frames) / processSeconds : 0 }
+    var registrationFPS: Double { registrationSeconds > 0 ? Double(registrationFrames) / registrationSeconds : 0 }
 
     var report: String {
         func f(_ v: Double, _ n: Int = 1) -> String { String(format: "%.\(n)f", v) }
@@ -47,6 +51,8 @@ struct DeviceBenchmarkResult {
           one pass: \(f(decodeSeconds, 2))s  →  \(f(decodedFPS))  decoded fps   (\(f(realtimeFactor))x realtime)
         NATIVE PROCESS (decode + vImage box-convolve, full frame)
           one pass: \(f(processSeconds, 2))s  →  \(f(processedFPS))  processed fps
+        STABILIZATION PROXY (Vision frame-to-frame registration — the server's dominant CV cost)
+          one pass: \(f(registrationSeconds, 2))s  →  \(f(registrationFPS))  registered fps  (\(registrationFrames) pairs)
 
         SUSTAINED RUN (\(passes) passes ≈ a \(passes)-shot session)
           total: \(f(sustainedSeconds))s   mean/pass: \(f(perPassSeconds.reduce(0,+) / Double(max(perPassSeconds.count,1)), 2))s
@@ -124,6 +130,36 @@ actor DeviceBenchmarkRunner {
         return (frames, w, h, secs, peak)
     }
 
+    /// Frame-to-frame Vision image registration (the primitive under stabilization — the server's dominant
+    /// CV cost). Measures throughput on up to `maxPairs` consecutive full-res pairs. Hardware-accelerated.
+    private func registrationPass(_ url: URL, maxPairs: Int) throws -> (Int, Double) {
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first else { throw BenchError.noVideoTrack }
+        let reader = try AVAssetReader(asset: asset)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+        ])
+        out.alwaysCopiesSampleData = true    // we hold the previous frame across iterations
+        reader.add(out); reader.startReading()
+        let handler = VNSequenceRequestHandler()
+        var prev: CVPixelBuffer?
+        var pairs = 0
+        let t0 = CFAbsoluteTimeGetCurrent()
+        while reader.status == .reading, pairs < maxPairs, let sb = out.copyNextSampleBuffer() {
+            guard let cur = CMSampleBufferGetImageBuffer(sb) else { continue }
+            if let p = prev {
+                let req = VNTranslationalImageRegistrationRequest(targetedCVPixelBuffer: cur)
+                try? handler.perform([req], on: p)
+                _ = req.results?.first as? VNImageTranslationAlignmentObservation
+                pairs += 1
+            }
+            prev = cur
+        }
+        let secs = CFAbsoluteTimeGetCurrent() - t0
+        if reader.status == .failed { throw reader.error ?? BenchError.readFailed }
+        return (pairs, secs)
+    }
+
     func run(url: URL, clipName: String, passes: Int, progress: @Sendable @escaping (String) -> Void) async throws -> DeviceBenchmarkResult {
         var r = DeviceBenchmarkResult()
         r.clipName = clipName
@@ -141,6 +177,10 @@ actor DeviceBenchmarkRunner {
         progress("Process pass…")
         let (_, _, _, procS, _) = try decodePass(url, process: true, trackPeak: false)
         r.processSeconds = procS
+
+        progress("Stabilization (registration) pass…")
+        let (regPairs, regS) = try registrationPass(url, maxPairs: 240)   // ~2s @120fps — enough for a stable rate
+        r.registrationFrames = regPairs; r.registrationSeconds = regS
 
         // Sustained run with thermal/battery/memory tracking.
         await MainActor.run { UIDevice.current.isBatteryMonitoringEnabled = true }

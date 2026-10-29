@@ -5,6 +5,8 @@ struct LaneSightApp: App {
     @StateObject private var model = AppModel()
     /// DEC-099: shared Home/Stats/Lab data (parallel loads, one publish per page, silent revalidation).
     @StateObject private var tabData = TabDataStore()
+    /// OD-03 (DEC-102): non-blocking connectivity signal for the offline banner. Never gates navigation.
+    @StateObject private var connectivity = Connectivity.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -41,7 +43,14 @@ struct LaneSightApp: App {
                 if !isPreview, model.gate == .ready, model.hasSeenIntro, !model.homeLoaded {
                     LaunchSplash().transition(.opacity).zIndex(1)
                 }
+                // OD-03: non-blocking offline banner. Appears at the top when offline; never blocks navigation
+                // or capture. Analysis offline is saved as pending and syncs on reconnect (wiring: next step).
+                if !isPreview, model.gate == .ready, !connectivity.isOnline {
+                    VStack { OfflineBanner(); Spacer() }
+                        .zIndex(2).transition(.move(edge: .top)).animation(.easeInOut, value: connectivity.isOnline)
+                }
             }
+            .task { connectivity.start() }
             .environmentObject(model)
             .environmentObject(tabData)
             // Never show one account's data to the next: drop the tab cache on sign-in/out.
