@@ -99,11 +99,18 @@ struct ShotLaneView: View {
     }
 
     private var farLaneNote: some View {
-        VStack(spacing: 2) {
-            Text("Not visible from this camera spot").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-            Text("Breakpoint, entry and pins need the full lane").font(.system(size: 10)).foregroundStyle(LS.textSecondary)
+        // Prefer the server's honest reason: the far lane is withheld because it isn't validated yet (DEC-065),
+        // which is NOT the same as a camera-position problem — the "move your camera" copy only applies when
+        // that's actually why. Fall back to the camera-spot copy when no reason was given.
+        let reason = result.capture_quality?.reason
+        return VStack(spacing: 2) {
+            Text("Back lane not shown yet").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            Text(reason ?? "Breakpoint, entry and pins need the full lane")
+                .font(.system(size: 10)).foregroundStyle(LS.textSecondary)
+                .multilineTextAlignment(.center).lineLimit(3)
         }
         .padding(10).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: 240)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }

@@ -56,6 +56,12 @@ REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot cali
 # lane, these are the measurements that can't be trusted (handoff B / DEC-061).
 _FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
                      'entry_board', 'entry_angle', 'entry_angle_52_55'}
+# DEC-065: the far lane is UNVALIDATED from an ordinary phone video — no held-out fiducial past ~16 ft confirms
+# entry board/angle, breakpoint or back-half speed — so these stay `unavailable` (NOT an estimate), independent
+# of the per-clip plausibility gate, until BOTH the pose geometry AND a real ball measurement pass the Phase-2
+# camera reference (CV_PHASE2_CAMERA_VALIDATION_PROTOCOL). Flip to True ONLY when that reference passes; no
+# far-lane number ships before then. (A plausibility failure is a SEPARATE, additional camera-spot reason.)
+FAR_LANE_VALIDATED = False
 # Every metric read off the lane geometry (depth scale + homography). When the depth scale is proven wrong
 # (plausibility gate: implausible breakpoint distance), NONE of these can be trusted — they're withheld, not
 # shown as measured. DEC-065: far-lane geometry is unvalidated; a broken scale makes it unavailable, not 'ok'.
@@ -298,6 +304,19 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     if geom_bad:                                   # compromised depth scale ⇒ far-lane-not-read state (A2/A3)
         cq_limited = True
         cq_reason = cq_reason or 'The lane depth scale came out implausible, so the far-lane read (entry, breakpoint) is not reliable.'
+    # DEC-065 unconditional gate: until Phase-2 validation, the far-lane metrics are not reported AT ALL
+    # (unavailable, not an estimate) — regardless of whether this clip's depth scale looked plausible. A
+    # plausibility/camera reason (if one fired) is kept because it's more actionable; otherwise the honest
+    # reason is that the read isn't validated yet (NOT a camera-position problem — the lane may be fully framed).
+    if not FAR_LANE_VALIDATED:
+        cq_limited = True
+        cq_reason = cq_reason or ("Back-lane metrics (entry point & angle, breakpoint, back-half speed) aren't "
+                                  "validated from phone video yet, so they're not shown. Everything up to the "
+                                  "arrows is measured.")
+        for x in meas:
+            if x.metric in _FAR_LANE_METRICS and x.status != 'unavailable':
+                x.value, x.status, x.confidence = None, 'unavailable', 0.0
+                x.note = (x.note + ' ' if x.note else '') + 'Far-lane metric gated until Phase-2 validation (DEC-065).'
     if cq_limited:
         for x in meas:
             if x.metric in _FAR_LANE_METRICS and x.value is not None and x.status not in ('unavailable',):
