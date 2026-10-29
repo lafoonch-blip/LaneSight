@@ -289,6 +289,28 @@
         "db_bytes",
         "captured_at"
       ]
+    },
+    "platform_daily": {
+      "rpc": "ops_rpc_platform_daily",
+      "owner_only": true,
+      "real_only": true,
+      "grain": "day x env x platform x capture_mode",
+      "purpose": "DEC-103/106 architecture comparison: server vs on-device (ios) attempts side by side.",
+      "columns": [
+        "day",
+        "env",
+        "platform",
+        "capture_mode",
+        "attempts",
+        "analyzed",
+        "failures",
+        "failure_rate",
+        "distinct_users",
+        "p50_attempt_seconds",
+        "p90_attempt_seconds",
+        "p95_attempt_seconds",
+        "avg_analyze_s"
+      ]
     }
   },
   "domains": [
