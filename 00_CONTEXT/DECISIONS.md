@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.66  
-Last Updated: 2026-10-29  
+Version: 1.67  
+Last Updated: 2026-10-30  
 Owner: Shayne  
-Supersedes: v1.65
+Supersedes: v1.66
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1256,6 +1256,18 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 - **Does NOT change:** the coach "your normal" baseline (`coach.BASELINE_MIN_N = 10`) or the plausibility-gate speed baseline (≥20 prior shots, app.py) — separate thresholds, untouched.
 - Existing accounts are recomputed (the new floors apply on the next recompute). DEC-083/085 building-state copy auto-updates to the new counts (driven by eligibility).
 **Date:** 2026-10-30 · **Status:** ACCEPTED · **Supersedes:** the 20-shot score-eligibility floor (DEC-048/DEC-077 eligibility threshold); keeps those decisions' formula + provisional label.
+
+### DEC-109 — A missed pin impact is a partial result, not a failed shot
+**Decision (Shayne, 2026-10-29; renumbered from the branch draft "DEC-108", which collided with the 5-shot score DEC):**
+- When the pin impact isn't detected, the shot is **not failed**. Whatever doesn't depend on the impact is still reported.
+- **Rev rate is reported as measured.** It reads the ball's surface-pattern periodicity from ball crops and frame timestamps only: no lane geometry, no depth scale, no pins.
+- **Speed is `unavailable` with the reason** for now, along with every other metric that rides the lane depth scale (boards, angles, breakpoint, loft). The production homography's only depth anchor today is the ball's position at impact (DEC-062/107), so without it there is no trustworthy distance scale. It is never estimated or extrapolated.
+- **Pin result:** not read (DEC-026/066). **No next-shot move** (`no_reliable_data`). `capture_quality.impact = 'not_detected'` so ops can count these.
+- The shot fails with `PIN_IMPACT_NOT_DETECTED` only when nothing at all can be measured (rev rate unavailable too).
+- **Next: decouple speed from the pins.** Anchor the near-lane depth scale to near landmarks (approach dots, arrows at 15 ft; DEC-065 near path) so early-lane speed (the DEC-107 headline) no longer depends on the impact anchor. That is a CV change under DEC-094 shadow/regression gates.
+
+**Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
+**Date:** 2026-10-29 · **Status:** ACCEPTED (code on branch `fix/partial-results-on-impact-miss`; not merged or deployed) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

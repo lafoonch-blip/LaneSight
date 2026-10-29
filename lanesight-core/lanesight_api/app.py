@@ -217,6 +217,7 @@ def _quality(rec) -> dict | None:
         v = m.get(k)
         return v.get('value') if isinstance(v, dict) else v
     out = {'far_lane': cq.get('far_lane'), 'capture_reason': cq.get('reason'),
+           'impact': cq.get('impact'),        # DEC-109: 'not_detected' = partial result (rev only), tracked in ops
            'entry_board': mv('entry_board'), 'ball_speed': mv('ball_speed'),
            'rev_rate': mv('rev_rate'), 'entry_angle': mv('entry_angle'),
            'n_measured': sum(1 for v in m.values()
