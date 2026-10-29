@@ -26,19 +26,45 @@ struct ShotLaneView: View {
     private var farLaneNotRead: Bool { result.coachLane?.status == "not_read" }
     private var rightHanded: Bool { true }   // record is already in the handed frame; board polarity handled server-side
 
+    // Right-side callout column (2026-10-29-A B1): labels sit in a tidy stack on the right with a leader line
+    // to the dot on the path, instead of floating over the centerline where the top (Entry) label was clipped.
+    private static let calloutW: CGFloat = 96, calloutH: CGFloat = 32, viewW: CGFloat = 344, viewH: CGFloat = 360
+
+    private var placed: [PlacedLabel] {
+        let cx = Self.viewW - Self.calloutW / 2 - 8           // callout center x, right-aligned
+        let topMin = Self.calloutH / 2 + 30                    // clear of the result chip
+        let botMax = Self.viewH - Self.calloutH / 2 - 36       // clear of the legend
+        let spacing = Self.calloutH + 6
+        var cursor = topMin
+        return labels.sorted { $0.point.y < $1.point.y }.map { lab -> PlacedLabel in
+            let y = min(max(lab.point.y, cursor), botMax)
+            cursor = y + spacing
+            return PlacedLabel(label: lab, center: CGPoint(x: cx, y: y),
+                               anchor: CGPoint(x: cx - Self.calloutW / 2, y: y))   // leader attaches to left edge
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             Lane3DRepresentable(result: result, rightHanded: rightHanded, labels: $labels)
-            // Glass labels pinned to their path dots (projected from 3D).
-            ForEach(labels) { lab in
-                LaneGlassLabel(label: lab)
-                    .position(x: lab.point.x, y: max(26, lab.point.y - 22))
+            // Leader lines + a dot at each projected point on the path.
+            Canvas { ctx, _ in
+                for p in placed {
+                    var line = Path(); line.move(to: p.anchor); line.addLine(to: p.label.point)
+                    ctx.stroke(line, with: .color(p.label.color.opacity(0.7)), lineWidth: 1)
+                    let d: CGFloat = 4
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.label.point.x - d/2, y: p.label.point.y - d/2, width: d, height: d)),
+                             with: .color(p.label.color))
+                }
+            }
+            ForEach(placed) { p in
+                LaneGlassLabel(label: p.label).frame(width: Self.calloutW).position(p.center)
             }
             resultChip.padding(8)
             VStack { Spacer(); legend.padding(8) }
             if farLaneNotRead { farLaneNote }
         }
-        .frame(width: 344, height: 360)
+        .frame(width: Self.viewW, height: Self.viewH)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(LS.borderStrong, lineWidth: 1))
     }
@@ -82,6 +108,14 @@ struct ShotLaneView: View {
     }
 }
 
+/// A right-side callout: the projected label plus where its glass card sits and where its leader line attaches.
+private struct PlacedLabel: Identifiable {
+    let label: ProjectedLabel
+    let center: CGPoint
+    let anchor: CGPoint
+    var id: String { label.id }
+}
+
 /// A projected pinned label: its screen point (in the lane view's coordinates) + text + accent.
 struct ProjectedLabel: Identifiable, Equatable {
     let id: String
@@ -97,11 +131,12 @@ private struct LaneGlassLabel: View {
         VStack(spacing: 1) {
             Text(label.title).font(.system(size: 9, weight: .semibold)).foregroundStyle(label.color)
             Text(label.value).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                .lineLimit(1).minimumScaleFactor(0.7)
         }
         .padding(.horizontal, 8).padding(.vertical, 5)
+        .frame(maxWidth: .infinity)
         .background(Color(hex: 0x001018).opacity(0.74), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(label.color.opacity(0.8), lineWidth: 1))
-        .fixedSize()
     }
 }
 
