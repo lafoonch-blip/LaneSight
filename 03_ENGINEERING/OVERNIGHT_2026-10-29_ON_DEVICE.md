@@ -31,12 +31,23 @@ shown, not counted) — exactly how Phase 3 is designed to start — and the swi
 | OD-00A | Audit pipeline (convert/stabilize/memory) | ✅ done |
 | OD-00B | `MeasurementEvidence` spec | ✅ done (review) |
 | OD-01 | iOS device benchmark harness | ✅ built + installed; **Shayne runs on iPhone** |
-| PROV | Engine provenance on `analysis_attempt` (additive migration + server) | next |
-| OD-03A | Server `advice_state` (provisional/low_confidence/ready) + migration | next |
-| SHADOW | Deploy branch backend to a separate shadow Cloud Run service | pending |
-| DASH | Dashboard architecture-compare split (platform) | pending |
-| OD-02 | Local store + outbox (offline-first) | pending (large) |
-| OD-03 | Offline UX states | pending (large) |
+| PROV | Engine provenance on `analysis_attempt` (additive migration + server) | ✅ done (028 applied live) |
+| DASH | Dashboard architecture-compare split (platform) | ✅ done (`/architecture` page) |
+| OD-02 | Local store + outbox (offline-first) | ✅ first increment (compiles; file-based store/outbox) — NOT wired into runPipeline yet |
+| OD-03 | Offline UX states | pending (next) |
+| OD-02A-server | Server idempotency-key dedupe (generalize content_hash) | pending (next) |
+| OD-03A | Server `advice_state` (provisional/low_confidence/ready) + migration | pending |
+| SHADOW | Deploy branch backend to a separate shadow Cloud Run service | pending (low value until backends differ) |
+| SPIKE | Real on-device CV step (lane detect via Vision/Accelerate) in the OD-01 harness | pending |
+
+## RESUME POINT (for the next session)
+Everything above is committed + pushed to `origin/feat/on-device-analysis`. Next, in priority order:
+1. Wire `OfflineStore`/`SyncEngine` into `AppModel.runPipeline` (offline → save `pending` shot + enqueue;
+   online path unchanged, DEC-068/080) + the OD-03 offline UX rows. Needs Shayne's airplane-mode device run.
+2. Server idempotency: accept `Idempotency-Key`, additive table `(user_id, key) → shot_id`, return stored
+   result on repeat (generalize the existing `content_hash` dedupe). Migration 029.
+3. Extend the OD-01 harness with a real CV step (lane detection) for a truer Phase-3 feasibility number.
+4. When Shayne has run OD-01 on the iPhone: paste results into `02_RESEARCH/DEVICE_BENCHMARK_2026-10-29.md`.
 
 ## For Shayne in the morning
 - Run the OD-01 device benchmark on your iPhone (instructions will be here when the harness is built).
