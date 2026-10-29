@@ -50,9 +50,11 @@ struct LoadableView<T, Content: View>: View {
         case .loaded(let value):
             content(value)
         case .failed(let message):
+            // Generic, honest copy for ANY section — never "analysis host" (this loads home/score/sessions
+            // too, not just analysis). `message` is already the friendly APIError.userMessage (P0 2026-10-29).
             VStack(spacing: 10) {
                 Image(systemName: "wifi.exclamationmark").font(.lsTitle2).foregroundStyle(LS.bestEffort)
-                Text("Couldn't reach the analysis host").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                Text("Couldn't load this").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
                 Text(message).font(.lsCaption).foregroundStyle(LS.textSecondary)
                     .multilineTextAlignment(.center).lineLimit(4)
                 Button("Retry", action: retry)

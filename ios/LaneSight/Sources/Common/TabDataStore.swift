@@ -1,5 +1,28 @@
 import SwiftUI
 
+/// Friendly, user-facing copy for a failed section load — never a raw server body / status / HTML, and never
+/// the "analysis host" for a non-analysis call (P0 2026-10-29). APIError already maps 5xx/HTML/transport.
+func friendlyError(_ error: Error) -> String {
+    (error as? APIError)?.userMessage ?? "Couldn't load this. Please try again."
+}
+
+/// Retry a request a couple of times with short backoff, but ONLY for transient server problems (5xx / HTML
+/// 5xx page / transport). A 4xx or decode error fails fast — retrying it won't help. Keeps a flaky single
+/// Cloud Run instance (deploy rollover / brief overload) from surfacing as a section error on launch.
+func withRetry<T>(_ attempts: Int = 3, _ op: @Sendable () async throws -> T) async throws -> T {
+    var last: Error?
+    for i in 0..<attempts {
+        do { return try await op() }
+        catch {
+            last = error
+            let transient = (error as? APIError)?.isTransientServerProblem ?? false
+            if !transient || i == attempts - 1 { throw error }
+            try? await Task.sleep(nanoseconds: UInt64(i + 1) * 500_000_000)   // 0.5s, 1.0s
+        }
+    }
+    throw last!
+}
+
 /// DEC-099 — seamless tab loading. One store holds the data for the three data tabs (Home · Stats · Lab):
 ///  • Each page fetches ALL its sections concurrently and publishes them in ONE update, so the page appears
 ///    at once instead of section by section (before: Home awaited 4 requests one after another and each card
@@ -84,10 +107,10 @@ final class TabDataStore: ObservableObject {
 
     private func fetchHome(_ model: AppModel, gen: Int) async {
         guard let client = try? model.makeClient() else { return }
-        async let s = client.score()
-        async let h = client.scoreHistory()
-        async let ss = client.listSessions()
-        async let a = client.activity()
+        async let s = withRetry { try await client.score() }
+        async let h = withRetry { try await client.scoreHistory() }
+        async let ss = withRetry { try await client.listSessions() }
+        async let a = withRetry { try await client.activity() }
         async let f = try? client.focus()
         async let av: Void = model.refreshAvatar()          // header photo arrives with the page, not after
 
@@ -95,11 +118,11 @@ final class TabDataStore: ObservableObject {
         do {
             let (sv, hv) = try await (s, h)
             next.score = .loaded(sv); next.history = hv
-        } catch { next.score = Loadable<ScoreResponse>.failed(error.localizedDescription).keepingLoaded(over: home.score) }
+        } catch { next.score = Loadable<ScoreResponse>.failed(friendlyError(error)).keepingLoaded(over: home.score) }
         do { next.sessions = .loaded(try await ss) }
-        catch { next.sessions = Loadable<[SessionRow]>.failed(error.localizedDescription).keepingLoaded(over: home.sessions) }
+        catch { next.sessions = Loadable<[SessionRow]>.failed(friendlyError(error)).keepingLoaded(over: home.sessions) }
         do { next.activity = .loaded(try await a) }
-        catch { next.activity = Loadable<[ActivityItem]>.failed(error.localizedDescription).keepingLoaded(over: home.activity) }
+        catch { next.activity = Loadable<[ActivityItem]>.failed(friendlyError(error)).keepingLoaded(over: home.activity) }
         if let fv = await f { next.focus = fv }
         _ = await av
 
@@ -110,25 +133,25 @@ final class TabDataStore: ObservableObject {
 
     private func fetchStats(_ model: AppModel, gen: Int) async {
         guard let client = try? model.makeClient() else { return }
-        async let s = client.score()
-        async let h = client.scoreHistory()
+        async let s = withRetry { try await client.score() }
+        async let h = withRetry { try await client.scoreHistory() }
         async let b = try? client.scoreBreakdown()          // nil until deployed → rows show "—"
-        async let t = client.stats(view: "throw", range: nil)
-        async let fm = client.stats(view: "form", range: nil)
-        async let e = client.equipmentStats()
+        async let t = withRetry { try await client.stats(view: "throw", range: nil) }
+        async let fm = withRetry { try await client.stats(view: "form", range: nil) }
+        async let e = withRetry { try await client.equipmentStats() }
 
         var next = stats
         do {
             let (sv, hv) = try await (s, h)
             next.score = .loaded(sv); next.history = hv
-        } catch { next.score = Loadable<ScoreResponse>.failed(error.localizedDescription).keepingLoaded(over: stats.score) }
+        } catch { next.score = Loadable<ScoreResponse>.failed(friendlyError(error)).keepingLoaded(over: stats.score) }
         if let bv = await b { next.breakdown = bv }
         do { next.throwStats = .loaded(try await t) }
-        catch { next.throwStats = Loadable<StatsResponse>.failed(error.localizedDescription).keepingLoaded(over: stats.throwStats) }
+        catch { next.throwStats = Loadable<StatsResponse>.failed(friendlyError(error)).keepingLoaded(over: stats.throwStats) }
         do { next.formStats = .loaded(try await fm) }
-        catch { next.formStats = Loadable<StatsResponse>.failed(error.localizedDescription).keepingLoaded(over: stats.formStats) }
+        catch { next.formStats = Loadable<StatsResponse>.failed(friendlyError(error)).keepingLoaded(over: stats.formStats) }
         do { next.equipment = .loaded(try await e) }
-        catch { next.equipment = Loadable<EquipmentStats>.failed(error.localizedDescription).keepingLoaded(over: stats.equipment) }
+        catch { next.equipment = Loadable<EquipmentStats>.failed(friendlyError(error)).keepingLoaded(over: stats.equipment) }
 
         guard gen == generation else { return }
         stats = next
@@ -137,18 +160,18 @@ final class TabDataStore: ObservableObject {
 
     private func fetchLab(_ model: AppModel, gen: Int) async {
         guard let client = try? model.makeClient() else { return }
-        async let ss = client.listSessions()
-        async let us = client.listUploads()
+        async let ss = withRetry { try await client.listSessions() }
+        async let us = withRetry { try await client.listUploads() }
 
         var next = lab
         do { next.sessions = .loaded(try await ss) }
-        catch { next.sessions = Loadable<[SessionRow]>.failed(error.localizedDescription).keepingLoaded(over: lab.sessions) }
+        catch { next.sessions = Loadable<[SessionRow]>.failed(friendlyError(error)).keepingLoaded(over: lab.sessions) }
         do { next.uploads = .loaded(try await us) }
         catch {
             // DEC-086: a response we can't read is our problem, not a scary host/status string.
             let msg: String
             if case APIError.decoding = error { msg = "Couldn't load your uploads. Pull to refresh." }
-            else { msg = error.localizedDescription }
+            else { msg = friendlyError(error) }
             next.uploads = Loadable<[UploadRow]>.failed(msg).keepingLoaded(over: lab.uploads)
         }
 

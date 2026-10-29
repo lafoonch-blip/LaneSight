@@ -50,11 +50,13 @@ struct ShotLaneView: View {
             // Leader lines + a dot at each projected point on the path.
             Canvas { ctx, _ in
                 for p in placed {
-                    var line = Path(); line.move(to: p.anchor); line.addLine(to: p.label.point)
+                    let dot: CGPoint = p.label.point
+                    var line = Path()
+                    line.move(to: p.anchor)
+                    line.addLine(to: dot)
                     ctx.stroke(line, with: .color(p.label.color.opacity(0.7)), lineWidth: 1)
-                    let d: CGFloat = 4
-                    ctx.fill(Path(ellipseIn: CGRect(x: p.label.point.x - d/2, y: p.label.point.y - d/2, width: d, height: d)),
-                             with: .color(p.label.color))
+                    let rect = CGRect(x: dot.x - 2, y: dot.y - 2, width: 4, height: 4)
+                    ctx.fill(Path(ellipseIn: rect), with: .color(p.label.color))
                 }
             }
             ForEach(placed) { p in
@@ -102,7 +104,7 @@ struct ShotLaneView: View {
         // Prefer the server's honest reason: the far lane is withheld because it isn't validated yet (DEC-065),
         // which is NOT the same as a camera-position problem — the "move your camera" copy only applies when
         // that's actually why. Fall back to the camera-spot copy when no reason was given.
-        let reason = result.capture_quality?.reason
+        let reason = result.captureReason
         return VStack(spacing: 2) {
             Text("Back lane not shown yet").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
             Text(reason ?? "Breakpoint, entry and pins need the full lane")

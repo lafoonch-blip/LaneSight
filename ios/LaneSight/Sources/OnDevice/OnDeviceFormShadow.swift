@@ -70,6 +70,7 @@ enum OnDeviceFormShadow {
         reader.add(rdOut); reader.startReading()
         let req = VNDetectHumanBodyPoseRequest()
         while reader.status == .reading, let sb = rdOut.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); return out }   // shadow cap / superseded (P0 2026-10-29)
             guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
             let handler = VNImageRequestHandler(cvPixelBuffer: px, orientation: .up, options: [:])

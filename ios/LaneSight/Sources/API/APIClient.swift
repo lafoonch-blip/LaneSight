@@ -25,6 +25,32 @@ enum APIError: LocalizedError {
         case .unauthorized: return "Your session expired. Please sign in again."
         }
     }
+
+    /// A transient error worth an automatic retry / a "try again" affordance: 5xx, 408/429, and transport
+    /// failures. A raw HTML body (a Google/Cloud Run 5xx page rather than the app's JSON) is treated as a
+    /// server problem even if the status slipped through (P0 2026-10-29 — the user saw a raw Google 500 page).
+    var isTransientServerProblem: Bool {
+        switch self {
+        case .transport: return true
+        case .http(let status, let body):
+            return status >= 500 || status == 408 || status == 429
+                || body.trimmingCharacters(in: .whitespaces).hasPrefix("<")
+        default: return false
+        }
+    }
+
+    /// Friendly, user-facing copy. NEVER leaks a raw server body / HTML / status code, and never names the
+    /// "analysis host" for a non-analysis call. Callers show this (not `errorDescription`) in the UI.
+    var userMessage: String {
+        switch self {
+        case .unauthorized: return "Your session expired. Please sign in again."
+        case .transport: return "Can't reach the server. Check your connection and try again."
+        default:
+            return isTransientServerProblem
+                ? "Server problem — please try again in a moment."
+                : "Something went wrong. Please try again."
+        }
+    }
 }
 
 /// Small async URLSession client. Sends the base URL from Settings on every request. The normal app

@@ -153,6 +153,7 @@ enum OnDeviceTracker {
         var rng: UInt64 = 0x2545F4914F6CDD1D
         func rnd(_ n: Int) -> Int { rng = rng &* 6364136223846793005 &+ 1442695040888963407; return Int((rng >> 33) % UInt64(max(1, n))) }
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); return nil }   // shadow cap / superseded (P0 2026-10-29)
             guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
             ts.append(CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))
             if sw == 0 {
@@ -184,6 +185,7 @@ enum OnDeviceTracker {
         reader.add(out); reader.startReading()
         var i = 0
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); return }       // shadow cap / superseded (P0 2026-10-29)
             guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
             body(i, downsampledLuma(px, stride: stride, sw: sw, sh: sh))
             i += 1

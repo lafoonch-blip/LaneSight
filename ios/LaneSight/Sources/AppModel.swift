@@ -585,6 +585,10 @@ final class AppModel: ObservableObject {
         #endif
     }
 
+    /// The in-flight shadow, if any. Single-flight: a new shot cancels the previous shadow so the on-device
+    /// engine can never pile up across shots (battery / thermal / next-shot contention — P0 2026-10-29).
+    private var shadowTask: Task<Void, Never>?
+
     private func launchShadow(clipURL: URL, shotId: String, source: String, sessionId: String?) {
         guard Self.shadowEnabled else { return }               // owner/dev only — off for real users (DEC-106)
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shadow-\(shotId).mov")
@@ -593,15 +597,40 @@ final class AppModel: ObservableObject {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let mode = captureMode
         let hand = handed
-        Task.detached(priority: .utility) {
+        let capSeconds: UInt64 = 60       // hard wall-clock cap; the engine is aborted past this (P0 2026-10-29)
+        shadowTask?.cancel()                                   // single-flight: drop any prior shadow first
+        shadowTask = Task.detached(priority: .utility) {
             defer { try? FileManager.default.removeItem(at: copy) }
-            // Ball shots -> the CV shadow; Form -> the Vision body-pose shadow. Both post platform='ios'.
-            let payload: [String: Any] = (mode == "form")
-                ? await OnDeviceFormShadow.run(clipURL: copy, shotId: shotId, source: source,
-                                               sessionId: sessionId, handed: hand, appVersion: appVersion)
-                : await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
-                                           sessionId: sessionId, captureMode: mode, appVersion: appVersion)
-            guard let json = try? JSONSerialization.data(withJSONObject: payload) else { return }
+            // Race the engine against a hard cap. The 512 s run (2026-10-29) came from processing the full
+            // untrimmed clip through several full-res decode passes; until that's trimmed/frame-skipped, the
+            // cap stops a slow shadow from burning the battery or blocking the next shot. The engine loops
+            // check Task.isCancelled, so cancelAll() actually halts the CPU work. Each child serialises to
+            // Data (Sendable) BEFORE crossing the task boundary — [String: Any] never leaves its own task.
+            let json: Data? = await withTaskGroup(of: Data?.self) { group in
+                group.addTask {
+                    let payload: [String: Any] = (mode == "form")
+                        ? await OnDeviceFormShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                                       sessionId: sessionId, handed: hand, appVersion: appVersion)
+                        : await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                                   sessionId: sessionId, captureMode: mode, appVersion: appVersion)
+                    return try? JSONSerialization.data(withJSONObject: payload)
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: capSeconds * 1_000_000_000)
+                    // On timeout, post an honest SHADOW_UNAVAILABLE marker so the slow run stays visible in ops.
+                    let marker: [String: Any] = [
+                        "shot_id": shotId, "source": source, "capture_mode": mode, "basis": "unavailable",
+                        "note": "on-device shadow aborted after \(capSeconds)s cap (too slow on the full clip)",
+                        "device_perf": ["latency_s": Double(capSeconds)],
+                    ].merging(sessionId.map { ["session_id": $0] } ?? [:]) { a, _ in a }
+                    return try? JSONSerialization.data(withJSONObject: marker)
+                }
+                let first = await group.next() ?? nil
+                group.cancelAll()
+                return first
+            }
+            if Task.isCancelled { return }                     // superseded by a newer shot — drop silently
+            guard let json else { return }
             await MainActor.run { [weak self] in
                 guard let self, let client = try? self.makeClient() else { return }
                 Task { try? await client.postShadow(json) }        // POST via a fresh client, like the failure hook
