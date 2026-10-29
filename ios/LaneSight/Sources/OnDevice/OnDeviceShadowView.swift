@@ -133,7 +133,7 @@ struct OnDeviceShadowView: View {
                 lines += "\n  span: frac \(f(a.frac, 2)) → \(f(b.frac, 2))   t \(f(Float(a.t), 2))s → \(f(Float(b.t), 2))s"
             }
             // Stage 4 — first end-to-end metric: ball speed.
-            let sp = OnDeviceTracker.speed(track: tr, foulLineY: geo.foulLineY)
+            let sp = OnDeviceTracker.speed(track: tr, geo: geo)
             lines += "\n\n── Ball speed (stage 4, \(sp.basis)) ──"
             if let mph = sp.mph {
                 lines += "\n  \(f(mph, 1)) mph   (release t=\(f(Float(sp.tRelease ?? 0), 2))s → impact t=\(f(Float(sp.tImpact ?? 0), 2))s)"

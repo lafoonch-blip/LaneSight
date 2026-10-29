@@ -65,7 +65,7 @@ struct LaneSightApp: App {
                     print("ONDEV: lanes=\(geo.lanes.count) vp=\(String(describing: geo.vanishingPoint)) foul=\(String(describing: geo.foulLineY))")
                     let tr = OnDeviceTracker.track(url: url, geo: geo)
                     print("ONDEV: track pts=\(tr.points.count) scanned=\(tr.framesScanned) cand=\(tr.candidateFrames)")
-                    let sp = OnDeviceTracker.speed(track: tr, foulLineY: geo.foulLineY)
+                    let sp = OnDeviceTracker.speed(track: tr, geo: geo)
                     print("ONDEV: speed=\(String(describing: sp.mph)) basis=\(sp.basis) note=\(sp.note)")
                     print("ONDEV: DONE")
                 }.value
