@@ -150,7 +150,9 @@
         "leave": "4-7 (two pins left side lane 10)",
         "strike": false,
         "source": "manual (CLAUDE_CODE_PROMPT_IMG8929_FIX.md); clip pending drop into training_videos"
-      }
+      },
+      "delivery": "two_handed",
+      "label_note": "two-handed bowler: the ball is visible in the swing well before release; the ball-track label starts at RELEASE onward. Detection-recall/false-positive scoring (when built) must score only from the first labeled time \u2014 do NOT count pre-release two-handed ball detections as false positives."
     },
     {
       "id": "IMG_8807",
