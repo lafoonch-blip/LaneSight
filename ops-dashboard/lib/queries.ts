@@ -123,16 +123,9 @@ export const getFunnel = (s: Scope) =>
   callRpc<FunnelRow>("ops_rpc_funnel", { p_envs: s.envs }, "env");
 export const getStorageLatest = () =>
   callRpc<StorageLatestRow>("ops_rpc_storage_latest", {}, "bucket");
-// DEC-103: server-authoritative vs on-device (shadow) — same metrics split by platform.
-export interface PlatformDailyRow {
-  day: string; env: string; platform: string; capture_mode: string;
-  attempts: number; analyzed: number; failures: number; failure_rate: number | null;
-  distinct_users: number;
-  p50_attempt_seconds: number | null; p90_attempt_seconds: number | null; p95_attempt_seconds: number | null;
-  avg_analyze_s: number | null;
-}
-export const getPlatformDaily = (s: Scope) =>
-  callRpc<PlatformDailyRow>("ops_rpc_platform_daily", { p_envs: s.envs, p_since: sinceDate(s.days) }, "day");
+// DEC-103: server-authoritative vs on-device (shadow), same metrics split by platform. The query is
+// getPlatformDaily above (mainline); this alias keeps the architecture page's type name after the merge.
+export type PlatformDailyRow = PlatformRow;
 
 // Sum a numeric column across rows; null (NO DATA) when there are no rows, never 0-as-fake.
 export function sumCol<T>(rows: T[], col: keyof T): number | null {
