@@ -29,6 +29,17 @@ from lanesight_core.score import SCORE_VERSION
 from lanesight_core.benchmarks import BENCHMARK_VERSION
 from lanesight_core.form import spot_check
 
+# DEC-106 Phase 0: Cloud Run reports os.cpu_count()=8 but allocates only 4 vCPUs, so OpenCV defaults to 8
+# threads on 4 vCPUs → 2x oversubscription that dominates the stabilize/warp stages (OpenCV is NOT controlled
+# by OMP/OPENBLAS env). Cap OpenCV threads to the allocated vCPUs when the cap env is set. No-op locally.
+_cpu_cap = os.environ.get('LANESIGHT_CPU_THREADS') or os.environ.get('LANESIGHT_CV_WORKERS')
+if _cpu_cap:
+    try:
+        import cv2 as _cv2
+        _cv2.setNumThreads(max(1, int(_cpu_cap)))
+    except Exception:
+        pass
+
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
 app = FastAPI(title='LaneSight API', version=API_VERSION)
@@ -223,6 +234,9 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
                    'source': 'upload' if is_upload else 'live', 'capture_mode': mode,
                    'content_hash': content_hash, 'algorithm_version': ALGO_VERSION,
                    'api_revision': os.environ.get('K_REVISION'),
+                   # DEC-103: engine provenance. This server path is always 'server'; the on-device engine
+                   # (shadow) submits 'ios'. version/build = algorithm_version/api_revision above.
+                   'platform': 'server',
                    'env': 'live' if os.environ.get('K_REVISION') else 'dev',
                    # Probe up front so a FAILED analysis still records the clip's camera/recording facts
                    # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related. cold_start
@@ -452,6 +466,29 @@ def health():
             'versions': {'api': API_VERSION, 'app_compat': APP_COMPAT,
                          'core': ALGO_VERSION, 'rules': BENCHMARK_VERSION, 'formula': SCORE_VERSION},
             'config': {**s.redacted(), 'upload_dedupe': _upload_dedupe_on()}}   # DEC-086 flag (default off)
+
+
+@app.get('/debug/env')
+def debug_env():
+    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Read-only, no auth
+    (no secrets). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off) matches the
+    allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+    info = {'os_cpu_count': os.cpu_count(),
+            'env': {k: os.environ.get(k) for k in
+                    ('LANESIGHT_CV_WORKERS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
+                     'NUMEXPR_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'K_SERVICE', 'K_REVISION')},
+            'execution_environment': os.environ.get('CLOUD_RUN_EXECUTION_ENVIRONMENT')}
+    try:
+        import cv2
+        info['cv2_num_threads'] = cv2.getNumThreads()
+    except Exception as e:
+        info['cv2'] = str(e)[:120]
+    try:
+        from lanesight_core.cv._parallel import workers
+        info['cv_workers'] = workers()
+    except Exception as e:
+        info['cv_workers_err'] = str(e)[:120]
+    return info
 
 
 # ----------------------------------------------------------------- auth (email/password, no bearer)
