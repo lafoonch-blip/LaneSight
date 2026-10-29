@@ -7,16 +7,17 @@ name = "lanesight-core"
 version = "0.6.0"
 description = "LaneSight back end: video ball tracking, shot metrics, pin reading, scoring/stats, insights, replay"
 requires-python = ">=3.11"
-# PINNED (2026-10-29): unpinned ranges let the container resolve different opencv/numpy per build, which — with
-# the container's ffmpeg differing from a dev Mac — made the lane geometry (pixel→ft Z-scale) non-reproducible
-# (the IMG_8753 server 16.04 vs Mac 18.71 gap traces to a ~0.858× down-lane scale; see DEC-107 / CURRENT_STATE).
-# The container is the single production reference (Gate A runs in-container); these pins make its builds
-# reproducible. Also pin ffmpeg in the Dockerfile. Re-baseline ops/smoke_reference.json on the first deploy with
-# these pins (the absolute speed may shift; it is then stable build-to-build).
-dependencies = ["numpy==1.26.4", "opencv-python-headless==4.10.0.84", "matplotlib==3.9.2"]
+# NOTE (2026-10-29): deps intentionally left as ranges. A specific pin must be VALIDATED in-container first —
+# the in-container diagnostic Job (ops/container_diag.py) proved opencv 4.11 on Linux FAILS IMG_8753
+# (PIN_IMPACT_NOT_DETECTED) while the current prod opencv succeeds, so a blind pin can break analysis. The
+# server-vs-Mac gap is NOT frame timing (identical frame-count/PTS in-container) — it's the platform opencv
+# wheel's bundled decoder producing different pixels (Linux vs macOS) → different geometry. Fix path: iterate
+# opencv versions via the Job until one is reproducible AND passes cv_eval, THEN pin to it + re-baseline the
+# smoke. The Debian release is pinned (Dockerfile, bookworm) for a deterministic ffmpeg.
+dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "matplotlib>=3.8"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
-form = ["mediapipe==0.10.14"]    # rear/bowler-side Form P1 pose backend (lanesight_core.form.pose)
+form = ["mediapipe>=0.10"]       # rear/bowler-side Form P1 pose backend (lanesight_core.form.pose)
 runner = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 api = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "pyjwt[crypto]>=2.8"]
 [tool.setuptools.packages.find]
