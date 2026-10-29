@@ -17,22 +17,26 @@ shown, not counted) — exactly how Phase 3 is designed to start — and the swi
   either via `apiBaseURL` (Dev panel). Both populations are comparable in the ops dashboard via `env` / `source`.
 
 ## Status log (newest first)
-- Branch + worktree created off `dev-build-v0 @ 30d34f2`.
-- OD-00 server-latency baseline: running `ops/perf_benchmark.py` over 24 real clips (reuses DEC-092 P0 timers).
+- OD-00B: `MeasurementEvidence` v1 spec written → `03_ENGINEERING/MEASUREMENT_EVIDENCE_SPEC.md` (DRAFT for review).
+- OD-01: device benchmark harness built, compiles on device, **installed on "Shayne's 17"**. Run it: Settings → Dev panel → "Device benchmark (OD-01)".
+- OD-00A: audit done — real targets are `convert_s` (83s total) + `cv.stabilize_s` (~15s/clip); decode is cheap; peak RSS ~2GB is the iPhone risk.
+- OD-00: baseline done (24 clips) — Mac p50 16.3s / p90 30.2s vs Cloud Run 90–328s (~5–6× faster, same code). `02_RESEARCH/ANALYSIS_TIMINGS_2026-10-29.md`.
+- DECs 102–104 entered (DECISIONS v1.63); proposal marked ACCEPTED; branch + worktree off `dev-build-v0 @ 30d34f2`.
 
 ## Task ledger
 | ID | Task | State |
 |----|------|-------|
-| SETUP | Branch, worktree, DECs 102–104, progress log | in progress |
-| OD-00 | Server per-stage latency baseline (≥20 clips) | running |
-| OD-00A | Audit pipeline for redundant decodes / passes | pending |
-| OD-00B | `MeasurementEvidence` spec | pending |
-| OD-01 | iOS device benchmark harness (Shayne runs on iPhone) | pending |
-| DASH | Dashboard env/source architecture-compare split | pending |
-| OD-03A | Server `advice_state` (provisional/low_confidence/ready) + additive migration | pending |
-| OD-02 | Local store + outbox (offline-first) | pending |
-| OD-03 | Offline UX states | pending |
-| SPIKE | Isolated on-device CV spike (non-production) | pending |
+| SETUP | Branch, worktree, DECs 102–104, progress log | ✅ done |
+| OD-00 | Server per-stage latency baseline (24 clips) | ✅ done |
+| OD-00A | Audit pipeline (convert/stabilize/memory) | ✅ done |
+| OD-00B | `MeasurementEvidence` spec | ✅ done (review) |
+| OD-01 | iOS device benchmark harness | ✅ built + installed; **Shayne runs on iPhone** |
+| PROV | Engine provenance on `analysis_attempt` (additive migration + server) | next |
+| OD-03A | Server `advice_state` (provisional/low_confidence/ready) + migration | next |
+| SHADOW | Deploy branch backend to a separate shadow Cloud Run service | pending |
+| DASH | Dashboard architecture-compare split (platform) | pending |
+| OD-02 | Local store + outbox (offline-first) | pending (large) |
+| OD-03 | Offline UX states | pending (large) |
 
 ## For Shayne in the morning
 - Run the OD-01 device benchmark on your iPhone (instructions will be here when the harness is built).
