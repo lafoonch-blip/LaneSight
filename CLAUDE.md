@@ -5,7 +5,7 @@ Read `AGENTS.md` first and follow its read order and rules. Short version: `DECI
 - Code: `lanesight-core/` (pipeline `lanesight_core/`, at-lane runner `lanesight_runner/`). Setup and use: `lanesight-core/README.md`.
 - Python: `lanesight-core/.venv` (Python 3.12). Activate before anything: `cd lanesight-core && source .venv/bin/activate`.
 - Real clips and runner data live in `~/LaneSightData` (`sessions/<id>/shot_NNN.mov`, `lanesight_runner.db`). Training/validation clips: `~/LaneSightData/training_videos`. Never copy videos into the repo.
-- Validation reference: `lanesight-core/validation/` (pipeline outputs + Ruby values for IMG_8751–8754). Any change to `lanesight_core/cv/` must be re-run on real clips and compared against these before committing. Report the numbers.
+- Validation reference: `lanesight-core/validation/` (pipeline outputs for IMG_8751–8754). Any change to `lanesight_core/cv/` must be re-run on real clips and compared against the committed pipeline baseline (and Specto where available) before committing — **Ruby is no longer a validation reference (DEC-105)**. Report the numbers.
 - Run `python3 -m pytest` before every commit; all tests must pass.
 - Commit locally. **Push to GitHub only when Shayne says so.**
 

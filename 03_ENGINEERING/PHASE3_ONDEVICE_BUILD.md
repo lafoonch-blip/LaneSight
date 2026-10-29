@@ -23,7 +23,8 @@ Run stage 1 on device: Settings → Dev panel → **On-device analysis (shadow)*
 OpenCV/Python. Their intermediate outputs will never bit-match (different algorithms, RNG, feature detectors).
 Trying to force stage-by-stage equality is the wrong goal and a trap. What the DEC-103 gate actually checks:
 the device's **final measurements** (ball speed, entry board, entry angle, rev rate, pins) agree with the
-server's **within the DEC-034 tolerances** on the validation set, and both are checked against Ruby ground truth.
+server's **within the DEC-034 tolerances** on the validation set, plus Specto where available (DEC-105: Ruby
+removed from the validation process; the server is the reference engine).
 
 Concretely, this reframes the port:
 - Each device stage can use the **best native approach** (e.g. stage 1 uses Vision homographic registration
@@ -44,7 +45,7 @@ the gate is metric-level (above). Order:
    frames into the lane coordinate frame every metric reads. Biggest unlock.
 2. **Stage 3 — ball detection + tracking** → a track in lane coordinates.
 3. **First metric — ball speed** (geometry over the track + frame timestamps): the simplest end-to-end metric,
-   and enough to stand up the real parity gate (device speed vs server speed vs Ruby, within DEC-034 tol).
+   and enough to stand up the real parity gate (device speed vs server speed, within DEC-034 tol; Specto where available).
 4. Extend to entry board / angle / rev / pins. Hold each until it clears ground-truth + parity on the
    validation set — accuracy beats coverage (a 2-board error flips the advice; CLAUDE.md).
 

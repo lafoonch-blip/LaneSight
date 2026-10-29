@@ -1,8 +1,14 @@
 # Validation Plan: sensors + Specto
 Status: DRAFT  
-Version: 1.0  
-Last Updated: 2026-10-14  
+Version: 1.1  
+Last Updated: 2026-10-29  
 Owner: Shayne
+
+> **DEC-105 (2026-10-29): Ruby is removed from the validation process.** It is no longer a ground-truth /
+> accuracy reference. The ongoing gate for CV changes is the **regression baseline** (`ops/perf_benchmark.py` —
+> a new run vs a saved reference run, within tolerance) plus **Specto** for absolute accuracy where available.
+> The Ruby references below and in `validation/` remain only as historical record. (Ruby as a user-pairable
+> sensor, DEC-021, is unaffected.)
 
 Goal: prove every LaneSight metric against an independent reference before it is labeled "Guaranteed" (`01_PRODUCT/METRIC_CAPABILITIES.md`). Each reference covers different metrics, so together they close the gaps.
 

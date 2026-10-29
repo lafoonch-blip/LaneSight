@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.63  
+Version: 1.64  
 Last Updated: 2026-10-29  
 Owner: Shayne  
-Supersedes: v1.62
+Supersedes: v1.63
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1195,7 +1195,7 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 ### DEC-103 — Measurement provenance, validation and sync
 **Decision (2026-10-28; proposal §12 DEC-B):**
 - Every measurement carries **engine provenance** (`engine.platform` = `ios` | `server`, `engine.version`, `engine.build`), versioned **`MeasurementEvidence`** (observations layer; observed vs predicted kept separate), and status/uncertainty/calibration info.
-- **Two separate gates** before device results become authoritative: (1) **ground truth** — the device engine meets the applicable DEC-034 accuracy gates vs Ruby/Specto; (2) **parity** — device vs server stay within metric-specific tolerances, with status/unavailable disagreements reviewed and reason codes semantically equivalent. Both must pass.
+- **Two separate gates** before device results become authoritative: (1) **ground truth** — the device engine meets the applicable DEC-034 accuracy gates vs Specto where available, with the server as the reference engine (DEC-105: Ruby removed from the validation process); (2) **parity** — device vs server stay within metric-specific tolerances, with status/unavailable disagreements reviewed and reason codes semantically equivalent. Both must pass.
 - **Offline records sync idempotently** (client UUID + idempotency key, account-scoped, retry with backoff, survive force-quit, no duplicates). Sessions/measurements are immutable or revisioned; arsenal is revisioned (DEC-007/044); last-write-wins only for simple profile fields.
 - **The server validates every device submission** (auth, ownership, schema, plausibility, accepted engine version) before it feeds Stats or the Score. A client-reported engine id is for tracing, not proof.
 - An **engine-version compatibility policy** governs supported versions, deprecated metrics, recalculation where evidence/clips were retained, and quarantine of outdated/rejected engines so stats never quietly mix incompatible measurements.
@@ -1211,6 +1211,19 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 - Deletion schedules are defined with the retention policy.
 **Why:** on-device measurement removes the need to ship video for supported phones; validation data must not be collected silently; retention is a LaneSight/plan decision, not a per-user toggle.
 **Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** builds on DEC-099/DEC-100 (now implemented: 7-day clip retention + `clip.storage_path`, verified live on rev `lanesight-api-00037-r6s`). Clarifies DEC-055 (uploads standalone) for the server-fallback path.
+
+### DEC-105 — Ruby removed from the validation process
+**Decision (2026-10-29, Shayne):**
+- **Ruby is no longer a validation ground-truth / accuracy reference.** Accuracy of CV changes and of the
+  on-device engine is checked against **Specto where available**, with the **server as the reference engine**
+  for on-device parity (DEC-103). The `validation/` Ruby values and any "compare against Ruby before committing"
+  step are retired from the process.
+- **Unchanged:** Ruby as a *user-pairable ball sensor* (DEC-021) — that is a product feature, not a validation
+  reference, and stands unless a later DEC changes it.
+**Why:** owner's call to simplify the reference set to Specto + server-parity.
+**Date:** 2026-10-29 · **Status:** ACCEPTED · **Supersedes:** the Ruby-as-validation clauses of DEC-022 and
+DEC-034 and the CLAUDE.md "compare against Ruby values" instruction, going forward. Historical DEC-021/022/030/035
+entries stand as record (never edited); their *Ruby-validation* basis is no longer the active process.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

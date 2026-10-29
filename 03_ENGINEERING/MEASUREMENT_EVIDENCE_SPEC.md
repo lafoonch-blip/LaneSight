@@ -71,7 +71,8 @@ verdicts. This table is normative for v1.
 device reports **raw timings** inside `pose`/`events`; the server issues the early/on-time/late verdict.
 
 ## 5. Validation (two separate gates — DEC-103)
-1. **Ground truth** — metrics derived from evidence meet the applicable DEC-034 accuracy gates vs Ruby/Specto.
+1. **Ground truth** — metrics derived from evidence meet the applicable DEC-034 accuracy gates vs Specto where
+   available, with the server as the reference engine (DEC-105: Ruby removed from the validation process).
 2. **Parity** — device vs server evidence/metrics agree within metric-specific tolerances; status/unavailable
    disagreements are reviewed; reason codes are semantically equivalent (not byte-identical).
 
