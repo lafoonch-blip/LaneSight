@@ -703,16 +703,18 @@ final class AppModel: ObservableObject {
                          sessionId: (source == "upload" ? nil : sid))
 
             // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
-            let last = try await client.job(created.job_id)
-            if last.state == "failed" {
+            // The job fetch is best-effort (try?): the analysis already ran, so a transient/decoding hiccup here
+            // must NOT fail the result — the shot record below is the source of truth (P0 2026-10-29).
+            let last = try? await client.job(created.job_id)
+            if last?.state == "failed" {
                 // DEC-086: show the server's friendly, user-facing copy — never the raw code/reason.
-                let friendly = last.failure?.display
+                let friendly = last?.failure?.display
                 pipeline = .failed(friendly?.isEmpty == false ? friendly!
                                    : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
                 clearPendingAnalysis()      // a real analysis failure — nothing to recover
                 return
             }
-            pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
+            pipeline = .analyzing(state: last?.state ?? "done", timings: last?.timings?.values ?? [:])
 
             // 5. Fetch the shot record + score; carry the analyze-job footer onto the card.
             pipeline = .fetching
@@ -737,7 +739,7 @@ final class AppModel: ObservableObject {
             let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
                 ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
             var built = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
-                                   footer: isForm ? nil : last.result,
+                                   footer: isForm ? nil : last?.result,
                                    suggestedTarget: isForm ? nil : insights?.suggested_target,
                                    recommendation: isForm ? nil : moveRec,
                                    insightsState: isForm ? nil : insights?.state,

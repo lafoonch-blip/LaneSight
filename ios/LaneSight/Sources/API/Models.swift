@@ -53,12 +53,38 @@ struct ShadowAck: Decodable {   // DEC-106 POST /analysis/shadow response (extra
     let logged: Bool
 }
 
-struct JobResponse: Codable {
+/// Decodes a JSON object as [String: Double], silently skipping any value that isn't a plain number (nested
+/// objects, strings, bools). The job response's `timings` gained nested fields (client/decode/cv, DEC-092) that
+/// broke a strict [String: Double] decode and failed every post-analysis fetch (P0 2026-10-29). This makes a new
+/// or nested server timing field incapable of breaking the client.
+nonisolated struct LenientDoubleDict: Codable {
+    let values: [String: Double]
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        var out: [String: Double] = [:]
+        for k in c.allKeys {
+            if (try? c.decode(Bool.self, forKey: k)) != nil { continue }      // skip JSON bools
+            if let d = try? c.decode(Double.self, forKey: k) { out[k.stringValue] = d }   // numbers only
+        }
+        values = out
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        for (k, v) in values { if let key = AnyKey(stringValue: k) { try c.encode(v, forKey: key) } }
+    }
+    struct AnyKey: CodingKey {
+        var stringValue: String; var intValue: Int?
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.intValue = intValue; stringValue = String(intValue) }
+    }
+}
+
+nonisolated struct JobResponse: Codable {
     let id: String
     let kind: String?
     let state: String          // queued | running | done | failed
     let reason: String?
-    let timings: [String: Double]?
+    let timings: LenientDoubleDict?   // flat numeric step times; nested detail is ignored (see LenientDoubleDict)
     var result: ShotFooter?    // analyze-job footer (score_delta + achievement_nudges + unlocked)
     var failure: FailureInfo?  // DEC-086: server-owned friendly copy when state == "failed"
 }
