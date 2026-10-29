@@ -569,6 +569,46 @@ final class AppModel: ObservableObject {
     /// DEC-096: collapse the live capture/analyze/result cover back to the Active Session.
     func exitToSession() { inLiveCapture = false; resetPipeline() }
 
+    /// DEC-106: fire-and-forget native on-device shadow analysis of the just-analysed clip. Copies the clip
+    /// (the upload temp is deleted when the pipeline finishes), runs the engine OFF the main actor, then POSTs
+    /// the result as platform='ios'. Ball shots only; every failure is swallowed — it must never affect the
+    /// user's result, Score or UI.
+    /// DEC-106: the on-device shadow is non-production — it runs ONLY behind an owner/dev flag, never for real
+    /// users on the production branch. Default: on for DEBUG (owner dev builds), off for Release; overridable via
+    /// the `ls.ondevice_shadow` UserDefaults key.
+    static var shadowEnabled: Bool {
+        if let v = UserDefaults.standard.object(forKey: "ls.ondevice_shadow") as? Bool { return v }
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private func launchShadow(clipURL: URL, shotId: String, source: String, sessionId: String?) {
+        guard Self.shadowEnabled else { return }               // owner/dev only — off for real users (DEC-106)
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("shadow-\(shotId).mov")
+        try? FileManager.default.removeItem(at: copy)
+        guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return }
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let mode = captureMode
+        let hand = handed
+        Task.detached(priority: .utility) {
+            defer { try? FileManager.default.removeItem(at: copy) }
+            // Ball shots -> the CV shadow; Form -> the Vision body-pose shadow. Both post platform='ios'.
+            let payload: [String: Any] = (mode == "form")
+                ? await OnDeviceFormShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                               sessionId: sessionId, handed: hand, appVersion: appVersion)
+                : await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
+                                           sessionId: sessionId, captureMode: mode, appVersion: appVersion)
+            guard let json = try? JSONSerialization.data(withJSONObject: payload) else { return }
+            await MainActor.run { [weak self] in
+                guard let self, let client = try? self.makeClient() else { return }
+                Task { try? await client.postShadow(json) }        // POST via a fresh client, like the failure hook
+            }
+        }
+    }
+
     private func runPipeline(fileURL: URL, source: String) async {
         // Keep the upload + analyze request running if the user switches apps mid-analysis (iOS otherwise
         // suspends the app in a few seconds and the request dies). This buys the background-execution window;
@@ -670,17 +710,30 @@ final class AppModel: ObservableObject {
                 metadata: metadata,
                 clientTimings: ct)
 
+            // DEC-106 shadow: run the native on-device engine on the same clip in the background and record it
+            // (platform='ios') for engine comparison. Never shown to the user, never scored. Ball shots only.
+            launchShadow(clipURL: uploadURL, shotId: created.shot_id, source: source,
+                         sessionId: (source == "upload" ? nil : sid))
+
             // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
-            let last = try await client.job(created.job_id)
-            if last.state == "failed" {
+            // Best-effort ONLY for a DECODE hiccup — the shot record is the source of truth after analysis. A job
+            // with state=failed (or any transport error) must NEVER be swallowed; it has to surface the DEC-086
+            // failure + Retry, not silently drop the user back to Upload (P0 2026-10-29).
+            let last: JobResponse?
+            do {
+                last = try await client.job(created.job_id)
+            } catch let e as APIError {
+                if case .decoding = e { last = nil } else { throw e }   // tolerate a schema drift; rethrow the rest
+            }
+            if last?.state == "failed" {
                 // DEC-086: show the server's friendly, user-facing copy — never the raw code/reason.
-                let friendly = last.failure?.display
+                let friendly = last?.failure?.display
                 pipeline = .failed(friendly?.isEmpty == false ? friendly!
                                    : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
                 clearPendingAnalysis()      // a real analysis failure — nothing to recover
                 return
             }
-            pipeline = .analyzing(state: last.state, timings: last.timings ?? [:])
+            pipeline = .analyzing(state: last?.state ?? "done", timings: last?.timings?.values ?? [:])
 
             // 5. Fetch the shot record + score; carry the analyze-job footer onto the card.
             pipeline = .fetching
@@ -705,7 +758,7 @@ final class AppModel: ObservableObject {
             let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
                 ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
             var built = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
-                                   footer: isForm ? nil : last.result,
+                                   footer: isForm ? nil : last?.result,
                                    suggestedTarget: isForm ? nil : insights?.suggested_target,
                                    recommendation: isForm ? nil : moveRec,
                                    insightsState: isForm ? nil : insights?.state,

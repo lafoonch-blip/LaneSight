@@ -5,6 +5,8 @@ struct LaneSightApp: App {
     @StateObject private var model = AppModel()
     /// DEC-099: shared Home/Stats/Lab data (parallel loads, one publish per page, silent revalidation).
     @StateObject private var tabData = TabDataStore()
+    /// OD-03 (DEC-102): non-blocking connectivity signal for the offline banner. Never gates navigation.
+    @StateObject private var connectivity = Connectivity.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -41,7 +43,38 @@ struct LaneSightApp: App {
                 if !isPreview, model.gate == .ready, model.hasSeenIntro, !model.homeLoaded {
                     LaunchSplash().transition(.opacity).zIndex(1)
                 }
+                // OD-03: non-blocking offline banner. Appears at the top when offline; never blocks navigation
+                // or capture. Analysis offline is saved as pending and syncs on reconnect (wiring: next step).
+                if !isPreview, model.gate == .ready, !connectivity.isOnline {
+                    VStack { OfflineBanner(); Spacer() }
+                        .zIndex(2).transition(.move(edge: .top)).animation(.easeInOut, value: connectivity.isOnline)
+                }
             }
+            .task { connectivity.start() }
+            #if DEBUG
+            // Diagnostic: run the on-device pipeline on a clip path at launch (sim repro). Stage-by-stage
+            // prints so a crash shows the last stage reached. Set LS_ONDEVICE_TEST=<path to a .mov>.
+            .task {
+                guard let p = ProcessInfo.processInfo.environment["LS_ONDEVICE_TEST"] else { return }
+                await Task.detached {
+                    let url = URL(fileURLWithPath: p)
+                    print("ONDEV: start \(p)")
+                    guard let px = OnDeviceLaneDetector.referenceFrame(url: url, at: 30) else { print("ONDEV: no reference frame"); return }
+                    print("ONDEV: got reference frame")
+                    let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
+                    print("ONDEV: lanes=\(geo.lanes.count) vp=\(String(describing: geo.vanishingPoint)) foul=\(String(describing: geo.foulLineY))")
+                    let tr = OnDeviceTracker.track(url: url, geo: geo)
+                    print("ONDEV: track pts=\(tr.points.count) scanned=\(tr.framesScanned) cand=\(tr.candidateFrames)")
+                    let sp = OnDeviceTracker.speed(track: tr, geo: geo)
+                    print("ONDEV: speed=\(String(describing: sp.mph)) basis=\(sp.basis) note=\(sp.note)")
+                    print("ONDEV: tRelease=\(String(describing: sp.tRelease)) tImpact=\(String(describing: sp.tImpact)) (server: 9.26 / 11.555)")
+                    if let f = tr.points.first, let l = tr.points.last {
+                        print("ONDEV: track t[\(String(format: "%.2f", f.t))→\(String(format: "%.2f", l.t))]  row[\(Int(f.contactRow))→\(Int(l.contactRow))]  frac[\(String(format: "%.2f", f.frac))→\(String(format: "%.2f", l.frac))]")
+                    }
+                    print("ONDEV: DONE")
+                }.value
+            }
+            #endif
             .environmentObject(model)
             .environmentObject(tabData)
             // Never show one account's data to the next: drop the tab cache on sign-in/out.
