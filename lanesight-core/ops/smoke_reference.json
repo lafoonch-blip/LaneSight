@@ -1,0 +1,12 @@
+{
+  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py). The smoke asserts the live API reproduces these values within the DEC-092 don't-regress tolerance (ball_speed +/-0.2 mph), so it catches metric DRIFT between revisions, not just breakage. Values are the SERVER's stable output (not the local/validation figure): the server analyzes the untrimmed clip and its impact-timing-sensitive 60 ft average reads ~1.9 mph below the local pipeline + Ruby (17.84/17.8) on IMG_8753 -- a Cloud-Run-vs-local CV reproducibility gap (FLAGGED, not a deploy regression). When a deploy intentionally changes a value, update it here with the reason.",
+  "clips": {
+    "IMG_8753.MOV": {
+      "ball_speed": 15.98,
+      "tol_mph": 0.2,
+      "server_rev_captured": "lanesight-api-00049-m7g",
+      "local_and_ruby": 17.84,
+      "discrepancy": "server 60ft-average reads ~1.9 mph low vs local/Ruby (impact-timing reproducibility gap on the untrimmed clip); release speed (front-half, also stored) is robust to this -- headline definition decision deferred (store-both, show-both after design update)."
+    }
+  }
+}

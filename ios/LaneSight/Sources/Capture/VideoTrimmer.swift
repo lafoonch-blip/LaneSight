@@ -44,7 +44,12 @@ enum VideoTrimmer {
     /// Seconds kept after motion onset: approach (~2–3 s) + ball travel to the pins (~2.5–3 s) + pin action, with margin.
     nonisolated static let tailKeep: Double = 10.0
 
-    nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4) async -> URL {
+    /// `tail` = seconds kept after motion onset. Defaults to the 10 s upload window (margin so the server's own
+    /// detect_window can re-trim precisely). The DEC-106 shadow passes a shorter tail (~5 s) so the on-device
+    /// engine analyses a tight shot window — it covers ball→pins→impact but isn't chewing the 10 s settle tail,
+    /// which is what made the shadow run 512 s on the full-length clip (2026-10-29).
+    nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4,
+                                             tail: Double = tailKeep) async -> URL {
         let asset = AVURLAsset(url: sourceURL)
         guard let duration = try? await asset.load(.duration) else { return sourceURL }
         let total = duration.seconds
@@ -55,9 +60,9 @@ enum VideoTrimmer {
         }
         // DEC-101: cut only the dead time BEFORE motion. The motion window used to END when the bowler's motion
         // stopped — before the ball reached the pins (2026-10-28: a 17.1 s clip trimmed to 2.85 s, the ball track
-        // ended at 2.74 s → PIN_IMPACT_NOT_DETECTED). Keep ≥1 s before onset and ≥`tailKeep` s after it.
+        // ended at 2.74 s → PIN_IMPACT_NOT_DETECTED). Keep ≥1 s before onset and ≥`tail` s after it.
         let start = max(0, motion.start.seconds - 0.6)              // + the 0.4 s pad already applied = 1 s
-        let end = min(total, max(motion.end.seconds, motion.start.seconds + tailKeep))
+        let end = min(total, max(motion.end.seconds, motion.start.seconds + tail))
         let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
                                 end: CMTime(seconds: end, preferredTimescale: 600))
         // Skip the export if trimming would barely shrink the clip.

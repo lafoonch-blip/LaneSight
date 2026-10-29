@@ -19,7 +19,7 @@ echo "== current revision: $PREV =="
 gcloud run deploy "$SERVICE" \
   --source . --region "$REGION" --allow-unauthenticated \
   --cpu 4 --memory 4Gi --timeout 600 --concurrency 8 --max-instances 3 \
-  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg \
+  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 

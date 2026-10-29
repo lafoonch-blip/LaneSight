@@ -21,11 +21,11 @@ import urllib.error
 import urllib.request
 
 CLIP = os.path.expanduser('~/LaneSightData/training_videos/IMG_8753.MOV')
-# A smoke test checks the end-to-end path WORKS and returns a SANE result — not strict accuracy (that's the
-# validation harness). The server headline is RELEASE speed (DEC-030), ~9% below the old 60-ft average, so
-# IMG_8753 reads ~16 mph on the server (not the 17.8 Ruby/validation figure). Band catches null / unavailable
-# / garbage while tolerating the release-vs-average definition and normal run-to-run variation.
-PLAUSIBLE_MIN, PLAUSIBLE_MAX = 12.0, 22.0
+CLIP_KEY = 'IMG_8753.MOV'
+# Assert against the STORED SERVER reference within the DEC-092 don't-regress tolerance (ball_speed ±0.2 mph),
+# so the smoke catches metric DRIFT revision-to-revision, not just breakage. The reference is the server's
+# stable value (ops/smoke_reference.json); ball_speed is the 60 ft foul→pins average (DEC-064; metrics.py).
+REFERENCE = os.path.join(os.path.dirname(__file__), 'smoke_reference.json')
 SMOKE_EMAIL = 'ls_smoke@lanesight.test'
 SMOKE_PW = os.environ.get('LANESIGHT_SMOKE_PW') or 'Sm0ke-deploy!2026'
 
@@ -112,11 +112,14 @@ def main():
     mets = rec.get('metrics') or {}
     bs = (mets.get('ball_speed') or {})
     val, status = bs.get('value'), bs.get('status')
-    print(f'smoke: shot={shot_id} ball_speed={val} status={status} (sane band {PLAUSIBLE_MIN}-{PLAUSIBLE_MAX})')
+    ref = json.load(open(REFERENCE))['clips'][CLIP_KEY]
+    exp, tol = ref['ball_speed'], ref['tol_mph']
+    print(f'smoke: shot={shot_id} ball_speed={val} status={status} (reference {exp}±{tol} mph)')
     if status != 'ok' or val is None:
         raise SystemExit(f'SMOKE FAIL: ball_speed not measured (status={status})')
-    if not (PLAUSIBLE_MIN <= val <= PLAUSIBLE_MAX):
-        raise SystemExit(f'SMOKE FAIL: ball_speed {val} outside sane band [{PLAUSIBLE_MIN}, {PLAUSIBLE_MAX}]')
+    if abs(val - exp) > tol:
+        raise SystemExit(f'SMOKE FAIL: ball_speed {val} drifted from reference {exp} by '
+                         f'{val - exp:+.2f} (> ±{tol}). If intentional, update ops/smoke_reference.json.')
     print('SMOKE PASS')
 
 

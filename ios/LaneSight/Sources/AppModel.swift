@@ -600,7 +600,16 @@ final class AppModel: ObservableObject {
         let capSeconds: UInt64 = 60       // hard wall-clock cap; the engine is aborted past this (P0 2026-10-29)
         shadowTask?.cancel()                                   // single-flight: drop any prior shadow first
         shadowTask = Task.detached(priority: .utility) {
-            defer { try? FileManager.default.removeItem(at: copy) }
+            // Run the shadow on a TIGHT shot window (the same shot the server analyses), not the full recording:
+            // the upload clip keeps a 10 s settle tail for the server's own re-trim, which made the shadow chew
+            // 512 s. A ~5 s tail covers ball→pins→impact and is far faster (DEC-106 shadow — form keeps its full
+            // approach, DEC-101). Minor window-boundary differences are fine for a parity comparison.
+            let shadowClip = (mode == "form") ? copy
+                : await VideoTrimmer.trimToShotWindow(copy, tail: 5.0)
+            defer {
+                try? FileManager.default.removeItem(at: copy)
+                if shadowClip != copy { try? FileManager.default.removeItem(at: shadowClip) }
+            }
             // Race the engine against a hard cap. The 512 s run (2026-10-29) came from processing the full
             // untrimmed clip through several full-res decode passes; until that's trimmed/frame-skipped, the
             // cap stops a slow shadow from burning the battery or blocking the next shot. The engine loops
@@ -609,9 +618,9 @@ final class AppModel: ObservableObject {
             let json: Data? = await withTaskGroup(of: Data?.self) { group in
                 group.addTask {
                     let payload: [String: Any] = (mode == "form")
-                        ? await OnDeviceFormShadow.run(clipURL: copy, shotId: shotId, source: source,
+                        ? await OnDeviceFormShadow.run(clipURL: shadowClip, shotId: shotId, source: source,
                                                        sessionId: sessionId, handed: hand, appVersion: appVersion)
-                        : await OnDeviceShadow.run(clipURL: copy, shotId: shotId, source: source,
+                        : await OnDeviceShadow.run(clipURL: shadowClip, shotId: shotId, source: source,
                                                    sessionId: sessionId, captureMode: mode, appVersion: appVersion)
                     return try? JSONSerialization.data(withJSONObject: payload)
                 }
