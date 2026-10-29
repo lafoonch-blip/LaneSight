@@ -28,19 +28,36 @@ fi
 PREV="$SERVING"
 echo "== current (serving) revision: $PREV =="
 
+# Build EXPLICITLY with --no-cache (2026-10-29): `gcloud run deploy --source` reused stale cached images more
+# than once (the 00050 reuse; a dep pin that resolved to the wrong opencv). Build the image ourselves, tagged by
+# the git commit, so the deployed artifact provably matches the source; then deploy that exact image by digest.
+REPO="us-east1-docker.pkg.dev/project-fd28bc3f-a844-43c2-a1c/cloud-run-source-deploy/$SERVICE"
+SHA=$(git rev-parse --short HEAD)
+echo "== building $REPO:$SHA --no-cache =="
+gcloud builds submit --no-cache --tag "$REPO:$SHA" --quiet .
+DIGEST=$(gcloud artifacts docker images describe "$REPO:$SHA" --format="value(image_summary.digest)" 2>/dev/null)
+echo "== built digest: $DIGEST =="
+
 gcloud run deploy "$SERVICE" \
-  --source . --region "$REGION" --allow-unauthenticated \
+  --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --cpu 4 --memory 4Gi --timeout 600 --concurrency 8 --max-instances 3 \
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 
 # The revision now SERVING traffic (not latestReadyRevisionName — a concurrent build can advance that without
-# routing). If it's unchanged, gcloud reused a cached image / another deploy intervened: fail loudly.
+# routing). If it's unchanged, another deploy intervened: fail loudly.
 NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.traffic[0].revisionName)")
 URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.url)")
 if [ "$NEW" = "$PREV" ]; then
-  echo "ABORT: traffic is still on $PREV — deploy did not route a new revision (cached image / concurrent deploy)."
+  echo "ABORT: traffic is still on $PREV — deploy did not route a new revision (concurrent deploy)."
+  exit 1
+fi
+# Verify the deployed image digest matches the digest we just built from this commit (item 3).
+SERVED_IMG=$(gcloud run revisions describe "$NEW" --region "$REGION" --format="value(spec.containers[0].image)" 2>/dev/null)
+if [ -n "$DIGEST" ] && ! printf '%s' "$SERVED_IMG" | grep -q "$DIGEST"; then
+  echo "ABORT: serving image ($SERVED_IMG) != built digest ($DIGEST) — stale/cached image. Rolling back."
+  gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$PREV=100" --quiet
   exit 1
 fi
 echo "== deployed: $NEW — running mandatory smoke test against $URL =="

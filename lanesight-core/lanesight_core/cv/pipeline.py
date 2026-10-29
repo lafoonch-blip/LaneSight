@@ -241,7 +241,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     _ffd = M['release_source'] == 'first_free_ball_detection'
     speed_c = (0.75 if M.get('board_at_0ft') is not None else 0.45) if _ffd else 0.6
     meas = [
-        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, '60 ft foul→pins average (Ruby-comparable); ball tracked to the pins via far-lane recovery'),
+        m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'early-lane (release) speed, front ~4–24 ft; best effort until the DEC-065 pose solver anchors the near-lane Z-scale (today it still rides the impact-anchored 2-point homography)', status='best_effort' if M.get('ball_speed_mph') is not None else None),
         m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
