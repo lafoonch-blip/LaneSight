@@ -45,8 +45,11 @@ struct DevPanelView: View {
                 NavigationLink { DeviceBenchmarkView() } label: {
                     Label("Device benchmark (OD-01)", systemImage: "gauge.with.dots.needle.67percent")
                 }
+                NavigationLink { OnDeviceShadowView() } label: {
+                    Label("On-device analysis (shadow)", systemImage: "cpu")
+                }
             } footer: {
-                Text("Measures decode + native per-frame processing throughput, memory and thermals on this iPhone. Compare to the server baseline.")
+                Text("OD-01 measures device capability. The shadow runner ports the first real CV stage (stabilization) on-device to compare against the server (DEC-103 parity).")
             }
 
             // Fail visibly: if the service can't reach the database, the app is not actually working.
