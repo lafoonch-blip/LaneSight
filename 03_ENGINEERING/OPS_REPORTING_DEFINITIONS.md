@@ -1,7 +1,7 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.4
+Version: 1.5
 Last Updated: 2026-10-29
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
@@ -37,6 +37,7 @@ LaneSight already records one rich production signal: the retained **`analysis_a
 
 - **Real accounts only.** Every canonical view excludes `profiles.is_staged = true` (DEC-063 — staged `ls_*` accounts MAY hold fabricated data). Only `ops.freshness` and `ops.coverage_status` are not row-level real-only (they are metadata). Deleted accounts (no `profiles` row) are treated as real, since staged status is then unknowable; staged accounts are long-lived, so this is a safe, documented edge.
 - **Environment.** `env ∈ {dev, beta, live}` is a selectable dimension, not a hidden filter. Production scope is **live + beta**; `dev` is local test traffic and is shown only when explicitly selected.
+- **Server engine only (production KPIs).** Every KPI view that aggregates attempts filters `platform = 'server'` (migration 030, DEC-106) so on-device **shadow** (`platform='ios'`) rows never double-count shots or inflate failure rates. The only views that keep shadow rows are the raw `ops.attempt` and `ops.platform_daily` (Engine A/B). `validate_definitions.py` enforces this: any attempt-reading view outside the exempt set that lacks a `platform` constraint fails CI.
 
 ## 4. Metric glossary
 

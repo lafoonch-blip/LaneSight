@@ -26,7 +26,12 @@ APP_DIR = HERE.parents[1]
 REPO_ROOT = HERE.parents[2]
 DEFS_PATH = APP_DIR / "definitions.json"
 MIG_DIR = REPO_ROOT / "lanesight-core" / "lanesight_core" / "models" / "migrations"
-SQL_PATHS = [MIG_DIR / "025_ops_reporting.sql", MIG_DIR / "027_ops_instrumentation.sql", MIG_DIR / "028_engine_provenance.sql", MIG_DIR / "029_ops_decode_cache.sql"]
+SQL_PATHS = [MIG_DIR / "025_ops_reporting.sql", MIG_DIR / "027_ops_instrumentation.sql", MIG_DIR / "028_engine_provenance.sql", MIG_DIR / "029_ops_decode_cache.sql", MIG_DIR / "030_ops_shadow_isolation.sql"]
+
+# DEC-106: views that may contain on-device shadow (platform='ios') rows — the raw per-attempt view, the
+# server-vs-ios comparison, and static metadata. Every OTHER view that aggregates attempts must constrain
+# platform so shadow rows never pollute production KPIs (double-counted shots / inflated failure rates).
+PLATFORM_EXEMPT_VIEWS = {"attempt", "platform_daily", "coverage_status"}
 OWNER_PY = REPO_ROOT / "lanesight-core" / "lanesight_core" / "owner.py"
 
 # Views with no per-user staged concept to filter: metadata views, and the pseudonymous/infra-level tables
@@ -112,6 +117,15 @@ def validate() -> list[str]:
             errors.append(f"view '{vname}': must be real_only (staged accounts excluded)")
         if "is_staged" not in blocks.get(vname, "").lower():
             errors.append(f"view '{vname}': SQL does not reference is_staged — staged accounts may leak in")
+
+    # 6b. DEC-106: every KPI view that aggregates attempts must constrain platform (keep shadow ios rows out of
+    #     production KPIs). Exempt: the raw per-attempt view, the platform comparison, and static metadata.
+    for vname, body in blocks.items():
+        if vname in PLATFORM_EXEMPT_VIEWS:
+            continue
+        if re.search(r"ops\.attempt\b|analysis_attempt\b", body) and not re.search(r"\bplatform\b", body):
+            errors.append(f"KPI view ops.{vname} reads attempts but does not constrain platform — shadow "
+                          f"(platform='ios') rows would pollute it; add platform='server'")
 
     # 7. coverage domains line up; 8 domains.
     cov_body = blocks.get("coverage_status", "")
