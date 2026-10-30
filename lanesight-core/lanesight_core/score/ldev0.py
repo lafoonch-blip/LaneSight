@@ -18,13 +18,23 @@ SCORE_VERSION = 'L-dev-0'
 
 # Mirror of the migration-007 seed. power_ref_ranges is None on purpose — PENDING Shayne (HANDOFF §7);
 # until it is set, P' (and therefore the overall score) is unavailable rather than guessed.
+# DEC-108 (2026-10-30): the LaneSight Score unlocks after SCORE_UNLOCK_SHOTS eligible shots (was 20) — applies
+# to the overall score AND each part's eligibility (single source: these floors). The TIER stays PROVISIONAL
+# until TIER_PROVISIONAL_UNTIL shots so an early (5-shot) tier isn't misleading (DEC-077 label kept). This does
+# NOT touch the coach "your normal" baseline (coach.BASELINE_MIN_N=10) or the plausibility-gate speed baseline
+# (20, app.py) — those are separate thresholds.
+SCORE_UNLOCK_SHOTS = 5
+TIER_PROVISIONAL_UNTIL = 20
+
 DEFAULT_LDEV0_PARAMS = {
     'weights': {'s_perf': 0.40, 'a_acc': 0.25, 'c_cons': 0.25, 'p_power': 0.10},
     's_perf': {'pocket_weight': 0.6, 'angle_weight': 0.4,
                'pocket_board_range': [16, 19], 'pocket_board_range_left_mirror': True,
                'entry_angle_range_deg': [4, 6]},
     'power_ref_ranges': None,   # {'entry_speed_mph':[lo,hi], 'rev_rate_rpm':[lo,hi], 'entry_angle_deg':[lo,hi], 'weight_lb':[lo,hi]}
-    'eligibility_floors': {'s_perf': 20, 'a_acc': 20, 'c_cons': 10, 'p_power': 10},
+    'eligibility_floors': {'s_perf': SCORE_UNLOCK_SHOTS, 'a_acc': SCORE_UNLOCK_SHOTS,
+                           'c_cons': SCORE_UNLOCK_SHOTS, 'p_power': SCORE_UNLOCK_SHOTS},
+    'tier_provisional_until': TIER_PROVISIONAL_UNTIL,
     'window_days': 90,
     'tier_ranges': {'bronze': [0, 399], 'silver': [400, 549], 'gold': [550, 699],
                     'platinum': [700, 849], 'onyx': [850, 1000]},
@@ -215,9 +225,12 @@ def compute(shots, intents=None, params=None, handed='R', weight_lb=None, shot_i
                             + w['c_cons'] * C['value'] + w['p_power'] * P['value']))
         from .tiers import tier_for
         tier = tier_for(score, params)
+    # DEC-108: a tier computed from fewer than tier_provisional_until shots is PROVISIONAL (shown with a
+    # provisional marker so an early tier isn't read as settled). Score itself is live once eligible.
+    tier_provisional = bool(eligible and len(shots) < params.get('tier_provisional_until', TIER_PROVISIONAL_UNTIL))
     return dict(
         formula_version=SCORE_VERSION, label=params.get('label'),
-        eligible=eligible, score=score, tier=tier,
+        eligible=eligible, score=score, tier=tier, tier_provisional=tier_provisional,
         s_perf=S['value'], a_acc=A['value'], c_cons=C['value'], p_power=P['value'],
         components={'s_perf': S, 'a_acc': A, 'c_cons': C, 'p_power': P},
         eligibility=eligibility,

@@ -958,7 +958,12 @@ def _with_part_deltas(store, user, snap, window_days=30):
                 cur, old = snap.get(k), ref.get(k)
                 if cur is not None and old is not None:
                     deltas[k] = round(cur - old, 1)
-    return {**snap, 'parts_delta_30d': deltas}
+    # DEC-108: the tier is PROVISIONAL until TIER_PROVISIONAL_UNTIL shots (a 5-shot tier isn't settled). Derive
+    # on read from the single constant so persisted snapshots (which don't store the flag) stay consistent.
+    from lanesight_core.score.ldev0 import TIER_PROVISIONAL_UNTIL
+    n_shots = (snap.get('inputs') or {}).get('n_shots', 0) if snap.get('inputs') else snap.get('n_shots', 0)
+    tier_prov = bool(snap.get('eligible') and snap.get('tier') is not None and (n_shots or 0) < TIER_PROVISIONAL_UNTIL)
+    return {**snap, 'parts_delta_30d': deltas, 'tier_provisional': snap.get('tier_provisional', tier_prov)}
 
 
 @app.get('/me/score')

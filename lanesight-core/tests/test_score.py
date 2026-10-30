@@ -147,3 +147,29 @@ def test_tier_not_eligible_no_movement():
     prev = {'tier': 'gold', 'best_score': 700, 'first_qualified_score': 600, 'below_floor_sessions': 1}
     out = evaluate_tier(prev, {'eligible': False, 'score': None}, P)
     assert out['event'] is None and out['state']['tier'] == 'gold'
+
+
+# --------------------------------------------------------------------------- DEC-108: 5-shot unlock + provisional tier
+def _scored_params():
+    import copy
+    p = copy.deepcopy(P)
+    p['power_ref_ranges'] = {'entry_speed_mph': [14, 20], 'rev_rate_rpm': [300, 500],
+                             'entry_angle_deg': [3, 7], 'weight_lb': [14, 16]}
+    return p
+
+def _intents(n): return {f's{i}': {'arrows_board': 15.0, 'breakpoint_board': 10.0} for i in range(n)}
+
+def test_dec108_unlocks_at_5_shots():
+    params = _scored_params()
+    r5 = compute([shot(i) for i in range(5)], _intents(5), params, weight_lb=15.0)
+    assert r5['eligible'] is True and r5['score'] is not None           # was 20, now 5
+    r4 = compute([shot(i) for i in range(4)], _intents(4), params, weight_lb=15.0)
+    assert r4['eligible'] is False                                       # below the 5-shot floor
+    assert all(e['need'] == 5 for e in r5['eligibility'].values())       # every part floor is 5 (one source)
+
+def test_dec108_tier_provisional_until_20():
+    params = _scored_params()
+    r5 = compute([shot(i) for i in range(5)], _intents(5), params, weight_lb=15.0)
+    assert r5['tier'] is not None and r5['tier_provisional'] is True      # tier shown but provisional at 5
+    r20 = compute([shot(i) for i in range(20)], _intents(20), params, weight_lb=15.0)
+    assert r20['tier'] is not None and r20['tier_provisional'] is False   # settled at 20
