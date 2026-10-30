@@ -325,9 +325,18 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     if os.environ.get('LANESIGHT_NEAR_ANCHOR_SHADOW') == '1':
         try:
             from .arrows import detect_arrow_row
-            from .metrics import lane_homography_at, early_speed_from_H
+            from .metrics import lane_homography_at, early_speed_from_H, LANE_IN
             anchor_px, z_ft, adiag = detect_arrow_row(S['bg'], lane, vp)
             impact_v, _ = early_speed_from_H(ground, t_imp, H)
+            # ORACLE: take the TRUE Z=15 point from the impact homography (invert H, map lane (centre,15ft)->image)
+            # and feed it to the SAME near-anchor path. If oracle_v ≈ impact_v, the near-anchor MECHANISM is sound
+            # and the only gap is the arrow DETECTOR (separates the two failure modes).
+            try:
+                Hinv = np.linalg.inv(H); w = Hinv @ np.array([LANE_IN / 2.0, 15.0, 1.0]); oracle_px = w[:2] / w[2]
+                Ho = lane_homography_at(lane, vp, oracle_px, 15.0)
+                oracle_v, _ = early_speed_from_H(ground, t_imp, Ho)
+            except Exception:
+                oracle_v = None
             if anchor_px is not None:
                 Hn = lane_homography_at(lane, vp, anchor_px, z_ft)
                 near_v, ndiag = early_speed_from_H(ground, t_imp, Hn)
@@ -337,8 +346,11 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                'near_diag': ndiag}
             else:
                 near_shadow = {'arrow_found': False, 'arrow': adiag, 'impact_speed_mph': impact_v}
+            near_shadow['oracle_speed_mph'] = oracle_v
+            near_shadow['oracle_delta_mph'] = (round(oracle_v - impact_v, 3)
+                                               if (oracle_v is not None and impact_v is not None) else None)
             log(f"near-anchor shadow: {near_shadow.get('arrow_found')} near={near_shadow.get('near_speed_mph')} "
-                f"impact={near_shadow.get('impact_speed_mph')} d={near_shadow.get('delta_mph')}")
+                f"impact={near_shadow.get('impact_speed_mph')} oracle={oracle_v} d={near_shadow.get('delta_mph')}")
         except Exception as _e:
             near_shadow = {'error': f'{type(_e).__name__}: {_e}'[:200]}
     with _stage('read_pins_s'):
