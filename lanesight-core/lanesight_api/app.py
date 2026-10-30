@@ -370,8 +370,17 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             # Persist the failure on the shot row (so Lab › Uploads can show it) + log the attempt, then
             # re-raise so the job reports it. Unknown exceptions become a stable INTERNAL_ERROR.
             from lanesight_core.failures import AnalysisFailure
-            fail = e if isinstance(e, AnalysisFailure) else \
-                AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:500], stage='internal')
+            if isinstance(e, AnalysisFailure):
+                fail = e
+            else:
+                # Capture the traceback HERE (the jobs.py wrapper won't re-wrap an already-raised
+                # AnalysisFailure, so without this the attempt row's diagnostics are null — exactly what
+                # hid the 57c1aa3c down-lane crash on 2026-10-30). These hard clips are the frontier; the
+                # trace is how we fix them.
+                import traceback
+                fail = AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:500], stage='internal',
+                                       diagnostics={'exc_type': type(e).__name__,
+                                                    'traceback_tail': traceback.format_exc()[-1200:]})
             try:
                 store.mark_shot_failed(shot_id, fail.code, fail.stage)
             except Exception as me:
