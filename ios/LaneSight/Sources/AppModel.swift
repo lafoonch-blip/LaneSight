@@ -183,6 +183,12 @@ final class AppModel: ObservableObject {
     private(set) var lastCaptureURL: URL?
     private var lastSource = "live"
 
+    // An analysis that finished (or failed) while the app was CLOSED. Surfaced non-intrusively on Home as a
+    // "Shot analyzed while you were away · View" banner — NOT a result sheet at launch (2026-10-30). Tapping
+    // opens the result; a failed one shows the friendly reason + Retry.
+    struct AwayResult: Equatable { let shotId: String; let mode: String?; let failed: Bool; let sessionId: String? }
+    @Published var awayResult: AwayResult?
+
     // Recover-on-resume: the analysis runs server-side and its result is durable in Supabase even if the app
     // is backgrounded and the request drops. We persist a marker for the in-flight analysis so that on return
     // to the foreground we can fetch the finished shot and show it, instead of leaving a stale failure.
@@ -978,7 +984,7 @@ final class AppModel: ObservableObject {
     /// the server likely finished it (the result is durable in Supabase) even though our request dropped — so
     /// fetch the shot the server was working on and present its result (or its failure), instead of leaving the
     /// user on a stale "failed". If it's still running, re-raise the analyzing cover and keep the marker.
-    func reconcilePendingAnalysis() async {
+    func reconcilePendingAnalysis(coldLaunch: Bool = false) async {
         guard let pending = pendingAnalysis, let client = try? makeClient() else { return }
         let id: String?, hint: String?, state: String?
         do {
@@ -997,6 +1003,17 @@ final class AppModel: ObservableObject {
             }
         } catch { return }                                   // still offline — try again on the next foreground
         guard let sid = id else { return }                   // the shot isn't there yet / nothing to recover
+        // COLD LAUNCH (2026-10-30): the app was CLOSED — land on Home and surface the finished/failed shot
+        // non-intrusively as an "away" banner (it's already durable in Lab › Uploads / the session list), never
+        // a result sheet at launch. A still-running one just stays pending and appears in its row when it lands.
+        if coldLaunch {
+            switch state {
+            case "analyzed": awayResult = AwayResult(shotId: sid, mode: hint, failed: false, sessionId: pending.sessionId); clearPendingAnalysis()
+            case "failed":   awayResult = AwayResult(shotId: sid, mode: hint, failed: true,  sessionId: pending.sessionId); clearPendingAnalysis()
+            default:         break   // still running → leave the marker; it surfaces in its row when done
+            }
+            return
+        }
         switch state {
         case "analyzed":
             if await loadShotResult(shotId: sid, captureModeHint: hint) {

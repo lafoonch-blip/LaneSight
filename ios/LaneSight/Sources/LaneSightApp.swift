@@ -8,6 +8,7 @@ struct LaneSightApp: App {
     /// OD-03 (DEC-102): non-blocking connectivity signal for the offline banner. Never gates navigation.
     @StateObject private var connectivity = Connectivity.shared
     @Environment(\.scenePhase) private var scenePhase
+    @State private var didFirstActivation = false   // first scenePhase→active == cold launch (2026-10-30)
 
     init() {
         LSAppearance.apply()
@@ -93,11 +94,14 @@ struct LaneSightApp: App {
                     .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
                     .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
             }
-            // Recover-on-resume: if an analysis was in flight when the app was backgrounded, the server
-            // finishes it durably even though our request dropped — so on return to the foreground, fetch
-            // that shot and present its result (or failure) instead of leaving the user stuck.
+            // Recover analyses that finished while we were away. On WARM resume (app still alive, mid-analysis)
+            // present the recovered result as before. On COLD launch (first activation after process start) land
+            // on Home and surface it as a non-intrusive "away" banner instead — never a result sheet at launch.
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await model.reconcilePendingAnalysis() } }
+                if phase == .active {
+                    let cold = !didFirstActivation; didFirstActivation = true
+                    Task { await model.reconcilePendingAnalysis(coldLaunch: cold) }
+                }
             }
         }
     }

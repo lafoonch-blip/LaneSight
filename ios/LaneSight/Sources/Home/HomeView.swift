@@ -11,6 +11,39 @@ struct HomeView: View {
     private var activity: Loadable<[ActivityItem]> { tabs.home.activity }
     private var focus: FocusResponse? { tabs.home.focus }
 
+    /// "Shot analyzed while you were away · View" (2026-10-30). Shown on Home instead of presenting a result
+    /// sheet at launch. Tapping opens the result (or the friendly failure); the shot is also in Lab › Uploads /
+    /// the session list regardless.
+    private func awayBanner(_ a: AppModel.AwayResult) -> some View {
+        Button {
+            Task {
+                if a.failed {
+                    model.pipeline = .failed("We couldn't analyze that shot.")
+                } else if await model.loadShotResult(shotId: a.shotId, captureModeHint: a.mode) {
+                    model.pipeline = .done
+                }
+                model.uploadBusy = true          // present now — the user tapped (intentional, not at launch)
+                model.awayResult = nil
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: a.failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(a.failed ? LS.bestEffort : LS.positive)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(a.failed ? "A shot couldn't be analyzed while you were away"
+                                  : "Shot analyzed while you were away")
+                        .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                    Text(a.failed ? "Tap for the reason · Retry from Lab" : "Tap to view")
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
+            }
+            .lsCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -21,6 +54,7 @@ struct HomeView: View {
                     } else {
                     VStack(alignment: .leading, spacing: 18) {
                         if showWelcome { welcomeStartCard }
+                        if let away = model.awayResult { awayBanner(away) }   // analyzed/failed while the app was closed
 
                         // DEC-083: Home keeps the real score card in both states — ScoreCard renders the
                         // locked "BUILDING" treatment (greyed badge, "Score unlocks · N%", per-part progress)
