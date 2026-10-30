@@ -42,6 +42,7 @@ echo "== built digest: $DIGEST =="
 
 gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
+  --revision-suffix "${REV_SUFFIX:-$SHA}" \
   --cpu 4 --memory 4Gi --timeout 600 --concurrency 8 --max-instances 3 \
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
@@ -50,12 +51,30 @@ gcloud run deploy "$SERVICE" \
 # The NEW revision is latestReadyRevisionName (the one just built). Traffic may be PINNED to an older revision
 # (a prior update-traffic), so `gcloud run deploy` does NOT auto-route — we route EXPLICITLY below. That pinning
 # is exactly why earlier deploys "served 00052" while new revisions sat at 0%.
-NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.latestReadyRevisionName)")
+# When --revision-suffix is set the revision name is KNOWN ($SERVICE-$suffix); use it directly. Otherwise read
+# latestReadyRevisionName, but POLL for it — `gcloud run deploy` can return before Cloud Run flips
+# latestReadyRevisionName off the old one (the race that aborted the dec109 deploy at 0% traffic).
 URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.url)")
+if [ -n "${REV_SUFFIX:-}" ]; then
+  NEW="$SERVICE-$REV_SUFFIX"
+else
+  NEW="$PREV"
+  for _ in $(seq 1 30); do
+    NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.latestReadyRevisionName)")
+    [ "$NEW" != "$PREV" ] && break
+    sleep 2
+  done
+fi
 if [ "$NEW" = "$PREV" ]; then
   echo "ABORT: no new revision was created (latest == serving $PREV) — build/deploy did not take."
   exit 1
 fi
+# Wait for the new revision to be Ready before routing/smoking it.
+for _ in $(seq 1 30); do
+  R=$(gcloud run revisions describe "$NEW" --region "$REGION" --format="value(status.conditions[0].status)" 2>/dev/null || true)
+  [ "$R" = "True" ] && break
+  sleep 2
+done
 # Verify the new revision's image digest matches the digest we just built from this commit (item 3).
 SERVED_IMG=$(gcloud run revisions describe "$NEW" --region "$REGION" --format="value(spec.containers[0].image)" 2>/dev/null)
 if [ -n "$DIGEST" ] && ! printf '%s' "$SERVED_IMG" | grep -q "$DIGEST"; then

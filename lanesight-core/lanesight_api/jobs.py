@@ -25,6 +25,10 @@ class Job:
     created_at: float = field(default_factory=time.monotonic)
     started_at: float | None = None
     finished_at: float | None = None
+    # Durable-job metadata (Part 3a): who owns the job + which shot, so a persisted row is resolvable
+    # cross-instance and scoped to the user on GET /jobs/:id.
+    user_id: str | None = None
+    shot_id: str | None = None
     # Structured failure (DEC-086): the stable code/stage + the numbers behind it, and the user-facing copy.
     failure_code: str | None = None
     failure_stage: str | None = None
@@ -64,17 +68,30 @@ class SerialJobQueue:
         # NOT a global lock (DEC-043 one-at-a-time is PER SESSION, and a session's shots are serial in practice);
         # different instances still analyse different users concurrently.
         self._analysis_slot = threading.BoundedSemaphore(1)
+        # Durable-job sink (Part 3a): set by the app to a best-effort persist(job) that writes the job row to
+        # Supabase on every state change, so GET /jobs/:id resolves on any instance / after a restart. None in
+        # tests / the Mac service (in-memory is enough there); a persist failure never fails the analysis.
+        self.persist = None
         if not self._sync:
             self._worker = threading.Thread(target=self._run, name='lanesight-jobs', daemon=True)
             self._worker.start()
 
-    def submit(self, kind: str, fn) -> Job:
+    def _persist(self, job):
+        if not self.persist:
+            return
+        try:
+            self.persist(job)
+        except Exception as e:                   # best-effort: durability must never fail the analysis
+            print(f'job persist skipped ({type(e).__name__}: {e})')
+
+    def submit(self, kind: str, fn, user_id: str | None = None, shot_id: str | None = None) -> Job:
         """fn(job) -> result dict. fn may record per-step timings via job.timings[...]. Runs serially on the
         background worker, or INLINE (done when this returns) in sync mode. An `analyze` job in sync mode holds
         the per-instance analysis slot; if one is already running HERE, raises AnalysisBusy (→ HTTP 409)."""
-        job = Job(id=uuid.uuid4().hex, kind=kind)
+        job = Job(id=uuid.uuid4().hex, kind=kind, user_id=user_id, shot_id=shot_id)
         with self._lock:
             self._jobs[job.id] = job
+        self._persist(job)                       # 'queued' row exists before the POST returns its job_id
         if self._sync:
             if kind == 'analyze':
                 if not self._analysis_slot.acquire(blocking=False):
@@ -99,9 +116,13 @@ class SerialJobQueue:
         """Run one job to completion (shared by the background worker and sync mode)."""
         job.state = 'running'
         job.started_at = time.monotonic()
+        self._persist(job)                       # a cross-instance poll now sees 'running', not 404
         try:
             job.result = fn(job)
             job.state = 'done'
+            # fn() may have learned the shot_id (e.g. a storage analyze that creates the shot) — carry it.
+            if isinstance(job.result, dict) and job.result.get('shot_id'):
+                job.shot_id = job.result['shot_id']
         except Exception as e:                   # fail visibly with the reason (DEC-043), never silently
             from lanesight_core.failures import AnalysisFailure
             if not isinstance(e, AnalysisFailure):   # wrap anything unexpected as a stable INTERNAL_ERROR
@@ -116,6 +137,7 @@ class SerialJobQueue:
         finally:
             job.finished_at = time.monotonic()
             job.timings['total'] = job.finished_at - job.started_at
+            self._persist(job)                   # terminal row: done+result or failed+failure, resolvable anywhere
 
     def _run(self):
         while True:

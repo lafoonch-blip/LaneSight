@@ -66,6 +66,16 @@ struct ShotReadCard: View {
 
     // MARK: Coach
 
+    /// Honest fallback when the server coach block is absent (e.g. the best-effort enrich errored). A
+    /// no-reliable-data / lane-not-read shot (DEC-109 revs-only) must NOT read "keep repeating your line" —
+    /// that would be confident advice with no lane read behind it.
+    private var fallbackCoachText: String {
+        switch result.insightsState {
+        case "no_reliable_data": return "We couldn't read the lane from this camera spot — no move. Reposition and try again."
+        default: return laneRead ? "Keep repeating your line." : "Keep the same line. Move the tripod so your next shot gets a full read."
+        }
+    }
+
     private var coachBox: some View {
         let action = result.coachAction?.action
         let tag: String = {
@@ -81,7 +91,7 @@ struct ShotReadCard: View {
                 Image(systemName: "sparkles").font(.system(size: 13)).foregroundStyle(LS.link)
                 Text(tag).font(.system(size: 11, weight: .bold)).tracking(0.5).foregroundStyle(LS.link)
             }
-            Text(result.coachAction?.text ?? "Keep repeating your line.")
+            Text(result.coachAction?.text ?? fallbackCoachText)
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }

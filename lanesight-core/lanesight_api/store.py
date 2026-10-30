@@ -387,6 +387,24 @@ class MemoryStore:
         self.analysis_attempts.append(r)
         return r
 
+    # ----------------------------------------------------------------- durable jobs (Part 3a)
+    def save_job(self, row: dict):
+        """Upsert one durable job row (id, user_id, shot_id, kind, state, reason, result, failure, timings).
+        In-memory here; PgStore writes through so GET /jobs/:id resolves cross-instance / after a restart."""
+        if not hasattr(self, 'jobs'):
+            self.jobs = {}
+        r = dict(row); r['updated_at'] = time.time()
+        r.setdefault('created_at', time.time())
+        existing = self.jobs.get(r['id'])
+        if existing:
+            r['created_at'] = existing.get('created_at', r['created_at'])
+        self.jobs[r['id']] = r
+        return r
+
+    def get_job(self, job_id: str) -> dict | None:
+        """Return the stored job row (public shape) or None. The caller scopes it to the user."""
+        return (getattr(self, 'jobs', None) or {}).get(job_id)
+
     # ----------------------------------------------------------------- §2 instrumentation (DEC-098)
     def log_api_request(self, row):
         """DEC-098 §2 (M2): record one API request. Best-effort; pseudonymises user_id -> user_ref and never
@@ -1089,6 +1107,20 @@ class PgStore(MemoryStore):
             body['user_ref'] = _user_ref(body.get('user_id'))
         self._req('analysis_attempt', 'POST', body, prefer='return=minimal')
         return body
+
+    def save_job(self, row: dict):
+        """Part 3a: upsert the durable analysis_job row (PK=id). Lets the DB default created_at/updated_at on
+        insert and bump updated_at on conflict. jsonb columns (result/failure/timings) go through as-is."""
+        # Omit the timestamps: created_at defaults on insert, updated_at is bumped by the table trigger
+        # (migration 034) on every upsert — so a long-running job's row stays fresh.
+        body = {k: v for k, v in (row or {}).items() if v is not None and k not in ('created_at', 'updated_at')}
+        self._req('analysis_job?on_conflict=id', 'POST', body,
+                  prefer='resolution=merge-duplicates,return=minimal')
+        return body
+
+    def get_job(self, job_id: str) -> dict | None:
+        rows = self._get('analysis_job', f'id=eq.{job_id}&select=*&limit=1')
+        return rows[0] if rows else None
 
     def log_api_request(self, row):
         """DEC-098 §2 (M2): POST one api_request row (pseudonymised, no raw user_id/bodies/tokens)."""

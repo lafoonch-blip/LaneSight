@@ -31,6 +31,25 @@ def test_spot_check_never_blocks():
     r = client.post('/spot-check', json={'framing': {'lane_visible_fraction': 0.2, 'foul_line_visible': True}}, headers=H)
     assert r.status_code == 200 and r.json()['blocks'] is False
 
+def test_get_job_falls_back_to_durable_row():
+    """Part 3a: GET /jobs/:id must resolve a job this instance never ran (not in the in-memory queue) from the
+    durable store — the fix for the lost-session 404. Also scopes the row to its owner."""
+    store = get_store()
+    # A job persisted by "another instance" (direct store write; the live queue has no memory of it).
+    store.save_job({'id': 'job-away-1', 'user_id': 'u1', 'shot_id': 'shot-away', 'kind': 'analyze',
+                    'state': 'done', 'result': {'shot_id': 'shot-away'}, 'timings': {'total': 42.0}})
+    r = client.get('/jobs/job-away-1', headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert body['state'] == 'done' and body['result']['shot_id'] == 'shot-away'
+
+    # A job owned by someone else is not visible (404, not another user's result).
+    store.save_job({'id': 'job-other', 'user_id': 'someone-else', 'kind': 'analyze', 'state': 'done'})
+    assert client.get('/jobs/job-other', headers=H).status_code == 404
+    # A truly unknown job still 404s.
+    assert client.get('/jobs/does-not-exist', headers=H).status_code == 404
+
+
 def test_report_pins_recomputes_state():
     from lanesight_core.insights.adjust import STATES
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']

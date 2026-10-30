@@ -42,6 +42,20 @@ if _cpu_cap:
 
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
+
+
+def _persist_job(job):
+    """Part 3a: write the job's public state through to Supabase on every transition, so GET /jobs/:id
+    resolves on ANY instance and after a restart (the in-memory queue is per-instance). Best-effort — the
+    queue swallows errors so durability can never fail an analysis."""
+    pub = job.public()
+    get_store().save_job({'id': pub['id'], 'user_id': job.user_id, 'shot_id': job.shot_id,
+                          'kind': pub['kind'], 'state': pub['state'], 'reason': pub.get('reason'),
+                          'result': pub.get('result'), 'failure': pub.get('failure'),
+                          'timings': pub.get('timings')})
+
+
+_queue.persist = _persist_job
 app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
@@ -367,7 +381,7 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             _log('failed', failure=fail)
             raise
 
-    return _queue.submit('analyze', run)
+    return _queue.submit('analyze', run, user_id=user_id, shot_id=shot_id)
 
 
 # The engine versions that produced the results a piece of feedback is about. core/rules/formula are
@@ -756,10 +770,20 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
 
 @app.get('/jobs/{job_id}')
 def get_job(job_id: str, user=Depends(current_user)):
+    # In-memory first (this instance ran it). Part 3a: fall back to the durable row so a poll that lands on a
+    # different instance, or after the instance scaled to zero / restarted, resolves instead of 404ing — the
+    # lost-session bug. The DB row is the same public shape (id/kind/state/reason/timings/result/failure).
     job = _queue.get(job_id)
-    if not job:
+    if job:
+        return job.public()
+    row = get_store().get_job(job_id)
+    if not row:
         raise HTTPException(404, 'job not found')
-    return job.public()
+    if row.get('user_id') and row['user_id'] != user:   # scope to the owner (service role bypasses RLS)
+        raise HTTPException(404, 'job not found')
+    return {'id': row['id'], 'kind': row.get('kind'), 'state': row.get('state'),
+            'reason': row.get('reason'), 'timings': row.get('timings') or {}, 'timings_detail': None,
+            'result': row.get('result'), 'failure': row.get('failure')}
 
 def _flat_metrics(m: dict) -> dict:
     """Flatten a record's metrics ({k:{value}} or {k:v}) to {k: value}."""
