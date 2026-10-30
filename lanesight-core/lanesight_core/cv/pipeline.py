@@ -108,11 +108,13 @@ IMPACT_MISSED_TIP = ("Rev rate was measured. For speed and the lane read, keep t
                      "the pins with the pin deck in frame.")
 
 
-def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane):
-    """Partial result when the pin impact isn't found (Shayne 2026-10-29, DEC-109): a missed pin moment must not
-    throw away what doesn't depend on it. Rev rate (geometry-free) is reported as measured; every metric that
-    rides the impact-anchored depth scale (all speeds, boards, angles, loft) and the pin result are
-    `unavailable` with the reason — never estimated. No move is given (no_reliable_data)."""
+def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
+                          reason=None, impact_status='not_detected'):
+    """Partial result when the impact-anchored depth scale isn't trustworthy (Shayne 2026-10-29, DEC-109/110):
+    a single broken dependency must not throw away what doesn't depend on it. Rev rate (geometry-free) is
+    reported as measured; every metric that rides the impact-anchored depth scale (all speeds, boards, angles,
+    loft) and the pin result are `unavailable` with the reason — never estimated. No move (no_reliable_data).
+    `reason`/`impact_status` let the same partial serve both the impact-not-found and scale-corrupt cases."""
     rpm, rconf, rev_note, rev_sigma, rev_fps = rev
     try:
         fps = round(1 / float(np.median(np.diff(S['ts']))), 2)
@@ -127,8 +129,9 @@ def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed,
     meas += [m('axis_rotation', None, 'deg', 0, 'not yet measured from video'),
              m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
              m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)')]
-    reason = ("We lost the ball before it reached the pins, so speed, the lane read and the pin result "
-              "aren't available for this shot. " + IMPACT_MISSED_TIP)
+    if reason is None:
+        reason = ("We lost the ball before it reached the pins, so speed, the lane read and the pin result "
+                  "aren't available for this shot. " + IMPACT_MISSED_TIP)
     rec = ShotRecord(
         shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)),
         handed=handed or 'R',
@@ -138,7 +141,7 @@ def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed,
         events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
         measurements=meas, trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None,
         context=context or {},
-        capture_quality={'far_lane': 'limited', 'impact': 'not_detected', 'lane': chosen_lane, 'reason': reason,
+        capture_quality={'far_lane': 'limited', 'impact': impact_status, 'lane': chosen_lane, 'reason': reason,
                          'track_points': len(T),
                          'track_last_t': round(float(T[-1]['t']), 3) if T else None})
     rec.insights = no_reliable_data_insight(reason)
@@ -274,30 +277,70 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         TR = refine(video, S, lane, ground, t_imp, log=log)
     byf = {c['i']: c for c in T if c['t'] <= t_imp + 0.02}
     for c in TR: byf[c['i']] = c
-    with _stage('compute_s'):
-        M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
-    ser = M.pop('_series')
     # Distance scale sanity: the impact anchor (the 60 ft reference) is the ball's position extrapolated to the
     # impact. If the ball was lost before the pins (occlusion or low contrast in the back half, or pin-deck
     # clutter defeating the linker), that anchor sits mid-lane and every distance is stretched. A thrown ball
-    # tops out near ~22 mph, so a release speed past 30 means the scale is wrong - fail with a clear reason
-    # rather than emit confidently-wrong speed/entry/angle numbers (accuracy beats coverage).
-    # A reading below ~8 mph (or negative / non-finite) is the mirror image of >30: the release/impact time
-    # anchor is corrupt, so the number is not physical either. Both ends fail with a clear reason (ball_speed_plausible).
-    SPEED_MIN_MPH, SPEED_MAX_MPH = 8.0, 30.0
-    v = M.get('ball_speed_mph')
-    ok, why = ball_speed_plausible(v, SPEED_MIN_MPH, SPEED_MAX_MPH)
-    if not ok:
-        raise AnalysisFailure(
-            'IMPOSSIBLE_SPEED_SCALE', why, stage='sanity',
-            diagnostics={'measured_mph': (round(float(v), 1) if (v is not None and np.isfinite(v)) else None),
-                         'plausible_mph': [SPEED_MIN_MPH, SPEED_MAX_MPH], 'track_last_ft': M.get('track_last_ft')})
+    # tops out near ~22 mph, so a release speed past 30 means the scale is wrong; below ~8 mph the release/impact
+    # time anchor is corrupt. Either way the scale-dependent numbers aren't trustworthy (accuracy beats coverage).
+    # DEC-110 metric-independence: rather than FAIL the whole shot (the old behavior), fall back to the partial
+    # record — the geometry-free rev rate still stands, and only the scale-dependent metrics are withheld. Same
+    # for a track too sparse to fit speed. Only when the rev rate is unmeasurable too does the shot hard-fail.
+    try:
+        with _stage('compute_s'):
+            M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
+        ser = M.pop('_series')
+        SPEED_MIN_MPH, SPEED_MAX_MPH = 8.0, 30.0
+        v = M.get('ball_speed_mph')
+        ok, why = ball_speed_plausible(v, SPEED_MIN_MPH, SPEED_MAX_MPH)
+        if not ok:
+            raise AnalysisFailure(
+                'IMPOSSIBLE_SPEED_SCALE', why, stage='sanity',
+                diagnostics={'measured_mph': (round(float(v), 1) if (v is not None and np.isfinite(v)) else None),
+                             'plausible_mph': [SPEED_MIN_MPH, SPEED_MAX_MPH], 'track_last_ft': M.get('track_last_ft')})
+    except AnalysisFailure as _af:
+        if _af.code not in ('IMPOSSIBLE_SPEED_SCALE', 'TRACK_TOO_SPARSE_FOR_SPEED'):
+            raise
+        with _stage('rev_rate_s'):
+            rev = measure_rev_rate(video, S, ground, t_imp)
+        if rev[0] is None:
+            raise                                   # nothing measurable at all → keep the coded failure
+        reason = ("We couldn't pin down a trustworthy lane distance for this shot, so speed and the lane read "
+                  "aren't available — but your rev rate is. " + IMPACT_MISSED_TIP)
+        log(f'{_af.code}: partial result (rev rate {rev[0]:.0f} lane rpm); speed/geometry unavailable')
+        return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
+                                     reason=reason, impact_status='scale_unreliable')
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]
     from .metrics import impact_anchor
     pi = impact_anchor(Tp, t_imp, vp_y=vp[1])
     H = lane_homography(lane, vp, np.array(pi))
+    # DEC-110 metric-independence SHADOW (OFF by default; set LANESIGHT_NEAR_ANCHOR_SHADOW=1). Measures the
+    # early-lane speed off the Z=15 arrow row (impact-independent) against the production impact-anchored speed on
+    # the SAME track, and records it — never shown, never scored. The goal is to decouple speed from the pins, but
+    # the first arrow detector did NOT pass the accuracy gate on the validation set (2026-10-30: declined 3/4,
+    # 9.6 vs 18.7 mph on the 4th), so it stays gated until the detector agrees with the impact anchor. The
+    # mechanism (lane_homography_at + early_speed_from_H + this harness) is what lets the detector be tuned.
+    near_shadow = None
+    if os.environ.get('LANESIGHT_NEAR_ANCHOR_SHADOW') == '1':
+        try:
+            from .arrows import detect_arrow_row
+            from .metrics import lane_homography_at, early_speed_from_H
+            anchor_px, z_ft, adiag = detect_arrow_row(S['bg'], lane, vp)
+            impact_v, _ = early_speed_from_H(ground, t_imp, H)
+            if anchor_px is not None:
+                Hn = lane_homography_at(lane, vp, anchor_px, z_ft)
+                near_v, ndiag = early_speed_from_H(ground, t_imp, Hn)
+                near_shadow = {'arrow_found': True, 'arrow': adiag, 'near_speed_mph': near_v,
+                               'impact_speed_mph': impact_v,
+                               'delta_mph': (round(near_v - impact_v, 3) if (near_v is not None and impact_v is not None) else None),
+                               'near_diag': ndiag}
+            else:
+                near_shadow = {'arrow_found': False, 'arrow': adiag, 'impact_speed_mph': impact_v}
+            log(f"near-anchor shadow: {near_shadow.get('arrow_found')} near={near_shadow.get('near_speed_mph')} "
+                f"impact={near_shadow.get('impact_speed_mph')} d={near_shadow.get('delta_mph')}")
+        except Exception as _e:
+            near_shadow = {'error': f'{type(_e).__name__}: {_e}'[:200]}
     with _stage('read_pins_s'):
         PR = read_pins(video, S, H, t_imp, log=log)
     # rev rate
@@ -410,7 +453,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                                  release_source=M['release_source']),
                      measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {},
                      capture_quality={'far_lane': 'limited' if cq_limited else 'ok', 'lane': chosen_lane,
-                                      **({'reason': cq_reason} if cq_reason else {})})
+                                      **({'reason': cq_reason} if cq_reason else {}),
+                                      **({'near_anchor_shadow': near_shadow} if near_shadow else {})})
     shot_view = {x.metric: x.value for x in meas}
     shot_view['_quality'] = quality_map(meas)   # DEC-094 §5/§6: per-metric status/uncertainty for the coaching gate
     shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence

@@ -26,6 +26,22 @@ def test_impact_missed_record_keeps_rev_and_withholds_speed():
     assert len(names) == len(set(names)) == len(P._METRIC_CATALOG)
 
 
+def test_scale_unreliable_partial_keeps_rev():
+    """DEC-110: a corrupt depth scale (IMPOSSIBLE_SPEED_SCALE / TRACK_TOO_SPARSE_FOR_SPEED) must also degrade to
+    the partial — rev measured, scale-dependent metrics unavailable — not fail the whole shot."""
+    T = [{'t': 1.0 + i / 60, 'D': 40} for i in range(30)]
+    rev = (402.0, 0.8, 'surface-pattern periodicity', 10.0, 60.0)
+    reason = "We couldn't pin down a trustworthy lane distance for this shot, so speed and the lane read aren't available"
+    rec = P._impact_missed_record('clip.mov', _S(), T, T, rev, {'shot_id': 's2'}, '/tmp/x', 'R',
+                                  {'center_x_px': 500.0, 'lanes_detected': 1},
+                                  reason=reason, impact_status='scale_unreliable')
+    d = rec.to_dict()['metrics']
+    assert d['rev_rate_lane']['value'] == 402.0 and d['ball_speed']['value'] is None
+    assert rec.capture_quality['impact'] == 'scale_unreliable'
+    assert reason in rec.capture_quality['reason']
+    assert rec.insights['state'] == 'no_reliable_data'
+
+
 def test_rev_rate_gate_needs_enough_large_frames():
     small = [{'t': i / 60, 'D': 20} for i in range(50)]
     rpm, conf, note, sig, fps = P.measure_rev_rate('clip.mov', _S(), small, None)
