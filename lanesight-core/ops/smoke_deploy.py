@@ -116,7 +116,7 @@ def main():
     ref = json.load(open(REFERENCE))['clips'][CLIP_KEY]
     exp, tol = ref['ball_speed'], ref['tol_mph']
     print(f'smoke: shot={shot_id} ball_speed={val} speed_release={early} status={status} (reference {exp}±{tol} mph)')
-    if status != 'ok' or val is None:
+    if status not in ('ok', 'best_effort') or val is None:   # best_effort is measured (DEC-107: release speed)
         raise SystemExit(f'SMOKE FAIL: ball_speed not measured (status={status})')
     if abs(val - exp) > tol:
         raise SystemExit(f'SMOKE FAIL: ball_speed {val} drifted from reference {exp} by '

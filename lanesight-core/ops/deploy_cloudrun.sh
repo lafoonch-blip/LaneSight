@@ -47,22 +47,24 @@ gcloud run deploy "$SERVICE" \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 
-# The revision now SERVING traffic (not latestReadyRevisionName — a concurrent build can advance that without
-# routing). If it's unchanged, another deploy intervened: fail loudly.
-NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.traffic[0].revisionName)")
+# The NEW revision is latestReadyRevisionName (the one just built). Traffic may be PINNED to an older revision
+# (a prior update-traffic), so `gcloud run deploy` does NOT auto-route — we route EXPLICITLY below. That pinning
+# is exactly why earlier deploys "served 00052" while new revisions sat at 0%.
+NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.latestReadyRevisionName)")
 URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.url)")
 if [ "$NEW" = "$PREV" ]; then
-  echo "ABORT: traffic is still on $PREV — deploy did not route a new revision (concurrent deploy)."
+  echo "ABORT: no new revision was created (latest == serving $PREV) — build/deploy did not take."
   exit 1
 fi
-# Verify the deployed image digest matches the digest we just built from this commit (item 3).
+# Verify the new revision's image digest matches the digest we just built from this commit (item 3).
 SERVED_IMG=$(gcloud run revisions describe "$NEW" --region "$REGION" --format="value(spec.containers[0].image)" 2>/dev/null)
 if [ -n "$DIGEST" ] && ! printf '%s' "$SERVED_IMG" | grep -q "$DIGEST"; then
-  echo "ABORT: serving image ($SERVED_IMG) != built digest ($DIGEST) — stale/cached image. Rolling back."
-  gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$PREV=100" --quiet
+  echo "ABORT: new revision image ($SERVED_IMG) != built digest ($DIGEST) — stale/cached image."
   exit 1
 fi
-echo "== deployed: $NEW — running mandatory smoke test against $URL =="
+# Route 100% traffic to the new revision (handles pinned traffic).
+gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-revisions "$NEW=100" --quiet
+echo "== deployed + routed: $NEW — running mandatory smoke test against $URL =="
 
 if python3 ops/smoke_deploy.py --api "$URL"; then
   echo "== SMOKE PASS — $NEW is live =="
