@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.67  
+Version: 1.68  
 Last Updated: 2026-10-30  
 Owner: Shayne  
-Supersedes: v1.66
+Supersedes: v1.67
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1267,7 +1267,17 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 - **Next: decouple speed from the pins.** Anchor the near-lane depth scale to near landmarks (approach dots, arrows at 15 ft; DEC-065 near path) so early-lane speed (the DEC-107 headline) no longer depends on the impact anchor. That is a CV change under DEC-094 shadow/regression gates.
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
-**Date:** 2026-10-29 · **Status:** ACCEPTED (code on branch `fix/partial-results-on-impact-miss`; not merged or deployed) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+**Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-110 — Analysis jobs are durable (resolvable cross-instance), not in-process only
+**Decision (2026-10-30):**
+- Every analysis job is persisted to Supabase (`analysis_job` table, migration 034) on each transition: queued → running → done/failed. The row carries the same public shape the client already decodes (`id/kind/state/reason/timings/result/failure`) plus `user_id`/`shot_id`.
+- `GET /jobs/:id` reads the in-process queue first, then **falls back to the durable row**, scoped to the owner. A poll that lands on a different Cloud Run instance, or arrives after the instance scaled to zero / restarted, now resolves instead of 404ing.
+- Persistence is **best-effort**: a store write that fails is logged and swallowed — durability can never fail an analysis.
+- Client recovery stays keyed on the **shot** (session/uploads lookup + state), not the job id: in sync mode the `job_id` only returns on completion, which a dropped request never saw. The durable job is the server-side half; the client's reconcile + resume-poll is the other half.
+
+**Why:** The job queue was `SerialJobQueue._jobs` in instance memory only, so `GET /jobs/:id` 404'd whenever the poll didn't land on the instance that ran it (concurrency 8, max-instances 3) or after scale-to-zero. The shot analyzed and persisted, but the client could never re-resolve its job — the "analysis hang + lost session" of 2026-10-29. Verified live: a 202 s inline job persisted `done` + resolved via `GET /jobs/:id` after the fact.
+**Date:** 2026-10-30 · **Status:** ACCEPTED — migration 034 applied, deployed (rev `lanesight-api-durjobs`).
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
