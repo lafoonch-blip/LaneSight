@@ -697,8 +697,11 @@ final class AppModel: ObservableObject {
             let tTrim = Date()
             // DEC-101: Form clips are never window-trimmed (the start of the approach matters); Shot clips use the
             // head-only trim in VideoTrimmer (the tail always runs ≥10 s past motion onset so the ball reaches the pins).
-            let uploadURL = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
+            let (uploadURL, trimOutcome) = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
             ct["trim_s"] = Date().timeIntervalSince(tTrim)
+            // Part 3d: record WHICH trim outcome fired (0/1 = trimmed, 2–6 = a named full-clip fallback, 7 =
+            // form). A full-clip upload is no longer silent — ops can see why the window trim didn't cut.
+            ct["trim_outcome"] = trimOutcome.rawValue
             // DEC-100: record what the phone trim kept, so a failure shows whether the trim cut the shot.
             if let d = await VideoTrimmer.duration(fileURL) { ct["orig_duration_s"] = d }
             if let d = await VideoTrimmer.duration(uploadURL) { ct["upload_duration_s"] = d }
@@ -984,25 +987,32 @@ final class AppModel: ObservableObject {
     /// the server likely finished it (the result is durable in Supabase) even though our request dropped — so
     /// fetch the shot the server was working on and present its result (or its failure), instead of leaving the
     /// user on a stale "failed". If it's still running, re-raise the analyzing cover and keep the marker.
-    func reconcilePendingAnalysis(coldLaunch: Bool = false) async {
-        guard let pending = pendingAnalysis, let client = try? makeClient() else { return }
-        let id: String?, hint: String?, state: String?
+    /// Find the shot the dropped analysis was working on + its current state (analyzed/failed/running). Recovery
+    /// is keyed on the SHOT (durable in Supabase), not the in-flight job id — in sync mode the job_id only comes
+    /// back on completion, which a dropped request never saw. Returns nil while still offline / nothing yet.
+    private func latestPendingShot(_ pending: PendingAnalysis, _ client: APIClient)
+        async -> (id: String, hint: String?, state: String?)? {
         do {
             if pending.source == "upload" {
                 let rows = try await client.listUploads()
-                // The upload created at/after we started analyzing (newest, ordering-agnostic).
                 let c = rows.filter { ($0.created_at ?? 0) >= pending.startedAt - 5 }
                     .max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
                     ?? rows.max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
-                id = c?.id; hint = c?.capture_mode; state = c?.state
+                guard let c else { return nil }
+                return (c.id, c.capture_mode, c.state)
             } else {
                 let rows = try await client.sessionShots(pending.sessionId ?? "")
-                let c = rows.filter { ($0.created_at ?? 0) >= pending.startedAt - 5 }
-                    .max { ($0.created_at ?? 0) < ($1.created_at ?? 0) }
-                id = c?.id; hint = nil; state = c?.state     // live: loadShotResult detects form from the record
+                guard let c = rows.filter({ ($0.created_at ?? 0) >= pending.startedAt - 5 })
+                    .max(by: { ($0.created_at ?? 0) < ($1.created_at ?? 0) }) else { return nil }
+                return (c.id, nil, c.state)                  // live: loadShotResult detects form from the record
             }
-        } catch { return }                                   // still offline — try again on the next foreground
-        guard let sid = id else { return }                   // the shot isn't there yet / nothing to recover
+        } catch { return nil }
+    }
+
+    func reconcilePendingAnalysis(coldLaunch: Bool = false) async {
+        guard let pending = pendingAnalysis, let client = try? makeClient() else { return }
+        guard let found = await latestPendingShot(pending, client) else { return }
+        let sid = found.id, hint = found.hint, state = found.state
         // COLD LAUNCH (2026-10-30): the app was CLOSED — land on Home and surface the finished/failed shot
         // non-intrusively as an "away" banner (it's already durable in Lab › Uploads / the session list), never
         // a result sheet at launch. A still-running one just stays pending and appears in its row when it lands.
@@ -1024,7 +1034,32 @@ final class AppModel: ObservableObject {
             pipeline = .failed("We couldn't analyze that shot."); uploadBusy = true
             clearPendingAnalysis()
         default:
-            pipeline = .analyzing(state: "running", timings: [:]); uploadBusy = true   // still running; keep waiting
+            // Still running. Raise the analyzing cover AND actively poll the shot state to completion, so the
+            // user doesn't have to background/foreground again for the result to land (Part 3b resume-polling).
+            pipeline = .analyzing(state: "running", timings: [:]); uploadBusy = true
+            await resumePoll(pending: pending, client: client, hint: hint)
+        }
+    }
+
+    /// Bounded poll of the pending shot's state until terminal (≈3 min at 4 s). Presents the result/failure the
+    /// moment the server finishes — in-app, no second foreground needed. Stops early if the marker is cleared
+    /// (e.g. the user started a new shot) so we never hijack a later analysis.
+    private func resumePoll(pending: PendingAnalysis, client: APIClient, hint: String?) async {
+        for _ in 0..<45 {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard pendingAnalysis?.startedAt == pending.startedAt else { return }   // superseded/cleared → stop
+            guard let found = await latestPendingShot(pending, client) else { continue }
+            switch found.state {
+            case "analyzed":
+                if await loadShotResult(shotId: found.id, captureModeHint: hint ?? found.hint) {
+                    pipeline = .done; uploadBusy = true
+                }
+                clearPendingAnalysis(); return
+            case "failed":
+                pipeline = .failed("We couldn't analyze that shot."); uploadBusy = true
+                clearPendingAnalysis(); return
+            default: continue                                 // still running → keep polling
+            }
         }
     }
 

@@ -20,6 +20,21 @@ enum VideoTrimmer {
     /// main-actor isolation.
     nonisolated static let maxUploadBytes = 48_000_000
 
+    /// Why the shot-window trim produced the clip it did. Numeric `code` so it fits the upload's
+    /// `clientTimings` ([String:Double]) and lands in the analysis-attempt diagnostics — Part 3d: a trim that
+    /// fell back to the full clip is no longer silent; the server row says WHICH fallback fired. `trimmed` /
+    /// `trimmedRelaxed` are the wins (relaxed = the second, lower-threshold motion pass caught it).
+    enum TrimOutcome: Double {
+        case trimmed = 0
+        case trimmedRelaxed = 1
+        case fullUnreadable = 2       // duration couldn't be read
+        case fullTooShort = 3         // clip ≤ 1.2 s
+        case fullNoMotion = 4         // no confident motion window, even after the relaxed retry
+        case fullBarelyHelps = 5      // trimming would keep > 85% — not worth a re-mux
+        case fullExportFailed = 6     // passthrough export failed
+        case notWindowTrimmed = 7     // form clip (window trim intentionally skipped)
+    }
+
     /// Prepare ANY clip (live capture or Photos upload) for upload: trim to the shot window (lossless), then
     /// guarantee it fits under `maxBytes`. The lossless window trim handles the common case with no quality
     /// loss; only if the trimmed clip is still too large (e.g. a long 120 fps delivery) do we re-encode to fit,
@@ -28,11 +43,13 @@ enum VideoTrimmer {
     /// `windowTrim: false` (DEC-100: Form clips) skips the motion-window cut — it's tuned to the ball and can cut
     /// the start of the approach — and only fits the clip under the size cap.
     nonisolated static func trimForUpload(_ sourceURL: URL, maxBytes: Int = maxUploadBytes,
-                                          windowTrim: Bool = true) async -> URL {
-        let trimmed = windowTrim ? await trimToShotWindow(sourceURL) : sourceURL
-        if fileSize(trimmed) <= maxBytes { return trimmed }
-        if let fitted = await reencodeToFit(trimmed, maxBytes: maxBytes) { return fitted }
-        return trimmed   // best effort — if even this is over, the upload surfaces the error to the user
+                                          windowTrim: Bool = true) async -> (url: URL, outcome: TrimOutcome) {
+        let (trimmed, outcome) = windowTrim
+            ? await trimToShotWindowDetailed(sourceURL)
+            : (sourceURL, TrimOutcome.notWindowTrimmed)
+        if fileSize(trimmed) <= maxBytes { return (trimmed, outcome) }
+        if let fitted = await reencodeToFit(trimmed, maxBytes: maxBytes) { return (fitted, outcome) }
+        return (trimmed, outcome)   // best effort — if even this is over, the upload surfaces the error
     }
 
     /// Duration in seconds (nil if unreadable) — recorded on the attempt so a failure shows what the trim cut.
@@ -48,16 +65,31 @@ enum VideoTrimmer {
     /// detect_window can re-trim precisely). The DEC-106 shadow passes a shorter tail (~5 s) so the on-device
     /// engine analyses a tight shot window — it covers ball→pins→impact but isn't chewing the 10 s settle tail,
     /// which is what made the shadow run 512 s on the full-length clip (2026-10-29).
+    /// URL-only shim (the DEC-106 shadow just needs the clip). The upload path uses `trimToShotWindowDetailed`.
     nonisolated static func trimToShotWindow(_ sourceURL: URL, pad: Double = 0.4,
                                              tail: Double = tailKeep) async -> URL {
-        let asset = AVURLAsset(url: sourceURL)
-        guard let duration = try? await asset.load(.duration) else { return sourceURL }
-        let total = duration.seconds
-        guard total.isFinite, total > 1.2 else { return sourceURL }   // too short to bother
+        await trimToShotWindowDetailed(sourceURL, pad: pad, tail: tail).url
+    }
 
-        guard let motion = await motionWindow(asset: asset, total: total, pad: pad) else {
-            return sourceURL   // no confident motion → send the full tap-window clip
+    /// Trim to the shot window, returning WHY (Part 3d). Every fallback to the full clip carries a reason, and a
+    /// first-pass motion miss gets a second, lower-threshold retry before we give up — a silent full-clip upload
+    /// (the shot-1 symptom) is replaced by a logged, retried outcome.
+    nonisolated static func trimToShotWindowDetailed(_ sourceURL: URL, pad: Double = 0.4,
+                                                     tail: Double = tailKeep) async -> (url: URL, outcome: TrimOutcome) {
+        let asset = AVURLAsset(url: sourceURL)
+        guard let duration = try? await asset.load(.duration) else { return (sourceURL, .fullUnreadable) }
+        let total = duration.seconds
+        guard total.isFinite, total > 1.2 else { return (sourceURL, .fullTooShort) }   // too short to bother
+
+        // Primary pass at the normal threshold; if it finds nothing, RETRY once at a lower threshold (a faint
+        // down-lane ball / a body that occludes the lens can keep motion under the 18% floor). Only then full-clip.
+        var relaxed = false
+        var motion = await motionWindow(asset: asset, total: total, pad: pad, thresholdFactor: 0.18)
+        if motion == nil {
+            motion = await motionWindow(asset: asset, total: total, pad: pad, thresholdFactor: 0.10)
+            relaxed = motion != nil
         }
+        guard let motion else { return (sourceURL, .fullNoMotion) }
         // DEC-101: cut only the dead time BEFORE motion. The motion window used to END when the bowler's motion
         // stopped — before the ball reached the pins (2026-10-28: a 17.1 s clip trimmed to 2.85 s, the ball track
         // ended at 2.74 s → PIN_IMPACT_NOT_DETECTED). Keep ≥1 s before onset and ≥`tail` s after it.
@@ -66,13 +98,15 @@ enum VideoTrimmer {
         let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 600),
                                 end: CMTime(seconds: end, preferredTimescale: 600))
         // Skip the export if trimming would barely shrink the clip.
-        if range.duration.seconds > total * 0.85 { return sourceURL }
+        if range.duration.seconds > total * 0.85 { return (sourceURL, .fullBarelyHelps) }
 
-        return await export(asset: asset, range: range) ?? sourceURL
+        guard let out = await export(asset: asset, range: range) else { return (sourceURL, .fullExportFailed) }
+        return (out, relaxed ? .trimmedRelaxed : .trimmed)
     }
 
     /// Returns the active-motion time range (padded) inside the clip, or nil if not confident.
-    private nonisolated static func motionWindow(asset: AVURLAsset, total: Double, pad: Double) async -> CMTimeRange? {
+    private nonisolated static func motionWindow(asset: AVURLAsset, total: Double, pad: Double,
+                                                 thresholdFactor: Float) async -> CMTimeRange? {
         let gen = AVAssetImageGenerator(asset: asset)
         gen.appliesPreferredTrackTransform = true
         gen.maximumSize = CGSize(width: 160, height: 160)    // downscale the ANALYSIS frames only
@@ -110,7 +144,7 @@ enum VideoTrimmer {
 
         let peak = motion.max() ?? 0
         guard peak > 0 else { return nil }
-        let threshold = max(peak * 0.18, 2.0)   // 18% of peak, with a tiny floor on the 0...255 scale
+        let threshold = max(peak * thresholdFactor, 2.0)   // % of peak, with a tiny floor on the 0...255 scale
 
         var firstActive: Int?
         var lastActive: Int?
