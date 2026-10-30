@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.68  
+Version: 1.69  
 Last Updated: 2026-10-30  
 Owner: Shayne  
-Supersedes: v1.67
+Supersedes: v1.68
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,15 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-111 — Metric independence: never fail the whole shot for one missing dependency
+**Decision (Shayne, 2026-10-30):** A broken single stage must not discard the metrics that don't depend on it. Compute everything the near lane and the ball's tracked path allow; mark only the genuinely-undeterminable metrics `unavailable` with a reason; hard-fail only when *nothing* is measurable.
+- **Speed and revs** come from the FIRST part of the lane (release/skid, ~4–24 ft) and must not depend on pin impact. Revs are already geometry-free (DEC-109). Speed still rides the impact-anchored homography; the target is to anchor the near-lane depth scale on the Z=15 arrow row so it no longer needs the impact.
+- **Throw line** (entry board/angle/breakpoint) needs the ball's path down the lane, not the impact *moment*.
+- **Shipped now:** `IMPOSSIBLE_SPEED_SCALE` and `TRACK_TOO_SPARSE_FOR_SPEED` no longer fail the shot — they fall back to the DEC-109 partial (rev measured, scale-dependent metrics withheld, `capture_quality.impact='scale_unreliable'`). The near-anchor mechanism is built (`lane_homography_at`, `early_speed_from_H`, `arrows.py`) but runs SHADOW-only (gated by `LANESIGHT_NEAR_ANCHOR_SHADOW`); the first arrow detector failed the accuracy gate on the validation set (declined 3/4, 9.6 vs 18.7 mph on the 4th) so speed stays impact-anchored until the detector agrees with it.
+
+**Why:** A missed pin moment (or a mid-lane anchor, or a sparse far track) was throwing away a valid rev/speed read by failing the entire shot. The core stats should survive a partial capture.
+**Date:** 2026-10-30 · **Status:** ACCEPTED — partial-fallback shipped; near-anchor shadow-gated pending the detector. **Extends:** DEC-109.
 
 ### DEC-110 — Analysis jobs are durable (resolvable cross-instance), not in-process only
 **Decision (2026-10-30):**
