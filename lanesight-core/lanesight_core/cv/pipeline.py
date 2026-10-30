@@ -69,6 +69,82 @@ _GEOMETRY_METRICS = {'entry_board', 'entry_angle', 'entry_angle_52_55', 'breakpo
                      'laydown_board', 'board_at_7ft', 'arrows_board', 'launch_angle'}
 
 
+def measure_rev_rate(video, S, ground, t_max=None):
+    """Lane rev rate from the ball's surface-pattern periodicity (DEC-027/028). Uses ONLY ball crops and frame
+    timestamps — no lane geometry, no depth scale, no pin impact — so it is measurable whenever the ball is seen
+    large enough (>32 px) in >=24 frames. Returns (rpm, confidence, note, sigma, fps); rpm None = unavailable."""
+    big = [c for c in ground if c['D'] > 32 and (t_max is None or c['t'] <= t_max)]
+    rpm, rconf, rev_note = None, 0.0, 'surface-pattern periodicity'
+    rev_sigma, rev_fps = None, None                 # honest resolution band (lane rpm) + capture fps
+    if len(big) >= 24:
+        rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
+        sc = np.sort(info['score']); rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1))
+        if info['at_rail']:          # no clear spin period found; 60/P is the search-band edge, not a reading
+            rpm, rconf, rev_note = None, 0.0, "couldn't read the ball's spin pattern (no clear repeat)"
+        else:
+            rev_sigma, rev_fps = info['sigma'], info['fps']
+            rel = rev_sigma / rpm                   # false precision is dishonest: temper confidence by the band width
+            rconf = float(rconf * np.clip(1 - rel / 0.15, 0.25, 1.0))
+            rev_note = f'surface-pattern periodicity; ±{rev_sigma:.0f} rpm, frame-lag limited at {rev_fps:.0f} fps (120 fps ~halves it)'
+    else:
+        rev_note = f'too few ball frames to read spin ({len(big)}<24)'
+    return rpm, rconf, rev_note, rev_sigma, rev_fps
+
+
+def _rev_measurements(rpm, rconf, rev_note, rev_sigma, rev_fps):
+    return [
+        m('rev_rate_lane', rpm, 'rpm', rconf, rev_note, uncertainty=rev_sigma),
+        m('rev_rate', rpm * REV_SENSOR_FACTOR if rpm else None, 'rpm', rconf * 0.7,
+          f'sensor-equivalent ×{REV_SENSOR_FACTOR}; ±{rev_sigma * REV_SENSOR_FACTOR:.0f} rpm at {rev_fps:.0f} fps' if rpm else rev_note,
+          status='calibrated_estimate' if rpm else None,
+          uncertainty=rev_sigma * REV_SENSOR_FACTOR if rev_sigma is not None else None),
+    ]
+
+
+IMPACT_MISSED_SPEED_NOTE = ("Speed needs a lane distance reference. Today the only one LaneSight trusts is the "
+                            "ball reaching the pins, and this clip lost the ball before that, so speed isn't "
+                            "reported. Rev rate doesn't depend on it.")
+IMPACT_MISSED_TIP = ("Rev rate was measured. For speed and the lane read, keep the ball in view all the way to "
+                     "the pins with the pin deck in frame.")
+
+
+def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane):
+    """Partial result when the pin impact isn't found (Shayne 2026-10-29, DEC-109): a missed pin moment must not
+    throw away what doesn't depend on it. Rev rate (geometry-free) is reported as measured; every metric that
+    rides the impact-anchored depth scale (all speeds, boards, angles, loft) and the pin result are
+    `unavailable` with the reason — never estimated. No move is given (no_reliable_data)."""
+    rpm, rconf, rev_note, rev_sigma, rev_fps = rev
+    try:
+        fps = round(1 / float(np.median(np.diff(S['ts']))), 2)
+    except Exception:
+        fps = None
+    rev_names = ('rev_rate_lane', 'rev_rate')
+    meas = [m(name, None, unit, 0, IMPACT_MISSED_SPEED_NOTE if unit == 'mph' else
+              'Not measured: the ball was lost before the pins, so the lane depth scale has no anchor.')
+            for name, unit in _METRIC_CATALOG if name not in rev_names
+            and name not in ('axis_rotation', 'axis_tilt', 'pap')]
+    meas += _rev_measurements(rpm, rconf, rev_note, rev_sigma, rev_fps)
+    meas += [m('axis_rotation', None, 'deg', 0, 'not yet measured from video'),
+             m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
+             m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)')]
+    reason = ("We lost the ball before it reached the pins, so speed, the lane read and the pin result "
+              "aren't available for this shot. " + IMPACT_MISSED_TIP)
+    rec = ShotRecord(
+        shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)),
+        handed=handed or 'R',
+        video=dict(file=os.path.basename(video), fps=fps,
+                   camera_motion_px=round(float(S['shift'].max()), 1) if 'shift' in S else None,
+                   reference_frame=int(S['ref']) if 'ref' in S else None),
+        events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
+        measurements=meas, trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None,
+        context=context or {},
+        capture_quality={'far_lane': 'limited', 'impact': 'not_detected', 'lane': chosen_lane, 'reason': reason,
+                         'track_points': len(T),
+                         'track_last_t': round(float(T[-1]['t']), 3) if T else None})
+    rec.insights = no_reliable_data_insight(reason)
+    return rec
+
+
 def far_lane_quality(M, zboard):
     """Plausibility gate on the downlane depth scale (handoff B / DEC-061). A real ball LOSES speed down the
     lane and curves smoothly; a late-speed that reads faster than early, or a lateral jump of more than 3 boards
@@ -180,11 +256,20 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
     with _stage('detect_impact_s'):
         t_imp, _ = detect_impact(video, S, lane, T, log=log)
-    if t_imp is None:
-        raise AnalysisFailure('PIN_IMPACT_NOT_DETECTED', 'pin impact not detected', stage='impact',
-                              diagnostics={'track_points': len(T),
-                                           'track_last_t': round(float(T[-1]['t']), 3) if T else None})
     ground = [c for c in T if not c.get('airborne_candidate')]
+    if t_imp is None:
+        # DEC-109: a missed pin moment is not a failed shot. Rev rate needs no lane geometry or impact, so it is
+        # still measured; everything tied to the impact-anchored depth scale is unavailable with the reason.
+        # Only when nothing at all can be measured does the shot fail with the coded reason.
+        with _stage('rev_rate_s'):
+            rev = measure_rev_rate(video, S, ground, None)
+        if rev[0] is None:
+            raise AnalysisFailure('PIN_IMPACT_NOT_DETECTED', 'pin impact not detected', stage='impact',
+                                  diagnostics={'track_points': len(T),
+                                               'track_last_t': round(float(T[-1]['t']), 3) if T else None,
+                                               'rev_rate': rev[2]})
+        log(f'pin impact not detected: partial result (rev rate {rev[0]:.0f} lane rpm); speed/geometry unavailable')
+        return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane)
     with _stage('refine_s'):
         TR = refine(video, S, lane, ground, t_imp, log=log)
     byf = {c['i']: c for c in T if c['t'] <= t_imp + 0.02}
@@ -216,22 +301,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     with _stage('read_pins_s'):
         PR = read_pins(video, S, H, t_imp, log=log)
     # rev rate
-    big = [c for c in ground if c['D'] > 32 and c['t'] <= t_imp]
-    rpm, rconf, rev_note = None, 0.0, 'surface-pattern periodicity'
-    rev_sigma, rev_fps = None, None                 # honest resolution band (lane rpm) + capture fps
-    if len(big) >= 24:
-        with _stage('rev_rate_s'):
-            rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
-        sc = np.sort(info['score']); rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1))
-        if info['at_rail']:          # no clear spin period found; 60/P is the search-band edge, not a reading
-            rpm, rconf, rev_note = None, 0.0, "couldn't read the ball's spin pattern (no clear repeat)"
-        else:
-            rev_sigma, rev_fps = info['sigma'], info['fps']
-            rel = rev_sigma / rpm                   # false precision is dishonest: temper confidence by the band width
-            rconf = float(rconf * np.clip(1 - rel / 0.15, 0.25, 1.0))
-            rev_note = f'surface-pattern periodicity; ±{rev_sigma:.0f} rpm, frame-lag limited at {rev_fps:.0f} fps (120 fps ~halves it)'
-    else:
-        rev_note = f'too few ball frames to read spin ({len(big)}<24)'
+    with _stage('rev_rate_s'):
+        rpm, rconf, rev_note, rev_sigma, rev_fps = measure_rev_rate(video, S, ground, t_imp)
     # confidences
     lat_c = float(np.clip(1 - M['lateral_res_boards'] / 1.5, 0, 1))
     # Release-anchor confidence (2026-10-29): 'first_free_ball_detection' is the first ON-LANE ball, a reliable
@@ -253,11 +324,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('breakpoint_distance', M['breakpoint_extreme_ft'], 'ft', 0.5 * lat_c, 'geometric breakpoint (DEC-022)'),
         m('entry_board', M['entry_board'], 'board', lat_c), m('entry_angle', M['entry_angle_deg'], 'deg', 0.7 * lat_c),
         m('entry_angle_52_55', M.get('entry_angle_52_55_deg'), 'deg', 0.7 * lat_c, 'Specto-compatible: direction between 52 and 55 ft'),
-        m('rev_rate_lane', rpm, 'rpm', rconf, rev_note, uncertainty=rev_sigma),
-        m('rev_rate', rpm * REV_SENSOR_FACTOR if rpm else None, 'rpm', rconf * 0.7,
-          f'sensor-equivalent ×{REV_SENSOR_FACTOR}; ±{rev_sigma * REV_SENSOR_FACTOR:.0f} rpm at {rev_fps:.0f} fps' if rpm else rev_note,
-          status='calibrated_estimate' if rpm else None,
-          uncertainty=rev_sigma * REV_SENSOR_FACTOR if rev_sigma is not None else None),
+        *_rev_measurements(rpm, rconf, rev_note, rev_sigma, rev_fps),
         m('axis_rotation', None, 'deg', 0, 'not yet measured from video'), m('axis_tilt', None, 'deg', 0, 'not yet measured from video'),
         m('pap', None, 'in', 0, 'needs grip reference (holes/marker/profile)'),
     ]

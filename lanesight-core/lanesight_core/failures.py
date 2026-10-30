@@ -75,7 +75,7 @@ FAILURE_COPY: dict[str, dict] = {
     },
     'PIN_IMPACT_NOT_DETECTED': {
         'user_title': "We couldn't see the ball reach the pins",
-        'user_message': "We lost the ball before it got to the pins, so we can't anchor the measurements.",
+        'user_message': "We lost the ball before it got to the pins and couldn't read its revs either, so nothing could be measured.",
         'tip': "Make sure the pins are visible and the ball stays in view all the way down the lane.",
     },
     'TRACK_TOO_SPARSE_FOR_SPEED': {
