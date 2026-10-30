@@ -911,6 +911,22 @@ class MemoryStore:
         return True
 
 
+def _json_safe(obj):
+    """Recursively replace non-finite floats (NaN/Infinity) with None so every PostgREST write is valid JSON.
+    Python's json.dumps emits the non-standard `NaN`/`Infinity` tokens (allow_nan=True by default), which
+    PostgREST/Postgres reject as PGRST102 'Empty or invalid json' — the crash that failed a DEC-109 partial
+    whose rev measurement carried a NaN sigma/confidence (2026-10-30). A non-finite number is 'no value', so
+    None is the honest substitute (no fabricated number)."""
+    import math
+    if isinstance(obj, float):
+        return None if not math.isfinite(obj) else obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 class PgStore(MemoryStore):
     """Writes through to Supabase via PostgREST (the service_role key over the REST base in `rest_url`),
     keeping the same interface. The service role bypasses RLS, so ownership is enforced here in code.
@@ -922,7 +938,7 @@ class PgStore(MemoryStore):
 
     def _post(self, table, row):
         import json, urllib.request
-        body = json.dumps(row).encode()
+        body = json.dumps(_json_safe(row), allow_nan=False).encode()
         req = urllib.request.Request(self._rest + table, data=body, method='POST', headers={
             'apikey': self._key, 'Authorization': f'Bearer {self._key}',
             'Content-Type': 'application/json', 'Prefer': 'return=minimal'})
@@ -1169,7 +1185,7 @@ class PgStore(MemoryStore):
 
     def _req(self, path, method, body=None, prefer='return=minimal'):
         import json, urllib.request, urllib.error
-        data = json.dumps(body).encode() if body is not None else None
+        data = json.dumps(_json_safe(body), allow_nan=False).encode() if body is not None else None
         req = urllib.request.Request(self._rest + path, data=data, method=method, headers={
             'apikey': self._key, 'Authorization': f'Bearer {self._key}',
             'Content-Type': 'application/json', 'Prefer': prefer})

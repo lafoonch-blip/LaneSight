@@ -42,6 +42,43 @@ def test_scale_unreliable_partial_keeps_rev():
     assert rec.insights['state'] == 'no_reliable_data'
 
 
+def test_no_impact_partial_survives_full_api_path(monkeypatch):
+    """The 2026-10-30 crash: a no-impact partial whose rev measurement carried a NaN broke PgStore.save_shot_result
+    (PostgREST PGRST102 'Empty or invalid json' — json.dumps emits NaN/Infinity tokens). Drive the SAME partial,
+    with a NaN in it, through the full server write + engine path and prove nothing fails and no invalid JSON is
+    ever sent. Covers the path the record builder test alone missed (that test skips the DB write)."""
+    import json as _json
+    from lanesight_api.store import PgStore, _json_safe
+    from lanesight_api import engines
+
+    # A partial with NaN in the rev measurement (what the real clip produced).
+    T = [{'t': 1.0 + i / 60, 'D': 40} for i in range(30)]
+    rev = (380.0, float('nan'), 'surface-pattern periodicity', float('nan'), 60.0)
+    rec = P._impact_missed_record('clip.mov', _S(), T, T, rev, {'shot_id': 'sx'}, '/tmp/x', 'R',
+                                  {'center_x_px': 500.0, 'lanes_detected': 1}).to_dict()
+    rec['shot_id'] = 'sx'
+
+    # 1) PgStore write boundary: capture every body sent to PostgREST; each must be strict, NaN-free JSON.
+    sent = []
+
+    class _Resp:
+        status = 204
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b''
+    monkeypatch.setattr('urllib.request.urlopen', lambda req, timeout=None: sent.append(req.data) or _Resp())
+    store = PgStore('https://x.supabase.co/rest/v1/', 'service-key')
+    store.save_shot_result('sx', rec, {'ok': True})     # used to raise RuntimeError PGRST102
+    assert sent, 'no PostgREST write was attempted'
+    for body in sent:
+        assert b'NaN' not in body and b'Infinity' not in body, body[:120]
+        _json.loads(body)                                # parses (strict JSON, no exception)
+
+    # 2) Engine path (score/achievements/insights) on a partial — must not crash, score stays ineligible.
+    footer = engines.after_shot_analyzed(store, 'u-partial', None, rec)
+    assert footer['eligible'] is False and footer['score'] is None
+
+
 def test_rev_rate_gate_needs_enough_large_frames():
     small = [{'t': i / 60, 'D': 20} for i in range(50)]
     rpm, conf, note, sig, fps = P.measure_rev_rate('clip.mov', _S(), small, None)
