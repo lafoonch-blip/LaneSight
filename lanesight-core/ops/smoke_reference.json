@@ -1,11 +1,11 @@
 {
-  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py); asserts the live API reproduces ball_speed within the DEC-092 don't-regress tolerance (+/-0.2 mph) -- catches DRIFT, not just breakage. 2026-10-29: ball_speed is now the EARLY-LANE (release) speed (reverts DEC-064 -> DEC-030). Server early speed for IMG_8753 = 16.04; local = ~18.7 -- a systematic ~12% server-vs-local speed-scale gap (container ffmpeg/decode vs Mac) affects ALL speed definitions equally, FLAGGED separately. Update here when a deploy intentionally changes a value.",
+  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py); asserts the live API reproduces ball_speed within the DEC-092 don't-regress tolerance (+/-0.2 mph). ball_speed is the EARLY-LANE (release) speed. 2026-10-31 (DEC-107 FIX): the server now decodes via ffmpeg CLI (LANESIGHT_FFMPEG_DECODE=1) instead of the opencv wheel, so the ~14% Linux-vs-Mac decode gap is gone -- IMG_8753 server should now reproduce the Mac ffmpeg value (~18.72) instead of 16.04. Update here when a deploy intentionally changes a value.",
   "clips": {
     "IMG_8753.MOV": {
-      "ball_speed": 16.04,
+      "ball_speed": 18.72,
       "tol_mph": 0.2,
-      "definition": "early-lane (release) speed, 4-24ft regression fit",
-      "server_vs_local": "server 16.04 vs local ~18.7 -- systematic ~12% ffmpeg/decode gap (flagged, not a deploy regression)"
+      "definition": "early-lane (release) speed, 4-24ft regression fit; ffmpeg decode (Mac ffmpeg = 18.72)",
+      "server_vs_local": "with ffmpeg decode the server should match the Mac ffmpeg value within 0.1 (DEC-107 fix)"
     }
   }
 }
