@@ -2,101 +2,125 @@
 
 The production homography anchors the lane depth scale on the ball's position at pin impact (metrics.py
 `lane_homography`). When the impact isn't detected there is no depth scale, so speed / boards / the throw line
-are all withheld (DEC-109). But the seven aiming arrows sit at a FIXED, always-present landmark 15 ft past the
-foul line — detect their row and we have a near-lane depth anchor that needs neither the ball nor the pins.
+are all withheld (DEC-109). The seven aiming arrows are a fixed landmark ~12-16 ft past the foul line, so
+locating them gives a near-lane depth anchor that needs neither the ball nor the pins.
 
-This finds the arrow row on the STABILIZED BACKGROUND (ball absent, lane static) by scoring each near-lane row
-against the expected 7-arrow comb across the lane width (arrows at boards 5,10,…,35 → fractional positions
-below). It is deliberately CONSERVATIVE: if no row carries a clear, well-separated comb it returns None, and the
-caller keeps the honest "unavailable" rather than anchoring on a guess (CLAUDE.md: accuracy beats coverage).
+KNOWN-PATTERN FIT (2026-10-30, replacing the earlier single-row intensity comb). Frame inspection showed the
+arrows ARE imaged on the down-lane POV but are low-contrast and form a shallow V (centre arrow deepest), which
+a one-row comb can't match. Instead we fit the real layout:
+  * Lateral X: arrows at boards 5,10,15,20,25,30,35 (USBC), fixed from the DETECTED lane edges — no free phase.
+  * Longitudinal Z: a NOMINAL symmetric V inside the USBC 12-16 ft range. The exact per-arrow stagger is NOT
+    specified — lane_geometry.USBC_RANGES_FT['arrow'] = (12.0, 16.0) and lane_geometry marks the stagger TBD
+    (USBC Equipment Specifications Manual 2026-03-26; Shayne 2026-10-25: USBC permits a range, not a universal
+    point). So the ABSOLUTE anchor depth carries house-dependent uncertainty; the V SHAPE is what's matched.
+The only unknown is the near depth scale. For each candidate we anchor the centre arrow (board 20) at a trial
+image row, project all 7 arrows through the resulting near homography, and score each projected point by how
+much darker it is than its local surroundings on the CLAHE'd stabilized background. Accept only if the best
+candidate clearly beats the next non-overlapping one AND >=5/7 arrows score positive; else decline (the caller
+falls back to the impact anchor — never a guessed row).
 """
 from __future__ import annotations
 import numpy as np, cv2
-from .lanes import lane_x
+from .lanes import lane_x, foul_corners
+from .metrics import lane_homography_at, LANE_IN
 
-# Fractional positions across the lane width of the 7 arrows (boards 5,10,…,35 of 39, centre = board 20).
-ARROW_FRACS = np.array([(b - 0.5) / 39.0 for b in (5, 10, 15, 20, 25, 30, 35)])
-N_COLS = 91                       # cross-lane profile resolution (~2.3 cols/board)
+ARROW_BOARDS = (5, 10, 15, 20, 25, 30, 35)          # USBC target arrows, boards from the edge (symmetric about 20)
+Z_CENTER_FT = 15.0                                  # nominal centre-arrow (board 20) distance, within USBC 12-16 ft
+Z_STEP_FT = 0.75                                    # nominal V stagger per arrow pair outward (centre deepest)
 
 
-def _row_profile(gray, lane, y, win=18):
-    """Mean lane-intensity profile across the width at image row y, resampled to N_COLS, or None if off-frame.
-    Averages a VERTICAL window (±`win` rows) so the 7-arrow chevron (centre arrow ~3 ft deeper than the outer
-    ones) is captured by one profile instead of smeared across rows the single-row comb would miss."""
-    xl, xr = lane_x(lane, float(y))
-    if not np.isfinite(xl) or not np.isfinite(xr) or xr - xl < 20:
+def _arrow_model():
+    """Nominal arrow layout: (X inches from left edge, Z ft from foul) for the 7 arrows. X exact (board centres);
+    Z a nominal symmetric V within the USBC 12-16 ft range (exact stagger unspecified — see module docstring)."""
+    pts = []
+    for b in ARROW_BOARDS:
+        x_in = (b - 0.5) * LANE_IN / 39.0           # board centre, inches from the LEFT edge (lane_geometry convention)
+        z = Z_CENTER_FT - Z_STEP_FT * abs(b - 20) / 5.0     # 15.0 at board 20 → 12.75 at boards 5/35
+        pts.append((b, x_in, z))
+    return pts
+
+
+def _clahe_gray(bg):
+    g = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY) if bg.ndim == 3 else bg
+    return cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(g.astype(np.uint8)).astype(np.float32)
+
+
+def _point_darkness(gray, u, v, half):
+    """How much darker a small patch at (u,v) is than its local surroundings, normalised by local contrast.
+    Positive = darker than around it (an arrow mark). None if off-frame."""
+    h, w = gray.shape
+    u, v, half = int(round(u)), int(round(v)), int(half)
+    r_in, r_out = max(2, half), max(5, half * 3)
+    if v - r_out < 0 or v + r_out >= h or u - r_out < 0 or u + r_out >= w:
         return None
-    xs = np.linspace(xl + 1, xr - 1, N_COLS)
-    yy = int(round(y))
-    if yy - win < 0 or yy + win >= gray.shape[0] or xs.min() < 0 or xs.max() >= gray.shape[1]:
-        return None
-    cols = np.clip(np.round(xs).astype(int), 0, gray.shape[1] - 1)
-    band = gray[yy - win:yy + win + 1, :].mean(0)
-    return band[cols]
+    inner = gray[v - r_in:v + r_in + 1, u - r_in:u + r_in + 1]
+    outer = gray[v - r_out:v + r_out + 1, u - r_out:u + r_out + 1]
+    surround = (outer.sum() - inner.sum()) / max(1, outer.size - inner.size)
+    spread = outer.std() + 1e-6
+    return float((surround - inner.mean()) / spread)
 
 
-def _comb_score(profile):
-    """Dark-arrow comb contrast at the fixed board positions, with a separation ratio. Positive = arrows darker
-    than the gaps. A small phase search was tried (the detected edges don't map exactly to boards 1/39) but with
-    a free phase a comb fits near-foul laydown dots and noise just as well, producing false near-row picks — so
-    the fixed comb is used and the detector DECLINES when the arrows don't stand out, rather than guess a row
-    (2026-10-30 frame inspection: these down-lane POVs image the 15 ft arrows too faintly to discriminate)."""
-    p = profile - profile.mean()
-    idx = np.clip((ARROW_FRACS * (N_COLS - 1)).round().astype(int), 0, N_COLS - 1)
-    mids = np.clip(((ARROW_FRACS[:-1] + ARROW_FRACS[1:]) / 2 * (N_COLS - 1)).round().astype(int), 0, N_COLS - 1)
-    contrast = p[mids].mean() - p[idx].mean()
-    spread = profile.std() + 1e-6
-    return contrast, contrast / spread
-
-
-def detect_arrow_row(bg, lane, vp, z_ft=15.0):
-    """Return (anchor_px, z_ft, diag) for the arrow row on the stabilized background `bg`, or (None, z_ft, diag)
-    when no confident row is found. `anchor_px` is a point (lane centre) ON the arrow row, ready for
-    metrics.lane_homography_at(lane, vp, anchor_px, z_ft)."""
-    g0 = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY) if bg.ndim == 3 else bg
-    # The arrows are low-contrast on oiled/washed-out maple from a down-lane POV (2026-10-30 frame inspection).
-    # CLAHE on the luma lifts the dovetails out of the wood before scoring — without it the true arrow row scores
-    # below the decline threshold and the search locks onto a far-lane false comb instead.
-    gray = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(g0.astype(np.uint8)).astype(np.float32)
-    H = gray.shape[0]
-    # Search the NEAR lane only: from just past the foul up toward (but short of) the mid lane. The arrows sit at
-    # 15 ft; range-finder dots and the pin-deck clutter are farther, so capping the band near the foul keeps those
-    # out. Band expressed as a fraction of the foul→vanishing-point span (perspective-robust).
-    from .lanes import foul_corners
+def detect_arrow_row(bg, lane, vp, z_ft=Z_CENTER_FT):
+    """Return (anchor_px, z_ft, diag). anchor_px = the fitted centre-arrow point (board 20) ON the arrow V, at
+    depth z_ft, ready for metrics.lane_homography_at(lane, vp, anchor_px, z_ft). (None, z_ft, diag) when no
+    confident fit — the caller then keeps the impact anchor / unavailable (never a guessed row)."""
+    gray = _clahe_gray(bg)
+    model = _arrow_model()
     F = foul_corners(lane)
-    y_bottom = float(max(F[0][1], F[1][1]))        # foul row (largest y = nearest)
+    y_bottom = float(max(F[0][1], F[1][1]))          # foul row (largest y = nearest)
     span = y_bottom - vp[1]
-    y_far = y_bottom - 0.55 * span                 # ~mid lane (excludes the far-lane false combs)
-    y_cut = y_bottom - 0.12 * span                 # skip the first few ft (laydown dots right at the foul)
-    ys = np.linspace(y_far, y_cut, 120)
+    # Sweep the centre-arrow image row across the near lane (roughly 8-24 ft worth of band in fraction terms).
+    y_lo = y_bottom - 0.55 * span                    # far cap: excludes the mid/far-lane clutter
+    y_hi = y_bottom - 0.10 * span                    # near cap: just past the foul
+    cand_y = np.linspace(y_lo, y_hi, 140)
 
-    rows = []
-    for y in ys:
-        prof = _row_profile(gray, lane, y)
-        if prof is None:
+    results = []
+    for yc in cand_y:
+        xl, xr = lane_x(lane, float(yc))
+        if not (np.isfinite(xl) and np.isfinite(xr)) or xr - xl < 25:
             continue
-        contrast, ratio = _comb_score(prof)
-        rows.append((float(y), float(contrast), float(ratio)))
-    diag = {'rows_scored': len(rows)}
-    if len(rows) < 10:
-        return None, z_ft, {**diag, 'reason': 'too few rows profiled'}
+        cx = (xl + xr) / 2.0
+        try:
+            H = lane_homography_at(lane, vp, np.array([cx, yc]), Z_CENTER_FT)
+            Hinv = np.linalg.inv(H)
+        except Exception:
+            continue
+        lane_px = xr - xl
+        half = max(2.0, 0.6 * lane_px / 39.0)        # ~0.6 board patch radius in px at this row
+        per = []
+        for (b, x_in, z) in model:
+            p = Hinv @ np.array([x_in, z, 1.0])
+            if abs(p[2]) < 1e-9:
+                per.append(None); continue
+            u, v = p[0] / p[2], p[1] / p[2]
+            per.append(_point_darkness(gray, u, v, half))
+        vals = [s for s in per if s is not None]
+        if len(vals) < 5:
+            continue
+        score = float(np.sum(vals))
+        n_pos = int(np.sum(np.array(vals) > 0))
+        results.append((float(yc), score, n_pos, [round(s, 2) if s is not None else None for s in per]))
 
-    ys_a = np.array([r[0] for r in rows]); ratios = np.array([r[2] for r in rows])
-    best = int(np.argmax(ratios))
-    peak = ratios[best]
-    others = np.delete(ratios, best)
-    margin = peak - (others.mean() + 2.0 * others.std())
-    # profile for offline inspection: (y, ratio) sampled sparsely
-    prof_s = [(round(ys_a[i], 0), round(float(ratios[i]), 2)) for i in range(0, len(rows), max(1, len(rows) // 20))]
-    diag.update(peak_ratio=round(float(peak), 3), median_ratio=round(float(np.median(ratios)), 3),
-                margin=round(float(margin), 3), y=round(float(ys_a[best]), 1), profile=prof_s)
-    # Decline unless the arrow comb is BOTH strong and clearly separated from every other near-lane row. The
-    # thresholds are deliberately strict (margin ≥ 0.15, not > 0): on the down-lane POVs inspected 2026-10-30 a
-    # near-zero-margin "peak" was a 16.9 ft false pick 2 mph off, not the real 15 ft arrows. Better to decline and
-    # fall back to the impact anchor than anchor on a guessed row (CLAHE + chevron window already applied).
-    if peak < 0.6 or margin < 0.15:
-        return None, z_ft, {**diag, 'reason': 'no clearly-separated arrow comb'}
-    y_arrow = float(ys_a[best])
-    xl, xr = lane_x(lane, y_arrow)
-    anchor_px = np.array([(xl + xr) / 2.0, y_arrow])
+    diag = {'candidates': len(results)}
+    if len(results) < 5:
+        return None, z_ft, {**diag, 'reason': 'too few candidate rows on the lane'}
+
+    results.sort(key=lambda r: r[1], reverse=True)
+    best = results[0]
+    # next-best candidate OUTSIDE the winner's basin — the fit is smooth over a few px around the true row, so a
+    # near-neighbour isn't a real alternative. Require a genuine separation (~a couple board-depths) so the margin
+    # reflects a competing feature, not the same arrows one row over.
+    sep = 0.09 * span
+    runner = next((r for r in results[1:] if abs(r[0] - best[0]) > sep), None)
+    margin = best[1] - (runner[1] if runner else 0.0)
+    diag.update(best_y=round(best[0], 1), best_score=round(best[1], 2), n_positive=best[2],
+                per_arrow=best[3], runner_score=round(runner[1], 2) if runner else None,
+                margin=round(margin, 2))
+    # Accept only on a clear win AND a real majority of arrows individually present.
+    if best[2] < 5:
+        return None, z_ft, {**diag, 'reason': f'only {best[2]}/7 arrows scored positive'}
+    if runner is None or margin < 0.5 * max(best[1], 1e-6):
+        return None, z_ft, {**diag, 'reason': 'best arrow fit not clearly separated from the next'}
+    xl, xr = lane_x(lane, best[0])
+    anchor_px = np.array([(xl + xr) / 2.0, best[0]])
     return anchor_px, z_ft, {**diag, 'reason': 'ok'}
