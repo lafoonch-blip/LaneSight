@@ -11,8 +11,11 @@ Goal by morning: upload a clip in the app → see speed + rev + form, all honest
 
 - **1b/1c DONE (pin NOT promoted; labels BLOCKED).** Ground-truth 60 ft via track image-crossings (offset-invariant Δt): TRUTH 18.03/18.24/18.17/17.54. Anchor errors vs truth — impact 0.03/0.47/0.15/0.07, pin 0.17/0.10/0.15/0.14. Pin ties/beats on 2/4 (8752,8753), impact better on 8751/8754 → fails the "all 4" gate → NOT promoted (DEC-112). VISUAL labeling BLOCKED: trim/stabilization shifts track time off original clip time (at track t_imp the original still shows standing pins), so I can't map events to original frames autonomously → foul_cross/first_pin_contact labels need Shayne (or a pins-scatter frame-diff pass). DEC-112 recorded, v1.70. Pin anchor stays shadow; nothing deployed.
 
+- **2a/2c BALL shot DONE.** App builds + installed on sim. Uploaded IMG_8753 to live API (shot 5ff7a596…) → previewed the shot card via the DEBUG harness: renders **Release speed 16.0 mph**, **Rev rate 412 rpm**, Accuracy "Set a target", LANE & PINS all "Not read", far-lane banner, no fabricated numbers. Matches design `shot_card_state_far_lane_not_read.png` (diffs are data-state only). Marked APP_DESIGN_CHANGES 2026-10-29-A **BUILT** (C verify done). FORM shot (IMG_8846) FAILED `FORM_DELIVERY_NOT_ISOLATED` (DEC-095 gate) — friendly copy exists ("We couldn't find your whole delivery"). Sweeping other form clips to find one that isolates → 2b.
+
 ## Queue status
 1a/1b/1c. Pin anchor — DONE (shadow, not promoted; labels blocked on Shayne). See DEC-112.
+2a. Ball upload→card — DONE (verified). Form upload — IN PROGRESS (isolation sweep).
 2.  Upload → results in app (shot + form) — pending
 3.  Form deferred fixes + labeling packet — pending
 4.  Durable-jobs reliability tests vs live — pending
