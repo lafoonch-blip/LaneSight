@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.70  
-Last Updated: 2026-10-30  
+Version: 1.71  
+Last Updated: 2026-10-31  
 Owner: Shayne  
-Supersedes: v1.69
+Supersedes: v1.70
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,17 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-113 — Canonical SDR decode shipped (DEC-107 server speed-gap fix), SDR-only partial rollout (2026-10-31)
+**Decision:** The server-vs-Mac speed gap (IMG_8753 16.04 server vs 18.71 Mac, ~14% low) is the YUV→BGR **colour conversion** differing across platforms (the raw YUV420P is bit-identical; Mac ffmpeg 9.0.2 vs container ffmpeg 5.1/cv2 differ ~1% per channel, red-biased, and the 2-point homography impact anchor amplifies it ~14×). Fix: decode raw YUV420P via ffmpeg (bit-identical) + convert YUV→BGR in **pure numpy** driven by the clip's colour metadata (`cv/decode.py`), so the same bytes come out on Mac and Linux. Shipped **SDR-only** (`LANESIGHT_FFMPEG_DECODE=1`): all 64 recent live+upload captures are bt709 SDR (0 HDR), so canonical covers 100% of real shots. HLG HDR stays on the existing `convert_sdr` path, gated behind `LANESIGHT_CANONICAL_HDR` (STEP 2).
+- **Perf (the deploy blocker):** the numpy conversion is ~11 s/pass; a full analysis makes ~4 passes over overlapping-but-PARTIAL frame ranges so the lazy frame cache never reached EOF and re-converted every pass → the first deploy (`canonsdr`) **timed out** the 420 s smoke and auto-rolled-back (safe). Fix: `stabilize._prime_canonical` decodes the whole canonical clip ONCE into the frame cache up front; every pass then serves from RAM (decode-once). IMG_8753 (885 f, 1080p, untrimmed): **56 s→21 s** on Mac, speed unchanged. Needs headroom → deploy bumped to **--memory 8Gi + LANESIGHT_FRAME_CACHE_MB=5500** (a 5.25 GB untrimmed clip fits; longer clips fall back to per-pass decode, slower but correct). Non-canonical (HDR/cv2) clips keep the lazy cache (prime returns False once, no re-probing).
+- **Gate + live:** Mac==server within 0.1 mph — live rev `lanesight-api-canon2` serves IMG_8753 at **18.631** vs Mac 18.711 (Δ 0.08 < 0.1; the residual is downstream OpenCV platform variance, not decode — frames are bit-identical). Smoke reference updated to 18.71 ±0.2. 397 tests pass; IMG_8751-54 all analyze (8751/8754 HDR unchanged on the cv2 path: 18.615/18.232).
+- **Tiered benchmark (improvement-loop testing policy, set 2026-10-31):**
+  - **Quick** (every commit): pytest + smoke clip, byte-identical to the last run. ~1 min.
+  - **Standard** (auto when a diff touches `lanesight_core/cv/`, decode, or metric code): IMG_8751-54 + a small labeled set in the Cloud Run Job; report coverage/accuracy deltas + new failures. ~10-15 min. **Blocks the deploy on failure.**
+  - **Full** (nightly on prod, before promoting any CV change to production, and for background-search finalists): whole library + locked test, full scoreboard. Never blocks routine commits.
+  - **Escalate** Standard→Full automatically if any metric moves beyond its tolerance or a new failure appears. Pick the tier by diff path in the deploy wrapper / pre-commit; log which tier ran with each commit.
+**Date:** 2026-10-31 · **Status:** ACCEPTED — committed to `dev-build-v0` (c21c494) + deployed live (`lanesight-api-canon2`). STEP 2 (HDR canonical decode-once) and STEP 3 (hue-shift robustness) pending; tiered-benchmark wiring pending. · **Supersedes:** the cv2-decode speed gap noted in DEC-107.
 
 ### DEC-112 — Pin-spot depth anchor: shadow only, NOT promoted (2026-10-31)
 **Decision (overnight run):** `cv/pins_anchor.py` — a spec-fixed, impact-independent, center-agnostic near-lane depth anchor (foul Z=0 + the 7 visible perimeter pin spots, head pin Z=60 ft; the centre-column back pins 5/8/9 are occluded down-lane) — stays SHADOW-gated and does NOT feed speed/baselines/coaching. It reuses the arrow V-fit structure (sweep depth only; lateral from the detected edges; score the bright pin body above each projected base; reflection-reject). It detects 7/7 pins on all of IMG_8751-54 incl. both portrait clips (the arrow fit declined on portrait).
