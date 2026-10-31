@@ -26,16 +26,22 @@ from .metrics import lane_homography_at, LANE_IN
 
 ARROW_BOARDS = (5, 10, 15, 20, 25, 30, 35)          # USBC target arrows, boards from the edge (symmetric about 20)
 Z_CENTER_FT = 15.0                                  # nominal centre-arrow (board 20) distance, within USBC 12-16 ft
-Z_STEP_FT = 0.75                                    # nominal V stagger per arrow pair outward (centre deepest)
+# PROVISIONAL nominal V stagger (ft per arrow-pair outward, centre deepest). NOT a validated constant: a sweep on
+# IMG_8751/53/54 (same house, 2 sessions) showed 0.75 was too steep (8753 off by -0.97 mph) and ~0.5 reconciles
+# all three to within ~0.27 mph. The AUTHORITATIVE value is Shayne's tape measurement of the arrow layout
+# (pending); until then this stays shadow-gated and is never shipped into baselines/coaching. (2026-10-30)
+Z_STEP_FT = 0.5
 
 
-def _arrow_model():
-    """Nominal arrow layout: (X inches from left edge, Z ft from foul) for the 7 arrows. X exact (board centres);
-    Z a nominal symmetric V within the USBC 12-16 ft range (exact stagger unspecified — see module docstring)."""
+def _arrow_model(z_center=Z_CENTER_FT, z_step=Z_STEP_FT):
+    """Arrow layout: (X inches from left edge, Z ft from foul) for the 7 arrows. X exact (board centres); Z a
+    symmetric V, `z_center` at board 20 stepping back `z_step` ft per arrow-pair outward. z_center/z_step are
+    NOMINAL within the USBC 12-16 ft range — the real values are Shayne's tape measurements (pending), so these
+    are parameters, not constants (see module docstring)."""
     pts = []
     for b in ARROW_BOARDS:
         x_in = (b - 0.5) * LANE_IN / 39.0           # board centre, inches from the LEFT edge (lane_geometry convention)
-        z = Z_CENTER_FT - Z_STEP_FT * abs(b - 20) / 5.0     # 15.0 at board 20 → 12.75 at boards 5/35
+        z = z_center - z_step * abs(b - 20) / 5.0
         pts.append((b, x_in, z))
     return pts
 
@@ -60,12 +66,13 @@ def _point_darkness(gray, u, v, half):
     return float((surround - inner.mean()) / spread)
 
 
-def detect_arrow_row(bg, lane, vp, z_ft=Z_CENTER_FT):
+def detect_arrow_row(bg, lane, vp, z_ft=Z_CENTER_FT, z_step=Z_STEP_FT):
     """Return (anchor_px, z_ft, diag). anchor_px = the fitted centre-arrow point (board 20) ON the arrow V, at
     depth z_ft, ready for metrics.lane_homography_at(lane, vp, anchor_px, z_ft). (None, z_ft, diag) when no
-    confident fit — the caller then keeps the impact anchor / unavailable (never a guessed row)."""
+    confident fit — the caller then keeps the impact anchor / unavailable (never a guessed row). z_ft/z_step are
+    the nominal V (pending Shayne's measured arrow layout)."""
     gray = _clahe_gray(bg)
-    model = _arrow_model()
+    model = _arrow_model(z_ft, z_step)
     F = foul_corners(lane)
     y_bottom = float(max(F[0][1], F[1][1]))          # foul row (largest y = nearest)
     span = y_bottom - vp[1]
@@ -81,7 +88,7 @@ def detect_arrow_row(bg, lane, vp, z_ft=Z_CENTER_FT):
             continue
         cx = (xl + xr) / 2.0
         try:
-            H = lane_homography_at(lane, vp, np.array([cx, yc]), Z_CENTER_FT)
+            H = lane_homography_at(lane, vp, np.array([cx, yc]), z_ft)
             Hinv = np.linalg.inv(H)
         except Exception:
             continue
