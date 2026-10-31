@@ -229,7 +229,7 @@ class Registrar:
     # that computes the warp is down-scaled. Defaults preserve the original 0.5 / 4000.
     def __init__(self, scale=None):
         self.s = float(os.environ.get('LANESIGHT_ORB_SCALE', '0.5')) if scale is None else scale
-        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '4000'))
+        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '1500'))   # DEC-115: 1500 (was 4000) cuts the O(n^2)
         fast = int(os.environ.get('LANESIGHT_ORB_FAST', '10'))
         self.orb = cv2.ORB_create(nfeat, fastThreshold=fast); self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     def feats(self, f):
@@ -264,13 +264,32 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
     core = (lambda i: True) if core_end_s is None else (lambda i: i >= len(ts) or ts[i] <= core_end_s)
     _dbg = {'passA_s': 0.0, 'featsB_s': 0.0, 'solveB_s': 0.0, 'bgC_s': 0.0}   # DEC-115 sub-stage profiling
     _tA = _time.perf_counter()
-    # pass A: reference = middle of the longest steady stretch with the lane visible (within the core, not the tail)
-    prevg = None; mot = []; woodf = []
-    for i, f in frames(path):
+    # pass A: reference = middle of the longest steady stretch with the lane visible (within the core, not the tail).
+    # DEC-115 perf: this per-frame motion/wood scan (resize + grey + wood_mask at 1/8 res) is the single biggest
+    # stabilize stage on the server (~52%). The per-frame work is independent, so it is fanned across worker threads
+    # (cv2 threads forced to 1) exactly like pass B; the phaseCorrelate motion is then computed sequentially over the
+    # pre-computed greys (cheap FFTs). Same greys, same order -> bit-identical mot/woodf/ref as the serial scan, so
+    # the reference choice (which some clips' speed is sensitive to) is UNCHANGED — this is pure parallel speed-up.
+    def _mscan(f):
         sm = cv2.resize(f, None, fx=0.125, fy=0.125)
-        g = cv2.cvtColor(sm, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        mot.append(0.0 if prevg is None else np.hypot(*cv2.phaseCorrelate(prevg, g)[0]) * 8)
-        woodf.append(wood_mask(sm).mean()); prevg = g
+        return cv2.cvtColor(sm, cv2.COLOR_BGR2GRAY).astype(np.float32), float(wood_mask(sm).mean())
+    _nwA = workers(); _dtA = cv2.getNumThreads(); greys = []; woodf = []
+    cv2.setNumThreads(1)
+    try:
+        with ThreadPoolExecutor(max_workers=_nwA) as _exA:
+            _genA = frames(path)
+            while True:
+                _bA = []
+                for _ in range(max(_nwA * 8, 64)):
+                    _nf = next(_genA, None)
+                    if _nf is None: break
+                    _bA.append(_nf[1])
+                if not _bA: break
+                for _g, _wm in _exA.map(_mscan, _bA):
+                    greys.append(_g); woodf.append(_wm)
+    finally:
+        cv2.setNumThreads(_dtA)
+    mot = [0.0] + [np.hypot(*cv2.phaseCorrelate(greys[k - 1], greys[k])[0]) * 8 for k in range(1, len(greys))]
     mot = np.convolve(np.array(mot), np.ones(15) / 15, 'same'); woodf = np.array(woodf)
     cm = np.array([core(i) for i in range(len(mot))])          # thresholds over core frames only, so the settle
     thr = max(3.0, np.percentile(mot[cm], 40)); wmax = woodf[cm].max()   # tail never shifts the reference choice
