@@ -15,7 +15,9 @@ Goal by morning: upload a clip in the app → see speed + rev + form, all honest
 
 ## Queue status
 1a/1b/1c. Pin anchor — DONE (shadow, not promoted; labels blocked on Shayne). See DEC-112.
-2a. Ball upload→card — DONE (verified). Form upload — IN PROGRESS (isolation sweep).
+- **2b/3a form root cause (found; fix deferred pending labels).** All form clips fail DEC-095 because the gate (`pose.py:586`, `RELEASE_VS_STOP`) compares release (E7) to **E8=hold_start** (posted-finish start, ~5.33s) while the code comment + physics say release ≈ **slide_plant** (~4.11s). The 0.67-0.88s false gap drops every event. Candidate fix: gate release vs slide_plant — BUT it's a user-facing form gate, so NOT changed without ground truth. Also 8824 (side) misclassified view=down_lane. Both need Shayne's event labels → packet (3b). Form RESULTS stay blocked; in-app shows the honest reason. Did NOT loosen the gate (honesty/DEC-094).
+
+2a. Ball upload→card — DONE (verified). Form — fails DEC-095 isolation on all tested clips (8846 rear, 8824 side): E2 ball-start / E7 release NOT located, swing_time 1.035s < 1.3s gate → FORM_DELIVERY_NOT_ISOLATED (friendly reason shows in-app). 8847/8848 too big for direct multipart (413; app uses Storage upload). Minimum bar (clear reason) MET; form RESULTS blocked on the pose event detection → investigating (item 3a). Note: 8824 (side) detected view=down_lane (view-label issue, item 3a).
 2.  Upload → results in app (shot + form) — pending
 3.  Form deferred fixes + labeling packet — pending
 4.  Durable-jobs reliability tests vs live — pending
