@@ -39,17 +39,29 @@ def can_canonical(meta):
     return meta['transfer'] in _SDR_TRANSFER and meta['cs'] in _KRKB
 
 
+def _up2x(p):
+    """Fast, deterministic 2x bilinear upsample of a chroma plane (4:2:0 -> 4:4:4), left-cosited (0.75/0.25).
+    Vectorised (no fancy indexing) so it's both quick and platform-stable — cv2.resize was version-dependent
+    (~0.08 mph Mac-vs-Linux residual), np.ix_ bilinear was too slow; this is both deterministic and fast."""
+    h, w = p.shape
+    hor = np.empty((h, 2 * w), np.float32)
+    hor[:, 0::2] = p * 0.75 + np.concatenate([p[:, :1], p[:, :-1]], 1) * 0.25
+    hor[:, 1::2] = p * 0.75 + np.concatenate([p[:, 1:], p[:, -1:]], 1) * 0.25
+    out = np.empty((2 * h, 2 * w), np.float32)
+    out[0::2] = hor * 0.75 + np.concatenate([hor[:1], hor[:-1]], 0) * 0.25
+    out[1::2] = hor * 0.75 + np.concatenate([hor[1:], hor[-1:]], 0) * 0.25
+    return out
+
+
 def yuv420p_to_bgr(buf, w, h, cs='bt709', rng='tv'):
-    """Planar YUV420P bytes → HxWx3 BGR uint8. Bilinear chroma upsample; limited/full range aware."""
+    """Planar YUV420P bytes → HxWx3 BGR uint8. Deterministic numpy chroma upsample; limited/full range aware."""
     ysz = w * h
     Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.float32)
     cw, ch = w // 2, h // 2
     U = np.frombuffer(buf[ysz:ysz + cw * ch], np.uint8).reshape(ch, cw).astype(np.float32)
     V = np.frombuffer(buf[ysz + cw * ch:ysz + 2 * cw * ch], np.uint8).reshape(ch, cw).astype(np.float32)
-    # bilinear upsample the chroma planes to full res (deterministic)
-    import cv2 as _cv
-    U = _cv.resize(U, (w, h), interpolation=_cv.INTER_LINEAR)
-    V = _cv.resize(V, (w, h), interpolation=_cv.INTER_LINEAR)
+    U = _up2x(U)[:h, :w]
+    V = _up2x(V)[:h, :w]
     Kr, Kb = _KRKB.get(cs, _KRKB['bt709']); Kg = 1.0 - Kr - Kb
     if rng in ('pc', 'jpeg', 'full'):
         Yl, Cb, Cr = Y, U - 128.0, V - 128.0
