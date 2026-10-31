@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 
 SCHEMA_VERSION = 'shot-1.0'
-ALGO_VERSION = "lanesight-cv-0.6.0"
+# 0.7.0 (2026-10-31, DEC-113/DEC-103): canonical SDR decode (deterministic YUV->BGR) changed CV outputs
+# materially vs 0.6.0 (server speeds were ~14% low on the old cv2 decode). The version bump is the engine
+# provenance marker: measurements tagged < 0.7.0 are quarantined ("legacy") so stats never mix the two engines.
+ALGO_VERSION = "lanesight-cv-0.7.0"
 
 @dataclass
 class Measurement:

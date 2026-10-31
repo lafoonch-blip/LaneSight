@@ -1422,8 +1422,11 @@ class PgStore(MemoryStore):
         if not shots:
             return [], {}, 'R'
         ids = [s['id'] for s in shots]
+        # DEC-103/DEC-113: exclude engine-quarantined ("legacy") measurements — e.g. speeds from the pre-0.7.0
+        # cv2 decode that ran ~14% low — so personal baselines / consistency / score / achievements never mix
+        # incompatible engine versions. legacy defaults false, so current (0.7.0+) measurements are unaffected.
         meas = self._get_in('measurements', 'shot_id', ids,
-                            'source=eq.lanesight_video&select=shot_id,metric,value,status,confidence,note')
+                            'source=eq.lanesight_video&legacy=is.false&select=shot_id,metric,value,status,confidence,note')
         ints = self._get_in('shot_intents', 'shot_id', ids, 'select=shot_id,arrows_board,breakpoint_board')
         by_shot = {}
         for m in meas:
