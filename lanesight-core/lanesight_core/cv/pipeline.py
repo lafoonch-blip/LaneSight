@@ -78,8 +78,9 @@ def measure_rev_rate(video, S, ground, t_max=None):
     rev_sigma, rev_fps = None, None                 # honest resolution band (lane rpm) + capture fps
     if len(big) >= 24:
         rpm, info = rev_rate(ball_crops(video, S, big, max_n=90))
-        sc = np.sort(info['score']); rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1))
-        if info['at_rail']:          # no clear spin period found; 60/P is the search-band edge, not a reading
+        sc = np.sort(info['score'][np.isfinite(info['score'])])
+        rconf = float(np.clip((sc[-1] - np.median(sc)) / 0.25, 0, 1)) if len(sc) else 0.0
+        if info['at_rail'] or not np.isfinite(rpm) or not np.isfinite(rconf):          # no clear spin period found; 60/P is the search-band edge, not a reading
             rpm, rconf, rev_note = None, 0.0, "couldn't read the ball's spin pattern (no clear repeat)"
         else:
             rev_sigma, rev_fps = info['sigma'], info['fps']

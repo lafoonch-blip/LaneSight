@@ -33,11 +33,21 @@ def rev_rate(crops, fmin=4.0, fmax=10.0):
     for P in periods:
         k = P / dt
         score.append(np.mean([np.interp(m * k, lags, ac) for m in (1, 2, 3) if m * k < lags[-1]]))
-    score = np.array(score); ai = int(np.argmax(score))
-    # A real spin period sits inside the band; when no pattern repeats, argmax slides to the search rail
-    # (shortest or longest period) and 60/P is the ceiling (or floor) value, not a measurement. Flag it so the
-    # caller reports the rev rate unavailable instead of a confident wrong number (DEC-026).
-    at_rail = ai < 3 or ai > len(score) - 4
+    score = np.array(score, dtype=float)
+    # Periods longer than the observed window have NO autocorrelation data (mean of an empty list = NaN). np.argmax
+    # returns the FIRST NaN, so a short clip used to "pick" the first unsearchable period and report it as a rev rate
+    # (2026-10-30, shot 57c1aa3c: 401 rpm with NaN confidence). Search only periods that have data, and treat the
+    # last searchable period as a rail too: a peak there means the true period may lie beyond what the clip covers.
+    valid = np.isfinite(score)
+    if not valid.any():
+        ai, at_rail = len(score) - 1, True
+    else:
+        last = int(np.where(valid)[0].max())
+        ai = int(np.nanargmax(np.where(valid, score, -np.inf)))
+        # A real spin period sits inside the band; when no pattern repeats, argmax slides to the search rail
+        # (shortest or longest searchable period) and 60/P is the ceiling (or floor) value, not a measurement. Flag
+        # it so the caller reports the rev rate unavailable instead of a confident wrong number (DEC-026/027).
+        at_rail = ai < 3 or ai > last - 3
     P = periods[ai]; f0 = 1.0 / P
     # Refine the frequency with long-baseline phase coherence (all crop pairs, not just the lag-averaged
     # autocorrelation): resolution scales with the total rotations observed, beating the integer-frame-lag quantum
