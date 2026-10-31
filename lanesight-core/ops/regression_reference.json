@@ -1,0 +1,10 @@
+{
+  "_note": "DEC-113 Standard-tier regression reference. Mac-local canonical-decode (LANESIGHT_FFMPEG_DECODE=1) ball_speed for the IMG_8751-54 validation clips, engine lanesight-cv-0.7.0 (2026-10-31). ops/regression_tier.py re-runs the 4 clips and fails if any ball_speed moves beyond tol_mph (DEC-092 don't-regress band) or a clip that analyzed now fails. Update a value ONLY when a CV change intentionally moves it (and say why in the commit). 8751/8754 are HLG HDR (convert_sdr path); 8752/8753 are bt709 SDR (canonical).",
+  "tol_mph": 0.2,
+  "clips": {
+    "IMG_8751.MOV": {"ball_speed": 18.615, "dynamic_range": "hdr"},
+    "IMG_8752.MOV": {"ball_speed": 18.308, "dynamic_range": "sdr"},
+    "IMG_8753.MOV": {"ball_speed": 18.711, "dynamic_range": "sdr"},
+    "IMG_8754.MOV": {"ball_speed": 18.232, "dynamic_range": "hdr"}
+  }
+}

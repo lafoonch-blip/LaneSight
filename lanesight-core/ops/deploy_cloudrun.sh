@@ -32,6 +32,27 @@ fi
 PREV="$SERVING"
 echo "== current (serving) revision: $PREV =="
 
+# --- DEC-113 tiered benchmark (pick by diff path; log the tier). Quick = the post-deploy smoke below (always).
+# Standard = CV/decode/metric/score code changed vs the serving revision's commit -> run the IMG_8751-54
+# regression as a HARD pre-build gate. A breach auto-escalates to Full (regression_tier.py prints the ESCALATE
+# line); Full itself is nightly / pre-prod-promote and is never auto-run from a deploy.
+SERVING_IMG=$(gcloud run revisions describe "$PREV" --region "$REGION" --format="value(spec.containers[0].image)" 2>/dev/null || true)
+SERVING_SHA="${SERVING_IMG##*:}"
+if git rev-parse --verify -q "$SERVING_SHA" >/dev/null 2>&1; then
+  TIER=$(ops/tier_for_diff.sh "$SERVING_SHA" HEAD 2>/dev/null || echo standard)
+else
+  echo "== serving commit '$SERVING_SHA' not resolvable locally — running Standard to be safe =="
+  TIER=standard
+fi
+echo "== DEC-113 benchmark tier: $TIER (diff $SERVING_SHA..$(git rev-parse --short HEAD)) =="
+if [ "$TIER" = "standard" ]; then
+  echo "== Standard tier: IMG_8751-54 regression (hard gate, before build) =="
+  if ! LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 python3 ops/regression_tier.py; then
+    echo "ABORT: Standard regression failed — not deploying (see the ESCALATE note; run the Full benchmark)."
+    exit 1
+  fi
+fi
+
 # Build EXPLICITLY, tagged by the git commit (2026-10-29): `gcloud run deploy --source` reused stale cached
 # images more than once (the 00050 reuse; a dep pin that resolved to the wrong opencv). The default Cloud Build
 # docker builder (Kaniko off) builds FRESH from the source tar every time — no layer cache — so a per-commit
@@ -48,7 +69,7 @@ gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --revision-suffix "${REV_SUFFIX:-$SHA}" \
   --cpu 4 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 3 \
-  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500 \
+  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=4,LANESIGHT_GIB=8 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 

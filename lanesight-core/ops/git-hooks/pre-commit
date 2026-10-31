@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# DEC-113 tiered benchmark — pre-commit gate (by diff path).
+#   Quick (always): pytest. ~10 s.
+#   Standard (staged diff touches CV / decode / metric / score code): + IMG_8751-54 regression. ~5-10 min.
+# Skip with:  LANESIGHT_SKIP_HOOK=1 git commit ...   (or git commit --no-verify)
+set -euo pipefail
+[ "${LANESIGHT_SKIP_HOOK:-0}" = "1" ] && { echo "[pre-commit] skipped (LANESIGHT_SKIP_HOOK=1)"; exit 0; }
+root=$(git rev-parse --show-toplevel)
+core="$root/lanesight-core"
+cd "$core"
+# shellcheck disable=SC1091
+[ -f .venv/bin/activate ] && source .venv/bin/activate
+tier=$(ops/tier_for_diff.sh HEAD 2>/dev/null || echo quick)   # staged diff (no head ref -> --cached)
+echo "[pre-commit] DEC-113 tier: $tier"
+echo "[pre-commit] Quick: pytest"
+python3 -m pytest -q >/tmp/ls_precommit_pytest.log 2>&1 || { echo "[pre-commit] pytest FAILED:"; tail -15 /tmp/ls_precommit_pytest.log; exit 1; }
+echo "[pre-commit] pytest OK"
+if [ "$tier" = "standard" ]; then
+  echo "[pre-commit] Standard: IMG_8751-54 regression (set LANESIGHT_SKIP_HOOK=1 to bypass)"
+  LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 python3 ops/regression_tier.py \
+    || { echo "[pre-commit] regression FAILED — commit blocked (see ESCALATE note)"; exit 1; }
+fi
+echo "[pre-commit] $tier tier passed"
