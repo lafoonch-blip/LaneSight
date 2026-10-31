@@ -47,7 +47,8 @@ fi
 echo "== DEC-113 benchmark tier: $TIER (diff $SERVING_SHA..$(git rev-parse --short HEAD)) =="
 if [ "$TIER" = "standard" ]; then
   echo "== Standard tier: IMG_8751-54 regression (hard gate, before build) =="
-  if ! LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 python3 ops/regression_tier.py; then
+  PYBIN="python3"; [ -x .venv/bin/python3 ] && PYBIN=".venv/bin/python3"   # the engine deps live in the venv
+  if ! LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 "$PYBIN" ops/regression_tier.py; then
     echo "ABORT: Standard regression failed — not deploying (see the ESCALATE note; run the Full benchmark)."
     exit 1
   fi
