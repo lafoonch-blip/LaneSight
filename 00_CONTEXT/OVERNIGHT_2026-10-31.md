@@ -25,7 +25,7 @@ Goal by morning: upload a clip in the app → see speed + rev + form, all honest
 
 - **3b DONE.** Form labeling packet at `03_ENGINEERING/form_labeling_packet/` (contact sheets for IMG_8824 side + IMG_8846 rear + README). Verified form-clip times map to original frames (no form trim) + 8824 is clearly a SIDE view (classifier wrong). ~10 min for Shayne to label → unblocks the gate fix + numeric form validation.
 - **4 DONE (no regressions).** Durable jobs verified LIVE on `revrate`: analysis_job has 7 done + 9 failed rows from tonight's uploads; cross-instance `GET /jobs/:id` resolves (job 8aab7a0d → done, correct shot_id). 396 unit tests pass incl. durable-job cross-instance/failure-durability/best-effort-persist + resume. Client background/kill-relaunch resume is unit-tested + builds; a live UI kill/relaunch test needs automation (not done autonomously), but the server durability that enables recovery is confirmed.
-- **5 (back-half tracking) — NOT started (time/priority).** Deferred; see morning report.
+- **5 DONE (characterization, report-only — no build/promote).** Ran the mounted down-lane POV reference clips: IMG_8929 → `TRACK_TOO_SPARSE_FOR_SPEED` with **on_lane_pts=1, track_first=last=56.29 ft** (the ball is detected at ONE point, near the pins; the whole release→~56 ft roll is missed). IMG_8930 → `BALL_TRACK_NOT_FOUND`. **Reframe:** the frontier here is NOT back-half tracking — it's early/mid-lane ball ISOLATION on this POV (the detector/window locks onto the bowler + ball return; the rolling ball isn't isolated from release through ~56 ft). Next-session direction: improve near/mid-lane ball detection/isolation on the mounted POV (then the existing linker can connect it), DEC-094 shadow. Nothing changed/promoted.
 
 ## Morning report
 
@@ -51,4 +51,6 @@ Pin ties/beats on 2/4 (8752, 8753) → fails the "all 4" gate → NOT promoted. 
 2. **Pin anchor truth labels:** confirm foul_cross/first_pin_contact on IMG_8751–54 (I'm blocked by the trim/stabilization time offset) → decides pin-anchor promotion.
 3. **Decision:** want the other 4 form clips' sheets too? And should I fix the view classifier (8824 side→down_lane misread) now or after labels?
 
-**Known not-done:** form RESULTS in-app (blocked on the gate fix, which needs #1); back-half ball tracking experiment (item 5, deferred).
+**Known not-done:** form RESULTS in-app (blocked on the gate fix, which needs #1). Item 5 (back-half tracking) was characterized not built — and it's really an early/mid-lane ball-isolation problem on the mounted POV (IMG_8929: 1 ball point at 56 ft; the whole roll is missed), a focused next-session CV experiment.
+
+**Morning-goal status:** Upload → **speed ✓ + rev ✓** (ball shot verified in the app: Release speed 16.0 mph, Rev rate 412 rpm, honest unavailable states) + **form = honest reason, not results yet** (gate bug root-caused; results unblock once you label — #1). Pin anchor: validated and **clearly reported not-ready** (shadow, DEC-112). Nothing unvalidated reached baselines/score/coaching; live rev unchanged (`revrate`).
