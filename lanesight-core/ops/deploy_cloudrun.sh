@@ -6,6 +6,11 @@
 # busy old one (no more rollover 5xx) and a burst of users gets its own instance. Scale-to-zero stays
 # (min-instances unset) for the cost cap. A per-INSTANCE guard in jobs.py caps one analysis per instance, so
 # concurrency 8 can't put two multi-GB analyses on one instance (DEC-043 one-at-a-time is per session).
+# --cpu 8 + --max-instances 2 (DEC-115): stabilize's per-frame ORB registration is the bottleneck and
+# parallelizes across vCPUs, so 8 vCPU ~halves analysis wall-time. Cloud Run bills vCPU-SECONDS, so 8 vCPU at
+# half the time is ~cost-neutral on CPU and halves memory-seconds. The region CPU quota is 20 vCPU, so
+# max-instances is 2 (8x2=16<=20, not 3 -> 24); fine for private beta (one analysis per instance + concurrency 8
+# for the light API). Raise max-instances once a quota increase lands.
 # --memory 8Gi (was 4Gi): DEC-113 canonical SDR decode is ~11 s/pass in pure numpy, so it is run ONCE per clip
 # and the decoded frames are cached (LANESIGHT_FRAME_CACHE_MB=5500); the remaining ~8 passes serve from RAM
 # (decode-once). A full untrimmed 14.75 s 1080p clip caches ~5.25 GB, which needs the larger instance; working
@@ -69,7 +74,7 @@ echo "== built digest: $DIGEST =="
 gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --revision-suffix "${REV_SUFFIX:-$SHA}" \
-  --cpu 8 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 3 \
+  --cpu 8 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 2 \
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=8,LANESIGHT_GIB=8 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
