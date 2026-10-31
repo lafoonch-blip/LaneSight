@@ -337,7 +337,51 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                 Ho = lane_homography_at(lane, vp, oracle_px, 15.0)
                 oracle_v, _ = early_speed_from_H(ground, t_imp, Ho)
             except Exception:
-                oracle_v = None
+                oracle_v, oracle_px = None, None
+            # DUMP an annotated background for hand-inspection (set LANESIGHT_NEAR_ANCHOR_DUMP=/path/prefix). Draws
+            # the lane edges, the ORACLE Z=15 cross-line (green, the true 15 ft), the DETECTOR row (red, if found),
+            # and a y-grid so the real arrow row can be read off by eye and compared in pixels AND feet.
+            cache = os.environ.get('LANESIGHT_NEAR_ANCHOR_CACHE')
+            if cache:                               # pickle the geometry so the detector can be tuned offline fast
+                try:
+                    import pickle as _pk
+                    _pk.dump({'bg': S['bg'], 'lane': lane, 'vp': vp, 'H': H,
+                              'oracle_px': oracle_px, 'ground': ground, 't_imp': t_imp,
+                              'impact_v': impact_v, 'oracle_v': oracle_v},
+                             open(cache, 'wb'))
+                except Exception as _ce:
+                    log(f'near-anchor cache failed: {_ce}')
+            dump = os.environ.get('LANESIGHT_NEAR_ANCHOR_DUMP')
+            if dump:
+                try:
+                    import cv2 as _cv
+                    img = S['bg'].copy()
+                    if img.ndim == 2: img = _cv.cvtColor(img, _cv.COLOR_GRAY2BGR)
+                    Hh = img.shape[0]
+                    ys = np.linspace(vp[1] + 0.05 * (Hh - vp[1]), Hh - 2, 300)
+                    for yy in ys:                                  # lane edges
+                        xl, xr = lane_x(lane, float(yy))
+                        for xx in (xl, xr):
+                            if np.isfinite(xx) and 0 <= xx < img.shape[1]:
+                                _cv.circle(img, (int(xx), int(yy)), 1, (255, 255, 0), -1)
+                    for yv in range(0, Hh, 50):                    # y grid + labels
+                        _cv.line(img, (0, yv), (img.shape[1], yv), (60, 60, 60), 1)
+                        _cv.putText(img, str(yv), (4, yv - 3), _cv.FONT_HERSHEY_SIMPLEX, 0.4, (160, 160, 160), 1)
+                    def _cross(Z, color):                          # the true cross-line at depth Z ft via inv(H)
+                        try:
+                            p0 = Hinv @ np.array([0.0, Z, 1.0]); p1 = Hinv @ np.array([LANE_IN, Z, 1.0])
+                            a = (p0[:2] / p0[2]).astype(int); b = (p1[:2] / p1[2]).astype(int)
+                            _cv.line(img, tuple(a), tuple(b), color, 2)
+                        except Exception:
+                            pass
+                    _cross(15.0, (0, 255, 0))                      # oracle true 15 ft (green)
+                    if anchor_px is not None:
+                        ry = int(anchor_px[1])
+                        _cv.line(img, (0, ry), (img.shape[1], ry), (0, 0, 255), 2)   # detector row (red)
+                    _cv.imwrite(f'{dump}', img)
+                    near_shadow_dump = dump
+                except Exception as _de:
+                    near_shadow_dump = f'dump failed: {_de}'
             if anchor_px is not None:
                 Hn = lane_homography_at(lane, vp, anchor_px, z_ft)
                 near_v, ndiag = early_speed_from_H(ground, t_imp, Hn)
@@ -350,6 +394,18 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             near_shadow['oracle_speed_mph'] = oracle_v
             near_shadow['oracle_delta_mph'] = (round(oracle_v - impact_v, 3)
                                                if (oracle_v is not None and impact_v is not None) else None)
+            # Row positions for the accuracy check (detector vs oracle, px + ft via the impact H). Hand-placed
+            # truth is read off the dumped frame; this gives the two machine rows to compare it against.
+            from .metrics import to_lane as _to_lane
+            def _row_ft(px):
+                try:
+                    _, zf = _to_lane(H, np.array([px[0]]), np.array([px[1]])); return round(float(zf[0]), 2)
+                except Exception:
+                    return None
+            near_shadow['oracle_px_y'] = round(float(oracle_px[1]), 1) if oracle_px is not None else None
+            near_shadow['detector_px_y'] = round(float(anchor_px[1]), 1) if anchor_px is not None else None
+            near_shadow['detector_row_ft'] = _row_ft(anchor_px) if anchor_px is not None else None
+            near_shadow['dump'] = near_shadow_dump if dump else None
             log(f"near-anchor shadow: {near_shadow.get('arrow_found')} near={near_shadow.get('near_speed_mph')} "
                 f"impact={near_shadow.get('impact_speed_mph')} oracle={oracle_v} d={near_shadow.get('delta_mph')}")
         except Exception as _e:
