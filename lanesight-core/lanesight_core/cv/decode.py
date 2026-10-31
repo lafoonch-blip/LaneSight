@@ -51,8 +51,14 @@ def probe_meta(path):
 
 
 def can_canonical(meta):
-    """SDR (known matrix) and HLG HDR decode canonically here; PQ is still left to convert_sdr."""
-    return (meta['transfer'] in _SDR_TRANSFER or meta['transfer'] == _HLG) and meta['cs'] in _KRKB
+    """SDR-ONLY partial rollout (2026-10-31, DEC-113): all live/upload captures are bt709 SDR, so canonical
+    decode covers 100% of real shots. HLG HDR has a deterministic path here too (canonical_frames), but it's
+    gated OFF until its decode-once/perf is fixed (step 2) — HDR stays on convert_sdr for now. Set
+    LANESIGHT_CANONICAL_HDR=1 to also canonicalise HLG once that's validated."""
+    import os
+    if meta['transfer'] == _HLG:
+        return os.environ.get('LANESIGHT_CANONICAL_HDR') == '1' and meta['cs'] in _KRKB
+    return meta['transfer'] in _SDR_TRANSFER and meta['cs'] in _KRKB
 
 
 def _up2x(p):

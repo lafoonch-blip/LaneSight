@@ -48,10 +48,12 @@ def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer,
         except Exception as e:
             log(f"windowing skipped: {e}")
     timing_src = analysis_src; video = analysis_src
-    # DEC-107: with the canonical decoder on, HLG HDR is tone-mapped deterministically INSIDE stabilize
-    # (cv/decode.py, no zscale + no re-encode), so skip the version-dependent convert_sdr for HLG. PQ still
-    # needs convert_sdr (canonical doesn't handle PQ yet).
-    _canon_hlg = os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1' and p.get('color_transfer') == 'arib-std-b67'
+    # DEC-107/113: with the canonical decoder on, HLG HDR can be tone-mapped deterministically INSIDE stabilize
+    # (cv/decode.py, no zscale/re-encode) — but only when LANESIGHT_CANONICAL_HDR=1 (its decode-once/perf is still
+    # pending, step 2). Otherwise HLG stays on convert_sdr (the current path). PQ always uses convert_sdr.
+    _canon_hlg = (os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1'
+                  and os.environ.get('LANESIGHT_CANONICAL_HDR') == '1'
+                  and p.get('color_transfer') == 'arib-std-b67')
     if p.get('hdr') and not _canon_hlg:
         t = time.time(); video = os.path.splitext(analysis_src)[0] + '_sdr.mov'
         conv = convert_sdr(analysis_src, video); p['sdr_conversion'] = conv

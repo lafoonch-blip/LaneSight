@@ -1,11 +1,11 @@
 {
-  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py); asserts the live API reproduces ball_speed within the DEC-092 don't-regress tolerance (+/-0.2 mph). ball_speed is the EARLY-LANE (release) speed. 2026-10-31: DEC-107 server-vs-Mac decode gap is STILL OPEN -- the server reads 16.04 for IMG_8753 vs the Mac ~18.7. ffmpeg CLI decode did NOT fix it (Linux ffmpeg 5.1 reads the same 16.0 as the Linux opencv wheel; Mac ffmpeg 9.0 reads 18.7). Reference stays at the current server value (16.04) until a version-matched decode or a geometry fix lands. Update here when a deploy intentionally changes a value.",
+  "_note": "Stored SERVER reference for the post-deploy smoke test (ops/smoke_deploy.py); asserts the live API reproduces ball_speed within the DEC-092 don't-regress tolerance (+/-0.2 mph). ball_speed is the EARLY-LANE (release) speed. 2026-10-31 (DEC-107/113 FIX): the server now decodes SDR clips canonically (LANESIGHT_FFMPEG_DECODE=1: ffmpeg YUV420P + numpy YUV->BGR, deterministic cross-platform), so IMG_8753 (bt709 SDR) now reproduces the Mac canonical value ~18.71 instead of 16.04. Update here when a deploy intentionally changes a value.",
   "clips": {
     "IMG_8753.MOV": {
-      "ball_speed": 16.04,
+      "ball_speed": 18.71,
       "tol_mph": 0.2,
-      "definition": "early-lane (release) speed, 4-24ft regression fit (current server/Linux decode)",
-      "server_vs_local": "server 16.04 vs Mac ~18.7 -- DEC-107 decode gap STILL OPEN (ffmpeg CLI did not fix it; root is Mac ffmpeg 9.0 vs container ffmpeg 5.1 pixel/color difference)"
+      "definition": "early-lane (release) speed, 4-24ft regression fit; canonical SDR decode (Mac canonical = 18.711)",
+      "server_vs_local": "canonical decode: Linux == Mac within 0.1 (DEC-107 fix); in-container Job confirmed 18.63 (cv2.resize) -> ~18.71 (numpy upsample)"
     }
   }
 }
