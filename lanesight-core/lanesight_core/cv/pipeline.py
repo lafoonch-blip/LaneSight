@@ -406,6 +406,23 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             near_shadow['detector_px_y'] = round(float(anchor_px[1]), 1) if anchor_px is not None else None
             near_shadow['detector_row_ft'] = _row_ft(anchor_px) if anchor_px is not None else None
             near_shadow['dump'] = near_shadow_dump if dump else None
+            # PIN-SPOT anchor (Shayne 2026-10-30): spec-fixed foul+pins depth scale, impact-independent and
+            # center-agnostic (arrows are only a plausibility check). Shadow-recorded against the impact anchor.
+            try:
+                from .pins_anchor import detect_pin_anchor
+                pin_px, pin_z, pdiag = detect_pin_anchor(S['bg'], lane, vp)
+                if pin_px is not None:
+                    Hp = lane_homography_at(lane, vp, pin_px, pin_z)
+                    pin_v, _ = early_speed_from_H(ground, t_imp, Hp)
+                    near_shadow['pin'] = {'found': True, 'head_px_y': round(float(pin_px[1]), 1),
+                                          'head_ft': _row_ft(pin_px), 'n_positive': pdiag.get('n_positive'),
+                                          'pin_speed_mph': pin_v, 'impact_speed_mph': impact_v,
+                                          'delta_mph': (round(pin_v - impact_v, 3) if (pin_v is not None and impact_v is not None) else None),
+                                          'margin': pdiag.get('margin')}
+                else:
+                    near_shadow['pin'] = {'found': False, 'reason': pdiag.get('reason')}
+            except Exception as _pe:
+                near_shadow['pin'] = {'error': f'{type(_pe).__name__}: {_pe}'[:150]}
             log(f"near-anchor shadow: {near_shadow.get('arrow_found')} near={near_shadow.get('near_speed_mph')} "
                 f"impact={near_shadow.get('impact_speed_mph')} oracle={oracle_v} d={near_shadow.get('delta_mph')}")
         except Exception as _e:
