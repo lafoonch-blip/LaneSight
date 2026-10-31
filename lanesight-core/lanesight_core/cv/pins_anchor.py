@@ -90,3 +90,61 @@ def detect_pin_anchor(bg, lane, vp):
     if runner is None or margin < 0.4 * max(best[1], 1e-6):
         return None, Z_HEAD_FT, {**diag, 'reason': 'best pin depth not clearly separated from the next'}
     return np.array([best[4], best[0]]), Z_HEAD_FT, {**diag, 'reason': 'ok'}
+
+
+def _pin_body_centroids(bg, lane, vp, yh, cx):
+    """At the fitted depth, snap each visible pin to the centroid of its bright body blob (for the pose solve).
+    Returns {name: (u, v)} for pins whose body is found. Reflection already handled by the depth fit (the body
+    is just above the base; the mirror is below)."""
+    wm = (_bright(bg) > 0).astype(np.uint8)
+    Hm = lane_homography_at(lane, vp, np.array([cx, yh]), Z_HEAD_FT); Hinv = np.linalg.inv(Hm)
+    xl, xr = lane_x(lane, float(yh)); lane_px = xr - xl
+    bh = max(8, int(0.16 * lane_px)); hw = max(3, int(0.7 * lane_px / 39.0))
+    out = {}
+    for name, (x_in, z) in zip(VISIBLE_PINS, _PINS):
+        p = Hinv @ np.array([x_in, z, 1.0])
+        if abs(p[2]) < 1e-9:
+            continue
+        u, vb = int(p[0] / p[2]), int(p[1] / p[2])
+        y0, y1, x0, x1 = vb - 2 * bh, vb + 2, u - hw, u + hw + 1
+        if y0 < 0 or y1 >= wm.shape[0] or x0 < 0 or x1 >= wm.shape[1]:
+            continue
+        win = wm[y0:y1, x0:x1]
+        ys, xs = np.nonzero(win)
+        if len(ys) < max(6, 0.1 * win.size):
+            continue
+        out[name] = (float(x0 + xs.mean()), float(y0 + ys.mean()))
+    return out
+
+
+def pin_pose_anchor(bg, lane, vp):
+    """DEC-065 pose-solved pin anchor. Detect the 7 pin bodies, build a foul+pins LandmarkSet, solve the camera
+    pose (fit_focal: focal + pin height), return (H_pose_img2world, info) usable by metrics.early_speed_from_H.
+    FINDING (2026-10-31, IMG_8751-54): on this down-lane POV the pose solve is ILL-CONDITIONED — foul+pins are
+    nearly coplanar and far (pose.py's documented planar-PnP ambiguity), giving reproj 3.6-6.4 px (>4 px gate),
+    inconsistent focal (2155-2935) / pin_height (0-20 in), and a WORSE head depth (67-126 ft) than the planar
+    anchor (58-63 ft). So this is NOT used for speed; the planar detect_pin_anchor is retained. Kept as a
+    harness for better-conditioned captures (a nearer/landscape POV with more pin depth spread may solve)."""
+    anchor, z, diag = detect_pin_anchor(bg, lane, vp)
+    if anchor is None:
+        return None, {'stage': 'detect', **diag}
+    from .calib.landmarks import LandmarkSet, STATUS_VERIFIED
+    from .calib.pose import fit_focal, plane_homography, nominal_K
+    cents = _pin_body_centroids(bg, lane, vp, anchor[1], anchor[0])
+    if len(cents) < 4:
+        return None, {'stage': 'centroids', 'reason': f'only {len(cents)} pin bodies localised', 'detect': diag}
+    h_img, w_img = bg.shape[:2]
+    ls = LandmarkSet.template('clip', (w_img, h_img))
+    F = foul_corners(lane)
+    ls.set_point('foul_l', float(F[0][0]), float(F[0][1]), status=STATUS_VERIFIED, source='auto:find_lanes')
+    ls.set_point('foul_r', float(F[1][0]), float(F[1][1]), status=STATUS_VERIFIED, source='auto:find_lanes')
+    for name, (u, v) in cents.items():
+        ls.set_point(name, u, v, status=STATUS_VERIFIED, source='auto:pin_fit')
+    sol = fit_focal(ls)
+    if sol is None:
+        return None, {'stage': 'pnp', 'reason': 'pose solve failed', 'n_pins': len(cents), 'detect': diag}
+    K = nominal_K(w_img, h_img, sol['focal_px'])
+    H = plane_homography(sol['rvec'], sol['tvec'], K)
+    return H, {'reason': 'ok', 'n_pins': len(cents), 'focal_px': sol['focal_px'],
+               'pin_height_in': sol['pin_height_in'], 'reproj_px': sol['reproj_px'],
+               'head_y_planar': round(float(anchor[1]), 1)}
