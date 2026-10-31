@@ -23,5 +23,32 @@ Goal by morning: upload a clip in the app → see speed + rev + form, all honest
 4.  Durable-jobs reliability tests vs live — pending
 5.  Back-half ball tracking shadow (if time) — pending
 
+- **3b DONE.** Form labeling packet at `03_ENGINEERING/form_labeling_packet/` (contact sheets for IMG_8824 side + IMG_8846 rear + README). Verified form-clip times map to original frames (no form trim) + 8824 is clearly a SIDE view (classifier wrong). ~10 min for Shayne to label → unblocks the gate fix + numeric form validation.
+- **4 DONE (no regressions).** Durable jobs verified LIVE on `revrate`: analysis_job has 7 done + 9 failed rows from tonight's uploads; cross-instance `GET /jobs/:id` resolves (job 8aab7a0d → done, correct shot_id). 396 unit tests pass incl. durable-job cross-instance/failure-durability/best-effort-persist + resume. Client background/kill-relaunch resume is unit-tested + builds; a live UI kill/relaunch test needs automation (not done autonomously), but the server durability that enables recovery is confirmed.
+- **5 (back-half tracking) — NOT started (time/priority).** Deferred; see morning report.
+
 ## Morning report
-(filled at end)
+
+**Live:** `lanesight-api-revrate` (unchanged — no server deploy needed tonight; all new code is shadow-gated or docs/tests). dev-build-v0 pushed through commit at wrap.
+
+**What changed tonight:**
+- Pin anchor: wired the DEC-065 pose solver (finding: ill-conditioned on this POV; planar retained) + shadow harness; **DEC-112** records it's shadow-only, not promoted.
+- Ball upload→shot card verified end-to-end in the app (Release speed 16.0 + Rev 412 + honest unavailable states); APP_DESIGN 2026-10-29-A marked BUILT (C verify).
+- Form root-caused (DEC-095 gate bug) + a labeling packet built. View-classifier bug noted.
+- Durable jobs re-verified live; no regressions.
+
+**Pin anchor vs 60 ft truth (both anchors, per clip)** — truth = track-crossing 60 ft/Δt (offset-invariant; NOT visually frame-confirmed, see below):
+| Clip | Truth | impact err | pin err |
+|---|---|---|---|
+| 8751 | 18.03 | 0.03 | 0.17 |
+| 8752 | 18.24 | 0.47 | 0.10 |
+| 8753 | 18.17 | 0.15 | 0.15 |
+| 8754 | 17.54 | 0.07 | 0.14 |
+Pin ties/beats on 2/4 (8752, 8753) → fails the "all 4" gate → NOT promoted. Pose solver worse (ill-conditioned).
+
+**What I need from you (shortest first):**
+1. **Form event labels (~10 min):** `03_ENGINEERING/form_labeling_packet/` — mark ball_start/backswing_top/release/slide_stop/finish_hold_end on the 2 contact sheets → unblocks the form gate fix + form results.
+2. **Pin anchor truth labels:** confirm foul_cross/first_pin_contact on IMG_8751–54 (I'm blocked by the trim/stabilization time offset) → decides pin-anchor promotion.
+3. **Decision:** want the other 4 form clips' sheets too? And should I fix the view classifier (8824 side→down_lane misread) now or after labels?
+
+**Known not-done:** form RESULTS in-app (blocked on the gate fix, which needs #1); back-half ball tracking experiment (item 5, deferred).
