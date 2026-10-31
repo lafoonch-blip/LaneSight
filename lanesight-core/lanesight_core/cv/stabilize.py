@@ -58,6 +58,60 @@ def open_capture(path):
     return cap
 
 
+# DEC-107 (Shayne 2026-10-31): the opencv wheel's bundled video decoder produces DIFFERENT pixels on Linux
+# (Cloud Run) vs macOS, which shifts the lane geometry and drops server speed ~14% (IMG_8753: 16.0 vs 18.7 on
+# the Mac). ffmpeg CLI decodes deterministically on both, so LANESIGHT_FFMPEG_DECODE=1 reads frames through
+# ffmpeg instead of cv2.VideoCapture — same pixels everywhere. Validate per-clip (ops Cloud Run Job) that
+# IMG_8751-54 match the Mac within 0.1 mph before shipping it as the default.
+def _ff_display_dims(path):
+    """Display (post-autorotate) width,height. ffprobe gives coded w/h + a rotation side-data; ffmpeg's default
+    -autorotate outputs the rotated frame, so a ±90 rotation swaps w/h (matches cv2 ORIENTATION_AUTO)."""
+    import json as _json
+    out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                          'stream=width,height:stream_side_data=rotation', '-of', 'json', path],
+                         capture_output=True, text=True).stdout
+    st = _json.loads(out)['streams'][0]
+    w, h = int(st['width']), int(st['height'])
+    rot = 0
+    for sd in st.get('side_data_list', []) or []:
+        if 'rotation' in sd:
+            rot = int(sd['rotation'])
+    if abs(rot) % 180 == 90:
+        w, h = h, w
+    return w, h
+
+
+def _ff_frames(path):
+    """Stream BGR frames via ffmpeg CLI (bgr24 rawvideo pipe). Deterministic across platforms (DEC-107). Capped
+    to the ffprobe frame count = len(pts(path)), so the frame stream and the timestamp array stay the SAME length
+    (ffmpeg rawvideo can emit one extra/fewer frame than ffprobe counts → index mismatch otherwise). Broken-pipe
+    stderr (when the consumer stops early) is discarded."""
+    import os as _os
+    w, h = _ff_display_dims(path)
+    fsz = w * h * 3
+    nexp = len(pts(path))                      # same accounting the timestamps use
+    proc = subprocess.Popen(['ffmpeg', '-v', 'error', '-i', path, '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-'],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=fsz)
+    count = 0
+    try:
+        while count < nexp:
+            buf = proc.stdout.read(fsz)
+            if buf is None or len(buf) < fsz:
+                break
+            count += 1
+            yield np.frombuffer(buf, np.uint8).reshape(h, w, 3).copy()
+    finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
 def frames(path):
     budget = _FRAME_CACHE_MB * 1048576
     # Serve a fully-populated cache without touching the decoder (DEC-092 P1 decode-once). Each pass gets an
@@ -76,12 +130,27 @@ def frames(path):
         reset_frame_cache(); _FCACHE['path'] = path       # (re)start population for this clip
     elif caching:
         _FCACHE.update(frames={}, bytes=0, complete=False)  # re-populate from scratch this pass
-    cap = open_capture(path); i = 0
-    nframes_hint = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)   # cheap upfront size check (0 if codec won't say)
+    # DEC-107: ffmpeg CLI decode (deterministic Linux==macOS) when enabled, else cv2.VideoCapture. Both yield
+    # upright BGR frames (ffmpeg autorotate ≈ cv2 ORIENTATION_AUTO).
+    _use_ff = os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1'
+    if _use_ff:
+        _gen = _ff_frames(path)
+        def _read():
+            try:
+                return True, next(_gen)
+            except StopIteration:
+                return False, None
+        _release = _gen.close
+        nframes_hint = 0
+    else:
+        cap = open_capture(path)
+        nframes_hint = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)   # cheap upfront size check (0 if codec won't say)
+        _read, _release = cap.read, cap.release
+    i = 0
     try:
         while True:
             t = _time.perf_counter()
-            ok, f = cap.read()
+            ok, f = _read()
             _DECODE['seconds'] += _time.perf_counter() - t
             if not ok:
                 if caching:
@@ -100,7 +169,7 @@ def frames(path):
                     _FCACHE['bytes'] += f.nbytes
             yield i, f; i += 1
     finally:
-        cap.release()
+        _release()
 
 def wood_mask(bgr):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
