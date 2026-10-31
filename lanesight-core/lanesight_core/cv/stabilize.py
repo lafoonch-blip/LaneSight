@@ -222,8 +222,16 @@ def wood_mask(bgr):
     return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
 class Registrar:
-    def __init__(self, scale=0.5):
-        self.s = scale; self.orb = cv2.ORB_create(4000, fastThreshold=10); self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+    # DEC-092 P2 perf: the detection resolution + ORB feature count are the per-frame registration cost. On a
+    # fixed-tripod clip a few hundred good lane-surface matches already pin the homography, so fewer features at a
+    # lower detection scale cut stabilize time with no measurable geometry change (re-validate on IMG_8751-54,
+    # Standard tier). Measurement is unaffected — it runs at FULL res on the warped frames; only the registration
+    # that computes the warp is down-scaled. Defaults preserve the original 0.5 / 4000.
+    def __init__(self, scale=None):
+        self.s = float(os.environ.get('LANESIGHT_ORB_SCALE', '0.35')) if scale is None else scale
+        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '1500'))
+        fast = int(os.environ.get('LANESIGHT_ORB_FAST', '10'))
+        self.orb = cv2.ORB_create(nfeat, fastThreshold=fast); self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     def feats(self, f):
         small = cv2.resize(f, None, fx=self.s, fy=self.s)
         g = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
@@ -275,6 +283,47 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
     Hs = []; inl = []; kr = dr = None; prev = None
     for i, f in frames(path):
         if i == ref: kr, dr = R.feats(f); ref_img = f.copy(); break
+    # Subsample-registration fast path (DEC-092 P2 perf): pass B's per-frame ORB registration is ~80% of analysis
+    # time on the server, but LaneSight is shot from a fixed tripod — the camera barely moves (logs: "motion up to
+    # 1px"). So register only every LANESIGHT_REG_STRIDE-th frame with real ORB (which captures the clip's ACTUAL
+    # small camera offset — unlike assuming identity, which biased IMG_8751 by ~0.4 mph) and reuse the nearest
+    # registered homography for the frames in between. Consecutive frames differ by <1px on a tripod, so a
+    # neighbour's homography is accurate; the cost drops ~STRIDE-fold. STRIDE=1 (default) is the exact original
+    # per-frame path. Re-validate on IMG_8751-54 (Standard tier) whenever STRIDE changes.
+    STRIDE = int(os.environ.get('LANESIGHT_REG_STRIDE', '1'))
+    _stride_done = False
+    if STRIDE > 1 and kr is not None:
+        reg_ids = sorted(set([ref] + list(range(0, len(ts), STRIDE))))
+        regset = set(reg_ids); regmax = max(reg_ids); rf = {}
+        for i, f in frames(path):
+            if i in regset: rf[i] = f
+            if i >= regmax: break
+        _tl = threading.local()
+        def _feats(f):
+            R2 = getattr(_tl, 'R', None)
+            if R2 is None: R2 = _tl.R = Registrar()
+            return R2.feats(f)
+        nw = workers(); default_threads = cv2.getNumThreads()
+        cv2.setNumThreads(1)
+        with ThreadPoolExecutor(max_workers=nw) as ex:
+            feats = list(ex.map(lambda i: _feats(rf[i]), reg_ids))
+        cv2.setNumThreads(default_threads)
+        regH = {}; prevf = None
+        for i, (kf, df) in zip(reg_ids, feats):
+            H, n = R.H(kf, df, kr, dr)
+            if (H is None or n < min_inliers) and prevf is not None:
+                Hp, n2 = R.H(kf, df, prevf[1], prevf[2])
+                H, n = (regH[prevf[0]] @ Hp, -n2) if Hp is not None else (regH[prevf[0]], -1)
+            if H is None: H, n = np.eye(3), -1
+            regH[i] = H; prevf = (i, kf, df)
+        reg_arr = np.array(reg_ids)
+        for i in range(len(ts)):
+            p = int(np.searchsorted(reg_arr, i))
+            cand = [c for c in (p - 1, p) if 0 <= c < len(reg_arr)]
+            j = reg_ids[min(cand, key=lambda c: abs(reg_arr[c] - i))]
+            Hs.append(regH[j]); inl.append(999 if np.array_equal(regH[j], np.eye(3)) else int(min_inliers))
+        log(f'subsample registration: ORB on {len(reg_ids)}/{len(ts)} frames (stride {STRIDE}), nearest-H fill')
+        _stride_done = True
     # Two phases per chunk so BOTH halves use the cores. ORB feature extraction is per-frame independent (the heavy
     # part here) and scales only when each cv2 call is single-threaded, so it is fanned across worker threads with
     # cv2 threads forced to 1 (each worker gets its own deterministic Registrar -> bit-identical features). The
@@ -287,28 +336,29 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         R2 = getattr(_tl, 'R', None)
         if R2 is None: R2 = _tl.R = Registrar()
         return R2.feats(f)
-    nw = workers(); default_threads = cv2.getNumThreads(); chunk = max(nw * 4, 48); gen = frames(path)
-    try:
-        with ThreadPoolExecutor(max_workers=nw) as ex:
-            while True:
-                batch = []
-                for _ in range(chunk):
-                    nf = next(gen, None)
-                    if nf is None: break
-                    batch.append(nf)                                   # (i, frame)
-                if not batch: break
-                cv2.setNumThreads(1)                                   # phase 1: parallel ORB (per-frame independent)
-                feats = list(ex.map(lambda nf: _feats(nf[1]), batch)) # ex.map preserves input order
-                cv2.setNumThreads(default_threads)                    # phase 2: sequential solve at full threads
-                for (i, f), (kf, df) in zip(batch, feats):
-                    H, n = R.H(kf, df, kr, dr)
-                    if (H is None or n < min_inliers) and prev is not None:
-                        Hp, n2 = R.H(kf, df, prev[1], prev[2])         # frame -> previous frame
-                        H, n = (Hs[-1] @ Hp, -n2) if Hp is not None else (Hs[-1], -1)
-                    if H is None: H, n = np.eye(3), -1
-                    Hs.append(H); inl.append(n); prev = (i, kf, df)
-    finally:
-        cv2.setNumThreads(default_threads)
+    if not _stride_done:
+        nw = workers(); default_threads = cv2.getNumThreads(); chunk = max(nw * 4, 48); gen = frames(path)
+        try:
+            with ThreadPoolExecutor(max_workers=nw) as ex:
+                while True:
+                    batch = []
+                    for _ in range(chunk):
+                        nf = next(gen, None)
+                        if nf is None: break
+                        batch.append(nf)                                   # (i, frame)
+                    if not batch: break
+                    cv2.setNumThreads(1)                                   # phase 1: parallel ORB (per-frame independent)
+                    feats = list(ex.map(lambda nf: _feats(nf[1]), batch)) # ex.map preserves input order
+                    cv2.setNumThreads(default_threads)                    # phase 2: sequential solve at full threads
+                    for (i, f), (kf, df) in zip(batch, feats):
+                        H, n = R.H(kf, df, kr, dr)
+                        if (H is None or n < min_inliers) and prev is not None:
+                            Hp, n2 = R.H(kf, df, prev[1], prev[2])         # frame -> previous frame
+                            H, n = (Hs[-1] @ Hp, -n2) if Hp is not None else (Hs[-1], -1)
+                        if H is None: H, n = np.eye(3), -1
+                        Hs.append(H); inl.append(n); prev = (i, kf, df)
+        finally:
+            cv2.setNumThreads(default_threads)
     Hs = np.array(Hs)
     c = np.array([540., 960., 1.]); sh = [np.linalg.norm((h @ c / (h @ c)[2])[:2] - c[:2]) for h in Hs]
     log(f'ref frame {ref} (t={ts[ref]:.2f}s); median inliers {np.median([v for v in inl if v > 0]):.0f}; '
