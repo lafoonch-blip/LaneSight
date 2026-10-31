@@ -1,0 +1,20 @@
+{
+  "_README": "Ground-truth form labels for the numeric-bar validation (next session). Fill in the timestamp (in SECONDS from the clip start) of each swing event you can see in that clip, plus the step count. Leave a value null if the event isn't visible in that view. Rear clips (8846-48) see steps / shoulders / off-arm / backswing height + finish; side clips (8824-26) see spine tilt / release / slide. Label only what's clearly visible — a null is better than a guess. Copy this file to form_labels.json and fill it. Tolerance target: timing events within ~0.08 s (about 2 frames at 30 fps); step_count exact.",
+  "_events": {
+    "E2_ball_start_s": "first sustained move of the ball out of the setup hold",
+    "E4_backswing_top_s": "top of the backswing (apex, ball highest)",
+    "E5_slide_start_s": "the slide foot starts its final slide",
+    "E7_release_s": "ball leaves the hand (bottom of the swing)",
+    "E8_slide_stop_s": "slide foot stops at the line",
+    "E9_finish_hold_end_s": "end of the posted finish (you come out of the hold)",
+    "step_count": "number of approach steps (integer, e.g. 4 or 5)"
+  },
+  "clips": {
+    "IMG_8846": {"view": "rear",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null},
+    "IMG_8847": {"view": "rear",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null},
+    "IMG_8848": {"view": "rear",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null},
+    "IMG_8824": {"view": "side",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null},
+    "IMG_8825": {"view": "side",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null},
+    "IMG_8826": {"view": "side",  "E2_ball_start_s": null, "E4_backswing_top_s": null, "E5_slide_start_s": null, "E7_release_s": null, "E8_slide_stop_s": null, "E9_finish_hold_end_s": null, "step_count": null}
+  }
+}
