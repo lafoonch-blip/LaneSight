@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.69  
+Version: 1.70  
 Last Updated: 2026-10-30  
 Owner: Shayne  
-Supersedes: v1.68
+Supersedes: v1.69
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,12 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-112 — Pin-spot depth anchor: shadow only, NOT promoted (2026-10-31)
+**Decision (overnight run):** `cv/pins_anchor.py` — a spec-fixed, impact-independent, center-agnostic near-lane depth anchor (foul Z=0 + the 7 visible perimeter pin spots, head pin Z=60 ft; the centre-column back pins 5/8/9 are occluded down-lane) — stays SHADOW-gated and does NOT feed speed/baselines/coaching. It reuses the arrow V-fit structure (sweep depth only; lateral from the detected edges; score the bright pin body above each projected base; reflection-reject). It detects 7/7 pins on all of IMG_8751-54 incl. both portrait clips (the arrow fit declined on portrait).
+- **Why not promoted:** (1) the DEC-065 pose solver is ILL-CONDITIONED on this POV — foul+pins are near-coplanar + far → reproj 3.6-6.4 px, inconsistent focal/pin_height, head depth 67-126 ft (worse than the planar 58-63 ft); the planar anchor is retained but carries a ~±0.5 mph residual (base-vs-body offset + far-lane conditioning). (2) Against a track-crossing 60 ft truth (offset-invariant Δt; NOT visually frame-confirmed — see below), the pin anchor ties/beats the impact anchor on only 2/4 clips (8752 pin 0.10 vs impact 0.47; 8753 tie; 8751/8754 impact better), failing the "ties/beats on all 4" gate.
+- **Ground-truth labels are BLOCKED:** `foul_cross_s` / `first_pin_contact_s` (validation/cv_eval/labels/IMG_875x) are unfilled; autonomous visual labeling is blocked because the analysis TRIM/stabilization shifts track time off the original clip time (at track t_imp the original frames still show standing pins), so track events can't be mapped to original frames without the stabilization transform. The 60 ft Δt (hence speed) is still valid (a time difference cancels the offset); the absolute frame labels need Shayne, or a pins-scatter frame-diff pass.
+**Status:** ACCEPTED — shadow harness committed; promotion pending (a) a better-conditioned capture or a non-PnP pin solve, and (b) Shayne's visual foul_cross/first_pin_contact labels. **Never** in baselines/score/coaching.
 
 ### DEC-111 — Metric independence: never fail the whole shot for one missing dependency
 **Decision (Shayne, 2026-10-30):** A broken single stage must not discard the metrics that don't depend on it. Compute everything the near lane and the ball's tracked path allow; mark only the genuinely-undeterminable metrics `unavailable` with a reason; hard-fail only when *nothing* is measurable.
