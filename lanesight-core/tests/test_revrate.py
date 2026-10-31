@@ -38,3 +38,17 @@ def test_no_in_band_period_lands_on_the_rail():
     # decays with lag and argmax slides to the shortest-period rail (the real '672' signature).
     _, info = rev_rate(_crops(period_s=0.5))             # 2 Hz, below fmin -> nothing to lock onto in band
     assert info['at_rail']                               # caller reports rev rate unavailable, not 60/P
+
+
+def test_short_clip_never_reports_a_period_without_data():
+    """2026-10-30: with few crops, long periods have no autocorrelation data (NaN score). np.argmax picked the first
+    NaN and reported it as a rev rate. Now: no rail-free peak inside the searchable band -> at_rail (unavailable)."""
+    import numpy as np
+    from lanesight_core.cv.revrate import rev_rate
+    rng = np.random.default_rng(0)
+    crops = [(i / 60.0, rng.integers(0, 255, (40, 40, 3), dtype=np.uint8)) for i in range(24)]   # pure noise
+    rev, info = rev_rate(crops)
+    assert not np.isfinite(info['score']).all()          # the NaN tail exists for a clip this short
+    assert info['at_rail'] or np.isfinite(info['score'][info['argmax']])
+    assert np.isfinite(info['score'][info['argmax']]) or info['at_rail']
+    assert info['argmax'] <= int(np.where(np.isfinite(info['score']))[0].max())
