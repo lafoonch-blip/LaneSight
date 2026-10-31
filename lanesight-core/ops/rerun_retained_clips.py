@@ -49,6 +49,10 @@ def main():
                 rec, probe, timings = analyze_clip(tmp, os.path.splitext(tmp)[0],
                                                    handed=sh.get('handed'), timings={})
                 d = rec.to_dict() if hasattr(rec, 'to_dict') else rec
+                # save_shot_result's measurements upsert resolves on the PK (id), not (shot_id,metric,source),
+                # so re-saving a shot that already has rows 409s. Clear this shot's video measurements first,
+                # then save_shot_result inserts the fresh 0.7.0 rows cleanly. (Form rows untouched.)
+                store._req(f'measurements?shot_id=eq.{sh["id"]}&source=eq.lanesight_video', 'DELETE')
                 store.save_shot_result(sh['id'], d, {'ok': True}, algo_version=ALGO_VERSION)
                 n_speed = ((d.get('metrics') or {}).get('ball_speed') or {}).get('value')
                 results.append({'path': path, 'shot_id': sh['id'], 'user': u[:8],
