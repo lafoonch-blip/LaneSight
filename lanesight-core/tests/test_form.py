@@ -154,3 +154,17 @@ def test_gate_events_missing_slide_stop_is_lenient():
     ev = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8, E8=None)
     ok, reasons = pose.gate_events(ev)
     assert 'E7' in ok
+
+
+def test_gate_events_dec095_fix_uses_slide_plant_not_hold_start(monkeypatch):
+    """DEC-095 fix (Shayne 2026-10-31): the gate must anchor release to the slide-foot PLANT (E5), not
+    E8=hold_start (posted finish). Same delivery: release sits at the plant (E5) but ~0.85 s before the posted
+    finish (E8). OLD behavior (default) rejects it off E8; the spec fix (flag) accepts it off E5."""
+    # release at the plant, posted finish 0.85 s later (the IMG_8824/8846 shape)
+    ev = dict(E2=10.0, E3=10.3, E4=11.2, E5=11.75, E6=11.75, E7=11.8, E8=12.6)
+    monkeypatch.delenv('LANESIGHT_FORM_GATE_FIX', raising=False)
+    ok_old, reasons_old = pose.gate_events(ev)
+    assert ok_old == set() and 'slide stop' in reasons_old['E7']        # old (E8) rejects everything
+    monkeypatch.setenv('LANESIGHT_FORM_GATE_FIX', '1')
+    ok_new, reasons_new = pose.gate_events(ev)
+    assert ok_new == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons_new == {}   # spec (E5) accepts

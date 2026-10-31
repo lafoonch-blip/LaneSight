@@ -578,12 +578,18 @@ def gate_events(ev: dict) -> tuple[set, dict]:
                 ok.discard(k)
                 reasons[k] = why
 
-    E2, E6, E7, E8 = ev.get('E2'), ev.get('E6'), ev.get('E7'), ev.get('E8')
-    # 1. release must sit at the slide stop (you release as the slide foot posts). Release is the anchor the whole
-    # delivery is timed from — if it's off, the delivery window was mis-isolated, so NONE of the events can be
-    # trusted (form shot c9df6ca0: release read 0.57s before the slide stop). Drop them all with the reason.
-    if E7 is not None and E8 is not None and not (E8 + RELEASE_VS_STOP_LO <= E7 <= E8 + RELEASE_VS_STOP_HI):
-        drop(list(disp), f"release ({E7:.2f}s) isn't near the slide stop ({E8:.2f}s) — off by {E7 - E8:+.2f}s, so "
+    E2, E6, E7 = ev.get('E2'), ev.get('E6'), ev.get('E7')
+    # 1. release must sit at the slide stop (you release as the slide foot posts). Release anchors the whole
+    # delivery — if it's off, the window was mis-isolated, so NONE of the events can be trusted (form shot
+    # c9df6ca0). DEC-095 FIX (Shayne 2026-10-31): the "slide stop" is the slide-foot PLANT (E5), not E8=hold_start
+    # (the posted-finish start, ~1.2 s later) — comparing to E8 produced a ~0.7-0.9 s false gap that rejected
+    # EVERY real delivery (IMG_8824/8846). The spec-correct reference (E5) is behind LANESIGHT_FORM_GATE_FIX
+    # (SHADOW) until Shayne's event labels validate it + retune the bounds; default keeps the old E8 reference so
+    # production results are unchanged. T4 leverage (fundamentals E7−E8) legitimately still uses hold_start.
+    import os as _os
+    _stop = ev.get('E5') if _os.environ.get('LANESIGHT_FORM_GATE_FIX') == '1' else ev.get('E8')
+    if E7 is not None and _stop is not None and not (_stop + RELEASE_VS_STOP_LO <= E7 <= _stop + RELEASE_VS_STOP_HI):
+        drop(list(disp), f"release ({E7:.2f}s) isn't near the slide stop ({_stop:.2f}s) — off by {E7 - _stop:+.2f}s, so "
                          f"the delivery couldn't be timed reliably on this clip.")
         return ok, reasons
     # 2. ball-start → release duration (release is trusted here)
