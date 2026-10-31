@@ -17,6 +17,55 @@ import sys
 import urllib.request
 
 
+def frame_decode_diag(clip, n=300):
+    """Decode frame `n` of `clip` three ways and return hashes + per-channel stats so a Mac vs Linux run can be
+    diffed to LOCALIZE the gap (DEC-107): (1) raw YUV420P via ffmpeg (native decode, NO colour conversion —
+    should be bit-identical cross-platform), (2) BGR24 via ffmpeg swscale, (3) BGR via cv2.VideoCapture. If the
+    YUV hashes match but the BGR hashes/means differ, the divergence is the YUV->BGR colour conversion."""
+    import hashlib, numpy as np, cv2, json as _json
+    d = {'frame': n}
+    # clip colour metadata (matrix/range/transfer drive the YUV->RGB conversion)
+    try:
+        pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                             'stream=width,height,color_space,color_range,color_transfer,color_primaries,pix_fmt',
+                             '-of', 'json', clip], capture_output=True, text=True).stdout
+        d['meta'] = (_json.loads(pr).get('streams') or [{}])[0]
+    except Exception as e:
+        d['meta'] = f'err {e}'
+
+    def _ff(pixfmt):
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-i', clip, '-vf', f"select=eq(n\\,{n})",
+                            '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', pixfmt, '-'], capture_output=True)
+        return r.stdout
+    try:
+        yuv = _ff('yuv420p')
+        d['yuv420p'] = {'bytes': len(yuv), 'md5': hashlib.md5(yuv).hexdigest(),
+                        'mean': round(float(np.frombuffer(yuv, np.uint8).mean()), 4) if yuv else None}
+    except Exception as e:
+        d['yuv420p'] = f'err {e}'
+    try:
+        bgr = _ff('bgr24')
+        a = np.frombuffer(bgr, np.uint8) if bgr else np.array([])
+        d['bgr_ffmpeg'] = {'bytes': len(bgr), 'md5': hashlib.md5(bgr).hexdigest(),
+                           'mean_bgr': [round(float(a[i::3].mean()), 3) for i in range(3)] if a.size else None}
+    except Exception as e:
+        d['bgr_ffmpeg'] = f'err {e}'
+    try:
+        cap = cv2.VideoCapture(clip)
+        if hasattr(cv2, 'CAP_PROP_ORIENTATION_AUTO'):
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, n)
+        ok, f = cap.read(); cap.release()
+        if ok:
+            d['bgr_cv2'] = {'shape': list(f.shape), 'md5': hashlib.md5(np.ascontiguousarray(f)).hexdigest(),
+                            'mean_bgr': [round(float(f[..., i].mean()), 3) for i in range(3)]}
+        else:
+            d['bgr_cv2'] = 'read failed'
+    except Exception as e:
+        d['bgr_cv2'] = f'err {e}'
+    return d
+
+
 def main():
     out = {'python': sys.version.split()[0]}
     try:
@@ -73,6 +122,12 @@ def main():
                       'intervals': sorted([(int(cc), float(uu)) for cc, uu in zip(c, u)], reverse=True)[:3]}
     except Exception as e:
         out['pts'] = f'err {e}'
+
+    # STEP 1 (DEC-107 localize): per-frame YUV/BGR decode diff (run the SAME on Mac + container, diff the output)
+    try:
+        out['frame_diag'] = frame_decode_diag(clip, int(os.environ.get('DIAG_FRAME', '300')))
+    except Exception as e:
+        out['frame_diag'] = f'err {type(e).__name__}: {e}'
 
     # run the pipeline + dump the geometry signal (z@t≈9.82 is the key: Mac 13.28 vs server 11.40)
     try:
