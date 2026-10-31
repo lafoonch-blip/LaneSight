@@ -133,8 +133,13 @@ def frames(path):
     # DEC-107: ffmpeg CLI decode (deterministic Linux==macOS) when enabled, else cv2.VideoCapture. Both yield
     # upright BGR frames (ffmpeg autorotate ≈ cv2 ORIENTATION_AUTO).
     _use_ff = os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1'
+    _canon = False
     if _use_ff:
-        _gen = _ff_frames(path)
+        from . import decode as _dec
+        _meta = _dec.probe_meta(path)
+        _canon = _dec.can_canonical(_meta)
+    if _use_ff and _canon:
+        _gen = _dec.canonical_frames(path, _meta, len(pts(path)))   # yuv decode + numpy BGR (deterministic)
         def _read():
             try:
                 return True, next(_gen)
