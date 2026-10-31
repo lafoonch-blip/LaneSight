@@ -137,20 +137,35 @@ def main():
         import tempfile, time as _t
         from lanesight_runner.core import analyze_clip
         from lanesight_core.cv import stabilize as _stab
-        _stab.reset_decode_stats()
-        _t0 = _t.time()
-        rec, _, _ = analyze_clip(clip, os.path.join(tempfile.mkdtemp(), 'x'), log=lambda *a: None)
-        out['analyze_s'] = round(_t.time() - _t0, 1)
-        out['decode_stats'] = _stab.decode_stats()
-        d = rec.to_dict() if hasattr(rec, 'to_dict') else rec
-        m = d.get('metrics') or {}; ev = d.get('events') or {}
-        traj = (d.get('trajectory') or {}).get('lane') or []
-        z982 = next((round(p['z_ft'], 2) for p in traj if abs(p['t'] - 9.82) < 0.01), None)
-        out['result'] = {'ball_speed_early': (m.get('ball_speed') or {}).get('value'),
-                         't_release': ev.get('t_release'), 't_impact': ev.get('t_impact'),
-                         'z_at_9_82': z982, 'n_traj': len(traj)}
+
+        def _one(tag):
+            """One analyze with per-stage timings captured. Prints the 'stabilize sub:' line to stdout."""
+            _stab.reset_decode_stats()
+            tm = {}
+            _t0 = _t.time()
+            rec, _, _ = analyze_clip(clip, os.path.join(tempfile.mkdtemp(), 'x'),
+                                     log=(print if os.environ.get('DIAG_STABSUB') == '1' else (lambda *a: None)),
+                                     timings=tm)
+            d = rec.to_dict() if hasattr(rec, 'to_dict') else rec
+            m = d.get('metrics') or {}; ev = d.get('events') or {}
+            cv = tm.get('cv', {})
+            return {'tag': tag, 'analyze_s': round(_t.time() - _t0, 1), 'ball_speed': (m.get('ball_speed') or {}).get('value'),
+                    'stabilize_s': cv.get('stabilize_s'), 'extract_blobs_s': cv.get('extract_blobs_s'),
+                    'read_pins_s': cv.get('read_pins_s'), 'decode': _stab.decode_stats()}
+
+        # DEC-115 in-container A/B: both ORB configs in the SAME container (same instance) so the comparison
+        # controls for Cloud Run instance noise. DIAG_ORB_AB=1 to run it.
+        if os.environ.get('DIAG_ORB_AB') == '1':
+            runs = []
+            for tag, scale, feat in [('orb_0.5_4000', '0.5', '4000'), ('orb_0.35_1500', '0.35', '1500')]:
+                os.environ['LANESIGHT_ORB_SCALE'] = scale; os.environ['LANESIGHT_ORB_FEATURES'] = feat
+                runs.append(_one(tag))
+            out['orb_ab'] = runs
+        else:
+            out['result'] = _one('default')
     except Exception as e:
-        out['result'] = f'err {type(e).__name__}: {e}'
+        import traceback
+        out['result'] = f'err {type(e).__name__}: {e}'; out['tb'] = traceback.format_exc()[-800:]
     print(json.dumps(out, indent=2))
 
 

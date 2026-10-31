@@ -228,8 +228,8 @@ class Registrar:
     # Standard tier). Measurement is unaffected — it runs at FULL res on the warped frames; only the registration
     # that computes the warp is down-scaled. Defaults preserve the original 0.5 / 4000.
     def __init__(self, scale=None):
-        self.s = float(os.environ.get('LANESIGHT_ORB_SCALE', '0.35')) if scale is None else scale
-        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '1500'))
+        self.s = float(os.environ.get('LANESIGHT_ORB_SCALE', '0.5')) if scale is None else scale
+        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '4000'))
         fast = int(os.environ.get('LANESIGHT_ORB_FAST', '10'))
         self.orb = cv2.ORB_create(nfeat, fastThreshold=fast); self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     def feats(self, f):
@@ -262,6 +262,8 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
                                   f'timing source has {len(ts)} frames but the video has {n}',
                                   stage='stabilize', diagnostics={'timing_frames': len(ts), 'video_frames': n})
     core = (lambda i: True) if core_end_s is None else (lambda i: i >= len(ts) or ts[i] <= core_end_s)
+    _dbg = {'passA_s': 0.0, 'featsB_s': 0.0, 'solveB_s': 0.0, 'bgC_s': 0.0}   # DEC-115 sub-stage profiling
+    _tA = _time.perf_counter()
     # pass A: reference = middle of the longest steady stretch with the lane visible (within the core, not the tail)
     prevg = None; mot = []; woodf = []
     for i, f in frames(path):
@@ -278,6 +280,7 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         run = run + 1 if v else 0
         if run > best[0]: best = (run, i - run + 1, i)
     ref = (best[1] + best[2]) // 2
+    _dbg['passA_s'] = round(_time.perf_counter() - _tA, 2)
     R = Registrar()
     # pass B: homographies (direct to reference; chain through previous frame when direct match is weak)
     Hs = []; inl = []; kr = dr = None; prev = None
@@ -348,8 +351,11 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
                         batch.append(nf)                                   # (i, frame)
                     if not batch: break
                     cv2.setNumThreads(1)                                   # phase 1: parallel ORB (per-frame independent)
+                    _tf = _time.perf_counter()
                     feats = list(ex.map(lambda nf: _feats(nf[1]), batch)) # ex.map preserves input order
+                    _dbg['featsB_s'] += _time.perf_counter() - _tf
                     cv2.setNumThreads(default_threads)                    # phase 2: sequential solve at full threads
+                    _ts2 = _time.perf_counter()
                     for (i, f), (kf, df) in zip(batch, feats):
                         H, n = R.H(kf, df, kr, dr)
                         if (H is None or n < min_inliers) and prev is not None:
@@ -357,6 +363,7 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
                             H, n = (Hs[-1] @ Hp, -n2) if Hp is not None else (Hs[-1], -1)
                         if H is None: H, n = np.eye(3), -1
                         Hs.append(H); inl.append(n); prev = (i, kf, df)
+                    _dbg['solveB_s'] += _time.perf_counter() - _ts2
         finally:
             cv2.setNumThreads(default_threads)
     Hs = np.array(Hs)
@@ -365,10 +372,14 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         f'chained {sum(v < 0 for v in inl)}/{len(inl)}; camera motion up to {max(sh):.0f}px')
     # pass C: background = temporal median of warped frames (moving bowler/ball removed), core frames only so the
     # pin-settle tail (rake sweep, reset, bowler walking back) never pollutes the lane geometry
+    _tC = _time.perf_counter()
     h, w = ref_img.shape[:2]
     core_idx = [i for i in range(len(Hs)) if core(i)]; step = max(1, len(core_idx) // 80)
     sample = set(core_idx[::step]); stack = []
     for i, f in frames(path):
         if i in sample: stack.append(cv2.warpPerspective(f, Hs[i], (w, h)))
     bg = np.median(np.stack(stack), axis=0).astype(np.uint8)
+    _dbg['bgC_s'] = round(_time.perf_counter() - _tC, 2)
+    _dbg['featsB_s'] = round(_dbg['featsB_s'], 2); _dbg['solveB_s'] = round(_dbg['solveB_s'], 2)
+    log(f"stabilize sub: passA={_dbg['passA_s']}s featsB={_dbg['featsB_s']}s solveB={_dbg['solveB_s']}s bgC={_dbg['bgC_s']}s")
     return dict(ts=ts[:len(Hs)], Hs=Hs, ref=ref, bg=bg, inliers=np.array(inl), shift=np.array(sh))
