@@ -123,17 +123,25 @@ def main():
     except Exception as e:
         out['pts'] = f'err {e}'
 
-    # STEP 1 (DEC-107 localize): per-frame YUV/BGR decode diff (run the SAME on Mac + container, diff the output)
-    try:
-        out['frame_diag'] = frame_decode_diag(clip, int(os.environ.get('DIAG_FRAME', '300')))
-    except Exception as e:
-        out['frame_diag'] = f'err {type(e).__name__}: {e}'
+    # STEP 1 (DEC-107 localize): per-frame YUV/BGR decode diff (run the SAME on Mac + container, diff the output).
+    # DIAG_FRAME=0 skips it (it does 3 extra full decodes — exclude from a pure analyze-timing run).
+    _nfd = int(os.environ.get('DIAG_FRAME', '300'))
+    if _nfd > 0:
+        try:
+            out['frame_diag'] = frame_decode_diag(clip, _nfd)
+        except Exception as e:
+            out['frame_diag'] = f'err {type(e).__name__}: {e}'
 
     # run the pipeline + dump the geometry signal (z@t≈9.82 is the key: Mac 13.28 vs server 11.40)
     try:
-        import tempfile
+        import tempfile, time as _t
         from lanesight_runner.core import analyze_clip
+        from lanesight_core.cv import stabilize as _stab
+        _stab.reset_decode_stats()
+        _t0 = _t.time()
         rec, _, _ = analyze_clip(clip, os.path.join(tempfile.mkdtemp(), 'x'), log=lambda *a: None)
+        out['analyze_s'] = round(_t.time() - _t0, 1)
+        out['decode_stats'] = _stab.decode_stats()
         d = rec.to_dict() if hasattr(rec, 'to_dict') else rec
         m = d.get('metrics') or {}; ev = d.get('events') or {}
         traj = (d.get('trajectory') or {}).get('lane') or []

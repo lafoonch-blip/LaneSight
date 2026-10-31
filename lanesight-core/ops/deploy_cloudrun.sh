@@ -5,7 +5,11 @@
 # analysis instead of queued behind it; --max-instances 3 means a deploy's new revision can start next to a
 # busy old one (no more rollover 5xx) and a burst of users gets its own instance. Scale-to-zero stays
 # (min-instances unset) for the cost cap. A per-INSTANCE guard in jobs.py caps one analysis per instance, so
-# concurrency 8 can't put two multi-GB analyses on one 4 GiB instance (DEC-043 one-at-a-time is per session).
+# concurrency 8 can't put two multi-GB analyses on one instance (DEC-043 one-at-a-time is per session).
+# --memory 8Gi (was 4Gi): DEC-113 canonical SDR decode is ~11 s/pass in pure numpy, so it is run ONCE per clip
+# and the decoded frames are cached (LANESIGHT_FRAME_CACHE_MB=5500); the remaining ~8 passes serve from RAM
+# (decode-once). A full untrimmed 14.75 s 1080p clip caches ~5.25 GB, which needs the larger instance; working
+# set + cache stays ~7.3 GB < 8 GiB. Clips longer than ~5.5 GB fall back to per-pass decode (slower, still right).
 #
 # If the smoke test fails, traffic is rolled back to the previous revision and the script exits nonzero.
 set -euo pipefail
@@ -43,8 +47,8 @@ echo "== built digest: $DIGEST =="
 gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --revision-suffix "${REV_SUFFIX:-$SHA}" \
-  --cpu 4 --memory 4Gi --timeout 600 --concurrency 8 --max-instances 3 \
-  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1 \
+  --cpu 4 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 3 \
+  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 

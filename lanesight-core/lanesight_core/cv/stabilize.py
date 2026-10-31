@@ -27,11 +27,11 @@ _FRAME_CACHE_MB = int(os.environ.get('LANESIGHT_FRAME_CACHE_MB', '1000'))   # ha
 # peak ≈ working set ~2 GB + this ≈ 3 GB). Fits short / lower-fps / lower-res windows; a long 1080p60 window
 # (~9 s ≈ 3.3 GB) exceeds it and transparently falls back to re-decode. Set 0 to disable. See
 # 03_ENGINEERING/DECODE_ONCE_FINDINGS.md.
-_FCACHE = {'path': None, 'frames': {}, 'bytes': 0, 'complete': False, 'too_big': False}
+_FCACHE = {'path': None, 'frames': {}, 'bytes': 0, 'complete': False, 'too_big': False, 'prime_tried': False}
 
 
 def reset_frame_cache():
-    _FCACHE.update(path=None, frames={}, bytes=0, complete=False, too_big=False)
+    _FCACHE.update(path=None, frames={}, bytes=0, complete=False, too_big=False, prime_tried=False)
 
 
 def reset_decode_stats():
@@ -112,8 +112,47 @@ def _ff_frames(path):
             proc.kill()
 
 
+def _prime_canonical(path, budget):
+    """DEC-107/113 decode-once: the canonical SDR decode is ~11 s/pass in pure numpy, and a full analysis makes
+    ~4 passes over overlapping-but-PARTIAL frame ranges (reference search, core homographies, ball window, pin
+    tail) — so no single pass reaches EOF and the lazy per-pass cache below never flips `complete`, re-converting
+    every pass (4× → the Cloud Run smoke timeout). For a canonical clip, decode the WHOLE clip ONCE here and fill
+    the cache; every pass (incl. the first) is then served from RAM. Needs the clip to fit the budget (8 GiB
+    instance + a large LANESIGHT_FRAME_CACHE_MB); if it won't fit we abort, mark too_big, and fall back to the
+    per-pass decode. cv2 (non-canonical) decode is fast, so it is left on the lazy path. Returns True if primed."""
+    from . import decode as _dec
+    meta = _dec.probe_meta(path)
+    if not _dec.can_canonical(meta):
+        return False
+    reset_frame_cache(); _FCACHE.update(path=path, prime_tried=True)
+    _DECODE['passes'] += 1
+    try:
+        for i, f in enumerate(_dec.canonical_frames(path, meta, len(pts(path)))):
+            t = _time.perf_counter()
+            if _FCACHE['bytes'] + f.nbytes > budget:          # won't fit → abort prime, fall back to per-pass decode
+                reset_frame_cache(); _FCACHE.update(path=path, too_big=True, prime_tried=True)
+                _DECODE['seconds'] += _time.perf_counter() - t
+                return False
+            _FCACHE['frames'][i] = f; _FCACHE['bytes'] += f.nbytes
+            _DECODE['frames'] += 1
+            _DECODE['seconds'] += _time.perf_counter() - t
+    except Exception:
+        reset_frame_cache(); _FCACHE.update(path=path, too_big=True, prime_tried=True)
+        return False
+    _FCACHE['complete'] = True
+    return True
+
+
 def frames(path):
     budget = _FRAME_CACHE_MB * 1048576
+    # Decode-once prime for canonical clips (see _prime_canonical). A NEW clip clears any prior too_big/cache;
+    # the prime then runs at most once (guarded by complete/too_big) and the serve-block below handles every pass.
+    if budget > 0 and os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1':
+        if _FCACHE['path'] != path:
+            reset_frame_cache(); _FCACHE['path'] = path       # new clip → drop any stale cache + flags
+        if not _FCACHE['prime_tried']:                        # attempt the prime exactly once per clip (a
+            _FCACHE['prime_tried'] = True                     # non-canonical clip just returns False and keeps
+            _prime_canonical(path, budget)                    # the normal lazy cv2 cache below — no re-probing)
     # Serve a fully-populated cache without touching the decoder (DEC-092 P1 decode-once). Each pass gets an
     # independent copy, exactly as a fresh decode would — so results are byte-identical.
     if budget > 0 and _FCACHE['path'] == path and _FCACHE['complete']:
