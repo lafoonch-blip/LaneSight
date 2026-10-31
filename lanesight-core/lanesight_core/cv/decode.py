@@ -16,8 +16,24 @@ import numpy as np
 _KRKB = {'bt709': (0.2126, 0.0722), 'bt601': (0.299, 0.114), 'smpte170m': (0.299, 0.114),
          'bt470bg': (0.299, 0.114), 'fcc': (0.30, 0.11), 'bt2020nc': (0.2627, 0.0593),
          'bt2020_ncl': (0.2627, 0.0593), 'unknown': (0.2126, 0.0722), '': (0.2126, 0.0722)}
-# Transfers we can decode as SDR directly (no tone-map needed). HLG/PQ are handled upstream (convert_sdr).
+# Transfers we decode canonically: SDR directly, plus HLG (iPhone HDR Video) via a deterministic numpy tone-map
+# (no zscale, no re-encode — both were version-dependent). PQ (smpte2084) is still left to convert_sdr.
 _SDR_TRANSFER = {'bt709', 'bt601', 'smpte170m', 'bt470bg', 'iec61966-2-1', 'srgb', 'unknown', '', None}
+_HLG = 'arib-std-b67'
+_BT2020_TO_709 = np.array([[1.6605, -0.5876, -0.0728],
+                           [-0.1246, 1.1329, -0.0083],
+                           [-0.0182, -0.1006, 1.1187]], np.float32)
+
+
+def _hlg_to_709(rgb_u8):
+    """HLG (BT.2020) R'G'B' u8 -> SDR BT.709 u8 (same curve as probe._hlg_to_709): invert the ARIB STD-B67
+    OETF to scene-linear, convert the gamut BT.2020->709, re-apply the BT.709 OETF. Pure numpy = deterministic."""
+    e = rgb_u8.astype(np.float32) / 255.0
+    a, b, c = 0.17883277, 0.28466892, 0.55991073
+    lin = np.where(e <= 0.5, e * e / 3.0, (np.exp((e - c) / a) + b) / 12.0)
+    lin = np.clip(lin @ _BT2020_TO_709.T, 0, 1)
+    v = np.where(lin < 0.018, 4.5 * lin, 1.099 * np.power(lin, 0.45) - 0.099)
+    return np.clip(v * 255, 0, 255).astype(np.uint8)
 
 
 def probe_meta(path):
@@ -35,8 +51,8 @@ def probe_meta(path):
 
 
 def can_canonical(meta):
-    """SDR clips with a known matrix decode canonically here; HDR (HLG/PQ) is left to the cv2 path for now."""
-    return meta['transfer'] in _SDR_TRANSFER and meta['cs'] in _KRKB
+    """SDR (known matrix) and HLG HDR decode canonically here; PQ is still left to convert_sdr."""
+    return (meta['transfer'] in _SDR_TRANSFER or meta['transfer'] == _HLG) and meta['cs'] in _KRKB
 
 
 def _up2x(p):
@@ -105,6 +121,8 @@ def canonical_frames(path, meta, nexp):
                 break
             count += 1
             bgr = yuv420p_to_bgr(buf, w, h, meta['cs'], meta['range'])
+            if meta['transfer'] == _HLG:   # HLG: the above gave HLG-encoded R'G'B'; tone-map to SDR BT.709
+                bgr = _hlg_to_709(bgr[..., ::-1])[..., ::-1]
             yield _apply_rotation(bgr, meta['rotation'])
     finally:
         try:
