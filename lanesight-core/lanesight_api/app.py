@@ -56,6 +56,120 @@ def _persist_job(job):
 
 
 _queue.persist = _persist_job
+
+# --------------------------------------------------------------------------- DEC-116 ephemeral Job worker
+# POST returns immediately; the CPU-heavy analysis runs in a `lanesight-cv-analyze` Cloud Run Job (gen2, the
+# fast/steady pool) instead of inline on the slow gVisor service. The app's /jobs/:id polling (DEC-110) is
+# unchanged — the Job drives the durable analysis_job row. Gated by LANESIGHT_JOB_WORKER=1 (default OFF: the
+# in-service path stays the default until the Job path passes a live soak — DEC-116 step 5).
+_JOB_WORKER_PROJECT = 'project-fd28bc3f-a844-43c2-a1c'
+_JOB_WORKER_REGION = 'us-east1'
+_JOB_WORKER_NAME = 'lanesight-cv-analyze'
+# Concurrency cap: each execution is 4 vCPU; the region quota is 20, and the service needs headroom, so cap
+# simultaneous RUNNING executions. Excess shots stay 'queued' and are triggered by the drain when a slot frees.
+_JOB_WORKER_CAP = int(os.environ.get('LANESIGHT_JOB_CAP', '4'))
+_JOB_RUNNING_MAX_S = int(os.environ.get('LANESIGHT_JOB_RUNNING_MAX_S', '720'))   # reaper: a 'running' row older
+
+
+def _job_worker_on() -> bool:
+    return os.environ.get('LANESIGHT_JOB_WORKER') == '1'
+
+
+def _metadata_token() -> str:
+    import urllib.request as _u
+    r = _u.Request('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                   headers={'Metadata-Flavor': 'Google'})
+    return json.loads(_u.urlopen(r, timeout=10).read())['access_token']
+
+
+def _run_execution(env: dict) -> None:
+    """Fire one Cloud Run Job execution with per-execution container env overrides (the shot's params). Raises
+    on a non-2xx so the caller can keep the job 'queued' for the drain to retry."""
+    import urllib.request as _u
+    url = (f'https://run.googleapis.com/v2/projects/{_JOB_WORKER_PROJECT}/locations/{_JOB_WORKER_REGION}'
+           f'/jobs/{_JOB_WORKER_NAME}:run')
+    body = json.dumps({'overrides': {'taskCount': 1, 'timeout': '600s',
+                                     'containerOverrides': [{'env': [{'name': k, 'value': str(v)}
+                                                                     for k, v in env.items() if v is not None]}]}}).encode()
+    req = _u.Request(url, data=body, method='POST',
+                     headers={'Authorization': f'Bearer {_metadata_token()}', 'Content-Type': 'application/json'})
+    _u.urlopen(req, timeout=20).read()
+
+
+def _active_executions(store) -> int:
+    try:
+        return len(store._get('analysis_job', 'state=eq.running&kind=eq.analyze&select=id'))
+    except Exception:
+        return 0
+
+
+def _trigger_job_analysis(shot_id, user_id, session_id, clip_storage_path, handed, mode, is_upload, content_hash):
+    """Create the queued analysis_job row (stashing the trigger params in result._pending so the drain can fire
+    it later), then — if under the concurrency cap — mark it running and launch the execution. Returns a Job
+    handle whose .id the endpoint returns, so the client polls exactly as for the in-service path."""
+    from .jobs import Job
+    store = get_store()
+    env = {'LSW_JOB_ID': None, 'LSW_SHOT_ID': shot_id, 'LSW_USER_ID': user_id,
+           'LSW_SESSION_ID': session_id or '', 'LSW_CLIP_PATH': clip_storage_path, 'LSW_HANDED': handed or '',
+           'LSW_MODE': mode or 'shot', 'LSW_IS_UPLOAD': '1' if is_upload else '0',
+           'LSW_CONTENT_HASH': content_hash or ''}
+    job = Job(id=uuid.uuid4().hex, kind='analyze', user_id=user_id, shot_id=shot_id)
+    env['LSW_JOB_ID'] = job.id
+    # queued row with the trigger payload stashed (stripped from client responses in get_job)
+    store.save_job({'id': job.id, 'user_id': user_id, 'shot_id': shot_id, 'kind': 'analyze',
+                    'state': 'queued', 'result': {'_pending': env}})
+    if _active_executions(store) < _JOB_WORKER_CAP:
+        try:
+            _run_execution(env)
+            store.save_job({'id': job.id, 'user_id': user_id, 'shot_id': shot_id, 'kind': 'analyze',
+                            'state': 'running', 'result': None})
+            job.state = 'running'
+        except Exception as e:                       # couldn't launch now → stays queued for the drain
+            print(f'job execution launch deferred ({type(e).__name__}: {e})')
+    return job
+
+
+def _drain_and_reap():
+    """Called opportunistically from GET /jobs/:id (the client polls during an active analysis, which keeps the
+    instance alive, so no background thread is needed in scale-to-zero). (1) Reap: a 'running' row older than
+    the max runtime is marked failed TIMEOUT (never a stuck 'running'). (2) Drain: while under the cap, launch
+    the oldest still-'queued' execution from its stashed params."""
+    if not _job_worker_on():
+        return
+    store = get_store()
+    import datetime as _dt
+    try:
+        now = _dt.datetime.now(_dt.timezone.utc)
+        for r in store._get('analysis_job', 'state=eq.running&kind=eq.analyze&select=id,user_id,shot_id,updated_at,created_at'):
+            ts = r.get('updated_at') or r.get('created_at')
+            try:
+                age = (now - _dt.datetime.fromisoformat(str(ts).replace('Z', '+00:00'))).total_seconds()
+            except Exception:
+                age = 0
+            if age > _JOB_RUNNING_MAX_S:
+                store.save_job({'id': r['id'], 'user_id': r.get('user_id'), 'shot_id': r.get('shot_id'),
+                                'kind': 'analyze', 'state': 'failed', 'reason': 'ANALYSIS_TIMEOUT: worker exceeded max runtime',
+                                'failure': {'code': 'ANALYSIS_TIMEOUT', 'stage': 'worker'}})
+                try:
+                    store.mark_shot_failed(r['shot_id'], 'ANALYSIS_TIMEOUT', 'worker')
+                except Exception:
+                    pass
+        slots = _JOB_WORKER_CAP - _active_executions(store)
+        if slots > 0:
+            for r in store._get('analysis_job', f'state=eq.queued&kind=eq.analyze&order=created_at.asc&limit={slots}&select=id,user_id,shot_id,result'):
+                env = (r.get('result') or {}).get('_pending')
+                if not env:
+                    continue
+                try:
+                    _run_execution(env)
+                    store.save_job({'id': r['id'], 'user_id': r.get('user_id'), 'shot_id': r.get('shot_id'),
+                                    'kind': 'analyze', 'state': 'running', 'result': None})
+                except Exception as e:
+                    print(f'drain launch skipped ({type(e).__name__}: {e})')
+    except Exception as e:
+        print(f'drain/reap skipped ({type(e).__name__}: {e})')
+
+
 app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
@@ -242,9 +356,11 @@ def _quality(rec) -> dict | None:
     return {k: v for k, v in out.items() if v is not None} or None
 
 
-def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
-                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
-                 client_timings: dict | None = None, clip_storage_path: str | None = None):
+def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
+               mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
+               client_timings: dict | None = None, clip_storage_path: str | None = None):
+    """The analyze→persist→footer closure. Shared by the in-service queue (_analyze_job) and the ephemeral
+    Cloud Run Job worker (ops/analyze_worker.py, DEC-116) so both run byte-identical analysis + persistence."""
     def run(job):
         t0 = time.monotonic()
         if client_timings:                       # DEC-092 P0 (M1): phone-side stage times onto the same row
@@ -390,6 +506,22 @@ def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, sessi
             _log('failed', failure=fail)
             raise
 
+    return run
+
+
+def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
+                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
+                 client_timings: dict | None = None, clip_storage_path: str | None = None):
+    """In-service path: build the analyze closure and run it on the serial queue (sync on Cloud Run). The
+    ephemeral-Job path (LANESIGHT_JOB_WORKER=1) is in _trigger_job_analysis — it reuses _build_run in a
+    separate Cloud Run Job instead, so the slow gVisor service pool never runs the CPU-heavy analysis."""
+    # DEC-116: ephemeral-Job path when enabled and the clip is in GCS (so the worker can fetch it). Ball shots
+    # only — form stays on the in-service pose path. No clip in GCS (retention off) → in-service fallback.
+    if _job_worker_on() and clip_storage_path and mode != 'form':
+        return _trigger_job_analysis(shot_id, user_id, session_id, clip_storage_path, handed, mode,
+                                     is_upload, content_hash)
+    run = _build_run(shot_id, src, handed, user_id, session_id, mode, is_upload, content_hash,
+                     client_timings, clip_storage_path)
     return _queue.submit('analyze', run, user_id=user_id, shot_id=shot_id)
 
 
@@ -785,14 +917,18 @@ def get_job(job_id: str, user=Depends(current_user)):
     job = _queue.get(job_id)
     if job:
         return job.public()
+    _drain_and_reap()                                   # DEC-116: opportunistic queue drain + stuck-run reaper
     row = get_store().get_job(job_id)
     if not row:
         raise HTTPException(404, 'job not found')
     if row.get('user_id') and row['user_id'] != user:   # scope to the owner (service role bypasses RLS)
         raise HTTPException(404, 'job not found')
+    result = row.get('result')
+    if isinstance(result, dict) and '_pending' in result:   # don't leak the internal trigger payload
+        result = {k: v for k, v in result.items() if k != '_pending'} or None
     return {'id': row['id'], 'kind': row.get('kind'), 'state': row.get('state'),
             'reason': row.get('reason'), 'timings': row.get('timings') or {}, 'timings_detail': None,
-            'result': row.get('result'), 'failure': row.get('failure')}
+            'result': result, 'failure': row.get('failure')}
 
 def _flat_metrics(m: dict) -> dict:
     """Flatten a record's metrics ({k:{value}} or {k:v}) to {k: value}."""
