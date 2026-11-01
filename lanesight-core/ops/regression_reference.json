@@ -1,21 +1,21 @@
 {
-  "_note": "DEC-116 numba integer YUV->BGR conversion (fixed-point, bit-identical arm64/x86). Values are within +-0.2 of the pre-numba 0.5/4000 baseline (8751 18.615->18.54, 8752 18.308->18.301, 8753 18.711->18.739, 8754 18.232->18.362).  re-runs the 4 clips and fails if any ball_speed moves beyond tol_mph or a clip that analyzed now fails. NOTE: this gate runs on the Mac; it cannot catch server-only platform-CV differences (e.g. ORB 1500 starved the server homography on IMG_8753) \u2014 the in-container deploy smoke is the authoritative server check. 8751/8754 are HLG HDR (convert_sdr path); 8752/8753 are bt709 SDR (canonical).",
+  "_note": "DEC-113 Standard-tier regression reference: Mac-local canonical-decode (numpy float YUV->BGR, the deterministic default) ball_speed for IMG_8751-54, engine 0.7.0 + parallel pass A. The numba integer conversion (LANESIGHT_YUV_NUMBA, DEC-116) is OFF \u2014 it diverged on the server. tol 0.2; the in-container smoke is the authoritative server check. 8751/8754 HDR (convert_sdr); 8752/8753 SDR (canonical).",
   "tol_mph": 0.2,
   "clips": {
     "IMG_8751.MOV": {
-      "ball_speed": 18.54,
+      "ball_speed": 18.615,
       "dynamic_range": "hdr"
     },
     "IMG_8752.MOV": {
-      "ball_speed": 18.301,
+      "ball_speed": 18.308,
       "dynamic_range": "sdr"
     },
     "IMG_8753.MOV": {
-      "ball_speed": 18.739,
+      "ball_speed": 18.711,
       "dynamic_range": "sdr"
     },
     "IMG_8754.MOV": {
-      "ball_speed": 18.362,
+      "ball_speed": 18.232,
       "dynamic_range": "hdr"
     }
   }
