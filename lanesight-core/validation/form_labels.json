@@ -54,12 +54,12 @@
     "IMG_8848": {
       "view": "rear",
       "E2_ball_start_s": 13.1393,
-      "E4_backswing_top_s": null,
-      "E5_slide_start_s": null,
-      "E7_release_s": null,
-      "E8_slide_stop_s": null,
-      "E9_finish_hold_end_s": null,
-      "step_count": null
+      "E4_backswing_top_s": 14.3398,
+      "E5_slide_start_s": 14.4232,
+      "E7_release_s": 14.6733,
+      "E8_slide_stop_s": 14.6733,
+      "E9_finish_hold_end_s": 14.9401,
+      "step_count": 5
     }
   }
 }

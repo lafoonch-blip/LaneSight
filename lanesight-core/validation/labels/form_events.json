@@ -1,6 +1,6 @@
 {
   "task": "form_events",
-  "updated_at": "2026-11-01T09:43:39-05:00",
+  "updated_at": "2026-11-01T09:44:47-05:00",
   "clips": {
     "IMG_8824": {
       "events": {
@@ -208,12 +208,39 @@
           "frame": 788,
           "t_s": 13.1393,
           "status": "set"
+        },
+        "backswing_top": {
+          "frame": 860,
+          "t_s": 14.3398,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 865,
+          "t_s": 14.4232,
+          "status": "set"
+        },
+        "release": {
+          "frame": 880,
+          "t_s": 14.6733,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 880,
+          "t_s": 14.6733,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 896,
+          "t_s": 14.9401,
+          "status": "set"
         }
       },
-      "fields": {},
+      "fields": {
+        "step_count": 5
+      },
       "done": false,
       "fps": 59.97288339861404,
-      "complete": false
+      "complete": true
     }
   }
 }

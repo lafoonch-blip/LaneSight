@@ -1,0 +1,23 @@
+{
+  "_source": "LaneSight Labeler task 'pin_anchor_truth' (lanesight-core/validation/labels/pin_anchor_truth.json); null = not labeled or not visible",
+  "IMG_8751": {
+    "foul_cross_frame": 1601,
+    "first_pin_contact_frame": 1737,
+    "fps": 59.97423541199485
+  },
+  "IMG_8752": {
+    "foul_cross_frame": 1114,
+    "first_pin_contact_frame": 1249,
+    "fps": 59.971509971509974
+  },
+  "IMG_8753": {
+    "foul_cross_frame": 559,
+    "first_pin_contact_frame": 692,
+    "fps": 59.972893607409084
+  },
+  "IMG_8754": {
+    "foul_cross_frame": 1543,
+    "first_pin_contact_frame": 1683,
+    "fps": 59.9734369619755
+  }
+}
