@@ -154,6 +154,11 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     # equally — tracked separately; switching the headline neither causes nor fixes it.
     out['ball_speed_mph'] = mph(early[0])                          # headline = early-lane / release speed (always available)
     out['speed_release_mph'] = mph(early[0])                       # same value; explicit name kept for existing callers
+    # DEC-112 definition note: the TRUTH-comparable full-lane average is `speed_avg_foul_to_pins_mph` above —
+    # foul_cross (ball contact point at the foul line, Z=0) -> ball centre at first head-pin contact (Z_IMPACT=
+    # 59.44 ft). THIS number is a separate RELEASE-anchored secondary over a NOMINAL 60.0 ft (release precedes the
+    # foul crossing by RELEASE_OFFSET_S); it is intentionally a different interval/anchor, NOT the 59.44 ft truth
+    # metric — do not compare it to Shayne's foul->pin labels.
     out['speed_avg_60ft_mph'] = (mph(60.0 / (t_impact - release_t))
                                  if (t_impact is not None and release_t is not None) else None)  # secondary (needs pins)
     # loft: release -> touchdown (blob h/w step), times early-lane speed. 60 fps limits this to about +/-0.45 ft
