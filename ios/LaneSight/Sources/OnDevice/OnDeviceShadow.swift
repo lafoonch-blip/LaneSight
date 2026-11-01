@@ -26,12 +26,33 @@ enum OnDeviceShadow {
         var revRpm: Float?
         var revSigma: Float?
         var revNote = ""
+        var diag: [String: Any] = [:]       // DEC-117 Track A item 2: per-stage diagnostics for parity vs golden
         if let px = OnDeviceLaneDetector.referenceFrame(url: clipURL, at: 30) {
             let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
+            diag["lane_found"] = geo.lanes.first != nil
+            diag["lanes_detected"] = geo.lanes.count
+            diag["foul_line_y"] = geo.foulLineY as Any
+            if let vp = geo.vanishingPoint { diag["vp"] = [Double(vp.x), Double(vp.y)] }
+            if let l = geo.lanes.first {
+                diag["left_ab"] = [Double(l.left.a), Double(l.left.b)]
+                diag["right_ab"] = [Double(l.right.a), Double(l.right.b)]
+                diag["y_near_far"] = [l.yNear, l.yFar]
+            }
             let track = OnDeviceTracker.track(url: clipURL, geo: geo)
             peak = max(peak, currentFootprintBytes())
+            diag["frames_scanned"] = track.framesScanned
+            diag["candidate_frames"] = track.candidateFrames
+            diag["track_points"] = track.points.count
+            diag["span_frac"] = Double(track.spanFrac)
+            if let it = track.impactT { diag["impact_t_detected"] = it }
             let sp = OnDeviceTracker.speed(track: track, geo: geo)
             mph = sp.mph; basis = sp.basis; note = sp.note
+            if let tr = sp.tRelease { diag["t_release"] = tr }
+            if let ti = sp.tImpact { diag["t_impact"] = ti }
+            if let tr = sp.tRelease, let ti = sp.tImpact { diag["foul_to_impact_s"] = ti - tr }
+            diag["first_failing_stage"] = (geo.lanes.first == nil) ? "lane"
+                : (track.points.count < 6 ? "track"
+                : (sp.mph == nil ? "speed" : "none"))
             // DEC-117: rev rate (shadow; compile/validation pending). Geometry-free beyond the track, so it runs
             // even when speed is unavailable.
             let rev = OnDeviceRevRate.measure(url: clipURL, track: track.points, geo: geo)
@@ -40,6 +61,7 @@ enum OnDeviceShadow {
             peak = max(peak, currentFootprintBytes())
         } else {
             note = "no reference frame"
+            diag["first_failing_stage"] = "reference_frame"
         }
         peak = max(peak, currentFootprintBytes())
 
@@ -63,6 +85,7 @@ enum OnDeviceShadow {
         var body: [String: Any] = [
             "shot_id": shotId, "source": source, "capture_mode": captureMode,
             "basis": basis, "note": note, "metrics": metrics, "device_perf": perf,
+            "diag": diag,
             "algorithm_version": engineVersion, "app_version": appVersion,
         ]
         if let sid = sessionId { body["session_id"] = sid }

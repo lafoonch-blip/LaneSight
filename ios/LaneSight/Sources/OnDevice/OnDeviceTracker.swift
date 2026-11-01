@@ -33,7 +33,7 @@ struct BallTrack: Equatable {
     let candidateFrames: Int
     let seconds: Double
     var impactT: Double? = nil          // detected pin-deck arrival time (preferred t_impact)
-    var spanFrac: Float { (points.first.map { p in (points.last!.frac - p.frac) }) ?? 0 }
+    nonisolated var spanFrac: Float { (points.first.map { p in (points.last!.frac - p.frac) }) ?? 0 }
 }
 
 // Physical constants (match cv/track.py / lane_geometry).
@@ -189,15 +189,17 @@ enum OnDeviceTracker {
         func rnd(_ n: Int) -> Int { rng = rng &* 6364136223846793005 &+ 1442695040888963407; return Int((rng >> 33) % UInt64(max(1, n))) }
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return nil }   // shadow cap / superseded (P0 2026-10-29)
-            guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
-            ts.append(CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))
-            if sw == 0 {
-                let fw = CVPixelBufferGetWidth(px), fh = CVPixelBufferGetHeight(px)
-                stride = max(1, fh / 540); sw = fw / stride; sh = fh / stride
+            autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
+                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                ts.append(CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))
+                if sw == 0 {
+                    let fw = CVPixelBufferGetWidth(px), fh = CVPixelBufferGetHeight(px)
+                    stride = max(1, fh / 540); sw = fw / stride; sh = fh / stride
+                }
+                if samples.count < maxFrames { samples.append(downsampledLuma(px, stride: stride, sw: sw, sh: sh)) }
+                else { let j = rnd(i + 1); if j < maxFrames { samples[j] = downsampledLuma(px, stride: stride, sw: sw, sh: sh) } }
+                i += 1
             }
-            if samples.count < maxFrames { samples.append(downsampledLuma(px, stride: stride, sw: sw, sh: sh)) }
-            else { let j = rnd(i + 1); if j < maxFrames { samples[j] = downsampledLuma(px, stride: stride, sw: sw, sh: sh) } }
-            i += 1
         }
         guard !samples.isEmpty, sw > 0, sh > 0 else { return nil }
         var bg = [UInt8](repeating: 0, count: sw * sh)
@@ -221,9 +223,11 @@ enum OnDeviceTracker {
         var i = 0
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return }       // shadow cap / superseded (P0 2026-10-29)
-            guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
-            body(i, downsampledLuma(px, stride: stride, sw: sw, sh: sh))
-            i += 1
+            autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
+                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                body(i, downsampledLuma(px, stride: stride, sw: sw, sh: sh))
+                i += 1
+            }
         }
     }
 
@@ -259,7 +263,8 @@ enum OnDeviceTracker {
         let bw = cR - cL, bh = rBot - rTop
         var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(Double, Float)] = []
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
-            guard let px = CMSampleBufferGetImageBuffer(sb) else { continue }
+            autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
+            guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
             CVPixelBufferLockBaseAddress(px, .readOnly)
             let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
@@ -280,6 +285,7 @@ enum OnDeviceTracker {
                 var acc: Float = 0; let rr = ref!
                 for p in 0..<(bw * bh) { acc += abs(band[p] - rr[p]) }
                 series.append((t, acc / Float(bw * bh)))
+            }
             }
         }
         guard series.count > 10 else { return nil }

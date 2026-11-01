@@ -54,13 +54,16 @@ enum OnDeviceRevRate {
         let maxI = pts.map { $0.i }.max() ?? 0
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if i > maxI { break }
-            defer { i += 1 }
-            guard let p = want[i], let px = CMSampleBufferGetImageBuffer(sb) else { continue }
-            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
-            if let hs = cropHueSat(px, cx: p.cx, cy: p.contactRow, diamFrac: p.frac, lane: lane,
-                                   size: cropSize, maskIdx: maskIdx) {
-                crops.append((t, hs))
+            autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
+                if let p = want[i], let px = CMSampleBufferGetImageBuffer(sb) {
+                    let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+                    if let hs = cropHueSat(px, cx: p.cx, cy: p.contactRow, diamFrac: p.frac, lane: lane,
+                                           size: cropSize, maskIdx: maskIdx) {
+                        crops.append((t, hs))
+                    }
+                }
             }
+            i += 1
         }
         reader.cancelReading()
         guard crops.count >= 12 else { return fail("too few valid ball crops (\(crops.count))") }

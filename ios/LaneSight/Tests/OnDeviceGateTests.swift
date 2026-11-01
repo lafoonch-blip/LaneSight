@@ -38,6 +38,7 @@ final class OnDeviceGateTests: XCTestCase {
                 "peak_mem_mb": perf["peak_mem_mb"] as? Double as Any,
                 "battery_delta": perf["battery_delta"] as? Double as Any,
                 "thermal": perf["thermal_state"] as? String as Any,
+                "diag": body["diag"] as? [String: Any] as Any,
             ]
             if let data = try? JSONSerialization.data(withJSONObject: row.compactMapValues { $0 is NSNull ? nil : $0 }),
                let s = String(data: data, encoding: .utf8) {
