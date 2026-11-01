@@ -1,10 +1,10 @@
 {
-  "_note": "DEC-113/DEC-115 Standard-tier regression reference. Mac-local canonical-decode (LANESIGHT_FFMPEG_DECODE=1) ball_speed for the IMG_8751-54 validation clips, engine lanesight-cv-0.7.0. Values are the DEC-115 perf config (ORB scale 0.5 / 1500 features + parallel pass A); each is within ±0.2 of the original 0.5/4000 values (8751 18.615->18.532, 8752 18.308->18.266, 8753 unchanged, 8754 18.232->18.346). ops/regression_tier.py re-runs the 4 clips and fails if any ball_speed moves beyond tol_mph or a clip that analyzed now fails. Update a value ONLY when a CV change intentionally moves it (say why in the commit). 8751/8754 are HLG HDR (convert_sdr path); 8752/8753 are bt709 SDR (canonical).",
+  "_note": "DEC-113/DEC-115 Standard-tier regression reference. Mac-local canonical-decode (LANESIGHT_FFMPEG_DECODE=1) ball_speed for the IMG_8751-54 validation clips, engine lanesight-cv-0.7.0 with the DEC-115 parallel pass A (bit-identical to the original 0.5/4000 ORB config, so values are unchanged from the original baseline). ops/regression_tier.py re-runs the 4 clips and fails if any ball_speed moves beyond tol_mph or a clip that analyzed now fails. NOTE: this gate runs on the Mac; it cannot catch server-only platform-CV differences (e.g. ORB 1500 starved the server homography on IMG_8753) — the in-container deploy smoke is the authoritative server check. 8751/8754 are HLG HDR (convert_sdr path); 8752/8753 are bt709 SDR (canonical).",
   "tol_mph": 0.2,
   "clips": {
-    "IMG_8751.MOV": {"ball_speed": 18.532, "dynamic_range": "hdr"},
-    "IMG_8752.MOV": {"ball_speed": 18.266, "dynamic_range": "sdr"},
+    "IMG_8751.MOV": {"ball_speed": 18.615, "dynamic_range": "hdr"},
+    "IMG_8752.MOV": {"ball_speed": 18.308, "dynamic_range": "sdr"},
     "IMG_8753.MOV": {"ball_speed": 18.711, "dynamic_range": "sdr"},
-    "IMG_8754.MOV": {"ball_speed": 18.346, "dynamic_range": "hdr"}
+    "IMG_8754.MOV": {"ball_speed": 18.232, "dynamic_range": "hdr"}
   }
 }

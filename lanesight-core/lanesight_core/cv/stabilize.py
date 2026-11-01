@@ -229,7 +229,10 @@ class Registrar:
     # that computes the warp is down-scaled. Defaults preserve the original 0.5 / 4000.
     def __init__(self, scale=None):
         self.s = float(os.environ.get('LANESIGHT_ORB_SCALE', '0.5')) if scale is None else scale
-        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '1500'))   # DEC-115: 1500 (was 4000) cuts the O(n^2)
+        # NOTE: default stays 4000. Reducing to 1500 is faster (cuts the O(n^2) matcher) and passed on Mac, but
+        # STARVED the homography on the server for the marginal IMG_8753 (ball_speed came back unavailable in the
+        # in-container smoke) — the Mac gate can't see that platform difference. Left env-tunable, default-safe.
+        nfeat = int(os.environ.get('LANESIGHT_ORB_FEATURES', '4000'))
         fast = int(os.environ.get('LANESIGHT_ORB_FAST', '10'))
         self.orb = cv2.ORB_create(nfeat, fastThreshold=fast); self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     def feats(self, f):
