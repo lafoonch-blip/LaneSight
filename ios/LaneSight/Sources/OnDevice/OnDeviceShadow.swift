@@ -23,12 +23,21 @@ enum OnDeviceShadow {
         var mph: Float?
         var basis = "unavailable"
         var note = ""
+        var revRpm: Float?
+        var revSigma: Float?
+        var revNote = ""
         if let px = OnDeviceLaneDetector.referenceFrame(url: clipURL, at: 30) {
             let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
             let track = OnDeviceTracker.track(url: clipURL, geo: geo)
             peak = max(peak, currentFootprintBytes())
             let sp = OnDeviceTracker.speed(track: track, geo: geo)
             mph = sp.mph; basis = sp.basis; note = sp.note
+            // DEC-117: rev rate (shadow; compile/validation pending). Geometry-free beyond the track, so it runs
+            // even when speed is unavailable.
+            let rev = OnDeviceRevRate.measure(url: clipURL, track: track.points, geo: geo)
+            revRpm = rev.rpm; revSigma = rev.sigmaRpm; revNote = rev.note
+            if basis == "unavailable", rev.rpm != nil { basis = "best_effort" }   // rev stands alone (DEC-111)
+            peak = max(peak, currentFootprintBytes())
         } else {
             note = "no reference frame"
         }
@@ -40,6 +49,9 @@ enum OnDeviceShadow {
 
         var metrics: [String: Any] = [:]
         if let m = mph { metrics["ball_speed"] = Double(m) }
+        if let rv = revRpm { metrics["rev_rate"] = Double(rv) }
+        if let rs = revSigma { metrics["rev_rate_sigma"] = Double(rs) }
+        if mph == nil, !revNote.isEmpty { note = note.isEmpty ? revNote : note + " | rev: " + revNote }
         var perf: [String: Any] = [
             "latency_s": latency,
             "peak_mem_mb": Double(peak) / 1_048_576.0,
