@@ -78,7 +78,7 @@ echo "== built digest: $DIGEST =="
 gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --revision-suffix "${REV_SUFFIX:-$SHA}" \
-  --cpu 4 --memory 8Gi --timeout 600 --concurrency 1 --max-instances 3 --execution-environment gen2 \
+  --cpu 4 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 3 \
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=4,LANESIGHT_GIB=8,LANESIGHT_CV_WORKERS=4 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
