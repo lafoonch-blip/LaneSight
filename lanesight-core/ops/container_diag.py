@@ -132,6 +132,37 @@ def main():
         except Exception as e:
             out['frame_diag'] = f'err {type(e).__name__}: {e}'
 
+    # DEC-116 numba cross-platform check: md5 of numpy vs numba conversion of the first frames + maxdiff, so a
+    # Mac(arm64)-vs-server(x86) mismatch is localized exactly. DIAG_YUV_HASH=1.
+    if os.environ.get('DIAG_YUV_HASH') == '1':
+        try:
+            import hashlib, subprocess as _sp
+            from lanesight_core.cv import decode as _dec, _yuv_nb as _nb
+            m = _dec.probe_meta(clip); w, h = m['w'], m['h']; fsz = w * h * 3 // 2
+            pr = _sp.Popen(['ffmpeg', '-v', 'error', '-noautorotate', '-i', clip, '-f', 'rawvideo',
+                            '-pix_fmt', 'yuv420p', '-'], stdout=_sp.PIPE, stderr=_sp.DEVNULL, bufsize=fsz)
+            rows = []
+            for k in range(3):
+                b = pr.stdout.read(fsz)
+                npf = _dec.yuv420p_to_bgr(b, w, h, m['cs'], m['range'])
+                ysz = w * h; cw, cc = w // 2, h // 2
+                Y = np.frombuffer(b[:ysz], np.uint8).reshape(h, w).astype(np.int32)
+                U = np.frombuffer(b[ysz:ysz + cw * cc], np.uint8).reshape(cc, cw).astype(np.int32)
+                V = np.frombuffer(b[ysz + cw * cc:ysz + 2 * cw * cc], np.uint8).reshape(cc, cw).astype(np.int32)
+                Kr, Kb = _dec._KRKB[m['cs']]
+                nbf = _nb.convert(Y, U, V, Kr, Kb, m['range'])
+                d = np.abs(npf.astype(int) - nbf.astype(int))
+                rows.append({'frame': k, 'numpy_md5': hashlib.md5(npf.tobytes()).hexdigest()[:12],
+                             'numba_md5': hashlib.md5(nbf.tobytes()).hexdigest()[:12],
+                             'maxdiff': int(d.max()), 'mean': round(float(d.mean()), 3)})
+            pr.terminate()
+            import numba as _nbm
+            out['yuv_hash'] = {'numba_version': _nbm.__version__, 'rows': rows}
+        except Exception as e:
+            import traceback
+            out['yuv_hash'] = {'err': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-500:]}
+        print(json.dumps(out, indent=2)); return
+
     # run the pipeline + dump the geometry signal (z@t≈9.82 is the key: Mac 13.28 vs server 11.40)
     try:
         import tempfile, time as _t
