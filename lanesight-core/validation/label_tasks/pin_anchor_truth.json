@@ -1,0 +1,19 @@
+{
+  "title": "Speed truth: foul line + pin contact",
+  "instructions": "For each clip, mark two moments. True speed = 60 ft ÷ the time between them, with no lane geometry involved, so this checks which speed anchor is right (DEC-112).\n\nEach moment opens at Claude's estimate (grey tick under the slider). Step frame by frame with ← → and press Enter on the exact frame. Click the frame to zoom.",
+  "clips": [
+    {"id": "IMG_8751", "hints": {"foul_cross": 1601, "first_pin_contact": 1737}},
+    {"id": "IMG_8752", "hints": {"foul_cross": 1114, "first_pin_contact": 1249}},
+    {"id": "IMG_8753", "hints": {"foul_cross": 557,  "first_pin_contact": 692}},
+    {"id": "IMG_8754", "hints": {"foul_cross": 1543, "first_pin_contact": 1683}}
+  ],
+  "events": [
+    {"id": "foul_cross", "label": "Ball crosses the foul line",
+     "help": "First frame where the ball is over the foul line (the line nearest the camera).",
+     "export_key": "foul_cross_frame", "export_unit": "frame"},
+    {"id": "first_pin_contact", "label": "Ball touches the head pin",
+     "help": "First frame where the ball touches the head pin. If contact is hidden, the first frame the head pin moves.",
+     "export_key": "first_pin_contact_frame", "export_unit": "frame"}
+  ],
+  "export": {"path": "03_ENGINEERING/pin_anchor_labeling_packet/pin_anchor_labels.json", "add_fps": true}
+}

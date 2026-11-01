@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LaneSight Labeler</title>
+<style>
+:root{
+  --navy:#0B1320; --panel:#121C2E; --panel2:#18243A; --line:#24324C;
+  --blue:#007BFF; --cyan:#00D2FF; --gray:#A7B0BE; --white:#F7F9FC;
+  --ok:#2BD47D; --warn:#FFB020; --bad:#FF5A5F; --muted:#6B7891;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--navy);color:var(--white);
+  font:14px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--blue)}
+button.primary{background:var(--blue);border-color:var(--blue);font-weight:600}
+button.primary:hover{filter:brightness(1.1)}
+button.ghost{background:transparent}
+button:disabled{opacity:.4;cursor:default}
+kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:11px;color:var(--gray)}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px}
+header h1 span{color:var(--cyan)}
+header select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:260px}
+.progress{color:var(--gray);font-size:13px}
+.spacer{flex:1}
+.saved{color:var(--ok);font-size:12px;opacity:0;transition:opacity .3s}
+.saved.show{opacity:1}
+main{display:grid;grid-template-columns:220px 1fr 360px;min-height:0}
+aside,section{min-height:0}
+.clips{border-right:1px solid var(--line);overflow:auto;padding:10px}
+.clips h3,.side h3{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:6px 4px 8px}
+.clip{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;cursor:pointer;margin-bottom:2px}
+.clip:hover{background:var(--panel2)}
+.clip.active{background:var(--panel2);outline:1px solid var(--blue)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;border:2px solid var(--muted)}
+.dot.partial{border-color:var(--warn);background:linear-gradient(90deg,var(--warn) 50%,transparent 50%)}
+.dot.done{border-color:var(--ok);background:var(--ok)}
+.dot.missing{border-color:var(--bad)}
+.clip small{display:block;color:var(--muted);font-size:11px}
+.viewer{display:flex;flex-direction:column;min-width:0;padding:10px 14px;gap:8px}
+.stage{flex:1;min-height:0;background:#000;border-radius:10px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
+.stage.zoomed{cursor:zoom-out}
+.stage img{max-width:100%;max-height:100%;object-fit:contain;transition:transform .12s;user-select:none;-webkit-user-drag:none}
+.stage .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gray);text-align:center;padding:30px}
+.stage .badge{position:absolute;top:10px;left:10px;background:rgba(11,19,32,.8);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-variant-numeric:tabular-nums;font-size:13px}
+.stage .marker{position:absolute;top:10px;right:10px;background:var(--ok);color:#04210f;border-radius:8px;padding:4px 8px;font-weight:600;font-size:12px;display:none}
+.scrub{display:flex;align-items:center;gap:10px}
+.scrub input[type=range]{flex:1;accent-color:var(--blue)}
+.ticks{position:relative;height:10px;margin:-4px 0 0}
+.tick{position:absolute;top:0;width:2px;height:10px;background:var(--cyan);border-radius:1px}
+.tick.hint{background:var(--muted);height:6px;top:2px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.readout{font-variant-numeric:tabular-nums;color:var(--gray);margin-left:auto}
+.readout b{color:var(--white)}
+.side{border-left:1px solid var(--line);overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:12px}
+.instructions{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--gray);font-size:13px;white-space:pre-wrap}
+.ev{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel)}
+.ev.current{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset}
+.ev .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ev .name{font-weight:600}
+.ev .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);white-space:nowrap}
+.ev .val.set{color:var(--ok)} .ev .val.nv{color:var(--warn)}
+.ev .help{color:var(--gray);font-size:12px;margin:4px 0 8px}
+.ev .btns{display:flex;gap:6px;flex-wrap:wrap}
+.ev .btns button{padding:4px 8px;font-size:12px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--panel)}
+.field input{width:90px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;text-align:right}
+.next{display:flex;gap:8px}
+.next button{flex:1;padding:10px}
+.keys{color:var(--muted);font-size:12px;line-height:1.9}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 14px;border-radius:10px;display:none;z-index:9}
+.err{color:var(--bad)}
+@media (max-width: 1100px){ main{grid-template-columns:180px 1fr 300px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Lane<span>Sight</span> Labeler</h1>
+    <select id="taskSel" aria-label="Labeling task"></select>
+    <span class="progress" id="progress"></span>
+    <span class="spacer"></span>
+    <span class="saved" id="saved">Saved ✓</span>
+  </header>
+  <main>
+    <aside class="clips"><h3>Clips</h3><div id="clipList"></div></aside>
+    <section class="viewer">
+      <div class="stage" id="stage">
+        <img id="frame" alt="">
+        <div class="badge" id="badge"></div>
+        <div class="marker" id="marker"></div>
+        <div class="msg" id="msg">Pick a task to start.</div>
+      </div>
+      <div>
+        <div class="scrub">
+          <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Frame">
+        </div>
+        <div class="ticks" id="ticks"></div>
+      </div>
+      <div class="controls">
+        <button id="bBack10" title="Back 10 frames (Shift+←)">−10</button>
+        <button id="bBack1" title="Back 1 frame (←)">−1</button>
+        <button id="bPlay" class="primary" title="Play / pause (Space)">▶ Play</button>
+        <button id="bFwd1" title="Forward 1 frame (→)">+1</button>
+        <button id="bFwd10" title="Forward 10 frames (Shift+→)">+10</button>
+        <select id="speed" title="Playback speed" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px">
+          <option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option>
+        </select>
+        <button id="bZoom" class="ghost" title="Zoom (Z, or click the frame)">🔍 Zoom</button>
+        <span class="readout" id="readout"></span>
+      </div>
+    </section>
+    <aside class="side">
+      <div class="instructions" id="instr"></div>
+      <div><h3>Mark these moments</h3><div id="events"></div></div>
+      <div id="fieldsWrap"><div id="fields"></div></div>
+      <div class="next">
+        <button id="bPrevClip">← Previous clip</button>
+        <button id="bNextClip" class="primary">Next clip →</button>
+      </div>
+      <div class="keys">
+        <kbd>←</kbd><kbd>→</kbd> 1 frame · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 10 frames · <kbd>↑</kbd><kbd>↓</kbd> 1 second<br>
+        <kbd>Space</kbd> play · <kbd>Enter</kbd> mark current moment · <kbd>X</kbd> not visible<br>
+        <kbd>Z</kbd> zoom · <kbd>[</kbd><kbd>]</kbd> previous / next moment · <kbd>N</kbd> next clip
+      </div>
+    </aside>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+const S = {tasks:[], task:null, clipIdx:0, meta:null, frame:0, evIdx:0, playing:false, zoom:false, reqSeq:0};
+
+const store = {
+  get(k){ try { return localStorage.getItem('lsl.'+k); } catch(e){ return null; } },
+  set(k,v){ try { localStorage.setItem('lsl.'+k, v); } catch(e){} }
+};
+async function api(path, body){
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const j = await r.json().catch(()=>({error:'bad response'}));
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(t, ms=2200){ const el=$('toast'); el.textContent=t; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', ms); }
+function flashSaved(){ const s=$('saved'); s.classList.add('show'); clearTimeout(s._t); s._t=setTimeout(()=>s.classList.remove('show'),1200); }
+const clip = () => S.task && S.task.clips[S.clipIdx];
+const labels = () => { const l = (clip() && clip().labels) || {}; return {...l, events: l.events || {}, fields: l.fields || {}}; };
+const fmtT = f => S.meta && S.meta.fps ? (f / S.meta.fps).toFixed(3)+' s' : '';
+
+// ---------- tasks
+async function loadTasks(){
+  const j = await api('/api/tasks');
+  S.tasks = j.tasks;
+  const sel = $('taskSel'); sel.innerHTML='';
+  if(!S.tasks.length){ $('msg').textContent = 'No task files found in '+j.task_dir; return; }
+  for(const t of S.tasks){
+    const o=document.createElement('option'); o.value=t.id;
+    o.textContent = `${t.title}  (${t.done}/${t.total})` + (t.error ? '  ⚠' : ''); sel.appendChild(o);
+  }
+  const want = new URLSearchParams(location.search).get('task') || store.get('task');
+  const pick = S.tasks.find(t=>t.id===want) || S.tasks.find(t=>t.done<t.total) || S.tasks[0];
+  sel.value = pick.id;
+  await openTask(pick.id);
+}
+async function openTask(id, keepClip){
+  stop();
+  S.task = await api('/api/task/'+encodeURIComponent(id));
+  store.set('task', id);
+  $('instr').textContent = S.task.instructions || '';
+  $('instr').style.display = S.task.instructions ? '' : 'none';
+  if(!keepClip){
+    const saved = store.get('clip.'+id);
+    let i = S.task.clips.findIndex(c=>c.id===saved && !c.complete);
+    if(i<0) i = S.task.clips.findIndex(c=>!c.complete);
+    S.clipIdx = i<0 ? 0 : i;
+  }
+  renderTaskHeader();
+  await openClip(S.clipIdx);
+}
+function renderTaskHeader(){
+  const done = S.task.clips.filter(c=>c.complete).length;
+  $('progress').textContent = `${done} of ${S.task.clips.length} clips done`;
+  const o = [...$('taskSel').options].find(o=>o.value===S.task.id);
+  if(o) o.textContent = `${S.task.title}  (${done}/${S.task.clips.length})`;
+  renderClipList();
+}
+function renderClipList(){
+  const el=$('clipList'); el.innerHTML='';
+  S.task.clips.forEach((c,i)=>{
+    const d=document.createElement('div'); d.className='clip'+(i===S.clipIdx?' active':'');
+    const n = Object.keys((c.labels||{}).events||{}).length;
+    const st = c._missing ? 'missing' : c.complete ? 'done' : n ? 'partial' : '';
+    d.innerHTML = `<span class="dot ${st}"></span><div>${c.id}<small>${c._missing ? 'file not found' : c.complete ? 'done' : `${n}/${S.task.events.length} moments`}</small></div>`;
+    d.onclick = ()=>openClip(i);
+    el.appendChild(d);
+  });
+}
+
+// ---------- clip + frames
+async function openClip(i){
+  stop();
+  S.clipIdx = Math.max(0, Math.min(i, S.task.clips.length-1));
+  store.set('clip.'+S.task.id, clip().id);
+  S.meta = null;                       // ignore stepping keys until this clip is open
+  renderClipList();
+  $('msg').style.display=''; $('msg').textContent='Opening '+clip().id+' …'; $('frame').style.visibility='hidden';
+  $('badge').style.display='none'; setZoom(false);
+  try { S.meta = await api('/api/clip/'+encodeURIComponent(clip().id)); }
+  catch(e){ S.meta = {found:false, error:e.message}; }
+  if(!S.meta.found || S.meta.error){
+    clip()._missing = true; renderClipList();
+    $('badge').style.display='none'; $('marker').style.display='none';
+    $('readout').textContent=''; $('scrub').max=0; $('scrub').value=0; $('ticks').innerHTML='';
+    $('msg').innerHTML = S.meta.found ? `<div><span class="err">Couldn't open ${clip().id}</span><br><br>${S.meta.error}</div>`
+      : `<div><span class="err">${clip().id} wasn't found.</span><br><br>Put the clip anywhere under ~/LaneSightData (any sub-folder is fine), then click it again in the list.</div>`;
+    renderEvents(); renderFields(); return;
+  }
+  $('badge').style.display='';
+  clip()._missing = false;
+  $('scrub').max = Math.max(0, S.meta.frames-1);
+  S.evIdx = firstOpenEvent();
+  const ev = S.task.events[S.evIdx];
+  const lab = ev && labels().events[ev.id];
+  const hint = ev && (clip().hints||{})[ev.id];
+  await show(lab && lab.frame!=null ? lab.frame : hint!=null ? hint : 0);
+  renderEvents(); renderFields(); renderTicks();
+}
+function firstOpenEvent(){
+  const evs = labels().events||{};
+  const i = S.task.events.findIndex(e=>!evs[e.id]);
+  return i<0 ? 0 : i;
+}
+async function show(f){
+  if(!S.meta || !S.meta.found) return;
+  f = Math.max(0, Math.min(Math.round(f), S.meta.frames-1));
+  const m = S.meta;
+  S.frame = f; $('scrub').value = f; updateReadout();
+  const seq = ++S.reqSeq;
+  const url = `/api/frame/${encodeURIComponent(clip().id)}/${f}`;
+  await new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>{ if(seq===S.reqSeq && S.meta===m){ $('frame').src=img.src; $('frame').style.visibility='visible'; $('msg').style.display='none'; } res(); };
+    img.onerror = ()=>{ if(seq===S.reqSeq){ $('msg').style.display=''; $('msg').innerHTML='<span class="err">Frame '+f+' could not be decoded.</span>'; } res(); };
+    img.src = url;
+  });
+  if(S.meta!==m) return;
+  for(let k=1;k<=3;k++){ const p=new Image(); p.src=`/api/frame/${encodeURIComponent(clip().id)}/${Math.min(f+k, m.frames-1)}`; }
+}
+function updateReadout(){
+  $('badge').textContent = `${clip().id} · frame ${S.frame} · ${fmtT(S.frame)}`;
+  $('readout').innerHTML = `frame <b>${S.frame}</b> / ${S.meta.frames-1} · <b>${fmtT(S.frame)}</b> · ${(+S.meta.fps).toFixed(2)} fps`;
+  const hit = S.task.events.filter(e=>{ const v=labels().events[e.id]; return v && v.frame===S.frame; });
+  const m=$('marker'); m.style.display = hit.length?'block':'none'; m.textContent = hit.map(e=>e.label).join(' · ');
+}
+function renderTicks(){
+  const el=$('ticks'); el.innerHTML='';
+  if(!S.meta || !S.meta.frames) return;
+  const pct = f => (f/(S.meta.frames-1)*100)+'%';
+  for(const e of S.task.events){
+    const v=labels().events[e.id]; const h=(clip().hints||{})[e.id];
+    if(h!=null){ const t=document.createElement('div'); t.className='tick hint'; t.style.left=pct(h); t.title='hint: '+e.label; el.appendChild(t); }
+    if(v && v.frame!=null){ const t=document.createElement('div'); t.className='tick'; t.style.left=pct(v.frame); t.title=e.label; el.appendChild(t); }
+  }
+}
+
+// ---------- events + fields
+function renderEvents(){
+  const el=$('events'); el.innerHTML='';
+  const ok = S.meta && S.meta.found && !S.meta.error;
+  S.task.events.forEach((e,i)=>{
+    const v = labels().events[e.id];
+    const hint = (clip().hints||{})[e.id];
+    const d=document.createElement('div'); d.className='ev'+(i===S.evIdx?' current':'');
+    const val = !v ? '<span class="val">not marked</span>'
+      : v.status==='not_visible' ? '<span class="val nv">not visible</span>'
+      : `<span class="val set">frame ${v.frame} · ${v.t_s!=null? v.t_s.toFixed(3)+' s':''}</span>`;
+    d.innerHTML = `<div class="top"><span class="name">${i+1}. ${e.label}</span>${val}</div>
+      ${e.help?`<div class="help">${e.help}</div>`:''}
+      <div class="btns">
+        <button class="primary" data-a="mark" ${ok?'':'disabled'}>Mark frame ${ok?S.frame:''}</button>
+        <button data-a="nv" ${ok?'':'disabled'}>Not visible</button>
+        ${v && v.frame!=null ? '<button data-a="go" class="ghost">Go to it</button>' : ''}
+        ${hint!=null && !(v && v.frame!=null) ? `<button data-a="hint" class="ghost">Jump to estimate (${hint})</button>` : ''}
+        ${v ? '<button data-a="clear" class="ghost">Clear</button>' : ''}
+      </div>`;
+    d.onclick = ev=>{ if(ev.target.tagName!=='BUTTON'){ S.evIdx=i; renderEvents(); } };
+    d.querySelectorAll('button').forEach(b=>b.onclick = async ()=>{
+      S.evIdx=i; const a=b.dataset.a;
+      if(a==='mark') await mark(e.id, 'set');
+      else if(a==='nv') await mark(e.id, 'not_visible');
+      else if(a==='clear') await mark(e.id, 'clear');
+      else if(a==='go') { await show(v.frame); renderEvents(); }
+      else if(a==='hint') { await show(hint); renderEvents(); }
+    });
+    el.appendChild(d);
+  });
+}
+function renderFields(){
+  const el=$('fields'); el.innerHTML='';
+  $('fieldsWrap').style.display = S.task.fields.length ? '' : 'none';
+  for(const f of S.task.fields){
+    const d=document.createElement('div'); d.className='field';
+    const cur = (labels().fields||{})[f.id];
+    d.innerHTML = `<span>${f.label}${f.help?`<br><small style="color:var(--muted)">${f.help}</small>`:''}</span>
+      <input type="${f.type==='text'?'text':'number'}" value="${cur??''}" ${f.type==='int'?'step="1" min="0"':''}>`;
+    const inp=d.querySelector('input');
+    inp.onchange = async ()=>{ await save({field:f.id, value: inp.value}); };
+    inp.onkeydown = ev=>ev.stopPropagation();
+    el.appendChild(d);
+  }
+}
+async function save(change){
+  try{
+    const t = await api(`/api/label/${encodeURIComponent(S.task.id)}/${encodeURIComponent(clip().id)}`, change);
+    const keep = S.task.clips.map(c=>c._missing);
+    S.task = t; S.task.clips.forEach((c,i)=>c._missing=keep[i]);
+    flashSaved(); renderTaskHeader(); renderTicks(); updateReadout();
+    return true;
+  }catch(e){ toast('Not saved: '+e.message, 4000); return false; }
+}
+async function mark(evId, status){
+  stop();
+  const ok = await save({event: evId, status, frame: S.frame});
+  if(!ok) return;
+  if(status==='clear'){ renderEvents(); return; }
+  if(clip().complete){
+    renderEvents();
+    const next = S.task.clips.findIndex((c,i)=>i>S.clipIdx && !c.complete);
+    const any = next>=0 ? next : S.task.clips.findIndex(c=>!c.complete);
+    if(any<0){ toast('All clips in this task are done. Labels saved to '+S.task.labels_file, 5000); return; }
+    toast(`${clip().id} done ✓ — opening ${S.task.clips[any].id}`);
+    setTimeout(()=>openClip(any), 700); return;
+  }
+  // advance to the next unmarked moment; jump to its estimate if there is one
+  const evs = labels().events;
+  let n = S.task.events.findIndex((e,i)=>i>S.evIdx && !evs[e.id]);
+  if(n<0) n = S.task.events.findIndex(e=>!evs[e.id]);
+  if(n>=0){ S.evIdx=n; const h=(clip().hints||{})[S.task.events[n].id]; if(h!=null) await show(h); }
+  renderEvents();
+}
+
+// ---------- playback / zoom
+async function play(){
+  if(S.playing){ stop(); return; }
+  if(!S.meta || !S.meta.found) return;
+  S.playing=true; $('bPlay').textContent='❚❚ Pause';
+  if(!S.meta || !S.meta.found) return;
+  const fps = (S.meta.fps||30) * parseFloat($('speed').value);
+  while(S.playing && S.meta && S.frame < S.meta.frames-1){
+    const t0=performance.now();
+    await show(S.frame+1); renderEventsLight();
+    const wait = 1000/fps - (performance.now()-t0);
+    if(wait>0) await new Promise(r=>setTimeout(r, wait));
+  }
+  stop();
+}
+function stop(){ S.playing=false; $('bPlay').textContent='▶ Play'; }
+function renderEventsLight(){ document.querySelectorAll('.ev .btns button[data-a=mark]').forEach(b=>b.textContent='Mark frame '+S.frame); }
+function setZoom(on, ev){
+  S.zoom = on; const img=$('frame'); $('stage').classList.toggle('zoomed', on);
+  if(on){
+    const r = img.getBoundingClientRect();
+    const x = ev ? (ev.clientX-r.left)/r.width*100 : 50, y = ev ? (ev.clientY-r.top)/r.height*100 : 50;
+    img.style.transformOrigin = `${x}% ${y}%`; img.style.transform='scale(3)';
+  } else img.style.transform='none';
+}
+$('stage').onclick = ev => setZoom(!S.zoom, ev);
+$('bZoom').onclick = () => setZoom(!S.zoom);
+
+// ---------- wiring
+const step = async d => { stop(); if(!S.meta || !S.meta.found) return; await show(S.frame+d); renderEventsLight(); };
+$('bBack10').onclick=()=>step(-10); $('bBack1').onclick=()=>step(-1);
+$('bFwd1').onclick=()=>step(1); $('bFwd10').onclick=()=>step(10);
+$('bPlay').onclick=play;
+let scrubT; $('scrub').oninput = e => { stop(); if(!S.meta || !S.meta.found) return; clearTimeout(scrubT); const v=+e.target.value; S.frame=v; updateReadout(); scrubT=setTimeout(()=>{show(v); renderEventsLight();}, 60); };
+$('taskSel').onchange = e => openTask(e.target.value);
+$('bNextClip').onclick = ()=>openClip(S.clipIdx+1);
+$('bPrevClip').onclick = ()=>openClip(S.clipIdx-1);
+document.addEventListener('keydown', async ev=>{
+  if(ev.target.tagName==='INPUT' || ev.target.tagName==='SELECT' || !S.task) return;
+  const fps = Math.round(S.meta && S.meta.fps || 30);
+  const k = ev.key;
+  if(k==='ArrowRight'){ ev.preventDefault(); step(ev.shiftKey?10:1); }
+  else if(k==='ArrowLeft'){ ev.preventDefault(); step(ev.shiftKey?-10:-1); }
+  else if(k==='ArrowUp'){ ev.preventDefault(); step(fps); }
+  else if(k==='ArrowDown'){ ev.preventDefault(); step(-fps); }
+  else if(k===' '){ ev.preventDefault(); play(); }
+  else if(k==='Enter'){ ev.preventDefault(); const e=S.task.events[S.evIdx]; if(e) mark(e.id,'set'); }
+  else if(k==='x'||k==='X'){ const e=S.task.events[S.evIdx]; if(e) mark(e.id,'not_visible'); }
+  else if(k==='z'||k==='Z'){ setZoom(!S.zoom); }
+  else if(k===']'){ S.evIdx=Math.min(S.evIdx+1, S.task.events.length-1); renderEvents(); }
+  else if(k==='['){ S.evIdx=Math.max(S.evIdx-1, 0); renderEvents(); }
+  else if(k==='n'||k==='N'){ openClip(S.clipIdx+1); }
+});
+loadTasks().catch(e=>{ $('msg').innerHTML='<span class="err">'+e.message+'</span>'; });
+</script>
+</body>
+</html>
