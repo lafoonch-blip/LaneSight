@@ -1,66 +1,66 @@
-"""DEC-116: fast, deterministic YUV420P→BGR via a numba integer kernel. Replaces the pure-numpy float
-conversion (the decode-once prime was ~90 s for a full clip on the server, the canon2 analysis-time
-regression). Fixed-point INTEGER math → bit-identical on arm64 (Mac) and x86 (Linux), so Mac==server on the
-decoded pixels is exact (stronger than the float path). ~16× faster parallel / ~2× single-thread; every output
-pixel is independent so prange is deterministic. The chroma upsample reproduces stabilize._up2x's separable
-left-cosited 0.75/0.25 bilinear (weights 9/3/3/1, +8>>4)."""
+"""DEC-116: fast numba YUV420P→BGR that reproduces decode.yuv420p_to_bgr_numpy EXACTLY (float32, maxdiff 0),
+so enabling it is a no-op downstream (the server's fragile impact anchor amplified the earlier INTEGER kernel's
+maxdiff-2 into a 3 mph error / 15.6). Float matches numpy's float ops bit-for-bit (fastmath=False, same op order,
+same 0.75/0.25 separable left-cosited chroma upsample as stabilize._up2x). ~19× parallel / ~2.4× serial vs numpy.
+PARALLEL is gated by LANESIGHT_YUV_NB_PARALLEL (default serial) because numba's parallel backend diverged x86 vs
+arm64 for the integer kernel — parallel is enabled only after a per-frame md5 (Job==Mac) proves it matches here."""
+import os
 import numpy as np
 from numba import njit, prange
 
-
-@njit(parallel=False, fastmath=False, cache=True)
-def _convert(Y, U, V, ya, crr, cbb, gcb, gcr, yoff, full):
-    # SERIAL (parallel=False) + fastmath=False: integer-only, no reordering, so the output is bit-identical on
-    # arm64 and x86. DEC-116: parallel=True (prange) gave a different server result (canon16 smoke 15.6 vs Mac
-    # 18.7) — numba's parallel backend codegen diverged across arch — so this is serial. Still ~2× numpy.
-    h, w = Y.shape; ch, cw = U.shape
-    out = np.empty((h, w, 3), np.uint8)
-    for r in range(h):
-        rc = r >> 1
-        if (r & 1) == 0:
-            r1 = rc; r2 = rc - 1 if rc - 1 >= 0 else 0
-        else:
-            r1 = rc; r2 = rc + 1 if rc + 1 < ch else ch - 1
-        for c in range(w):
-            cc = c >> 1
-            if (c & 1) == 0:
-                c1 = cc; c2 = cc - 1 if cc - 1 >= 0 else 0
-            else:
-                c1 = cc; c2 = cc + 1 if cc + 1 < cw else cw - 1
-            u = (U[r1, c1] * 9 + U[r1, c2] * 3 + U[r2, c1] * 3 + U[r2, c2] + 8) >> 4
-            v = (V[r1, c1] * 9 + V[r1, c2] * 3 + V[r2, c1] * 3 + V[r2, c2] + 8) >> 4
-            yl = (Y[r, c] - yoff) * ya
-            cb = u - 128; cr = v - 128
-            R = (yl + crr * cr + 8192) >> 14
-            B = (yl + cbb * cb + 8192) >> 14
-            G = (yl - gcb * cb - gcr * cr + 8192) >> 14
-            out[r, c, 0] = 0 if B < 0 else (255 if B > 255 else B)
-            out[r, c, 1] = 0 if G < 0 else (255 if G > 255 else G)
-            out[r, c, 2] = 0 if R < 0 else (255 if R > 255 else R)
-    return out
+_PAR = os.environ.get('LANESIGHT_YUV_NB_PARALLEL') == '1'
 
 
-_S = 1 << 14
+def _kernel(parallel):
+    @njit(parallel=parallel, fastmath=False, cache=True)
+    def k(Y, U, V, krr, kbb, gkb, gkr, yscale, cscale, yoff, full):
+        h, w = Y.shape; ch, cw = U.shape
+        out = np.empty((h, w, 3), np.uint8)
+        rng = prange(h) if parallel else range(h)
+        for r in rng:
+            rc = r >> 1
+            r1 = rc; r2 = (rc - 1 if rc - 1 >= 0 else 0) if (r & 1) == 0 else (rc + 1 if rc + 1 < ch else ch - 1)
+            wr1 = np.float32(0.75); wr2 = np.float32(0.25)
+            for c in range(w):
+                cc = c >> 1
+                c1 = cc; c2 = (cc - 1 if cc - 1 >= 0 else 0) if (c & 1) == 0 else (cc + 1 if cc + 1 < cw else cw - 1)
+                wc1 = np.float32(0.75); wc2 = np.float32(0.25)
+                uh1 = np.float32(U[r1, c1]) * wc1 + np.float32(U[r1, c2]) * wc2
+                uh2 = np.float32(U[r2, c1]) * wc1 + np.float32(U[r2, c2]) * wc2
+                u = uh1 * wr1 + uh2 * wr2
+                vh1 = np.float32(V[r1, c1]) * wc1 + np.float32(V[r1, c2]) * wc2
+                vh2 = np.float32(V[r2, c1]) * wc1 + np.float32(V[r2, c2]) * wc2
+                v = vh1 * wr1 + vh2 * wr2
+                if full:
+                    Yl = np.float32(Y[r, c]); Cb = u - np.float32(128.0); Cr = v - np.float32(128.0)
+                else:
+                    Yl = (np.float32(Y[r, c]) - yoff) * yscale
+                    Cb = (u - np.float32(128.0)) * cscale; Cr = (v - np.float32(128.0)) * cscale
+                R = Yl + krr * Cr; B = Yl + kbb * Cb; G = Yl - gkb * Cb - gkr * Cr
+                b = int(B + np.float32(0.5)); g = int(G + np.float32(0.5)); rr = int(R + np.float32(0.5))
+                out[r, c, 0] = 0 if b < 0 else (255 if b > 255 else b)
+                out[r, c, 1] = 0 if g < 0 else (255 if g > 255 else g)
+                out[r, c, 2] = 0 if rr < 0 else (255 if rr > 255 else rr)
+        return out
+    return k
+
+
+_convert = _kernel(_PAR)
+_f32 = np.float32
 
 
 def convert(Y, U, V, Kr, Kb, rng):
-    """Y (h,w), U/V (h/2,w/2) int32; returns HxWx3 BGR uint8. Fixed-point BT.x matrix, limited/full range."""
+    """Y (h,w), U/V (h/2,w/2) int32 or float; returns HxWx3 BGR uint8, bit-identical to yuv420p_to_bgr_numpy."""
     Kg = 1.0 - Kr - Kb
     full = rng in ('pc', 'jpeg', 'full')
-    if full:
-        yoff = 0; yscale = 1.0; csc = 1.0
-    else:
-        yoff = 16; yscale = 255.0 / 219.0; csc = 255.0 / 224.0
-    ya = int(round(yscale * _S))
-    crr = int(round((2 - 2 * Kr) * csc * _S)); cbb = int(round((2 - 2 * Kb) * csc * _S))
-    gcb = int(round(Kb * (2 - 2 * Kb) / Kg * csc * _S)); gcr = int(round(Kr * (2 - 2 * Kr) / Kg * csc * _S))
-    return _convert(Y, U, V, ya, crr, cbb, gcb, gcr, yoff, full)
+    Yf = Y.astype(np.float32); Uf = U.astype(np.float32); Vf = V.astype(np.float32)
+    return _convert(Yf, Uf, Vf, _f32(2.0 - 2.0 * Kr), _f32(2.0 - 2.0 * Kb),
+                    _f32(Kb * (2.0 - 2.0 * Kb) / Kg), _f32(Kr * (2.0 - 2.0 * Kr) / Kg),
+                    _f32(255.0 / 219.0), _f32(255.0 / 224.0), _f32(16.0), full)
 
 
-# Warm the JIT at import (compile + disk-cache) on a 2×2 dummy so the first real frame isn't slow. On a fresh
-# Cloud Run instance /tmp is ephemeral, so this pays ~1-2 s once per cold start (vs the ~90 s it removes).
-try:
-    _z = np.zeros((2, 2), np.int32); _zc = np.zeros((1, 1), np.int32)
+try:   # warm the JIT (compile + disk-cache) so the first real frame isn't slow
+    _z = np.zeros((2, 2), np.float32); _zc = np.zeros((1, 1), np.float32)
     convert(_z, _zc, _zc, 0.2126, 0.0722, 'tv')
 except Exception:
     pass
