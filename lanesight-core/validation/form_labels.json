@@ -1,0 +1,65 @@
+{
+  "_source": "LaneSight Labeler task 'form_events' (lanesight-core/validation/labels/form_events.json); null = not labeled or not visible",
+  "clips": {
+    "IMG_8824": {
+      "view": "side",
+      "E2_ball_start_s": 2.6052,
+      "E4_backswing_top_s": 3.8577,
+      "E5_slide_start_s": 3.8744,
+      "E7_release_s": 4.2919,
+      "E8_slide_stop_s": 4.2752,
+      "E9_finish_hold_end_s": 4.5257,
+      "step_count": 5
+    },
+    "IMG_8825": {
+      "view": "side",
+      "E2_ball_start_s": 17.2176,
+      "E4_backswing_top_s": 18.4534,
+      "E5_slide_start_s": 18.5703,
+      "E7_release_s": 18.8375,
+      "E8_slide_stop_s": 18.8542,
+      "E9_finish_hold_end_s": 19.1047,
+      "step_count": 5
+    },
+    "IMG_8826": {
+      "view": "side",
+      "E2_ball_start_s": 15.9648,
+      "E4_backswing_top_s": 17.1671,
+      "E5_slide_start_s": 17.3174,
+      "E7_release_s": 17.5679,
+      "E8_slide_stop_s": 17.618,
+      "E9_finish_hold_end_s": 17.8518,
+      "step_count": 5
+    },
+    "IMG_8846": {
+      "view": "rear",
+      "E2_ball_start_s": 13.3,
+      "E4_backswing_top_s": 14.4333,
+      "E5_slide_start_s": 14.5667,
+      "E7_release_s": 14.8,
+      "E8_slide_stop_s": 14.8,
+      "E9_finish_hold_end_s": 15.1333,
+      "step_count": 5
+    },
+    "IMG_8847": {
+      "view": "rear",
+      "E2_ball_start_s": 15.2061,
+      "E4_backswing_top_s": 16.4066,
+      "E5_slide_start_s": 16.5233,
+      "E7_release_s": 16.7734,
+      "E8_slide_stop_s": 16.7901,
+      "E9_finish_hold_end_s": 17.0402,
+      "step_count": 5
+    },
+    "IMG_8848": {
+      "view": "rear",
+      "E2_ball_start_s": 13.1393,
+      "E4_backswing_top_s": null,
+      "E5_slide_start_s": null,
+      "E7_release_s": null,
+      "E8_slide_stop_s": null,
+      "E9_finish_hold_end_s": null,
+      "step_count": null
+    }
+  }
+}

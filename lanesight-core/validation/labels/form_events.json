@@ -1,0 +1,219 @@
+{
+  "task": "form_events",
+  "updated_at": "2026-11-01T09:43:39-05:00",
+  "clips": {
+    "IMG_8824": {
+      "events": {
+        "ball_start": {
+          "frame": 156,
+          "t_s": 2.6052,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 231,
+          "t_s": 3.8577,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 232,
+          "t_s": 3.8744,
+          "status": "set"
+        },
+        "release": {
+          "frame": 257,
+          "t_s": 4.2919,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 256,
+          "t_s": 4.2752,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 271,
+          "t_s": 4.5257,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.87963891675025,
+      "complete": true
+    },
+    "IMG_8825": {
+      "events": {
+        "ball_start": {
+          "frame": 1031,
+          "t_s": 17.2176,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 1105,
+          "t_s": 18.4534,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 1112,
+          "t_s": 18.5703,
+          "status": "set"
+        },
+        "release": {
+          "frame": 1128,
+          "t_s": 18.8375,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 1129,
+          "t_s": 18.8542,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 1144,
+          "t_s": 19.1047,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.88053758088601,
+      "complete": true
+    },
+    "IMG_8826": {
+      "events": {
+        "ball_start": {
+          "frame": 956,
+          "t_s": 15.9648,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 1028,
+          "t_s": 17.1671,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 1037,
+          "t_s": 17.3174,
+          "status": "set"
+        },
+        "release": {
+          "frame": 1052,
+          "t_s": 17.5679,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 1055,
+          "t_s": 17.618,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 1069,
+          "t_s": 17.8518,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.88189604724158,
+      "complete": true
+    },
+    "IMG_8846": {
+      "events": {
+        "ball_start": {
+          "frame": 399,
+          "t_s": 13.3,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 433,
+          "t_s": 14.4333,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 437,
+          "t_s": 14.5667,
+          "status": "set"
+        },
+        "release": {
+          "frame": 444,
+          "t_s": 14.8,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 444,
+          "t_s": 14.8,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 454,
+          "t_s": 15.1333,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 30.0,
+      "complete": true
+    },
+    "IMG_8847": {
+      "events": {
+        "ball_start": {
+          "frame": 912,
+          "t_s": 15.2061,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 984,
+          "t_s": 16.4066,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 991,
+          "t_s": 16.5233,
+          "status": "set"
+        },
+        "release": {
+          "frame": 1006,
+          "t_s": 16.7734,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 1007,
+          "t_s": 16.7901,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 1022,
+          "t_s": 17.0402,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.97586484312148,
+      "complete": true
+    },
+    "IMG_8848": {
+      "events": {
+        "ball_start": {
+          "frame": 788,
+          "t_s": 13.1393,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97288339861404,
+      "complete": false
+    }
+  }
+}

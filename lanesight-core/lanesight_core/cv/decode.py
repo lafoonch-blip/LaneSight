@@ -76,7 +76,23 @@ def _up2x(p):
 
 
 def yuv420p_to_bgr(buf, w, h, cs='bt709', rng='tv'):
-    """Planar YUV420P bytes → HxWx3 BGR uint8. Deterministic numpy chroma upsample; limited/full range aware."""
+    """Planar YUV420P bytes → HxWx3 BGR uint8. DEC-116: fixed-point INTEGER numba kernel (bit-identical on
+    arm64/x86 → Mac==server exact; ~90 s→~few s on the server for a full-clip prime). _up2x's separable
+    0.75/0.25 chroma upsample is reproduced inside the kernel. Pure-numpy float path kept as a fallback only
+    (yuv420p_to_bgr_numpy) — NOT interchangeable per-clip (values differ ≤2 levels), so numba must be present on
+    BOTH Mac and the server (it is a hard dep)."""
+    ysz = w * h
+    cw, ch = w // 2, h // 2
+    Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.int32)
+    U = np.frombuffer(buf[ysz:ysz + cw * ch], np.uint8).reshape(ch, cw).astype(np.int32)
+    V = np.frombuffer(buf[ysz + cw * ch:ysz + 2 * cw * ch], np.uint8).reshape(ch, cw).astype(np.int32)
+    Kr, Kb = _KRKB.get(cs, _KRKB['bt709'])
+    from . import _yuv_nb
+    return _yuv_nb.convert(Y, U, V, Kr, Kb, rng)
+
+
+def yuv420p_to_bgr_numpy(buf, w, h, cs='bt709', rng='tv'):
+    """Original pure-numpy float conversion (pre-DEC-116). Kept for reference/fallback; see yuv420p_to_bgr."""
     ysz = w * h
     Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.float32)
     cw, ch = w // 2, h // 2

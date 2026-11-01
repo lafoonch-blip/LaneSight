@@ -14,7 +14,7 @@ requires-python = ">=3.11"
 # wheel's bundled decoder producing different pixels (Linux vs macOS) → different geometry. Fix path: iterate
 # opencv versions via the Job until one is reproducible AND passes cv_eval, THEN pin to it + re-baseline the
 # smoke. The Debian release is pinned (Dockerfile, bookworm) for a deterministic ffmpeg.
-dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "matplotlib>=3.8"]
+dependencies = ["numpy>=1.26", "opencv-python-headless>=4.9", "matplotlib>=3.8", "numba>=0.60"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
 form = ["mediapipe>=0.10"]       # rear/bowler-side Form P1 pose backend (lanesight_core.form.pose)
