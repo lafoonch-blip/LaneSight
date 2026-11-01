@@ -6,7 +6,7 @@
 # busy old one (no more rollover 5xx) and a burst of users gets its own instance. Scale-to-zero stays
 # (min-instances unset) for the cost cap. A per-INSTANCE guard in jobs.py caps one analysis per instance, so
 # concurrency 8 can't put two multi-GB analyses on one instance (DEC-043 one-at-a-time is per session).
-# LANESIGHT_CV_WORKERS=4 (DEC-115): match the CV thread pool to --cpu. workers() defaults to min(cpu_count(),12),
+# LANESIGHT_CV_WORKERS=4,LANESIGHT_YUV_NB_PARALLEL=1 (DEC-115): match the CV thread pool to --cpu. workers() defaults to min(cpu_count(),12),
 # but cpu_count() reports the HOST node's cores (16+), not the Cloud Run --cpu allocation, so it was spawning ~12
 # threads on 4 throttled vCPUs = context-switch thrashing (stabilize swung 108-391s for the same clip). Pinning it
 # to the allocation removes the oversubscription. Keep this == --cpu.
@@ -79,7 +79,7 @@ gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
   --revision-suffix "${REV_SUFFIX:-$SHA}" \
   --cpu 4 --memory 16Gi --timeout 600 --concurrency 8 --max-instances 3 \
-  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=4,LANESIGHT_GIB=16,LANESIGHT_CV_WORKERS=4 \
+  --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=4,LANESIGHT_GIB=16,LANESIGHT_CV_WORKERS=4,LANESIGHT_YUV_NB_PARALLEL=1 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
   --quiet
 
