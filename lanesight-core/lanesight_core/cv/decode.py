@@ -76,12 +76,13 @@ def _up2x(p):
 
 
 def yuv420p_to_bgr(buf, w, h, cs='bt709', rng='tv'):
-    """Planar YUV420P bytes → HxWx3 BGR uint8. DEFAULT = the numba fixed-point INTEGER kernel (DEC-116): PROVEN
-    bit-identical on arm64(Mac) and x86(server) via per-frame md5 (serial — parallel=True was the divergence),
-    and ~90 s→~few s for a full-clip prime. Mac==server on decode is now exact (stronger than the old float
-    path). Set LANESIGHT_YUV_NUMPY=1 to force the slower pure-numpy float fallback (kept for environments
-    without numba / debugging)."""
-    if os.environ.get('LANESIGHT_YUV_NUMPY') != '1':
+    """Planar YUV420P bytes → HxWx3 BGR uint8. DEFAULT = pure-numpy float (cross-platform-deterministic).
+    DEC-116: the numba fixed-point kernel (LANESIGHT_YUV_NUMBA=1) is ~90 s→~few s and its CONVERSION is proven
+    bit-identical arm64==x86 (serial — parallel=True was a divergence, now fixed, per-frame md5 match). BUT
+    enabling it still broke the server analysis (IMG_8753 → 15.6 vs 18.7, deterministic, both parallel+serial) —
+    a numba-RUNTIME side-effect on the downstream CV (threading layer perturbing cv2 ORB/RANSAC), NOT the pixels.
+    So numba stays opt-in/OFF until that is isolated; numpy float is the proven default on both platforms."""
+    if os.environ.get('LANESIGHT_YUV_NUMBA') == '1':
         ysz = w * h; cw, ch = w // 2, h // 2
         Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.int32)
         U = np.frombuffer(buf[ysz:ysz + cw * ch], np.uint8).reshape(ch, cw).astype(np.int32)

@@ -3,19 +3,19 @@
   "tol_mph": 0.2,
   "clips": {
     "IMG_8751.MOV": {
-      "ball_speed": 18.54,
+      "ball_speed": 18.615,
       "dynamic_range": "hdr"
     },
     "IMG_8752.MOV": {
-      "ball_speed": 18.301,
+      "ball_speed": 18.308,
       "dynamic_range": "sdr"
     },
     "IMG_8753.MOV": {
-      "ball_speed": 18.739,
+      "ball_speed": 18.711,
       "dynamic_range": "sdr"
     },
     "IMG_8754.MOV": {
-      "ball_speed": 18.362,
+      "ball_speed": 18.232,
       "dynamic_range": "hdr"
     }
   }
