@@ -1,0 +1,26 @@
+{
+  "title": "Ball boxes (learned detector training, DEC-094)",
+  "instructions": "Collect ball bounding boxes to train an on-device learned ball detector (DEC-094). For each clip, step through the roll and draw a tight box around the BALL (not its shadow/reflection) on frames where it's clearly visible — more frames across the near AND far lane is better, especially the back half where the classical tracker loses it. Skip frames where the ball is fully occluded (by the bowler/return). You don't need every frame; aim for a good spread from foul line to pins.\n\nFor each labeled frame, record the box as pixel corners [x0,y0,x1,y1] in the frame's native resolution. Mark 'Not visible' (n) to skip a frame. These boxes are training/eval data (DEC-094), never a runtime anchor.",
+  "clips": [
+    {"id": "IMG_8751"},
+    {"id": "IMG_8752"},
+    {"id": "IMG_8753"},
+    {"id": "IMG_8754"}
+  ],
+  "mode": "boxes",
+  "box": {
+    "label": "Ball bounding box",
+    "help": "Tight box around the ball itself (exclude the shadow and the lane reflection). One box per labeled frame.",
+    "export_key": "ball_box",
+    "export_unit": "pixels_xyxy"
+  },
+  "fields": [
+    {"id": "frames_labeled", "label": "Frames labeled (count)", "type": "int", "required": false,
+     "help": "How many frames you boxed for this clip (sanity check; the export lists them)."}
+  ],
+  "export": {
+    "path": "validation/labels/ball_box_detection.json",
+    "add_fps": true
+  },
+  "_note": "Needs the labeler's box-drawing mode ('mode':'boxes'). If the current labeler build only supports point/frame events, this task file is the spec; the labeler gains a box tool in a follow-up (tracked in DEC-094)."
+}
