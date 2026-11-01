@@ -303,6 +303,18 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         run = run + 1 if v else 0
         if run > best[0]: best = (run, i - run + 1, i)
     ref = (best[1] + best[2]) // 2
+    # DEC-117 / CV-review item 2: reference-frame sensitivity test hook. The reference-frame choice should NOT
+    # change the speed (frame→reference alignment must be separable from reference→lane geometry). Forcing a
+    # different ref with LANESIGHT_STAB_REF (absolute index, or '+N'/'-N' offset from the auto choice) lets the
+    # test prove speed is invariant across references; it is NOT used in production (unset = auto).
+    _ref_ovr = os.environ.get('LANESIGHT_STAB_REF')
+    if _ref_ovr:
+        try:
+            ref = (ref + int(_ref_ovr)) if _ref_ovr[0] in '+-' else int(_ref_ovr)   # '+N'/'-N' offset, else absolute
+            ref = int(np.clip(ref, 0, len(ts) - 1))
+            log(f'STAB_REF override -> ref {ref}')
+        except Exception:
+            pass
     _dbg['passA_s'] = round(_time.perf_counter() - _tA, 2)
     R = Registrar()
     # pass B: homographies (direct to reference; chain through previous frame when direct match is weak)

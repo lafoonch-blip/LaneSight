@@ -40,6 +40,16 @@ struct BallTrack: Equatable {
 private nonisolated(unsafe) let BALL_IN: Float = 8.5
 private nonisolated(unsafe) let LANE_IN: Float = 41.5
 
+// Brightness-RELATIVE foreground threshold (DEC-117 robustness; mirrors cv/track.py THR_L_NOMINAL). The bg-diff
+// scales with any global gain the decode applies, so a fixed absolute threshold segments a brighter/darker copy
+// of the same clip differently → the ball track tail and the speed anchor move. Scaling the threshold by the
+// clip's own background level makes it gain-invariant, so the iOS AVFoundation decode can't recreate the
+// platform speed gap the server hit. L_NOMINAL ≈ the IMG_8751-54 mean working-luma level (max-channel basis,
+// same as downsampledLuma); bounds guard pathological lanes.
+private nonisolated(unsafe) let THR_L_NOMINAL: Float = 165
+private nonisolated(unsafe) let THR_MIN: Float = 25
+private nonisolated(unsafe) let THR_MAX: Float = 55
+
 enum OnDeviceTracker {
 
     // geometry helpers (ports of track.py exp_diam / contact_row; lane_x from the stage-2 edges)
@@ -99,12 +109,16 @@ enum OnDeviceTracker {
         //   • up-lane from the foul: contactRow between the VP and the foul line (not behind the foul in the approach)
         let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
         let vpY = vp.y
+        // brightness-relative threshold: scale diffThr by this clip's own background level over the lane strip
+        // (working coords) so a gain-scaled copy of the clip segments identically (DEC-117).
+        let bgLevel = laneBgLevel(bg: bg, sw: sw, sh: sh, lane: lane, stride: stride, vpY: vpY, foulY: foulY)
+        let thrEff = Int(min(THR_MAX, max(THR_MIN, Float(diffThr) * bgLevel / THR_L_NOMINAL)).rounded())
         var perFrame: [[Cand]] = []
         var scanned = 0
         let s = Float(stride)
         forEachLuma(url: url, stride: stride, sw: sw, sh: sh) { i, luma in
             scanned += 1
-            let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: diffThr)
+            let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: thrEff)
             var cs: [Cand] = []
             for b in blobs {
                 let bx = Float(b.x) * s, by = Float(b.y) * s, bw = Float(b.w) * s, bh = Float(b.h) * s, ba = Float(b.area) * s * s
@@ -131,6 +145,27 @@ enum OnDeviceTracker {
             result.impactT = detectImpact(url: url, lane: lane, vpY: vpY, foulY: foulY, afterT: first.t)
         }
         return result
+    }
+
+    /// Robust clip background level = median of the working-res background over the lane strip (between the VP
+    /// and the foul line, within the lane edges). Used to make the foreground threshold gain-invariant (DEC-117).
+    nonisolated private static func laneBgLevel(bg: [UInt8], sw: Int, sh: Int, lane: ODDetectedLane,
+                                                stride: Int, vpY: Float, foulY: Float) -> Float {
+        let s = Float(stride)
+        var vals: [UInt8] = []
+        vals.reserveCapacity(sw * sh / 4)
+        let y0 = max(0, Int(vpY / s)), y1 = min(sh, Int(foulY / s))
+        guard y1 > y0 else { return THR_L_NOMINAL }
+        for wy in y0..<y1 {
+            let fy = Float(wy) * s
+            let (xa, xb) = laneX(lane, fy)
+            let wx0 = max(0, Int(xa / s)), wx1 = min(sw, Int(xb / s))
+            if wx1 <= wx0 { continue }
+            for wx in wx0..<wx1 { vals.append(bg[wy * sw + wx]) }
+        }
+        if vals.isEmpty { return THR_L_NOMINAL }
+        vals.sort()
+        return Float(vals[vals.count / 2])
     }
 
     // MARK: background = per-pixel median of up to maxFrames evenly-sampled luma frames

@@ -7,6 +7,25 @@ from ..failures import AnalysisFailure
 
 BALL_IN, LANE_IN = 8.59, 41.5
 
+# Foreground threshold is made brightness-RELATIVE (DEC-117 robustness). The background-diff `d` scales linearly
+# with a global gain `g` applied to the whole clip (a clip and a g× brighter copy share the same bg, so d→g·d);
+# a FIXED absolute threshold then over/under-segments the darker/brighter copy, which shifts the ball track tail
+# → `far`/`t_impact` → the impact-anchored depth scale → the headline speed (the maxdiff-2 colour change that
+# swung 18.7↔15.6). Scaling the threshold by the clip's OWN ROI background level L makes thr track g, so a clip
+# and any gain-scaled copy segment IDENTICALLY (gain-invariant). L_NOMINAL ≈ the IMG_8751-54 mean ROI level, so
+# the baseline threshold stays ≈ its historical 35; THR_MIN/MAX bound pathological lanes.
+THR_L_NOMINAL = 165.0
+THR_MIN, THR_MAX = 25.0, 55.0
+
+def _roi_bg_level(bgc_maxc, roic):
+    """Robust clip background level = median of the max-channel background over the lane ROI (the diff basis)."""
+    vals = bgc_maxc[roic]
+    return float(np.median(vals)) if vals.size else THR_L_NOMINAL
+
+def _adaptive_thr(thr, level):
+    """Brightness-relative threshold: thr·(clip level / nominal), clamped. Gain-invariant across copies of a clip."""
+    return float(np.clip(thr * level / THR_L_NOMINAL, THR_MIN, THR_MAX))
+
 def exp_diam(lane, y):
     xa, xb = lane_x(lane, y); return BALL_IN / LANE_IN * (xb - xa)
 
@@ -34,6 +53,11 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
                          'vp': [round(float(vp[0]), 1), round(float(vp[1]), 1)] if vp is not None else None})
     y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     roic = roi[y0:y1, x0:x1]; bgc = bg[y0:y1, x0:x1].astype(np.int16)
+    # brightness-relative threshold (DEC-117): scale thr by this clip's own ROI background level so a clip and
+    # any gain-scaled (brighter/darker) copy segment identically — removes the colour-sensitivity that moved
+    # the track tail / impact anchor / headline speed. A no-op at the nominal level (thr stays ≈35).
+    thr_eff = _adaptive_thr(thr, _roi_bg_level(bgc.max(axis=2), roic))
+    log(f'foreground thr {thr}->{thr_eff:.1f} (ROI bg level {_roi_bg_level(bgc.max(axis=2), roic):.0f}, nominal {THR_L_NOMINAL:.0f})')
     Hs = S['Hs']; ts = S['ts']
     # Each frame is processed independently (warp + background diff + connected components), so fan the per-frame
     # work across cores with decode kept sequential and results reassembled in frame order (pure speed-up; the
@@ -42,7 +66,7 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
         wf = cv2.warpPerspective(f, Hs[i], (w, h))[y0:y1, x0:x1]
         valid = wf.max(axis=2) > 0                                  # outside warped frame = no data
         d = np.abs(wf.astype(np.int16) - bgc).max(axis=2)
-        m = ((d > thr) & roic & valid).astype(np.uint8)
+        m = ((d > thr_eff) & roic & valid).astype(np.uint8)
         m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         n, lab, st, cen = cv2.connectedComponentsWithStats(m)
         bl = [dict(x=int(st[k, 0] + x0), y=int(st[k, 1] + y0), w=int(st[k, 2]), h=int(st[k, 3]), a=int(st[k, 4]))
