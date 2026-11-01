@@ -98,7 +98,7 @@ def main():
                          f'{api}/sessions/{sid}/shots',
                          '-H', f'Authorization: Bearer {tok}',
                          '-F', f'file=@{CLIP};type=video/quicktime',
-                         '-F', f'metadata={meta}'], capture_output=True, text=True, timeout=420)
+                         '-F', f'metadata={meta}'], capture_output=True, text=True, timeout=580)
     body, _, code = cp.stdout.rpartition('\n')
     if code.strip() != '200':
         raise SystemExit(f'create shot failed ({code.strip()}): {body[:300]}')
