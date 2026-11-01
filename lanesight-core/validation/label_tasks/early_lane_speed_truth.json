@@ -1,0 +1,31 @@
+{
+  "title": "Speed truth (early lane): shadow at foul, dots, arrows",
+  "instructions": "Validation-only truth for the EARLY-LANE (release/skid) speed — the headline number — with NO pin contact and NO lane geometry from the engine. For each clip, mark the frame the ball's SHADOW (its contact point on the lane) crosses each line: the foul line, the dot line, and the arrow line. True early speed = (your tape-measured distance between two lines) / (time between those frames).\n\nBEFORE labeling, TAPE-MEASURE your home lane ONCE and enter the two distances below (they are lane constants, so the same numbers apply to every clip shot on that lane):\n  - foul line -> the DOTS (the row of guide dots past the foul, ~7 ft): measure foul line to the CENTRE of the dots, in INCHES.\n  - foul line -> the ARROWS (the second-arrow row, ~15 ft): measure foul line to the CENTRE of the arrows you are marking, in INCHES.\nMeasure along the boards (down-lane), from the foul line edge nearest you. If a line is not clearly visible in a clip, mark it 'Not visible' (n) and the pair is skipped. These distances are TRUTH ONLY and must NEVER be used as a runtime anchor.\n\nEach moment opens at a rough estimate; step frame-by-frame with the arrows and press Enter on the exact frame. Click the frame to zoom.",
+  "clips": [
+    {"id": "IMG_8751"},
+    {"id": "IMG_8752"},
+    {"id": "IMG_8753"},
+    {"id": "IMG_8754"}
+  ],
+  "fields": [
+    {"id": "foul_to_dots_in", "label": "Tape: foul → dots (inches)", "type": "float", "required": false,
+     "help": "Your measured distance from the foul line to the centre of the dot row, in inches (≈84 in if standard 7 ft). Lane constant — same for every clip on this lane."},
+    {"id": "foul_to_arrows_in", "label": "Tape: foul → arrows (inches)", "type": "float", "required": false,
+     "help": "Your measured distance from the foul line to the centre of the arrow row you mark, in inches (≈180 in if standard 15 ft). Lane constant."}
+  ],
+  "events": [
+    {"id": "shadow_at_foul", "label": "Shadow crosses the FOUL line",
+     "help": "First frame the ball's shadow (contact point on the lane) is over the foul line (nearest you).",
+     "export_key": "shadow_at_foul_frame", "export_unit": "frame"},
+    {"id": "shadow_at_dots", "label": "Shadow crosses the DOTS",
+     "help": "First frame the ball's shadow is over the dot row (~7 ft). 'Not visible' if the dots aren't clear.",
+     "export_key": "shadow_at_dots_frame", "export_unit": "frame"},
+    {"id": "shadow_at_arrows", "label": "Shadow crosses the ARROWS",
+     "help": "First frame the ball's shadow is over the arrow row (~15 ft, the row you tape-measured).",
+     "export_key": "shadow_at_arrows_frame", "export_unit": "frame"}
+  ],
+  "export": {
+    "path": "validation/labels/early_lane_speed_truth.json",
+    "add_fps": true
+  }
+}

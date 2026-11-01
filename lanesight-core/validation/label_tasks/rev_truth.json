@@ -1,0 +1,37 @@
+{
+  "title": "Rev-rate truth: marked ball at 240 fps",
+  "instructions": "Ground truth for REV RATE, measured directly from a marked ball so it needs no spin-pattern model. SHOOT A SPECIAL CLIP: put ONE clear mark on the ball (a piece of tape or a dot on the coverstock), throw a normal shot, and record it in SLO-MO at 240 fps (iPhone: Camera > Slo-mo, confirm 240). Frame the ball over the first ~10-15 ft so the mark is readable.\n\nThen label the frame each time that ONE mark returns to the SAME position/orientation (one full revolution) — do it for as many successive passes as you can see clearly (the more, the tighter the number). Rev rate (lane rpm) = 60 × fps ÷ (average frames between successive passes). Mark unused passes 'Not visible' (n).\n\nPick a reference instant for 'the same position' and keep it consistent, e.g. the mark at the TOP of the ball (12 o'clock) each pass, or the mark centred facing the camera. Step frame-by-frame and press Enter on the frame where the mark is at that reference. Also record, once per clip, the fps and a short note on where the mark is (so we can re-check).",
+  "clips": [
+    {"id": "REV_240_sample", "static": {"note": "replace with your 240fps marked-ball clip id(s)"}}
+  ],
+  "fields": [
+    {"id": "capture_fps", "label": "Capture fps (240?)", "type": "int", "required": true,
+     "help": "The slo-mo capture rate. Must be the TRUE sensor fps (240 for iPhone slo-mo), not 30."},
+    {"id": "mark_desc", "label": "Mark / reference used", "type": "text", "required": false,
+     "help": "e.g. 'white tape dot, logged when at 12 o'clock' — so the reference instant is reproducible."}
+  ],
+  "events": [
+    {"id": "mark_pass_1", "label": "Mark pass #1 (reference position)",
+     "help": "First frame the mark is at your chosen reference position.",
+     "export_key": "mark_pass_1_frame", "export_unit": "frame"},
+    {"id": "mark_pass_2", "label": "Mark pass #2",
+     "help": "Next frame the mark returns to the same reference position (one revolution later).",
+     "export_key": "mark_pass_2_frame", "export_unit": "frame"},
+    {"id": "mark_pass_3", "label": "Mark pass #3",
+     "help": "Third pass. 'Not visible' if the mark is lost.",
+     "export_key": "mark_pass_3_frame", "export_unit": "frame"},
+    {"id": "mark_pass_4", "label": "Mark pass #4",
+     "help": "Fourth pass. 'Not visible' if the mark is lost.",
+     "export_key": "mark_pass_4_frame", "export_unit": "frame"},
+    {"id": "mark_pass_5", "label": "Mark pass #5",
+     "help": "Fifth pass. 'Not visible' if the mark is lost.",
+     "export_key": "mark_pass_5_frame", "export_unit": "frame"},
+    {"id": "mark_pass_6", "label": "Mark pass #6",
+     "help": "Sixth pass. 'Not visible' if the mark is lost.",
+     "export_key": "mark_pass_6_frame", "export_unit": "frame"}
+  ],
+  "export": {
+    "path": "validation/labels/rev_truth.json",
+    "add_fps": true
+  }
+}
