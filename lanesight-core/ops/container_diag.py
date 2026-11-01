@@ -151,10 +151,11 @@ def main():
             cv = tm.get('cv', {})
             return {'tag': tag, 'analyze_s': round(_t.time() - _t0, 1), 'ball_speed': (m.get('ball_speed') or {}).get('value'),
                     'stabilize_s': cv.get('stabilize_s'), 'extract_blobs_s': cv.get('extract_blobs_s'),
-                    'read_pins_s': cv.get('read_pins_s'), 'decode': _stab.decode_stats()}
+                    'read_pins_s': cv.get('read_pins_s'), 'stab_split': dict(_stab.STAB_TIMING),
+                    'decode': _stab.decode_stats(), 'canonical': os.environ.get('LANESIGHT_FFMPEG_DECODE')}
 
-        # DEC-115 in-container A/B: both ORB configs in the SAME container (same instance) so the comparison
-        # controls for Cloud Run instance noise. DIAG_ORB_AB=1 to run it.
+        # DEC-116: repeat N times in ONE container to profile per-stage (prime vs passA vs solveB vs bg) and its
+        # variance. Toggle canonical on/off via the Job's LANESIGHT_FFMPEG_DECODE env across executions.
         if os.environ.get('DIAG_ORB_AB') == '1':
             runs = []
             for tag, scale, feat in [('orb_0.5_4000', '0.5', '4000'), ('orb_0.35_1500', '0.35', '1500')]:
@@ -162,7 +163,8 @@ def main():
                 runs.append(_one(tag))
             out['orb_ab'] = runs
         else:
-            out['result'] = _one('default')
+            n = int(os.environ.get('DIAG_REPEAT', '1'))
+            out['runs'] = [_one(f'run{i+1}') for i in range(n)]
     except Exception as e:
         import traceback
         out['result'] = f'err {type(e).__name__}: {e}'; out['tb'] = traceback.format_exc()[-800:]

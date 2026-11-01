@@ -14,7 +14,8 @@ def pts(path):
 # that repeated full decodes — not the metric math — are the bottleneck before committing to decode-once (P1).
 # Module-level counters; the pipeline is serial so one frames() generator is active at a time.
 import time as _time
-_DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0, 'cached_passes': 0, 'cached_frames': 0}
+_DECODE = {'passes': 0, 'frames': 0, 'seconds': 0.0, 'cached_passes': 0, 'cached_frames': 0, 'prime_s': 0.0}
+STAB_TIMING = {}   # DEC-116: last stabilize() per-stage split (prime/passA/featsB/solveB/bgC), for profiling
 
 # DEC-092 P1 decode-once: a memory-bounded frame cache. The pipeline decodes the clip ~9× (streaming, to keep
 # memory low). For a clip that fits the byte budget — the common case, since real shots are trimmed to a short
@@ -35,13 +36,13 @@ def reset_frame_cache():
 
 
 def reset_decode_stats():
-    _DECODE.update(passes=0, frames=0, seconds=0.0, cached_passes=0, cached_frames=0)
+    _DECODE.update(passes=0, frames=0, seconds=0.0, cached_passes=0, cached_frames=0, prime_s=0.0)
     reset_frame_cache()                               # free any held frames between analyses (memory hygiene)
 
 
 def decode_stats():
     return {'passes': _DECODE['passes'], 'frames': _DECODE['frames'],
-            'seconds': round(_DECODE['seconds'], 3),
+            'seconds': round(_DECODE['seconds'], 3), 'prime_s': round(_DECODE['prime_s'], 2),
             'cached_passes': _DECODE['cached_passes'], 'cached_frames': _DECODE['cached_frames'],
             'cache_complete': _FCACHE['complete'], 'cache_mb': round(_FCACHE['bytes'] / 1048576, 1)}
 
@@ -126,19 +127,19 @@ def _prime_canonical(path, budget):
         return False
     reset_frame_cache(); _FCACHE.update(path=path, prime_tried=True)
     _DECODE['passes'] += 1
-    try:
-        for i, f in enumerate(_dec.canonical_frames(path, meta, len(pts(path)))):
-            t = _time.perf_counter()
+    _t0 = _time.perf_counter()                            # wall-clock the WHOLE prime (decode+convert+store), the
+    try:                                                  # bulk of which is inside the generator's next() — the
+        for i, f in enumerate(_dec.canonical_frames(path, meta, len(pts(path)))):   # old per-store timer missed it
             if _FCACHE['bytes'] + f.nbytes > budget:          # won't fit → abort prime, fall back to per-pass decode
                 reset_frame_cache(); _FCACHE.update(path=path, too_big=True, prime_tried=True)
-                _DECODE['seconds'] += _time.perf_counter() - t
+                _DECODE['prime_s'] += _time.perf_counter() - _t0; _DECODE['seconds'] += _DECODE['prime_s']
                 return False
             _FCACHE['frames'][i] = f; _FCACHE['bytes'] += f.nbytes
             _DECODE['frames'] += 1
-            _DECODE['seconds'] += _time.perf_counter() - t
     except Exception:
         reset_frame_cache(); _FCACHE.update(path=path, too_big=True, prime_tried=True)
         return False
+    _DECODE['prime_s'] += round(_time.perf_counter() - _t0, 2); _DECODE['seconds'] += _DECODE['prime_s']
     _FCACHE['complete'] = True
     return True
 
@@ -402,6 +403,10 @@ def stabilize(path, log=print, min_inliers=60, timing_path=None, core_end_s=None
         if i in sample: stack.append(cv2.warpPerspective(f, Hs[i], (w, h)))
     bg = np.median(np.stack(stack), axis=0).astype(np.uint8)
     _dbg['bgC_s'] = round(_time.perf_counter() - _tC, 2)
+    # DEC-116 profiling: prime_s (canonical decode-once) runs inside pass A's first frames() call, so it's part
+    # of passA_s above; expose both so a profiler can split canonical-priming from the real pass-A work.
+    _dbg['prime_s'] = round(_DECODE['prime_s'], 2); _dbg['passA_real_s'] = round(_dbg['passA_s'] - _dbg['prime_s'], 2)
+    STAB_TIMING.clear(); STAB_TIMING.update(_dbg)
     _dbg['featsB_s'] = round(_dbg['featsB_s'], 2); _dbg['solveB_s'] = round(_dbg['solveB_s'], 2)
     log(f"stabilize sub: passA={_dbg['passA_s']}s featsB={_dbg['featsB_s']}s solveB={_dbg['solveB_s']}s bgC={_dbg['bgC_s']}s")
     return dict(ts=ts[:len(Hs)], Hs=Hs, ref=ref, bg=bg, inliers=np.array(inl), shift=np.array(sh))
