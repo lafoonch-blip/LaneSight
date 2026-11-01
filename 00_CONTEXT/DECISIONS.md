@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.74  
+Version: 1.76  
 Last Updated: 2026-11-01  
 Owner: Shayne  
-Supersedes: v1.73
+Supersedes: v1.75
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -591,7 +591,7 @@ Other rules:
 
 **Why:** Gives form feedback concrete, coach-standard checkpoints while keeping unmeasurable advice clearly separate from measured results.
 **Date:** 2026-10-25
-**Status:** ACCEPTED (Dev Build v0 designs 3.4). On-time windows and thresholds are provisional owner settings until validated on real clips.
+**Status:** ACCEPTED (Dev Build v0 designs 3.4), **measured-metric list AMENDED by DEC-118** (MVP Form metrics = step count, approach duration, swing timing events + release-vs-slide, tempo consistency; drift/spine tilt/knee bend → post-MVP). On-time windows and thresholds are provisional owner settings until validated on real clips.
 **Supersedes:** FORM_ANALYSIS_SPEC §2 honesty note ("never as a grade") for these owner-defined checkpoints; DEC-046 in part (a bowler may set a swing-timing baseline in Profile; other self-set targets still wait for the Coaching tab).
 
 ### DEC-058 — Bowler notes on every shot, stored for comparison
@@ -1125,7 +1125,7 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 - **Ending is only from the Active Session** → session-end popup + summary (DEC-072).
 
 **Why:** a live practice session is a continuous loop (record → review → record next); bouncing back to Setup or out of the session after each shot breaks the rhythm and risks losing the session. One clear landing point (the Active Session) with one explicit exit (End session) makes the loop predictable and the session durable across failures, tab changes and relaunches.
-**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** nothing — clarifies DEC-080/081 and extends them to failures and Form.
+**Date:** 2026-10-28 · **Status:** ACCEPTED, **AMENDED by DEC-119** (session stays active until the user ends it; survives navigation/background/crash). · **Supersedes:** nothing — clarifies DEC-080/081 and extends them to failures and Form.
 
 ### DEC-097 — Ball and oil pattern are editable on the Active Session (live Shot sessions)
 **Decision (Shayne, 2026-10-28):** the Active Session shows the current **Ball** and **Oil pattern**, each with a Change control, next to the target line (DEC-071). Live Shot sessions only — Form sessions have no ball/oil (DEC-081).
@@ -1162,7 +1162,7 @@ Steps 3–5 are gated behind Phase-2. The dataset, labels, evaluation harness an
 6. **The Form baseline is defined and settable** (Profile › Form baseline). The values are the engine's measured swing phases, in seconds: **Pushaway** (ball starts moving → ball at hip, E2→E3), **Backswing** (hip → top of backswing, E3→E4), **Downswing** (top → bottom of the swing, E4→E6), **Release** (bottom of the swing → release, E6→E7); **Total swing** = their sum (= `swing_time`, ball start → release). Modes: **Use my average** (median of the bowler's measured form deliveries once established), **Enter my timing**, or **No baseline**. Plus **"Use this delivery as my baseline"** on a Form result (saves only that delivery's measured phases). Server validates: mode `entered`|`average`, each value 0 < t ≤ 3 s (sanity bound, not a target — DEC-095 puts the whole swing at 1.3–2.5 s), at least one phase when entered; `null` clears it.
 7. **Once the bowler picks Shot or Form Analysis, nothing asks again.** The Upload screen no longer shows "What's in this clip? Shot / Form" — the mode comes from the Shot/Form card (Form uploads also drop the target fields). The Lab header's upload shortcut (an entry with no Shot/Form choice) is removed; the flow is Shot/Form → Live session or Upload video (per the Lab flow decision).
 **Why:** Shayne's 2026-10-28 test pass: tabs filled in piece by piece; pushed screens stayed open under other tabs; the retention row was unclear (server vs phone) and isn't the user's call; no way to set a default ball; names couldn't be saved; the Form card compared against a baseline that couldn't be set; Upload re-asked Shot vs Form.
-**Date:** 2026-10-28 · **Status:** ACCEPTED · **Supersedes:** in part DEC-096 (tab-switch-away bullet); the "Raw video retention" Settings row (v3.7 Figma 434:6174); in part DEC-087 (DOB gate scope — create only).
+**Date:** 2026-10-28 · **Status:** ACCEPTED, **AMENDED by DEC-119** (tab bar is NO LONGER hidden on the Active Session). · **Supersedes:** in part DEC-096 (tab-switch-away bullet); the "Raw video retention" Settings row (v3.7 Figma 434:6174); in part DEC-087 (DOB gate scope — create only).
 **Deploy order:** apply migration `026_arsenal_default_ball.sql` to live Supabase BEFORE deploying the API (the arsenal select now reads `is_default`).
 
 ### DEC-100 — Every analysis is reproducible: clips retained 7 days for diagnostics, phone-side failures logged, failures get a root cause
@@ -1268,6 +1268,33 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-119 — An active session lasts until the user ends it
+**Decision (Shayne, 2026-11-01):**
+- A live session (Shot or Form) stays active until the user taps **End session**. Navigating away, backgrounding, app crashes, force-quit or a dead battery never end it. There is never more than one active session.
+- While a session is active, Home and Lab show a **"Session in progress · Return"** banner. Tapping it opens the Active Session with all its shots/deliveries (analyzed, analyzing, failed + Retry), and the user can record more. **The tab bar is no longer hidden on the Active Session (amends DEC-099).**
+- On cold launch (after force-quit or crash), or on returning after **≥30 min** in the background, with a session still active: show a prompt **"You have a session in progress (started <time>, N shots). Continue / End session"**. Continue → straight to the Active Session. End → the session is closed and becomes history (same end flow: summary/feedback per DEC-072/053 can be skipped), and the user stays on Home.
+- Shorter interruptions (**<30 min** in background) return straight to where the user was, no prompt.
+- Sessions never auto-end. Any shot still uploading/analyzing in the session keeps going and shows its result there.
+- Source of truth for "active" is the **server (`sessions.ended_at` null)**, mirrored locally so it works offline.
+**Why:** a practice session is the user's unit of work; losing it to a background/crash/navigation (as the old blocking-flow + hidden-tab-bar design allowed) throws away shots and context. Durability + a single active session + explicit end makes the session survive anything short of the user ending it.
+**Date:** 2026-11-01 · **Status:** ACCEPTED · **Amends:** DEC-096 (session activeness/navigation) and DEC-099 (hides the tab bar on the Active Session — now shown). **Builds on:** DEC-110 (durable jobs), DEC-072/053 (end-session summary/feedback), DEC-080 (Analyzing flow).
+
+### DEC-118 — MVP = Shot Analysis + Form Analysis, each with its own validated metrics and Beta gates
+**Decision (Shayne, 2026-11-01):**
+- **Two independent analysis products, both required:** Shot Analysis ("what your ball did") and Form Analysis ("what your body did"), on one shared platform (capture, decoding, calibration metadata, jobs, history, confidence/unavailable states, data collection). Neither analysis can fail or block the other. The user picks Shot or Form per recording (DEC-069); running both on one recording is a later option (DEC-056 stands until then).
+- **Shot Analysis MVP metrics (all required, validated before Beta):** ball speed; rev rate; observed ball path (only measured, trustworthy segments); laydown + launch angle when near-lane geometry validates; strike / no strike when the pins are readable (DEC-066). Arrows board, breakpoint, entry board/angle stay gated (DEC-065) and are not MVP requirements.
+- **Form Analysis MVP metrics (all required, validated before Beta):** step count; approach duration (first step → release); swing timing events (ball start, top of backswing, release, slide stop) with release timing relative to the slide; tempo consistency across deliveries. Drift, spine tilt, knee bend and other joint angles move to post-MVP (amends DEC-057's measured-metric list; hand/wrist rules stay coaching cues only).
+- **Friends-Beta release gates (per product; MVP stays Shayne-tested until he calls it, DEC-047):**
+
+  | Gate | Shot | Form |
+  |---|---|---|
+  | Accuracy vs independent ground truth | speed ±0.5 mph (DEC-034); revs ±25 rpm vs marked-ball truth | step count exact on ≥95% of clips; events within ±2 frames |
+  | Coverage | ≤20% of supported-camera shots return any core metric as unavailable | same |
+  | Analysis time (tap-stop → result, on device) | <30 s | <30 s |
+
+**Why:** the product is two things a bowler cares about — the ball and the body — and each must stand on its own validated metrics and its own Beta gate, sharing one capture/jobs/history platform. The gates are ground-truth, not Python/Swift parity (DEC-106). Note the on-device analysis-time gate (<30 s) is well under the current ~132 s on-device latency (DEC-117) — performance work is required before Beta.
+**Date:** 2026-11-01 · **Status:** ACCEPTED · **Amends:** DEC-057 (trims the Form measured-metric list to the MVP set above; drift/spine/knee → post-MVP). **Builds on:** DEC-069 (pick Shot or Form per recording), DEC-056 (both-on-one-recording later), DEC-065/066 (gated far-lane + strike), DEC-034 (±0.5 mph launch bar), DEC-047 (Shayne-tested until he calls Beta), DEC-117 (on-device engine).
 
 ### DEC-117 — iPhone is the PRIMARY engine for speed + rev now; server runs in SHADOW (2026-11-01)
 **Decision (Shayne, 2026-11-01 — amends DEC-106 phases and DEC-080):** The iPhone becomes the **primary** production engine for **ball speed + rev rate** immediately; the server runs those two in **shadow**. This pulls DEC-106 Phase 6 forward for speed/rev specifically (the rest of DEC-106 — lane read, pins, coaching — stays server-authoritative and is NOT ported yet).

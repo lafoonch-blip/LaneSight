@@ -1,11 +1,13 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.11  
-Last Updated: 2026-10-26  
+Version: 3.12  
+Last Updated: 2026-11-01  
 Owner: Shayne  
 Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
+
+**MVP scope restated (DEC-118, 2026-11-01):** the MVP is two independent products on one platform — **Shot Analysis** (ball speed, rev rate, observed ball path, laydown+launch angle when geometry validates, strike/no-strike when pins readable) and **Form Analysis** (step count, approach duration, swing timing events + release-vs-slide, tempo consistency). Each has its own Friends-Beta gate (Shot: speed ±0.5 mph / revs ±25 rpm; Form: step count ≥95% exact / events ±2 frames; both: ≤20% unavailable, on-device <30 s). Far-lane (DEC-065) + drift/spine/knee (post-MVP, amends DEC-057) are NOT MVP. **Sessions (DEC-119):** an active session lasts until the user taps End session (survives navigation/background/crash); "Session in progress · Return" banner; cold-launch/≥30-min-background resume prompt; shots persisted before upload + resumed on relaunch.
 
 The back end has to satisfy the contracts in `LaneSight_PRD_UI_Spec_v1`:
 - §7 metric targets

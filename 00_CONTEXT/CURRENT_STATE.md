@@ -1,9 +1,9 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.64  
-Last Updated: 2026-10-29  
+Version: 1.65  
+Last Updated: 2026-11-01  
 Owner: Shayne  
-Supersedes: v1.63
+Supersedes: v1.64
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.
@@ -13,6 +13,10 @@ Supersedes: v1.63
 
 ## Building now
 **Active workstream: the LaneSight app (one app, built to the v3.7 designs — DEC-089).** The old "Dev Build v0 (now) vs target state (later)" split is retired: there is a single app built to the Figma "Target state – v3.7" designs (DEC-091); every design change is queued in `03_ENGINEERING/APP_DESIGN_CHANGES.md` and built incrementally. Open now: the Shot card redesign (DEC-088/090) and its states and Upload result. It runs on Cloud Run + Supabase (the Mac-over-Tailscale setup from the original dev build, DEC-045…053, is history — see the Dev Build v0 section below for that record). Back-end accuracy/robustness work continues in parallel.
+
+**MVP scope is now two products (DEC-118, 2026-11-01).** The MVP is **Shot Analysis** AND **Form Analysis**, independent on one shared platform; neither blocks the other; the user picks Shot or Form per recording (DEC-069). **Shot MVP metrics** (all validated before Beta): ball speed, rev rate, observed ball path (trustworthy segments only), laydown + launch angle (when near-lane geometry validates), strike/no-strike (when pins readable, DEC-066); far-lane (arrows/breakpoint/entry) stays gated (DEC-065). **Form MVP metrics**: step count, approach duration, swing timing events (ball start, top of backswing, release, slide stop) + release-vs-slide, tempo consistency; drift/spine/knee → post-MVP (amends DEC-057). **Friends-Beta gates (per product):** Shot — speed ±0.5 mph (DEC-034), revs ±25 rpm vs marked-ball truth; Form — step count exact ≥95%, events ±2 frames; both — ≤20% unavailable on supported-camera shots, **on-device analysis <30 s** (vs ~132 s today — DEC-117 perf work required). MVP stays Shayne-tested until he calls Beta (DEC-047).
+
+**Active session lasts until the user ends it (DEC-119, 2026-11-01).** A live Shot/Form session stays active until **End session** — navigating away, backgrounding, crash, force-quit, dead battery never end it; never more than one active session; the server (`sessions.ended_at null`, mirrored locally for offline) is the source of truth. Home/Lab show a "Session in progress · Return" banner; the Active Session no longer hides the tab bar (amends DEC-099). Cold launch (crash/force-quit) or return after ≥30 min background with a session active → prompt "session in progress (started <time>, N shots): Continue / End". <30 min background → straight back, no prompt. Sessions never auto-end; in-flight uploads/analyses keep going and surface their result in the Active Session. Each recorded shot is persisted (session id, clip path, settings) **before** upload; relaunch resumes upload/analysis in the active session.
 
 The back end (DEC-017), stage by stage: metrics engine → moving camera → scoring/stats → insights/adjustments → profile/arsenal/oil/sensor → replay payload. UI and cloud come after. The app stack is decided (DEC-029): **native SwiftUI**, AVFoundation capture (60/240 fps, real frame timestamps), FastAPI + Supabase backend, Xcode project in this repo next to `lanesight-core`; Figma design in progress (Shayne).
 
