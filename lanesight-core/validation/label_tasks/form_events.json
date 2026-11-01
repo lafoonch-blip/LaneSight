@@ -1,0 +1,30 @@
+{
+  "title": "Form: swing events + steps",
+  "instructions": "For each clip, mark the moments below and enter the step count. These are the ground truth for the form timing checks (DEC-095).\n\nSide clips (8824–26) show release, slide and backswing best. Rear clips (8846–48) show steps, ball start and finish best. If a moment isn't clearly visible from this camera, press X (Not visible) rather than guessing.",
+  "clips": [
+    {"id": "IMG_8824", "static": {"view": "side"}},
+    {"id": "IMG_8825", "static": {"view": "side"}},
+    {"id": "IMG_8826", "static": {"view": "side"}},
+    {"id": "IMG_8846", "static": {"view": "rear"}},
+    {"id": "IMG_8847", "static": {"view": "rear"}},
+    {"id": "IMG_8848", "static": {"view": "rear"}}
+  ],
+  "events": [
+    {"id": "ball_start", "label": "Ball start", "help": "The ball first moves out of your setup hold (pushaway begins).",
+     "export_key": "E2_ball_start_s", "export_unit": "seconds"},
+    {"id": "backswing_top", "label": "Top of backswing", "help": "The ball at its highest point behind you.",
+     "export_key": "E4_backswing_top_s", "export_unit": "seconds"},
+    {"id": "slide_start", "label": "Slide starts", "help": "Your slide foot begins its final slide.",
+     "export_key": "E5_slide_start_s", "export_unit": "seconds"},
+    {"id": "release", "label": "Release", "help": "The ball leaves your hand at the bottom of the swing.",
+     "export_key": "E7_release_s", "export_unit": "seconds"},
+    {"id": "slide_stop", "label": "Slide stops", "help": "Your slide foot stops at the line.",
+     "export_key": "E8_slide_stop_s", "export_unit": "seconds"},
+    {"id": "finish_end", "label": "Finish ends", "help": "You come out of your posted finish.",
+     "export_key": "E9_finish_hold_end_s", "export_unit": "seconds"}
+  ],
+  "fields": [
+    {"id": "step_count", "label": "Approach steps", "type": "int", "required": true, "help": "Count every step, e.g. 4 or 5"}
+  ],
+  "export": {"path": "lanesight-core/validation/form_labels.json", "wrap": "clips"}
+}
