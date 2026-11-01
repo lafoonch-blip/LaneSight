@@ -1,21 +1,21 @@
 {
-  "_note": "DEC-113 Standard-tier regression reference: Mac-local canonical-decode (numpy float YUV->BGR, the deterministic default) ball_speed for IMG_8751-54, engine 0.7.0 + parallel pass A. The numba integer conversion (LANESIGHT_YUV_NUMBA, DEC-116) is OFF \u2014 it diverged on the server. tol 0.2; the in-container smoke is the authoritative server check. 8751/8754 HDR (convert_sdr); 8752/8753 SDR (canonical).",
+  "_note": "DEC-116: numba integer YUV->BGR is the DEFAULT conversion (serial, PROVEN bit-identical arm64/x86 via per-frame md5). Values within +-0.2 of the pre-numba float baseline (8751 18.615->18.54, 8752 18.308->18.301, 8753 18.711->18.739, 8754 18.232->18.362). tol 0.2; in-container smoke = authoritative server check. LANESIGHT_YUV_NUMPY=1 forces the float fallback. 8751/8754 HDR, 8752/8753 SDR.",
   "tol_mph": 0.2,
   "clips": {
     "IMG_8751.MOV": {
-      "ball_speed": 18.615,
+      "ball_speed": 18.54,
       "dynamic_range": "hdr"
     },
     "IMG_8752.MOV": {
-      "ball_speed": 18.308,
+      "ball_speed": 18.301,
       "dynamic_range": "sdr"
     },
     "IMG_8753.MOV": {
-      "ball_speed": 18.711,
+      "ball_speed": 18.739,
       "dynamic_range": "sdr"
     },
     "IMG_8754.MOV": {
-      "ball_speed": 18.232,
+      "ball_speed": 18.362,
       "dynamic_range": "hdr"
     }
   }
