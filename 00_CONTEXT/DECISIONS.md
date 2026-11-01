@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.72  
+Version: 1.73  
 Last Updated: 2026-10-31  
 Owner: Shayne  
-Supersedes: v1.71
+Supersedes: v1.72
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,14 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-116 — Analysis-time investigation: stabilize profiled, Cloud Run CPU variance is the real blocker (2026-10-31)
+**Decision/finding:** Attacked the ~190 s/shot analysis time. Per-stage breakdown via a CONTROLLED in-container A/B (both configs in one container → no instance noise), IMG_8753: stabilize dominates at ~108 s of ~141 s analyze, split **passA (phaseCorrelate motion scan) ~52 s, solveB (BFMatcher brute-force knnMatch) ~34 s, ORB feature extraction ~4 s, bg ~6 s**. Decode is already cached (~0, DEC-113). So ORB *extraction* was never the cost — the motion scan and the O(features²) matcher are.
+- **Tried + REJECTED (accuracy):** identity static homographies (IMG_8751 −0.45 mph), reg subsample (`LANESIGHT_REG_STRIDE`; stride 3 regressed 8751 −0.46 — non-monotonic/fragile), pass A subsample (`LANESIGHT_PASSA_STRIDE`; stride 2 regressed 8751 −0.49). Common cause: 8751's speed is hypersensitive to the stabilization reference/registration, so any shortcut that changes the per-frame registration or the reference frame fails the ±0.2 gate. All left gated OFF (default = exact original).
+- **Tried + REJECTED (server-fragile):** ORB features 4000→1500 cut the matcher and passed the Mac gate (±0.13) but STARVED IMG_8753's homography on the SERVER (ball_speed came back unavailable in the in-container smoke) — the Mac gate can't see platform-CV differences. Left env-tunable, default 4000.
+- **SHIPPED (accuracy-neutral, live `lanesight-api-canon10`):** parallelize pass A across the worker pool (bit-identical greys/motion/reference — local regression Δ+0.000 on all 4 clips; the reference CHOICE is unchanged, which is what 8751 needs), and pin `LANESIGHT_CV_WORKERS=4` to `--cpu` (workers() used `min(cpu_count(),12)` but cpu_count() reports the host node's 16+ cores, so it oversubscribed 4 throttled vCPUs). Raised the deploy smoke curl timeout 420→580 s (the 885-frame worst-case clip sat at the limit).
+- **The real blocker — NOT met: <60 s.** The server has SEVERE, uncontrollable instance variance: the SAME IMG_8753 work measured **108, 196, 266, 382, 391, 413 s** across revisions/instances. This swamps every algorithmic gain and makes a clean before/after impossible from deploy-smokes. The dominant lever is therefore **infrastructure, not CV**: a consistently-provisioned analysis path (CPU-always-allocated / min-instances warm / a committed machine type / a dedicated non-concurrency-8 worker / 8+ vCPU once the 20-vCPU region quota is raised — 8×3=24 was rejected). 8 vCPU (cost-neutral on vCPU-seconds, halves memory-seconds) is the recommended next step but is quota-gated.
+**Date:** 2026-10-31 · **Status:** ACCEPTED — parallel pass A + workers pin live (canon10), accuracy-identical to canon3 (18.631 smoke); <60 s target NOT met (infra-bound). The fragile shortcuts stay gated-off; the real fix is an infra change + a quota increase, measured via the controlled in-container A/B (deploy-smokes are too noisy). · **Supersedes:** —
 
 ### DEC-114 — canon2 follow-ups: engine-version quarantine + re-run + recompute; 8 GiB cost; tiered benchmark wired (2026-10-31)
 **Decision:** Follow-ups after the canonical-decode deploy (DEC-113), all on `dev-build-v0` + live `lanesight-api-canon3` (engine bumped to **lanesight-cv-0.7.0**).
