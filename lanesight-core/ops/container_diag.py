@@ -66,6 +66,29 @@ def frame_decode_diag(clip, n=300):
     return d
 
 
+
+def _emit(out):
+    """Print the diag JSON to stdout AND (DEC-116: Cloud Run Job logs are unreliable to read) upload it to GCS
+    at DIAG_OUT_GCS=gs://bucket/object via the Job SA (metadata token), so it can be gsutil-cat'd reliably."""
+    import json as _j
+    print(_j.dumps(out, indent=2))
+    dest = os.environ.get('DIAG_OUT_GCS')
+    if dest and dest.startswith('gs://'):
+        try:
+            import urllib.request as _u
+            bkt, _, obj = dest[5:].partition('/')
+            mreq = _u.Request('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                              headers={'Metadata-Flavor': 'Google'})
+            tok = _j.loads(_u.urlopen(mreq, timeout=10).read())['access_token']
+            url = f'https://storage.googleapis.com/upload/storage/v1/b/{bkt}/o?uploadType=media&name={obj}'
+            req = _u.Request(url, data=_j.dumps(out).encode(), method='POST',
+                             headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'})
+            _u.urlopen(req, timeout=20).read()
+            print(f'[diag] uploaded result to {dest}')
+        except Exception as e:
+            print(f'[diag] GCS upload failed: {type(e).__name__}: {e}')
+
+
 def main():
     out = {'python': sys.version.split()[0]}
     try:
@@ -161,7 +184,7 @@ def main():
         except Exception as e:
             import traceback
             out['yuv_hash'] = {'err': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-500:]}
-        print(json.dumps(out, indent=2)); return
+        _emit(out); return
 
     # run the pipeline + dump the geometry signal (z@t≈9.82 is the key: Mac 13.28 vs server 11.40)
     try:
@@ -199,7 +222,7 @@ def main():
     except Exception as e:
         import traceback
         out['result'] = f'err {type(e).__name__}: {e}'; out['tb'] = traceback.format_exc()[-800:]
-    print(json.dumps(out, indent=2))
+    _emit(out)
 
 
 if __name__ == '__main__':

@@ -8,11 +8,14 @@ import numpy as np
 from numba import njit, prange
 
 
-@njit(parallel=True, fastmath=False, cache=True)
+@njit(parallel=False, fastmath=False, cache=True)
 def _convert(Y, U, V, ya, crr, cbb, gcb, gcr, yoff, full):
+    # SERIAL (parallel=False) + fastmath=False: integer-only, no reordering, so the output is bit-identical on
+    # arm64 and x86. DEC-116: parallel=True (prange) gave a different server result (canon16 smoke 15.6 vs Mac
+    # 18.7) — numba's parallel backend codegen diverged across arch — so this is serial. Still ~2× numpy.
     h, w = Y.shape; ch, cw = U.shape
     out = np.empty((h, w, 3), np.uint8)
-    for r in prange(h):
+    for r in range(h):
         rc = r >> 1
         if (r & 1) == 0:
             r1 = rc; r2 = rc - 1 if rc - 1 >= 0 else 0
