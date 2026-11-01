@@ -36,7 +36,6 @@ enum OnDeviceRevRate {
         // 1) collect colour ball crops at the track points (BGRA decode; crop around the ball, resize to cropSize).
         let want: [Int: TrackPoint] = Dictionary(uniqueKeysWithValues: pts.map { ($0.i, $0) })
         var crops: [(t: Double, hs: [Float])] = []       // hue+sat, z-normalised over the inner disc
-        let n = cropSize * cropSize
         // circular inner-disc mask (r < 0.38·size) — avoids the crop edge / background.
         var maskIdx: [Int] = []; let c = Float(cropSize - 1) / 2; let r2 = (0.38 * Float(cropSize)) * (0.38 * Float(cropSize))
         for y in 0..<cropSize { for x in 0..<cropSize {
