@@ -9,7 +9,7 @@ the clip's colour_space/range metadata — so the exact same bytes come out on t
 this) falls back to the cv2 path until canonicalised. Rotation is applied to match cv2's ORIENTATION_AUTO.
 """
 from __future__ import annotations
-import subprocess, json
+import os, subprocess, json
 import numpy as np
 
 # YUV(full-range)→RGB per BT.x: (Kr, Kb). Non-constant-luminance matrices.
