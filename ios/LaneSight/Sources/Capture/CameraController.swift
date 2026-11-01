@@ -1,4 +1,5 @@
 import AVFoundation
+import simd
 import Combine
 
 enum CameraError: LocalizedError {
@@ -36,6 +37,14 @@ final class CameraController: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
+    // DEC-117 item 2: per-frame camera intrinsics. AVCaptureMovieFileOutput does not persist the intrinsic
+    // matrix, so a parallel video-data output carries it (kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix);
+    // we write it to a <clip>.intrinsics.json sidecar so the on-device metric lane-plane (OnDeviceMetricPlane)
+    // gets the EXACT focal instead of an assumed one (the down-lane POV is focal-dominated).
+    private let intrinsicsOutput = AVCaptureVideoDataOutput()
+    private let intrinsicsQueue = DispatchQueue(label: "com.lanesight.intrinsics")
+    private let intrinsicsBox = IntrinsicsBox()
+    @Published private(set) var intrinsicsDelivered = false
     private var configured = false
     private var stopContinuation: CheckedContinuation<URL, Error>?
     private var device: AVCaptureDevice?        // the active back camera, for torch + zoom
@@ -101,6 +110,18 @@ final class CameraController: NSObject, ObservableObject {
             session.addInput(input)
             guard session.canAddOutput(movieOutput) else { throw CameraError.notReady }
             session.addOutput(movieOutput)
+
+            // DEC-117 item 2: parallel video-data output to carry per-frame camera intrinsics. Minimal cost —
+            // the delegate just reads the matrix attachment and returns; frames are discarded. Enabled only if
+            // the connection supports intrinsic delivery (requires geometric-distortion params available).
+            intrinsicsOutput.alwaysDiscardsLateVideoFrames = true
+            intrinsicsOutput.setSampleBufferDelegate(self, queue: intrinsicsQueue)
+            if session.canAddOutput(intrinsicsOutput) {
+                session.addOutput(intrinsicsOutput)
+                if let conn = intrinsicsOutput.connection(with: .video), conn.isCameraIntrinsicMatrixDeliverySupported {
+                    conn.isCameraIntrinsicMatrixDeliveryEnabled = true
+                }
+            }
 
             let chosen = bestFormat(for: device, preferred: preferredFPS)
             session.sessionPreset = (chosen != nil) ? .inputPriority : .high
@@ -179,6 +200,7 @@ final class CameraController: NSObject, ObservableObject {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("lanesight-shot-\(UUID().uuidString).mov")
         try? FileManager.default.removeItem(at: url)
+        intrinsicsBox.reset()
         movieOutput.startRecording(to: url, recordingDelegate: self)
         state = .recording
     }
@@ -205,8 +227,10 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         let attrs = try? FileManager.default.attributesOfItem(atPath: outputFileURL.path)
         let size = (attrs?[.size] as? Int) ?? 0
         let errMsg = error.map { String(describing: $0) }
+        let delivered = intrinsicsBox.writeSidecar(for: outputFileURL)   // DEC-117 item 2: <clip>.intrinsics.json
         Task { @MainActor in
             self.state = .ready
+            self.intrinsicsDelivered = delivered
             guard let cont = self.stopContinuation else { return }
             self.stopContinuation = nil
             if size > 0 {
@@ -215,5 +239,50 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
                 cont.resume(throwing: CameraError.recording(errMsg ?? "empty recording"))
             }
         }
+    }
+}
+
+extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
+    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
+                                   from connection: AVCaptureConnection) {
+        // Per-frame camera intrinsic matrix (3x3, column-major float), attached when delivery is enabled.
+        guard let att = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix,
+                                        attachmentModeOut: nil) as? Data else { return }
+        att.withUnsafeBytes { raw in
+            guard raw.count >= MemoryLayout<matrix_float3x3>.size else { return }
+            let m = raw.load(as: matrix_float3x3.self)
+            intrinsicsBox.record(m)
+        }
+    }
+}
+
+/// Thread-safe collector for the per-frame intrinsic matrix (delegate runs off the main actor). Keeps the first
+/// and last seen matrix (so a zoom change mid-shot is visible) and the sample count.
+nonisolated final class IntrinsicsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var first: matrix_float3x3?
+    private var last: matrix_float3x3?
+    private var count = 0
+
+    func reset() { lock.lock(); first = nil; last = nil; count = 0; lock.unlock() }
+    func record(_ m: matrix_float3x3) {
+        lock.lock(); if first == nil { first = m }; last = m; count += 1; lock.unlock()
+    }
+    /// Write <clip>.intrinsics.json next to the clip. Returns true if any intrinsics were delivered.
+    func writeSidecar(for clipURL: URL) -> Bool {
+        lock.lock(); let f = first; let l = last; let n = count; lock.unlock()
+        guard let f, let l else { return false }
+        func mat(_ m: matrix_float3x3) -> [[Double]] {       // row-major [fx 0 cx; 0 fy cy; 0 0 1]
+            (0..<3).map { r in (0..<3).map { c in Double(m[c][r]) } }   // simd is column-major: m[col][row]
+        }
+        let obj: [String: Any] = [
+            "source": "AVCameraCalibrationData per-frame (isCameraIntrinsicMatrixDeliveryEnabled)",
+            "intrinsic_matrix_first": mat(f), "intrinsic_matrix_last": mat(l),
+            "samples": n, "note": "3x3 row-major [fx 0 cx; 0 fy cy; 0 0 1] in pixels at capture resolution",
+        ]
+        let side = clipURL.deletingPathExtension().appendingPathExtension("intrinsics.json")
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) else { return false }
+        try? data.write(to: side)
+        return true
     }
 }

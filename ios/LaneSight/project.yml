@@ -46,11 +46,20 @@ targets:
     platform: iOS
     sources:
       - path: Tests
+        excludes:
+          - GateClips   # videos go in via the explicit resources entry below (avoid double-inclusion)
+      # DEC-117 device-gate clips (local only; gitignored — never committed). Absent on other machines → the
+      # gate test SKIPs. Comment this out if `xcodegen generate` can't find GateClips/.
+      - path: Tests/GateClips
+        buildPhase: resources
+        optional: true
     dependencies:
       - target: LaneSight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app.tests
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: GK3N928748   # same personal team as the app target (device gate signing)
         GENERATE_INFOPLIST_FILE: "YES"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LaneSight.app/LaneSight"
         BUNDLE_LOADER: "$(TEST_HOST)"
