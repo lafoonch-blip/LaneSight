@@ -76,9 +76,13 @@ def _metric_cell(meas):
         v, st, conf, note = meas.get('value'), meas.get('status'), meas.get('confidence'), meas.get('note')
     else:
         v, st, conf, note = meas, None, None, None
-    if v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
-        return 'unavailable', None, conf, note          # no usable numeric value -> honestly unavailable
-    return _OUTCOME_STATUS.get(st, 'measured'), float(v), conf, note
+    mapped = _OUTCOME_STATUS.get(st, 'measured')
+    # Honesty invariant: an 'unavailable' metric carries NO value. The form engine marks unavailable metrics with
+    # a 0.0 placeholder (not None), so map by STATUS first — else a 0.0 would slip through as a measured value and
+    # an unavailable row would violate analysis_metric_outcome_value_chk (seen on live form attempts).
+    if mapped == 'unavailable' or v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
+        return 'unavailable', None, conf, note
+    return mapped, float(v), conf, note
 
 
 # DEC-122 §6: metrics that are unavailable for a STRUCTURAL reason (not a stage failure), independent of the

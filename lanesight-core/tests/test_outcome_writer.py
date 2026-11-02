@@ -104,6 +104,16 @@ def test_form_catalog_and_ios_raw_scalar_shape():
     _honest(mrows)
 
 
+def test_unavailable_with_zero_placeholder_value_is_nulled():
+    # The form engine marks unavailable metrics with a 0.0 placeholder, not None. Mapping by STATUS must still
+    # null the value, else the row would violate analysis_metric_outcome_value_chk (live form 23514).
+    mrows, _ = outcome_rows_from_record('att-f', 'server', 'v', 'form',
+                                        {'pushaway_time': {'value': 0.0, 'status': 'unavailable', 'note': 'n'}}, None)
+    by = {r['metric_key']: r for r in mrows}
+    assert by['pushaway_time']['status'] == 'unavailable' and by['pushaway_time']['value'] is None
+    _honest(mrows)
+
+
 def test_non_numeric_value_is_treated_as_unavailable():
     mrows, _ = outcome_rows_from_record('att-3', 'server', 'v', 'shot',
                                         {'ball_speed': {'value': 'fast', 'status': 'ok'}}, None)
