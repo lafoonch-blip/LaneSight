@@ -8,12 +8,17 @@ SCHEMA_VERSION = 'shot-1.0'
 # 0.7.0 (2026-10-31, DEC-113/DEC-103): canonical SDR decode (deterministic YUV->BGR) changed CV outputs
 # materially vs 0.6.0 (server speeds were ~14% low on the old cv2 decode). The version bump is the engine
 # provenance marker: measurements tagged < 0.7.0 are quarantined ("legacy") so stats never mix the two engines.
+# 0.7.2 (2026-11-02, DEC-122): no analysis fails as a whole because one part failed — the former-fatal codes
+# (LANE_NOT_DETECTED_*, FOUL_LINE_NOT_IN_VIEW, LANE_GEOMETRY_UNUSABLE, BALL_TRACK_NOT_FOUND,
+# PIN_IMPACT_NOT_DETECTED, FORM_DELIVERY_NOT_ISOLATED) now return a COMPLETED partial + a per-stage report
+# instead of raising. Successful shots' MEASURED values are byte-identical to 0.7.1 (behavior change is
+# failure→partial only); the bump marks the provenance of the new stage_report / partial records.
 # 0.7.1 (2026-11-02, DEC-117): detect_impact no longer clamps the pin-impact up to a `far` tracked point that
 # sits PAST the pins (ball tracked into the pit on a strike) — the clamp now only defers to `far` when the pin
 # hotness fired BEFORE the ball entered the ROI. Fixes IMG_8752's foul->pins average (15.49 -> 17.85 vs truth
 # 18.00). Only shots whose ball was TRACKED PAST IMPACT change; all other shots are byte-identical to 0.7.0,
 # so 0.7.0 data is NOT quarantined wholesale — only the retained clips that change are re-run (DEC-117 decision).
-ALGO_VERSION = "lanesight-cv-0.7.1"
+ALGO_VERSION = "lanesight-cv-0.7.2"
 
 @dataclass
 class Measurement:
