@@ -113,9 +113,18 @@ enum OnDeviceTracker {
         // (same interval the foul_cross→first_pin_contact labels measure), impact anchored to the ball at the pins.
         let Z_IMPACT = 59.44
         let dtAvg = tImpact - tFoulCross
+        // DEC-122 step 7b honesty gate (server parity, cv/pipeline.py _foul_observed): the foul→pins speed needs
+        // the ball tracked NEAR the foul line, not extrapolated from mid-lane. Distance from the foul to the FIRST
+        // tracked point = avg speed × (t_first − t_foul). If the ball was first seen > 6 ft downlane the foul
+        // crossing is extrapolated → withhold the speed (unavailable + reason), exactly like the server withholds
+        // IMG_8970 / IMG_8969. No fabricated number.
+        let firstObservedFt = (dtAvg > 0.1) ? Float(Z_IMPACT / dtAvg) * Float(pts[0].t - tFoulCross) : 999
+        guard firstObservedFt <= 6.0 else {
+            return fail("foul crossing extrapolated: the ball was first tracked \(String(format: "%.1f", firstObservedFt)) ft downlane (needs ≤ 6 ft) — speed unavailable (DEC-122 7b)")
+        }
         let avg: Float? = (dtAvg > 0.5 && dtAvg < 5) ? Float(Z_IMPACT / dtAvg * 3600.0 / 5280.0) : nil
         return SpeedEstimate(mph: mph, tRelease: release, tImpact: tImpact, entryFrac: pts.last!.frac, basis: "best_effort",
-                             note: "trajectory anchors: foul crossing + ball reaching the lane far extent (≈ pins)",
+                             note: "best_effort: trajectory anchors (foul crossing + ball at the lane far extent); foul observed \(String(format: "%.1f", firstObservedFt)) ft",
                              avgFoulToPinsMph: avg, tFoulCross: tFoulCross)
     }
 
