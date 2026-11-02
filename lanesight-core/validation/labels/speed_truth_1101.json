@@ -1,0 +1,330 @@
+{
+  "task": "speed_truth_1101",
+  "updated_at": "2026-11-02T08:04:56-05:00",
+  "clips": {
+    "IMG_8963": {
+      "events": {
+        "foul_cross": {
+          "frame": 667,
+          "t_s": 11.1217,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 804,
+          "t_s": 13.4061,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97278911564626,
+      "complete": true
+    },
+    "IMG_8964": {
+      "events": {
+        "foul_cross": {
+          "frame": 602,
+          "t_s": 10.0377,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 746,
+          "t_s": 12.4388,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97374179431072,
+      "complete": true
+    },
+    "IMG_8965": {
+      "events": {
+        "foul_cross": {
+          "frame": 911,
+          "t_s": 15.1905,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1050,
+          "t_s": 17.5082,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97186620819006,
+      "complete": true
+    },
+    "IMG_8966": {
+      "events": {
+        "foul_cross": {
+          "frame": 670,
+          "t_s": 11.1718,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 811,
+          "t_s": 13.5228,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97266514806378,
+      "complete": true
+    },
+    "IMG_8967": {
+      "events": {
+        "foul_cross": {
+          "frame": 790,
+          "t_s": 13.1731,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 932,
+          "t_s": 15.541,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97048212528698,
+      "complete": true
+    },
+    "IMG_8968": {
+      "events": {
+        "foul_cross": {
+          "frame": 723,
+          "t_s": 12.0555,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 866,
+          "t_s": 14.44,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97244757385581,
+      "complete": true
+    },
+    "IMG_8969": {
+      "events": {
+        "foul_cross": {
+          "frame": 543,
+          "t_s": 9.054,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 677,
+          "t_s": 11.2883,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.9734630694383,
+      "complete": true
+    },
+    "IMG_8970": {
+      "events": {
+        "foul_cross": {
+          "frame": 774,
+          "t_s": 12.9056,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 915,
+          "t_s": 15.2566,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.974059662775616,
+      "complete": true
+    },
+    "IMG_8971": {
+      "events": {
+        "foul_cross": {
+          "frame": 822,
+          "t_s": 13.7067,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 961,
+          "t_s": 16.0245,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97067448680352,
+      "complete": true
+    },
+    "IMG_8972": {
+      "events": {
+        "foul_cross": {
+          "frame": 728,
+          "t_s": 12.1394,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 871,
+          "t_s": 14.5239,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.969964959118975,
+      "complete": true
+    },
+    "IMG_8973": {
+      "events": {
+        "foul_cross": {
+          "frame": 691,
+          "t_s": 11.5222,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 828,
+          "t_s": 13.8066,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.971374045801525,
+      "complete": true
+    },
+    "IMG_8974": {
+      "events": {
+        "foul_cross": {
+          "frame": 692,
+          "t_s": 11.5382,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 832,
+          "t_s": 13.8726,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97447894512973,
+      "complete": true
+    },
+    "IMG_8975": {
+      "events": {
+        "foul_cross": {
+          "frame": 902,
+          "t_s": 15.0399,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1037,
+          "t_s": 17.2908,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.9739997111079,
+      "complete": true
+    },
+    "IMG_8976": {
+      "events": {
+        "foul_cross": {
+          "frame": 769,
+          "t_s": 12.8334,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 911,
+          "t_s": 15.2032,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.921542987904544,
+      "complete": true
+    },
+    "IMG_8977": {
+      "events": {
+        "foul_cross": {
+          "frame": 720,
+          "t_s": 12.006,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 864,
+          "t_s": 14.4072,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97008973080758,
+      "complete": true
+    },
+    "IMG_8978": {
+      "events": {
+        "foul_cross": {
+          "frame": 1130,
+          "t_s": 18.8415,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1272,
+          "t_s": 21.2092,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97403721332756,
+      "complete": true
+    },
+    "IMG_8979": {
+      "events": {
+        "foul_cross": {
+          "frame": 593,
+          "t_s": 9.888,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 730,
+          "t_s": 12.1724,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97179125528914,
+      "complete": true
+    },
+    "IMG_8981": {
+      "events": {
+        "foul_cross": {
+          "frame": 867,
+          "t_s": 14.4568,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 999,
+          "t_s": 16.6579,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.971577451444816,
+      "complete": true
+    }
+  }
+}

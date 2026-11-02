@@ -27,6 +27,24 @@
       "baseline_ball_speed": 18.232,
       "dynamic_range": "hdr",
       "labels": {"foul_cross_s": 25.7281, "first_pin_contact_s": 28.0624}
+    },
+    "IMG_8964.MOV": {
+      "truth": 16.879,
+      "dynamic_range": "sdr",
+      "camera_group": "behind ball return, offset right",
+      "note": "11/1 speed_truth_1101 set; the ONLY new-camera clip measured within 0.3 of truth (engine 16.83, -0.05). Its sibling IMG_8971 in the same group reads +13.6 (plausible-but-wrong), so the group is NOT supported (DEC-118) — this clip is a valid regression ANCHOR, not an endorsement of the position."
+    },
+    "IMG_8969.MOV": {
+      "truth": 18.139,
+      "dynamic_range": "sdr",
+      "camera_group": "lower/wider, ball return lower-right",
+      "note": "11/1 set; engine 17.79 (-0.35, within the 0.5 Standard tol). Group reads high overall (sibling IMG_8970 +7.1) — borderline anchor."
+    },
+    "IMG_8981.MOV": {
+      "truth": 18.413,
+      "dynamic_range": "sdr",
+      "camera_group": "behind ball return, offset right",
+      "note": "11/1 set; engine 18.80 (+0.39, within 0.5). Borderline anchor (see IMG_8964 note)."
     }
   }
 }
