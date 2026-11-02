@@ -1,6 +1,6 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.78  
+Version: 1.79  
 Last Updated: 2026-11-02  
 Owner: Shayne  
 Supersedes: v1.77
@@ -1268,6 +1268,17 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-122 — Friends & Family test phase via TestFlight (pre-Beta, not gated by DEC-118) (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- Add a **Friends & Family (F&F) test phase** between Shayne-only MVP testing and the friends Beta. A handful of close friends and family get the app, sign up, use it when they bowl, and send feedback. Purpose: **more real-world videos and feedback for analysis**, not a Beta.
+- **Not gated by DEC-118.** The app does not need to be Beta-ready; the DEC-118 accuracy, coverage and <30 s gates still apply to the friends **Beta** only. DEC-047 (Beta is Shayne's call) is unchanged.
+- **Distribution: TestFlight external testing**, private invite link (iPhone only), bundle `com.lanesight.app`. Extends DEC "Xcode, then TestFlight internal" to an external F&F group.
+- **Minimum for F&F:** normal in-app sign-up (13+ gate, existing account deletion); testers told plainly it is an early test build whose numbers may be wrong or missing; a short plain-English consent covering recording, 7-day server clip retention (DEC-099/104) and use of their clips/feedback to improve analysis; their data marked as F&F (cohort/app phase) so it is separable in Stats, the ops dashboard and the feedback store (DEC-059) and never mixes with Shayne's real or staged test data (DEC-076 staged accounts); owner/dev-only screens hidden from testers; a demo login for Apple's beta review.
+- **Not required for F&F:** attorney-reviewed terms, entity/trademark work, the DEC-118 metric gates, performance SLOs. Those stay Beta/launch items (LEGAL_IP_LAUNCH_STRATEGY).
+- Server-fallback cost stays inside the DEC-043 $100/month private cap; a few testers are well within it.
+**Why:** the bottleneck right now is labeled real-world clips and observations from more bowlers, houses and phones; waiting for Beta readiness delays the data that gets LaneSight there.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-047, DEC-059, DEC-099/104, DEC-118 (Beta gates unchanged).
 
 ### DEC-121 — Form metric tolerances + step-count honesty + Form capture defaults (amends DEC-118) (2026-11-02)
 **Decision (Shayne, 2026-11-02):** per-plant form-step labels landed (`form_steps` task → `validation/form_steps_labels.json`; all approaches are 5 steps, no 6-step data; some early plants off-frame so visible-plant counts are 8824:4, others 5, IMG_8980:3). Amends DEC-118's Form gates with explicit tolerances and records an honest status for step count.
