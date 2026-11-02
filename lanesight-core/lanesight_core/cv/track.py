@@ -193,7 +193,12 @@ def detect_impact(path, S, lane, track, log=print):
         if t > far['t'] + 0.6: break
         G = cv2.cvtColor(cv2.warpPerspective(f, S['Hs'][i], (w, h))[y_a:y_b, xa:xb], cv2.COLOR_BGR2GRAY).astype(np.float32)
         if t < t_enter - 0.05: refs.append(G); continue
-        if isinstance(refs, list): refs = np.median(np.stack(refs), 0).astype(np.float32)
+        # No pre-arrival reference frame was collected (the ball is already in the ROI at the window start, e.g. a
+        # tight trim on IMG_8975) — we can't build a motion baseline, so impact is simply not detectable here.
+        # Return no impact (→ the coded PIN_IMPACT_NOT_DETECTED partial path) instead of crashing on np.stack([]).
+        if isinstance(refs, list):
+            if not refs: return None, np.array([])
+            refs = np.median(np.stack(refs), 0).astype(np.float32)
         (dx, dy), _ = cv2.phaseCorrelate(refs, G)
         G = cv2.warpAffine(G, np.float32([[1, 0, -dx], [0, 1, -dy]]), (G.shape[1], G.shape[0]))
         dif = np.abs(G - refs)
@@ -218,7 +223,12 @@ def detect_impact(path, S, lane, track, log=print):
     # which would truncate the track mid-lane and shrink the distance scale (~2.5x on shot 5). The ball cannot
     # strike before it arrives, so never place impact before far['t']. On well-tracked clips far['t'] already
     # equals the hotness time (impact lands at 0.0 diameters from far), so this is a no-op there.
-    if t_imp is not None and far['t'] > t_imp: t_imp = float(far['t'])
+    # Never place impact before the ball arrives: if the hotness fired BEFORE the ball entered the pin ROI
+    # (t_imp < t_enter) it is an early false trigger (a glossy-lane reflection ahead of the ball), so defer to the
+    # ball's farthest tracked point `far`. But once the ball is IN the ROI, a sustained hotness IS the pin contact
+    # — do NOT drag it late to a `far` that sits past the pins (a strike's ball tracked on into the pit, e.g.
+    # IMG_8752 where d47bc12 extended the tail 0.35 s past impact and the old unconditional clamp read −2.5 mph).
+    if t_imp is not None and far['t'] > t_imp and t_imp < t_enter: t_imp = float(far['t'])
     log(f'impact t={t_imp} (ROI rows {y_a}-{y_b}, ball enters ROI {t_enter:.2f}s, baseline {base:.4f}±{sd:.4f})')
     return t_imp, E
 

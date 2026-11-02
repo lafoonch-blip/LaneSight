@@ -1,22 +1,50 @@
 {
-  "_note": "DEC-116: numba integer YUV->BGR is the DEFAULT conversion (serial, PROVEN bit-identical arm64/x86 via per-frame md5). Values within +-0.2 of the pre-numba float baseline (8751 18.615->18.54, 8752 18.308->18.301, 8753 18.711->18.739, 8754 18.232->18.362). tol 0.2; in-container smoke = authoritative server check. LANESIGHT_YUV_NUMPY=1 forces the float fallback. 8751/8754 HDR, 8752/8753 SDR.",
-  "tol_mph": 0.2,
+  "_note": "DEC-113/DEC-117 Standard-tier speed regression, re-anchored to LABELED TRUTH (2026-11-01). Compares the engine's `speed_avg_foul_to_pins` (full-lane average, foul_cross -> first head-pin contact, 59.44 ft) to Shayne's labeled truth from validation/labels/pin_anchor_truth.json (truth_mph = 59.44 / (first_pin_contact_s - foul_cross_s)), NOT old engine output. This is the apples-to-apples comparison: the labels measure the foul->pins average, and so does speed_avg_foul_to_pins (DEC-064/DEC-112). A CV change that moves the engine CLOSER to truth now PASSES instead of being flagged + bypassed. WHY the metric changed from `ball_speed`: the headline `ball_speed` is the EARLY-LANE (release) speed (reversed to DEC-030 by Shayne 2026-10-29), which is physically higher than the full-lane average and has NO labeled ground truth, so it was never truth-comparable (release-vs-avg offset was +0.76/-0.11/+0.44/+0.87 on 8751-54). The release headline is kept per clip as `baseline_ball_speed` for drift visibility only (not gated). tol_mph 0.5 = the DEC-034 beta accuracy bar; the engine's foul->pins average tracks truth to MAE ~0.12 (max 0.28), so this passes with margin and still catches a real regression.",
+  "metric": "speed_avg_foul_to_pins",
+  "tol_mph": 0.5,
+  "truth_source": "validation/labels/pin_anchor_truth.json — 59.44 ft foul_cross -> first_pin_contact",
   "clips": {
-    "IMG_8751.MOV": {
-      "ball_speed": 18.615,
-      "dynamic_range": "hdr"
+    "IMG_8751.mov": {
+      "truth": 17.872,
+      "baseline_ball_speed": 18.632,
+      "dynamic_range": "hdr",
+      "labels": {"foul_cross_s": 26.6948, "first_pin_contact_s": 28.9624}
     },
     "IMG_8752.MOV": {
-      "ball_speed": 18.308,
-      "dynamic_range": "sdr"
+      "truth": 18.003,
+      "baseline_ball_speed": 17.891,
+      "dynamic_range": "sdr",
+      "labels": {"foul_cross_s": 18.5755, "first_pin_contact_s": 20.8266}
     },
     "IMG_8753.MOV": {
-      "ball_speed": 18.711,
-      "dynamic_range": "sdr"
+      "truth": 18.275,
+      "baseline_ball_speed": 18.711,
+      "dynamic_range": "sdr",
+      "labels": {"foul_cross_s": 9.3209, "first_pin_contact_s": 11.5385}
     },
-    "IMG_8754.MOV": {
-      "ball_speed": 18.232,
-      "dynamic_range": "hdr"
+    "IMG_8754.mov": {
+      "truth": 17.362,
+      "baseline_ball_speed": 18.232,
+      "dynamic_range": "hdr",
+      "labels": {"foul_cross_s": 25.7281, "first_pin_contact_s": 28.0624}
+    },
+    "IMG_8964.MOV": {
+      "truth": 16.879,
+      "dynamic_range": "sdr",
+      "camera_group": "behind ball return, offset right",
+      "note": "11/1 speed_truth_1101 set; the ONLY new-camera clip measured within 0.3 of truth (engine 16.83, -0.05). Its sibling IMG_8971 in the same group reads +13.6 (plausible-but-wrong), so the group is NOT supported (DEC-118) — this clip is a valid regression ANCHOR, not an endorsement of the position."
+    },
+    "IMG_8969.MOV": {
+      "truth": 18.139,
+      "dynamic_range": "sdr",
+      "camera_group": "lower/wider, ball return lower-right",
+      "note": "11/1 set; engine 17.79 (-0.35, within the 0.5 Standard tol). Group reads high overall (sibling IMG_8970 +7.1) — borderline anchor."
+    },
+    "IMG_8981.MOV": {
+      "truth": 18.413,
+      "dynamic_range": "sdr",
+      "camera_group": "behind ball return, offset right",
+      "note": "11/1 set; engine 18.80 (+0.39, within 0.5). Borderline anchor (see IMG_8964 note)."
     }
   }
 }

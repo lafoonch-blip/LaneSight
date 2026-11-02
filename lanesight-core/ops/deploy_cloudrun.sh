@@ -75,9 +75,12 @@ gcloud builds submit --tag "$REPO:$SHA" --quiet .
 DIGEST=$(gcloud artifacts docker images describe "$REPO:$SHA" --format="value(image_summary.digest)" 2>/dev/null)
 echo "== built digest: $DIGEST =="
 
+REVSUF="${REV_SUFFIX:-$SHA}"     # the revision name is KNOWN ($SERVICE-$REVSUF) — commit SHA by default, any
+                                 # valid label if REV_SUFFIX is set (canonN, dec-NNN, …). Used below to route
+                                 # traffic by NAME, so the flip never depends on latestReadyRevisionName racing.
 gcloud run deploy "$SERVICE" \
   --image "$REPO:$SHA" --region "$REGION" --allow-unauthenticated \
-  --revision-suffix "${REV_SUFFIX:-$SHA}" \
+  --revision-suffix "$REVSUF" \
   --cpu 4 --memory 8Gi --timeout 600 --concurrency 8 --max-instances 3 \
   --set-env-vars LANESIGHT_SYNC_JOBS=1,LANESIGHT_DATA=/tmp/lanesight,MPLBACKEND=Agg,LANESIGHT_PRECHECK_ENFORCE=1,LANESIGHT_FFMPEG_DECODE=1,LANESIGHT_FRAME_CACHE_MB=5500,LANESIGHT_VCPU=4,LANESIGHT_GIB=8,LANESIGHT_CV_WORKERS=4,LANESIGHT_YUV_NB_PARALLEL=1 \
   --set-secrets LANESIGHT_DB_URL=LANESIGHT_DB_URL:latest,LANESIGHT_SERVICE_ROLE=LANESIGHT_SERVICE_ROLE:latest,LANESIGHT_JWT_SECRET=LANESIGHT_JWT_SECRET:latest \
@@ -86,22 +89,15 @@ gcloud run deploy "$SERVICE" \
 # The NEW revision is latestReadyRevisionName (the one just built). Traffic may be PINNED to an older revision
 # (a prior update-traffic), so `gcloud run deploy` does NOT auto-route — we route EXPLICITLY below. That pinning
 # is exactly why earlier deploys "served 00052" while new revisions sat at 0%.
-# When --revision-suffix is set the revision name is KNOWN ($SERVICE-$suffix); use it directly. Otherwise read
-# latestReadyRevisionName, but POLL for it — `gcloud run deploy` can return before Cloud Run flips
-# latestReadyRevisionName off the old one (the race that aborted the dec109 deploy at 0% traffic).
+# The revision name is ALWAYS known ($SERVICE-$REVSUF) because we always pass --revision-suffix above — so route
+# traffic by NAME. Do NOT poll latestReadyRevisionName (it stays on the old revision until the new one is Ready,
+# which raced the 60s poll and aborted earlier deploys at 0% traffic — and only matched a canonN-style name).
+# This accepts ANY valid revision name (commit SHA, canonN, dec-NNN, …).
 URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.url)")
-if [ -n "${REV_SUFFIX:-}" ]; then
-  NEW="$SERVICE-$REV_SUFFIX"
-else
-  NEW="$PREV"
-  for _ in $(seq 1 30); do
-    NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format="value(status.latestReadyRevisionName)")
-    [ "$NEW" != "$PREV" ] && break
-    sleep 2
-  done
-fi
+NEW="$SERVICE-$REVSUF"
 if [ "$NEW" = "$PREV" ]; then
-  echo "ABORT: no new revision was created (latest == serving $PREV) — build/deploy did not take."
+  echo "ABORT: new revision name ($NEW) == the serving revision — redeploying the same commit/suffix is a no-op."
+  echo "       Set REV_SUFFIX to a fresh name (or commit) and re-run."
   exit 1
 fi
 # Wait for the new revision to be Ready before routing/smoking it.

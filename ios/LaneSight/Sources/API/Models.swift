@@ -148,6 +148,7 @@ struct ShotRecord: Codable {
     // Capture quality (GUARDRAILS 3.7 B): far_lane == "limited" drives the camera-spot banner; `reason`
     // is the honest one-line explanation. `source` distinguishes an uploaded clip from a live shot.
     let capture_quality: CaptureQuality?
+    let stage_report: [String: StageOutcome]?    // DEC-122: per-stage ok/failed/skipped (dev/TestFlight "What worked")
     let source: String?
     // DEC-088/090 shot card: the fitted lane path, the 4 pinned points, Power, and the bowler's baseline.
     let path_fit: PathFit?
@@ -173,7 +174,7 @@ struct ShotRecord: Codable {
         case shot_id, metrics, insights, form_version, view, status, fps
         case key_frames, key_frame_poses, events, timing_checkpoints, measured_positions
         case swing_timing, coaching_cues, focus, footer
-        case capture_quality, source
+        case capture_quality, stage_report, source
         case path_fit, key_points, impact_energy_j, baseline
     }
 
@@ -199,6 +200,7 @@ struct ShotRecord: Codable {
         focus = (try? c?.decodeIfPresent(FormFocus.self, forKey: .focus)) ?? nil
         footer = (try? c?.decodeIfPresent(FormFooter.self, forKey: .footer)) ?? nil
         capture_quality = (try? c?.decodeIfPresent(CaptureQuality.self, forKey: .capture_quality)) ?? nil
+        stage_report = (try? c?.decodeIfPresent([String: StageOutcome].self, forKey: .stage_report)) ?? nil
         source = (try? c?.decodeIfPresent(String.self, forKey: .source)) ?? nil
         path_fit = (try? c?.decodeIfPresent(PathFit.self, forKey: .path_fit)) ?? nil
         key_points = (try? c?.decodeIfPresent([String: ShotKeyPoint].self, forKey: .key_points)) ?? nil
@@ -212,6 +214,15 @@ struct ShotRecord: Codable {
 struct CaptureQuality: Codable, Equatable {
     let far_lane: String?
     let reason: String?
+}
+
+/// DEC-122: one entry per analysis stage (decode/stabilize/lane/foul/ball_track/impact/pose/…). Drives the
+/// dev/TestFlight "What worked" list on the result screen — never shown to production users.
+struct StageOutcome: Codable, Equatable {
+    let status: String?        // ok | failed | skipped
+    let reason_code: String?
+    let reason: String?
+    let duration_ms: Double?
 }
 
 // MARK: - Form fundamentals v1 contract (DEC-057, after_form_analyzed footer / shot record)
