@@ -27,6 +27,7 @@ enum OnDeviceShadow {
         var revRpm: Float?
         var revSigma: Float?
         var revNote = ""
+        var boards: BoardMetrics?
         var diag: [String: Any] = [:]       // DEC-117 Track A item 2: per-stage diagnostics for parity vs golden
         var stageMs: [String: Double] = [:]  // DEC-117 Track A item 1: per-stage timing breakdown (ms)
         func stage<T>(_ name: String, _ body: () -> T) -> T {
@@ -70,6 +71,14 @@ enum OnDeviceShadow {
             let rev = stage("rev") { OnDeviceRevRate.measure(url: clipURL, track: track.points, geo: geo) }
             revRpm = rev.rpm; revSigma = rev.sigmaRpm; revNote = rev.note
             if basis == "unavailable", rev.rpm != nil { basis = "best_effort" }   // rev stands alone (DEC-111)
+            // DEC-127: BOARD metrics via the lane-plane homography (entry/arrows/laydown/breakpoint + angles).
+            boards = stage("boards") { OnDeviceBoards.compute(track: track, geo: geo, speed: sp) }
+            if let b = boards {
+                diag["right_handed"] = b.rightHanded as Any
+                if let v = b.entryBoard.value { diag["entry_board"] = v }
+                if let v = b.arrowsBoard.value { diag["arrows_board"] = v }
+                if let v = b.breakpointBoard.value { diag["breakpoint_board"] = v }
+            }
             peak = max(peak, currentFootprintBytes())
         } else {
             note = "no background plate"
@@ -87,6 +96,39 @@ enum OnDeviceShadow {
         if let rv = revRpm { metrics["rev_rate"] = Double(rv) }
         if let rs = revSigma { metrics["rev_rate_sigma"] = Double(rs) }
         if mph == nil, !revNote.isEmpty { note = note.isEmpty ? revNote : note + " | rev: " + revNote }
+
+        // DEC-127: the structured metrics record the /shots/metrics path forwards — value + status + unit + note
+        // per metric, so a MEASURED metric is 'ok' (counts for the Score) and an unmeasurable one is 'unavailable'
+        // + a reason (never a fabricated number). The flat `metrics` scalars above stay for the dev tool + the
+        // older /analysis/shadow diag.
+        func cell(_ v: Double?, _ unit: String, status: String = "ok", note cn: String? = nil) -> [String: Any] {
+            var d: [String: Any] = ["status": v != nil ? status : "unavailable", "unit": unit]
+            if let v { d["value"] = v }
+            if let cn { d["note"] = cn }
+            return d
+        }
+        var detailed: [String: Any] = [
+            // headline + rev are measured when present; the foul→pins average is best_effort by method (DEC-112).
+            "ball_speed": cell(mph.map(Double.init), "mph", note: mph == nil ? note : nil),
+            "speed_avg_foul_to_pins": cell(avgFoulToPins.map(Double.init), "mph", status: "best_effort",
+                                           note: "full-lane average; impact frame approximated (DEC-112)"),
+            "rev_rate": cell(revRpm.map(Double.init), "rpm", note: revRpm == nil ? revNote : nil),
+        ]
+        if let rs = revSigma { if var r = detailed["rev_rate"] as? [String: Any] { r["uncertainty"] = Double(rs); detailed["rev_rate"] = r } }
+        var trajectory: [String: Any] = [:]
+        if let b = boards {
+            for (key, bc) in b.metricPairs() {
+                let unit = key.hasSuffix("angle") || key == "launch_angle" ? "deg"
+                         : (key == "breakpoint_distance" ? "ft" : "board")
+                detailed[key] = cell(bc.value, unit, status: bc.status == "ok" ? "ok" : "unavailable", note: bc.note)
+                if bc.status == "ok", let v = bc.value { metrics[key] = v }   // measured scalar for the dev tool too
+            }
+            // DEC-127: the ball path for the shot-card lane view. The server builds path_fit from `smoothed`.
+            if !b.curveZBoard.isEmpty {
+                trajectory["smoothed"] = b.curveZBoard.map { ["z_ft": $0[0], "board": $0[1]] }
+                trajectory["series"] = b.seriesZBoard.map { ["z_ft": $0[0], "board": $0[1]] }
+            }
+        }
         var perf: [String: Any] = [
             "latency_s": latency,
             "peak_mem_mb": Double(peak) / 1_048_576.0,
@@ -98,10 +140,11 @@ enum OnDeviceShadow {
 
         var body: [String: Any] = [
             "shot_id": shotId, "source": source, "capture_mode": captureMode,
-            "basis": basis, "note": note, "metrics": metrics, "device_perf": perf,
-            "diag": diag,
+            "basis": basis, "note": note, "metrics": metrics, "metrics_detailed": detailed,
+            "device_perf": perf, "diag": diag,
             "algorithm_version": engineVersion, "app_version": appVersion,
         ]
+        if !trajectory.isEmpty { body["trajectory"] = trajectory }
         if let sid = sessionId { body["session_id"] = sid }
         return body
     }

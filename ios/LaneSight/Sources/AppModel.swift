@@ -50,6 +50,10 @@ struct ShotResult: Equatable {
     /// DEC-126: which engine produced the DISPLAYED measurement — "server" (default) or "iphone" (on-device
     /// primary). The server-only metrics (boards/entry/loft) + Score/coaching are always server-authoritative.
     var engine: String = "server"
+    /// DEC-127 Offline Analysis state: the on-device metrics are shown but coaching needs connectivity — the
+    /// coaching section is ABSENT (never a half-populated placeholder), replaced by one line. The queued metrics
+    /// call enriches the saved shot in history when it lands.
+    var coachingPendingOffline: Bool = false
     // Uploaded clip (DEC-055): no Score / achievement block, show the upload footer instead.
     var isUpload: Bool = false
 
@@ -309,6 +313,7 @@ final class AppModel: ObservableObject {
         guard !didTrackAppOpen else { return }
         didTrackAppOpen = true
         track("app_opened")
+        flushMetricsQueue()   // DEC-127: send any coaching calls that were queued offline, so history enriches
     }
 
     /// Reload the profile photo (GET /me/avatar) into `avatarImage`. No-ops quietly if the client can't be
@@ -691,6 +696,12 @@ final class AppModel: ObservableObject {
         let basis: String       // best_effort | unavailable
         let note: String        // honest reason when a value is unavailable
         let latencyS: Double
+        // DEC-127: the FULL structured on-device metrics ({name:{value,status,unit,note,...}}) as JSON (Sendable),
+        // forwarded to POST /shots/metrics and used to render all metrics in the Offline state. nil = engine failed.
+        var detailedJSON: Data? = nil
+        // DEC-127: the ball path (trajectory.smoothed/series, board vs ft) as JSON — drives the shot-card lane view
+        // (path_fit) online via the server + is rendered locally in the Offline state. nil when no path was fit.
+        var trajectoryJSON: Data? = nil
     }
 
     /// DEC-126: run the on-device engine as the PRIMARY measurement for a live shot. Returns the measurement, or
@@ -712,10 +723,15 @@ final class AppModel: ObservableObject {
                                                     sessionId: sessionId, captureMode: mode, appVersion: appVersion)
                 let perf = body["device_perf"] as? [String: Any] ?? [:]
                 let m = body["metrics"] as? [String: Any] ?? [:]
+                let detailed = body["metrics_detailed"] as? [String: Any]
+                let dj = detailed.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+                let traj = body["trajectory"] as? [String: Any]
+                let tj = traj.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
                 return OnDeviceMeasurement(
                     ballSpeed: m["ball_speed"] as? Double, foulToPins: m["speed_avg_foul_to_pins"] as? Double,
                     revRate: m["rev_rate"] as? Double, basis: body["basis"] as? String ?? "unavailable",
-                    note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity)
+                    note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity,
+                    detailedJSON: dj, trajectoryJSON: tj)
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -730,50 +746,124 @@ final class AppModel: ObservableObject {
         return result
     }
 
-    /// DEC-126: override ONLY the on-device metrics (speed/rev) on a server-built result with the on-device
-    /// values; everything else (boards/entry/loft, Score, coaching) stays server-authoritative. A nil on-device
-    /// value becomes an honest `unavailable` + reason (DEC-122) — never the server's value.
-    private static func applyOnDevicePrimary(_ r: ShotResult, _ od: OnDeviceMeasurement) -> ShotResult {
-        var r = r
-        func cell(_ key: String, _ v: Double?) -> Metric {
-            Metric(metric: key, value: v, unit: key == "rev_rate" ? "rpm" : "mph",
-                   status: v != nil ? "best_effort" : "unavailable",
-                   note: v != nil ? "measured on iPhone (on-device)"
-                                  : (od.note.isEmpty ? "not measured on device" : od.note),
-                   confidence: nil, uncertainty: nil)
+    // DEC-127 removed `immediateOnDeviceResult` + `applyOnDevicePrimary` (the DEC-126 show-then-fold path): the
+    // result now renders ONCE from the metrics-call card (Complete) or the on-device metrics (Offline), never a
+    // 3-metric placeholder that's filled in later. See `buildResultFromCard` / `offlineResult`.
+
+    // MARK: - DEC-127 on-device-first result builders
+
+    /// Parse the on-device structured metrics JSON into display Metric cells. Measured → its status (ok);
+    /// the engine's explicit unavailable → unavailable + its reason. Never fabricates a value.
+    private static func metricDictFromDetailed(_ data: Data?) -> [String: Metric] {
+        guard let data, let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [:] }
+        var out: [String: Metric] = [:]
+        for (key, v) in obj {
+            guard let d = v as? [String: Any] else { continue }
+            out[key] = Metric(metric: key, value: d["value"] as? Double, unit: d["unit"] as? String,
+                              status: d["status"] as? String ?? "unavailable", note: d["note"] as? String,
+                              confidence: nil, uncertainty: d["uncertainty"] as? Double)
         }
-        let od3: [String: Double?] = ["ball_speed": od.ballSpeed, "speed_avg_foul_to_pins": od.foulToPins,
-                                      "rev_rate": od.revRate]
-        r.metrics = r.metrics.map { kv in od3.keys.contains(kv.0) ? (kv.0, cell(kv.0, od3[kv.0] ?? nil)) : kv }
+        return out
+    }
+
+    /// DEC-127 Complete Analysis: build the shown result from the metrics-endpoint response (score + coaching +
+    /// the full card). engine = iphone (the measurements are on-device; score/coaching are server-authoritative).
+    private static func buildResultFromCard(_ resp: MetricsResultResponse, isUpload: Bool) -> ShotResult {
+        let record = resp.shot.record
+        let metrics = MetricDisplay.ordered(record?.metrics ?? [:])
+        let insights = record?.insights
+        let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
+            ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
+        let pending = ScoreResponse(eligible: false, score: nil, tier: nil, s_perf: nil, a_acc: nil, c_cons: nil,
+                                    p_power: nil, eligibility: nil, parts_delta_30d: nil, formula_version: nil, label: nil)
+        var built = ShotResult(shotId: resp.shot_id, metrics: metrics, score: resp.score ?? pending,
+                               footer: resp.footer, suggestedTarget: insights?.suggested_target,
+                               recommendation: moveRec, insightsState: insights?.state,
+                               insightsConfidence: insights?.confidence, insightsNote: insights?.note,
+                               captureFarLaneLimited: record?.capture_quality?.far_lane == "limited",
+                               captureReason: record?.capture_quality?.reason, isUpload: isUpload,
+                               isForm: false, formView: nil, formStatus: nil, formVersion: nil)
+        built.ballName = resp.shot.ball_name
+        built.stageReport = record?.stage_report ?? [:]
+        Self.attachShotCard(&built, record)
+        built.engine = "iphone"
+        return built
+    }
+
+    /// DEC-127 Offline Analysis: all on-device measurements shown, coaching marked pending (needs connectivity).
+    /// No half-populated coaching — the view renders the measurements + one offline line and omits the coach box.
+    private static func offlineResult(_ m: OnDeviceMeasurement, shotId: String, isUpload: Bool) -> ShotResult {
+        let dict = metricDictFromDetailed(m.detailedJSON)
+        let metrics: [(String, Metric)] = dict.isEmpty
+            ? [("ball_speed", Metric(metric: "ball_speed", value: nil, unit: "mph", status: "unavailable",
+                                     note: m.note.isEmpty ? "not measured on device" : m.note,
+                                     confidence: nil, uncertainty: nil))]
+            : MetricDisplay.ordered(dict)
+        let pending = ScoreResponse(eligible: false, score: nil, tier: nil, s_perf: nil, a_acc: nil, c_cons: nil,
+                                    p_power: nil, eligibility: nil, parts_delta_30d: nil, formula_version: nil, label: nil)
+        var r = ShotResult(shotId: shotId, metrics: metrics, score: pending, footer: nil, suggestedTarget: nil,
+                           recommendation: nil, insightsState: nil, insightsConfidence: nil, insightsNote: nil,
+                           captureFarLaneLimited: false, captureReason: nil, isUpload: isUpload,
+                           isForm: false, formView: nil, formStatus: nil, formVersion: nil)
         r.engine = "iphone"
+        r.coachingPendingOffline = true
         return r
     }
 
-    /// DEC-126: a ShotResult built purely from the on-device measurement, shown IMMEDIATELY (before the upload).
-    /// Only the three on-device metrics are present; Score/coaching/boards are pending and fold in later from the
-    /// server shadow (or stay pending offline). A nil on-device value is an honest `unavailable` + reason.
-    private static func immediateOnDeviceResult(_ m: OnDeviceMeasurement, shotId: String, isUpload: Bool) -> ShotResult {
-        func cell(_ key: String, _ v: Double?) -> Metric {
-            Metric(metric: key, value: v, unit: key == "rev_rate" ? "rpm" : "mph",
-                   status: v != nil ? "best_effort" : "unavailable",
-                   note: v != nil ? "measured on iPhone (on-device)"
-                                  : (m.note.isEmpty ? "not measured on device" : m.note),
-                   confidence: nil, uncertainty: nil)
+    // MARK: - DEC-127 offline queue + background video upload
+
+    /// Queue a metrics call that couldn't reach the server (offline). Stored as the exact /shots/metrics body;
+    /// flushed when connectivity returns, which creates the server shot with coaching → it appears in history.
+    private func enqueueMetricsCall(detailed: Data?, sessionId: String?, metadata: ShotMetadata, shotId: String) {
+        guard let detailed, let detObj = (try? JSONSerialization.jsonObject(with: detailed)) as? [String: Any] else { return }
+        let metaObj = (try? JSONSerialization.jsonObject(with: Data(metadata.jsonString().utf8))) ?? [:]
+        var body: [String: Any] = ["metrics": detObj, "metadata": metaObj, "capture_mode": metadata.captureMode,
+                                   "source": metadata.source, "algorithm_version": OnDeviceShadow.engineVersion,
+                                   "shot_id": shotId]
+        if let sessionId { body["session_id"] = sessionId }
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+        var q = (defaults.array(forKey: "ls.metricsQueue") as? [Data]) ?? []
+        q.append(data)
+        defaults.set(q, forKey: "ls.metricsQueue")
+    }
+
+    /// Flush any queued metrics calls (call on launch / foreground). Each success creates the server shot with
+    /// coaching; failures stay queued. Never blocks the UI and never mutates a screen the user is viewing.
+    func flushMetricsQueue() {
+        let q = (defaults.array(forKey: "ls.metricsQueue") as? [Data]) ?? []
+        guard !q.isEmpty, let client = try? makeClient() else { return }
+        Task.detached { [weak self] in
+            var remaining: [Data] = []
+            for body in q {
+                do { _ = try await client.postMetricsRaw(body) }
+                catch { remaining.append(body) }   // keep it for the next attempt
+            }
+            await MainActor.run { self?.defaults.set(remaining, forKey: "ls.metricsQueue") }
         }
-        let metrics: [(String, Metric)] = [
-            ("ball_speed", cell("ball_speed", m.ballSpeed)),
-            ("speed_avg_foul_to_pins", cell("speed_avg_foul_to_pins", m.foulToPins)),
-            ("rev_rate", cell("rev_rate", m.revRate))]
-        let pending = ScoreResponse(eligible: false, score: nil, tier: nil, s_perf: nil, a_acc: nil,
-                                    c_cons: nil, p_power: nil, eligibility: nil, parts_delta_30d: nil,
-                                    formula_version: nil, label: nil)
-        var r = ShotResult(shotId: shotId, metrics: metrics, score: pending, footer: nil,
-                           suggestedTarget: nil, recommendation: nil, insightsState: nil,
-                           insightsConfidence: nil, insightsNote: nil, captureFarLaneLimited: false,
-                           captureReason: nil, isUpload: isUpload, isForm: false, formView: nil,
-                           formStatus: nil, formVersion: nil)
-        r.engine = "iphone"
-        return r
+    }
+
+    /// DEC-127 #5: upload the clip in the BACKGROUND, after the result is shown — Wi-Fi only by default (a user
+    /// setting allows cellular). Retention only here; the result is never changed by this. On cellular without
+    /// permission the upload is skipped (the clip stays local for this run).
+    private func backgroundUploadAndShadow(uploadURL: URL, originalURL: URL, metadata: ShotMetadata,
+                                           sessionId: String?, ct: [String: Double]) {
+        let allowCellular = defaults.bool(forKey: "ls.cellular_upload")
+        guard let client = try? makeClient() else { return }        // build on the main actor
+        Task.detached {
+            if await Reachability.isExpensive() && !allowCellular {
+                // Wi-Fi only (default): defer. The on-device result + coaching already landed; the clip is kept
+                // locally for this run. (A persistent Wi-Fi outbox is a follow-up.)
+                return
+            }
+            do {
+                let target = try await client.signedUploadURL()
+                try await client.putClipToStorage(uploadURL: target.upload_url, fileURL: uploadURL) { _ in }
+                // The clip is retained server-side for the diagnostic window; a server-side video SHADOW that
+                // re-analyses it for the board-delta comparison is a follow-up (never changes what was shown).
+            } catch { /* best-effort; the result already landed */ }
+            try? FileManager.default.removeItem(at: originalURL)
+            if uploadURL != originalURL { try? FileManager.default.removeItem(at: uploadURL) }
+        }
     }
 
     private func runPipeline(fileURL: URL, source: String) async {
@@ -783,9 +873,6 @@ final class AppModel: ObservableObject {
         var bgTask = UIApplication.shared.beginBackgroundTask(withName: "ls-analyze")
         func endBG() { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid } }
         defer { endBG() }
-        // DEC-126: when on-device is primary, the result is SHOWN from the local file before the upload; the upload +
-        // server then run behind it and must never block or clobber the shown result (incl. on an offline failure).
-        var shownImmediately = false
         do {
             let client = try makeClient()
             // Snapshot the capture mode for THIS shot up front so detection later can't be confused by a
@@ -839,36 +926,8 @@ final class AppModel: ObservableObject {
                 ct["upload_bytes"] = Double(b)
             }
 
-            // DEC-126: ON-DEVICE PRIMARY — measure on the LOCAL trimmed file and SHOW the result NOW, before the
-            // (43 MB, minutes-long) upload. The upload + server (Score/coaching/boards + shadow + outcome rows) run
-            // behind the already-shown result and never block it. No network is touched to get the speed/rev, so
-            // tap→result works with Wi-Fi off. Ball shots only; form keeps the server pose path.
-            if Self.onDevicePrimary && capturedMode != "form" {
-                let tOD = Date()
-                let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: UUID().uuidString,
-                                                      source: source, sessionId: sid, mode: "shot")
-                let m = od ?? OnDeviceMeasurement(ballSpeed: nil, foulToPins: nil, revRate: nil, basis: "unavailable",
-                                                  note: "on-device analysis didn't finish within 30 s", latencyS: -1)
-                ct["ondevice_s"] = Date().timeIntervalSince(tOD)
-                result = Self.immediateOnDeviceResult(m, shotId: UUID().uuidString, isUpload: source != "live")
-                pipeline = .done; showResult = true; shownImmediately = true
-                clearPendingAnalysis()
-                track(od != nil ? "ondevice_primary_shown" : "ondevice_unavailable_shown",
-                      props: ["ondevice_s": ct["ondevice_s"] ?? 0, "latency_s": m.latencyS, "basis": m.basis])
-            }
-
-            // DEC-126: live + on-device primary — create the session NOW (the result is already shown), so the
-            // server shot joins it. Best-effort: offline leaves it nil and the server analyze runs standalone.
-            if source == "live" && sid == nil {
-                if let created = try? await client.createSession(mode: "practice").id {
-                    sessionId = created; sid = created; track("session_started")
-                }
-            }
-
-            // 3. Upload the clip (multipart) with progress.
-            pipeline = .uploading(0)
-            // Live shots carry the session's current target (carry-forward / chip / Apply-this-move).
-            // Uploads seed that target from the Upload screen's fields so the Shot card shows it too.
+            // DEC-127: build the shot metadata once — both the on-device-first path (the metrics call) and the
+            // server-primary path (the upload) need it. Uploads seed the target from the Upload screen fields.
             if source != "live" {
                 sessionTarget = ShotIntent(
                     feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
@@ -878,16 +937,66 @@ final class AppModel: ObservableObject {
             }
             let ball = currentBall
             let metadata = ShotMetadata(
-                handed: handed,
-                captureMode: capturedMode,
-                source: source,
-                intent: sessionTarget,
-                suggested: sessionSuggested,
-                ballConfigurationId: ball?.ball_configuration_id,
-                userBallId: ball?.id,
-                oilPatternId: source == "live" ? selectedOilPatternId : nil   // DEC-097: lock oil per live shot
-            )
-            // Upload the clip straight to Supabase Storage (no API request-size cap), then analyze from there.
+                handed: handed, captureMode: capturedMode, source: source,
+                intent: sessionTarget, suggested: sessionSuggested,
+                ballConfigurationId: ball?.ball_configuration_id, userBallId: ball?.id,
+                oilPatternId: source == "live" ? selectedOilPatternId : nil)   // DEC-097: lock oil per live shot
+            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+
+            // ===================== DEC-127: ON-DEVICE-FIRST PATH (ball shots) =====================
+            // The phone computes ALL metrics locally (speed, rev, boards, the lateral path), then a lightweight
+            // metrics-only call returns Score + coaching. The result renders ONCE — a COMPLETE card online, an
+            // OFFLINE card if the call doesn't return in 10 s — never piecemeal, never a half-filled screen. The
+            // clip uploads AFTERWARD in the background (Wi-Fi only by default) and never changes what was shown.
+            // No network is touched before the result (tap→result works with Wi-Fi off). Form keeps the server path.
+            if Self.onDevicePrimary && capturedMode != "form" {
+                pipeline = .analyzing(state: "ondevice", timings: [:])          // "Analyzing your shot"
+                let tOD = Date()
+                let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: UUID().uuidString,
+                                                      source: source, sessionId: nil, mode: "shot")
+                ct["ondevice_s"] = Date().timeIntervalSince(tOD)
+                let m = od ?? OnDeviceMeasurement(ballSpeed: nil, foulToPins: nil, revRate: nil, basis: "unavailable",
+                                                  note: "on-device analysis didn't finish within 30 s", latencyS: -1)
+                let newShotId = UUID().uuidString
+                if source == "live" && sid == nil {                            // session feeds the Score; best-effort
+                    sid = try? await client.createSession(mode: "practice").id
+                    if sid != nil { sessionId = sid; track("session_started") }
+                }
+                let detailed = m.detailedJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                let traj = m.trajectoryJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                var built: ShotResult
+                if let detailed {
+                    pipeline = .analyzing(state: "coaching", timings: [:])     // "Generating coaching"
+                    do {
+                        let resp = try await client.scoreFromMetrics(
+                            metricsDetailed: detailed, trajectory: traj, keyPoints: nil,
+                            sessionId: (source == "upload" ? nil : sid), metadata: metadata,
+                            devicePerf: ["latency_s": m.latencyS], algorithmVersion: OnDeviceShadow.engineVersion,
+                            appVersion: appVersion, timeoutS: 10)
+                        built = Self.buildResultFromCard(resp, isUpload: source != "live")   // Complete Analysis
+                        track("ondevice_metrics_complete",
+                              props: ["ondevice_s": ct["ondevice_s"] ?? 0, "basis": m.basis, "engine": "iphone"])
+                    } catch {
+                        built = Self.offlineResult(m, shotId: newShotId, isUpload: source != "live")   // Offline
+                        enqueueMetricsCall(detailed: m.detailedJSON, sessionId: (source == "upload" ? nil : sid),
+                                           metadata: metadata, shotId: newShotId)
+                        track("ondevice_offline_shown", props: ["ondevice_s": ct["ondevice_s"] ?? 0])
+                    }
+                } else {
+                    built = Self.offlineResult(m, shotId: newShotId, isUpload: source != "live")   // engine couldn't measure
+                }
+                result = built                                                 // render ONCE ("Your results")
+                if source == "live" { shotCount += 1; if shotCount == 1 { track("first_shot_analyzed") } }
+                pipeline = .done
+                showResult = true
+                clearPendingAnalysis()
+                backgroundUploadAndShadow(uploadURL: uploadURL, originalURL: fileURL, metadata: metadata,
+                                          sessionId: (source == "upload" ? nil : sid), ct: ct)
+                return
+            }
+
+            // ==================== server-primary path (kill switch: on-device OFF) ====================
+            // 3. Upload the clip (multipart) with progress, then analyze from Storage (no API request-size cap).
             let tUrl = Date()
             let target = try await client.signedUploadURL()
             ct["signed_url_s"] = Date().timeIntervalSince(tUrl)
@@ -975,31 +1084,7 @@ final class AppModel: ObservableObject {
             built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
-            // DEC-126: on-device is PRIMARY for ball shots — its measurement ALWAYS drives the displayed speed/rev.
-            // DEVICE-ONLY: there is NO server fallback — if the on-device engine can't measure (crash or > 30 s),
-            // the speed/rev show an honest `unavailable`, never the server's number. The server stays a background
-            // shadow + authoritative only for Score/coaching/boards. Kill switch: the `ls.ondevice_primary` flag
-            // (Dev Panel toggle) — off ⇒ server primary. Applies to uploads too (behind the flag) for validation.
-            if Self.onDevicePrimary && !isForm && !shownImmediately {
-                // (flag on but the immediate path didn't run, e.g. a recovered/edge path) — measure now.
-                let t0 = Date()
-                let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: created.shot_id,
-                                                      source: source, sessionId: sid, mode: "shot")
-                let m = od ?? OnDeviceMeasurement(ballSpeed: nil, foulToPins: nil, revRate: nil, basis: "unavailable",
-                                                  note: "on-device analysis didn't finish within 30 s", latencyS: -1)
-                built = Self.applyOnDevicePrimary(built, m)
-                track(od != nil ? "ondevice_primary" : "ondevice_unavailable",
-                      props: ["engine_s": Date().timeIntervalSince(t0), "latency_s": m.latencyS, "basis": m.basis])
-            }
-            if shownImmediately {
-                // The on-device speed/rev are already on screen; keep them and fold in the server's Score /
-                // coaching / boards from `built`. The server CV for speed/rev stays shadow (never shown).
-                let odKeys: Set<String> = ["ball_speed", "speed_avg_foul_to_pins", "rev_rate"]
-                let shownOd = Dictionary((result?.metrics ?? []).filter { odKeys.contains($0.0) },
-                                         uniquingKeysWith: { a, _ in a })
-                built.metrics = built.metrics.map { kv in shownOd[kv.0].map { (kv.0, $0) } ?? kv }
-                built.engine = "iphone"
-            }
+            // Server-primary path (DEC-127 kill switch OFF): the server CV is authoritative for everything here.
             result = built
             shotCount += 1
             // §2 (DEC-098 M3): first successful live shot in this session (uploads are standalone, no session).
@@ -1033,10 +1118,9 @@ final class AppModel: ObservableObject {
             if let json = try? JSONSerialization.data(withJSONObject: report), let client = try? makeClient() {
                 Task { try? await client.reportClientFailure(json) }    // best effort; never blocks the UI
             }
-            // DEC-126: if the on-device result is already on screen (iPhone-primary), an upload/server failure
-            // (e.g. Wi-Fi off) is a BACKGROUND failure — it must NOT clobber the shown result. Score/coaching
-            // simply stay pending until the clip syncs. Only fail the UI when nothing was shown yet.
-            if !shownImmediately { pipeline = .failed(error.localizedDescription) }
+            // The on-device-first path returns before any throw and handles offline itself, so this catch is the
+            // server-primary path (or an early trim/client error): surface the failure + Retry (DEC-086).
+            pipeline = .failed(error.localizedDescription)
         }
     }
 

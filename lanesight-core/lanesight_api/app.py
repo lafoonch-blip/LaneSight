@@ -1719,6 +1719,10 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
            'key_points': b.get('key_points') or _key_points_from_metrics(metrics),
            'capture_quality': {'far_lane': _far_lane_read(metrics), 'source': 'ios-ondevice'},
            'engine': 'iphone', 'algorithm_version': algo}
+    # DEC-127: the on-device ball path (trajectory.smoothed = [{z_ft, board}]). _shot_card_enrich builds path_fit
+    # from it, so the shot-card lane view draws the same path + four labels as the server video path.
+    if isinstance(b.get('trajectory'), dict):
+        rec['trajectory'] = b['trajectory']
     if isinstance(b.get('stage_report'), dict):
         rec['stage_report'] = b['stage_report']
 

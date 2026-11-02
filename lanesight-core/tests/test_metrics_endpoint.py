@@ -105,6 +105,22 @@ def test_outcome_rows_written_measured_engine_iphone():
     assert rev.get('reason_code') and rev.get('failed_stage')
 
 
+def test_trajectory_builds_path_fit_for_the_lane_view():
+    u = 'dec127e'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    smoothed = [{'z_ft': float(z), 'board': 20.0 - z * 0.05} for z in range(0, 60, 3)]
+    body = {'metrics': _metrics(), 'capture_mode': 'shot', 'source': 'live', 'session_id': sid,
+            'algorithm_version': 'ios-ondevice-test',
+            'trajectory': {'smoothed': smoothed, 'series': smoothed},
+            'metadata': {'handed': 'R', 'intent': {'arrows_board': 15.0, 'breakpoint_board': 10.0}}}
+    r = client.post('/shots/metrics', json=body, headers=H(u))
+    assert r.status_code == 200, r.text
+    rec = r.json()['shot']['record']
+    # _shot_card_enrich builds path_fit from the on-device trajectory, so the shot-card lane view draws the path.
+    assert rec.get('path_fit') and rec['path_fit'].get('points'), f'path_fit should be built: {rec.get("path_fit")}'
+    assert rec['path_fit'].get('measured_extent_ft') == [0.0, 57.0]
+
+
 def test_upload_does_not_feed_score():
     u = 'dec127d'
     r = _post(u, None)                          # no session_id -> standalone upload
