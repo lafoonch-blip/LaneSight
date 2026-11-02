@@ -20,9 +20,21 @@
 -- Enums — closed vocabularies for the status columns (open-ended reason_code stays text, see below).
 -- PG has no `create type if not exists`, so guard each in a DO block for idempotent re-run.
 -- ===========================================================================
+-- metric status mirrors the engine's Measurement.status vocabulary (lanesight_core/models/shot.py) so the writer
+-- stores it with ONE documented rename and no lossy mapping:
+--   engine 'ok'                 -> 'measured'            (fully measured — renamed for clarity in an outcome table)
+--   engine 'low_confidence'     -> 'low_confidence'      (value produced, below the confidence floor)
+--   engine 'best_effort'        -> 'best_effort'         (value produced with caveats, e.g. DEC-122 §7c foul->pins avg)
+--   engine 'calibrated_estimate'-> 'calibrated_estimate' (labeled estimate, not a raw measurement — DEC honesty)
+--   engine 'unavailable'        -> 'unavailable'         (not measured; value IS NULL)
+-- All non-'unavailable' statuses carry a value (enforced by analysis_metric_outcome_value_chk below).
 do $$ begin
-  create type public.metric_outcome_status as enum ('measured', 'best_effort', 'unavailable');
+  create type public.metric_outcome_status as enum
+    ('measured', 'best_effort', 'low_confidence', 'unavailable', 'calibrated_estimate');
 exception when duplicate_object then null; end $$;
+-- If a prior (narrower) version of the enum already exists, widen it idempotently (ADD VALUE is a no-op if present).
+alter type public.metric_outcome_status add value if not exists 'low_confidence';
+alter type public.metric_outcome_status add value if not exists 'calibrated_estimate';
 
 do $$ begin
   create type public.stage_outcome_status as enum ('ok', 'failed', 'skipped');
@@ -74,7 +86,9 @@ create table if not exists public.analysis_metric_outcome (
   camera_group   text,                         -- coarser grouping for DEC-118 support buckets
   context        jsonb,                        -- snapshot {device, os, fps, width, height, resolution, source} at attempt time
   constraint analysis_metric_outcome_attempt_metric_uniq unique (attempt_id, metric_key),
-  constraint analysis_metric_outcome_value_chk check (status = 'unavailable' or value is not null or metric_key is not null)
+  -- Honesty invariant (DEC-122 / CLAUDE.md): unavailable => no value; any other status => a value is present.
+  constraint analysis_metric_outcome_value_chk check (
+    (status = 'unavailable' and value is null) or (status <> 'unavailable' and value is not null))
 );
 create index if not exists ame_attempt_idx       on public.analysis_metric_outcome (attempt_id);
 create index if not exists ame_metric_engine_idx on public.analysis_metric_outcome (metric_key, engine, engine_version);
@@ -148,17 +162,22 @@ insert into public.metric_catalog (metric_key, capture_mode, unit, required_stag
   ('axis_rotation',       'shot', 'deg',   array['ball_track','rev'],                     'lanesight-cv-0.6.0', 'Axis rotation',               32),
   ('axis_tilt',           'shot', 'deg',   array['ball_track','rev'],                     'lanesight-cv-0.6.0', 'Axis tilt',                   33),
   ('pap',                 'shot', 'in',    array['ball_track','rev'],                     'lanesight-cv-0.6.0', 'PAP',                         34),
+  -- Form metrics mirror form/analyze.py FORM_P1 exactly (key + unit); kept in sync by
+  -- tests/test_metric_catalog_seed.py (fails if the seed and the engine catalogs drift).
   ('pushaway_time',       'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Pushaway time',               50),
   ('backswing_time',      'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Backswing time',              51),
   ('downswing_time',      'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Downswing time',              52),
   ('release_time',        'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Release time',                53),
   ('swing_time',          'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Swing time',                  54),
   ('approach_time',       'form', 's',     array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Approach time',               55),
-  ('rhythm_ratio',        'form', 'ratio', array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Rhythm ratio',                56),
-  ('backswing_height_rel','form', 'ratio', array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Backswing height',            57),
-  ('drift_boards',        'form', 'board', array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Drift',                       58),
-  ('slide_length',        'form', 'ft',    array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Slide length',                59),
-  ('timing_at_slide',     'form', 's',     array['pose','swing_events','delivery_isolation'], 'lanesight-cv-0.6.0', 'Timing at slide',         60)
+  ('step_count',          'form', 'count', array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Step count',                  56),
+  ('ball_start_step',     'form', 'index', array['pose','swing_events','delivery_isolation'], 'lanesight-cv-0.6.0', 'Ball-start step',         57),
+  ('rhythm_ratio',        'form', 'ratio', array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Rhythm ratio',                58),
+  ('finish_hold',         'form', 's',     array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Finish hold',                 59),
+  ('backswing_height_rel','form', 'ratio', array['pose','swing_events'],                  'lanesight-cv-0.6.0', 'Backswing height',            60),
+  ('drift_boards',        'form', 'board', array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Drift',                       61),
+  ('timing_at_slide',     'form', 's',     array['pose','swing_events','delivery_isolation'], 'lanesight-cv-0.6.0', 'Timing at slide',         62),
+  ('slide_length',        'form', 'inch',  array['pose','delivery_isolation'],            'lanesight-cv-0.6.0', 'Slide length',                63)
 on conflict (metric_key, capture_mode) do update set
   unit = excluded.unit, required_stages = excluded.required_stages, introduced_in = excluded.introduced_in,
   display_name = excluded.display_name, sort_order = excluded.sort_order, is_active = true;
@@ -177,10 +196,14 @@ select
   coalesce(o.camera_view, 'unknown')                                         as camera_view,
   date_trunc('week', o.created_at)                                           as week,
   count(*)                                                                   as attempts,
-  count(*) filter (where o.status in ('measured', 'best_effort'))            as measured,
+  count(*) filter (where o.status = 'measured')                              as measured,
   count(*) filter (where o.status = 'best_effort')                           as best_effort,
+  count(*) filter (where o.status = 'low_confidence')                        as low_confidence,
+  count(*) filter (where o.status = 'calibrated_estimate')                   as calibrated_estimate,
   count(*) filter (where o.status = 'unavailable')                           as unavailable,
-  round(count(*) filter (where o.status in ('measured', 'best_effort'))::numeric
+  -- success = produced ANY value (status <> unavailable). Granular columns above let the dashboard compute a
+  -- stricter "measured-only" rate when needed.
+  round(count(*) filter (where o.status <> 'unavailable')::numeric
         / nullif(count(*), 0), 3)                                            as success_rate
 from public.analysis_metric_outcome o
 join ops.attempt a on a.id = o.attempt_id and a.is_staged = false
