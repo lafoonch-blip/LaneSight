@@ -146,13 +146,42 @@ def geomfree_avg(M):
     exists and is physically plausible for a thrown ball (step 7d honesty gate) — never a plausible-but-wrong
     number. Returns float mph or None."""
     v = (M or {}).get('speed_avg_foul_to_pins_mph')
-    if v is None:
+    if v is None or not _foul_observed(M):     # 7b: also require the foul crossing to be observed, not extrapolated
         return None
     try:
         v = float(v)
     except (TypeError, ValueError):
         return None
     return v if (np.isfinite(v) and _GF_MIN_MPH <= v <= _GF_MAX_MPH) else None
+
+
+FOUL_OBS_MAX_FT = 6.0   # the foul->pins average needs the ball tracked near the foul line (Z≈0). Beyond this the
+#                         foul-crossing TIME is extrapolated from mid-lane and the average is untrustworthy —
+#                         DEC-122 step 7b honesty gate, calibrated on the 11/1 set: accurate clips observe the foul
+#                         at track_first_ft ∈ [-2.3, +0.7] ft; IMG_8970 (reads +7.09 mph wrong) first tracks the
+#                         ball 32 ft downlane. Withholding it there removes the only plausible-but-wrong speed.
+
+
+def _foul_observed(M):
+    """True when the ball was actually tracked near the foul line, so t_foul is observed, not extrapolated."""
+    z0 = (M or {}).get('track_first_ft')
+    return z0 is not None and z0 <= FOUL_OBS_MAX_FT
+
+
+def _lane_ball_score(T):
+    """DEC-122 step 7b: score a detected lane by how much its linked track looks like the lane the BALL actually
+    rolled down — a long, many-point path whose lateral position stays WITHIN the lane edges. This beats raw
+    u-span (the old rule), which can lock onto a neighbouring lane or the ball return when the camera sits behind
+    it with two symmetric lanes in view. Returns 0 when the track isn't a ball-on-this-lane path (frac is the
+    ball's lateral position in [0,1] across the lane; link() already smooths it)."""
+    if not T or len(T) < 5:
+        return 0.0
+    fr = np.array([c.get('frac', 0.5) for c in T], float)
+    in_lane = float(np.mean((fr > -0.15) & (fr < 1.15)))     # share of points within the (slightly padded) edges
+    span = float(T[-1]['u'] - T[0]['u'])
+    if in_lane < 0.5 or span <= 0:                           # ball not on this lane / not travelling downlane
+        return 0.0
+    return len(T) * in_lane * span
 
 
 def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
@@ -315,21 +344,35 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         return _unsupported_view_record(video, S, vinfo, context, out_prefix, handed, stage_report=stages)
     bcache = out_prefix + '_blobs.pkl'
     best = None
+    lane_fail = None            # DEC-122 step 7b: remember a per-lane extract failure so all-lanes-fail -> partial
     for lane in G['lanes']:
-        with _stage('extract_blobs_s'):
-            if os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
-            else: B = extract_blobs(video, S, lane, vp, log=log)
+        try:
+            with _stage('extract_blobs_s'):
+                if os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
+                else: B = extract_blobs(video, S, lane, vp, log=log)
+        except AnalysisFailure as af:
+            # DEC-122 step 7b: a lane whose search region is degenerate (LANE_GEOMETRY_UNUSABLE from a far-off VP)
+            # must not crash the whole analysis — skip it and try the other detected lanes. Only if EVERY lane
+            # fails do we return the coded partial below.
+            lane_fail = af
+            log(f'lane candidate skipped ({af.code}); trying the next detected lane')
+            continue
         with _stage('link_s'):
-            T = link(candidates(B, lane, vp), vp)
-        span = T[-1]['u'] - T[0]['u'] if T else 0
-        if best is None or span > best[0]: best = (span, lane, T, B)
-    if best is None:
-        reason = 'lane not detected: lane edges/foul line not found in the stabilized background'
-        _mark('lane', reason_code='LANE_NOT_DETECTED', reason=reason, failed_stage='lane',
+            C = candidates(B, lane, vp)
+            T = link(C, vp)
+        score = _lane_ball_score(T)        # 7b: pick the lane the BALL travels down, not just the longest span
+        if best is None or score > best[0]: best = (score, lane, T, B)
+    if best is None or best[0] <= 0:
+        # Either no lane produced a search region (all raised) or none produced a ball-on-lane track.
+        code = getattr(lane_fail, 'code', None) or 'LANE_NOT_DETECTED'
+        reason = (str(lane_fail) if lane_fail else
+                  'lane not detected: lane edges/foul line not found in the stabilized background')
+        _mark('lane' if code != 'BALL_TRACK_NOT_FOUND' else 'ball_track', reason_code=code, reason=reason,
+              failed_stage=getattr(lane_fail, 'stage', 'lane'),
               diagnostics={'candidates_tried': len(G.get('lanes') or [])})
-        log('LANE_NOT_DETECTED: partial result — all metrics unavailable')
-        return _no_metrics_record(video, S, reason, 'lane', stages, out_prefix, handed, context,
-                                  reason_code='LANE_NOT_DETECTED')
+        log(f'{code}: partial result — all metrics unavailable')
+        return _no_metrics_record(video, S, reason, getattr(lane_fail, 'stage', 'lane'), stages, out_prefix,
+                                  handed, context, reason_code=code)
     _, lane, T, B = best
     # Record which lane was selected among those detected (transparency — a mounted down-lane POV between two
     # lanes can lock onto the wrong one): the chosen lane's lateral centre at the foul line + the detected count.
@@ -549,9 +592,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'early-lane (release) speed, front ~4–24 ft; best effort until the DEC-065 pose solver anchors the near-lane Z-scale (today it still rides the impact-anchored 2-point homography)', status='best_effort' if M.get('ball_speed_mph') is not None else None),
         m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
-        m('speed_avg_foul_to_pins', M.get('speed_avg_foul_to_pins_mph'), 'mph', 0.7,
-          'full-lane average, foul_cross -> first head-pin contact (59.44 ft); DEC-064/DEC-112 TRUTH-comparable (matches Shayne\'s foul->pin labels). Needs the ball tracked to the pins.',
-          status='best_effort' if M.get('speed_avg_foul_to_pins_mph') is not None else None),
+        m('speed_avg_foul_to_pins', M.get('speed_avg_foul_to_pins_mph') if _foul_observed(M) else None, 'mph', 0.7,
+          'full-lane average, foul_cross -> first head-pin contact (59.44 ft); DEC-064/DEC-112 TRUTH-comparable (matches Shayne\'s foul->pin labels). Needs the ball tracked to the pins.'
+          if _foul_observed(M) else
+          f'Not measured — the ball was first tracked {round(M.get("track_first_ft") or 0, 1)} ft downlane, so the '
+          f'foul-line crossing is extrapolated and the full-lane average would be unreliable (DEC-122 step 7b).',
+          status='best_effort' if (M.get('speed_avg_foul_to_pins_mph') is not None and _foul_observed(M)) else None),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),
         m('board_at_7ft', M.get('board_at_7ft'), 'board', lat_c if M['track_first_ft'] < 6 else 0.3),

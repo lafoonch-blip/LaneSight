@@ -22,6 +22,41 @@ The sections below are the EARLIER (superseded) framing, kept for history.
 
 ---
 
+## 7b IMPLEMENTATION (2026-11-02) — contact sheet, lane-selection-from-the-ball, foul-observation honesty gate
+Overlay contact sheet for all 18 clips: `CAMERA_OVERLAY_CONTACT_SHEET_2026-11-02.png` (lane edges per detected
+lane, foul line, ball track + candidate blobs; the mounted-POV clips show the ball return + balls filling the
+lower third and a near-parallel-edge / far-off VP). Three engine changes (pipeline.py), all truth-preserving:
+1. **Crash fix (DEC-122):** `extract_blobs` raising `LANE_GEOMETRY_UNUSABLE` for a degenerate lane used to crash
+   the whole analysis inside the lane-selection loop. Now a failing lane is SKIPPED (try the next); only if every
+   detected lane fails do we return a coded partial. Converts 8972/8976/8978/8979 from hard failures to partials.
+2. **Lane-selection-from-the-ball:** pick the lane whose linked track looks like the lane the BALL rolled down —
+   many points, long u-span, lateral `frac` staying WITHIN the lane edges (`_lane_ball_score`) — instead of raw
+   u-span, which could lock onto a neighbour / the ball return when two symmetric lanes are in view.
+3. **Foul-observation honesty gate (7d):** the foul->pins average is withheld unless the ball was actually tracked
+   near the foul line (`track_first_ft <= 6 ft`); beyond that the foul-crossing TIME is extrapolated from mid-lane
+   and the average is untrustworthy. Calibrated on this set: accurate clips observe the foul at track_first_ft
+   ∈ [-2.3, +0.7] ft; IMG_8970 first tracks the ball **32 ft** downlane and read **+7.09 mph wrong** — now withheld.
+
+**Before → after (foul->pins vs truth, 0.5 mph gate):**
+| | accurate (≤0.5) | wrong (>0.5) | hard crash | honest unavailable/partial |
+|---|---|---|---|---|
+| **before** | 3 (8964, 8969, 8981) | **2** (8968 −0.72, **8970 +7.09**) | **4** (8972/8976/8978/8979) | 9 |
+| **after**  | 3 (8964, 8969, 8981) | **1** (8968 −0.71) | **0** | 14 |
+
+**Per-camera-group coverage (after):** angled-from-side 0/1; behind-ball-return-offset 2/6 accurate + 0 wrong;
+lower/wider 1/4 accurate + 1 wrong (8968); centered-mounted-POV 0/7 (all honest unavailable/partial). The
+mounted-POV group is genuinely hard (degenerate near-parallel geometry, pale/no wood, unfindable far pins) — now
+honest partials, never a crash or a wrong number.
+
+**Gate status:** the 7 truth-gate clips stay in tolerance (8751 −0.17, 8752 −0.15, 8753 −0.01, 8754 −0.25, 8964
+−0.29, 8969 −0.35, 8981 +0.39) ✅. The "0/18 outside 0.5" gate has **one residual: IMG_8968 (−0.71)** — a clean
+132-point track that observes the foul, 0.21 over tolerance, indistinguishable at runtime from 8969 (−0.35, same
+framing). It is a genuine accuracy limit on the lower/wider framing, NOT a plausible-but-wrong fabrication; the
+dangerous fabrication (8970) is eliminated. No safe runtime signal separates 8968 from the accurate clips, so it
+cannot be withheld without also killing good measurements — closing it needs geometry-accuracy work, not a gate.
+
+---
+
 Shayne labeled 18 shot clips recorded 2026-11-01 from FOUR deliberately-varied camera positions
 (`validation/labels/speed_truth_1101.json` + `validation/speed_truth_1101_labels.json` for the group tags).
 Truth speed = 59.44 ft / ((first_pin_contact_frame − foul_cross_frame) / fps). Ran the 0.7.1 engine
