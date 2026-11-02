@@ -52,10 +52,6 @@ private nonisolated(unsafe) let LANE_IN: Float = 41.5
 private nonisolated(unsafe) let THR_L_NOMINAL: Float = 165
 private nonisolated(unsafe) let THR_MIN: Float = 25
 private nonisolated(unsafe) let THR_MAX: Float = 55
-// Pin-fall visible-motion latency: time from ball→pin contact to the pins moving enough to register as a
-// motion spike. The on-device detector sees pin MOTION, so ball-contact = spike − PIN_FALL_S. ~0.15 s ≈ 9
-// frames at 60 fps (physical pin topple); measured +0.17/+0.18 s on IMG_8751/8754.
-private nonisolated(unsafe) let PIN_FALL_S: Double = 0.15
 
 enum OnDeviceTracker {
 
@@ -98,7 +94,7 @@ enum OnDeviceTracker {
         // 8751/8754). The lane far extent is NOT the pin row (the ball tracks past it; the true pin depth needs the
         // gated metric plane), so a trajectory extrapolation undershoots — only used as a fallback when no spike.
         let tImpact: Double
-        if let it = track.impactT { tImpact = it - PIN_FALL_S }
+        if let it = track.impactT { tImpact = it }   // ball-masked pin-motion ≈ true contact (no pin-fall offset)
         else {
             // No pin-motion spike (e.g. a weak strike on IMG_8752). Fall back to the ball's FARTHEST-down-lane
             // tracked point (max u = nearest the pins), mirroring the server's `far = track[argmax(u)]`. This is
@@ -169,11 +165,7 @@ enum OnDeviceTracker {
         var result = BallTrack(points: pts, framesScanned: scanned, candidateFrames: candFrames,
                                seconds: CFAbsoluteTimeGetCurrent() - t0)
         if let first = pts.first {
-            // Bound the pin-motion search to shortly after the ball's LAST tracked point (≈ at the pins), so it
-            // can't lock onto a spurious later motion in the pit / a ball return / the next rack (IMG_8752 fired
-            // ~7 s late otherwise). The ball cannot strike the pins long after it was last seen approaching them.
-            result.impactT = detectImpact(url: url, lane: lane, vpY: vpY, foulY: foulY,
-                                          afterT: first.t, ballEndT: pts.last!.t, rot: rot)
+            result.impactT = detectImpact(url: url, track: pts, lane: lane, vpY: vpY, afterT: first.t, rot: rot)
         }
         return result
     }
@@ -278,64 +270,91 @@ enum OnDeviceTracker {
         return l
     }
 
-    /// Pin-deck arrival = t_impact. Watches the far quarter of the lane (where the pins stand); the first
-    /// sustained motion spike there after the ball is rolling is the ball reaching the pins (cf. cv/track.py
-    /// detect_impact, simplified for a tripod clip: reference = median of the first frames, no warp).
-    nonisolated private static func detectImpact(url: URL, lane: ODDetectedLane, vpY: Float, foulY: Float, afterT: Double, ballEndT: Double = .infinity, rot: ODRotation = .r0) -> Double? {
-        let rTop = max(0, Int(vpY) + 5), rBot = Int(vpY + 0.30 * (foulY - vpY))
-        guard rBot > rTop + 8 else { return nil }
-        let (xaF, xbF) = laneX(lane, Float(rBot)); let padX = 0.5 * (xbF - xaF)
-        let cL = max(0, Int(xaF - padX)), cR = Int(xbF + padX)
-        guard cR > cL + 8 else { return nil }
+    /// Pin-deck arrival = t_impact. Faithful port of cv/track.py detect_impact (tripod: no per-frame warp): the
+    /// ROI is a window around the ball's FARTHEST tracked point (≈ the pin deck); for each frame the diff-vs-
+    /// reference is measured in a band JUST BEYOND the ball's top (where the pins it is about to hit stand),
+    /// tracking the ball frame-by-frame so the measurement MASKS the ball itself and sees only the pins move.
+    /// With the ball masked, a 5σ sustained spike is genuine pin motion (a weak strike like IMG_8752 registers
+    /// without the ball's own motion false-triggering). The ball cannot strike before it arrives, so a hotness
+    /// that fires BEFORE the ball entered the ROI (t_imp < t_enter) is an early reflection → defer to far.t;
+    /// otherwise a sustained hotness IS the contact (do NOT drag it to a far point sitting past the pins).
+    nonisolated private static func detectImpact(url: URL, track: [TrackPoint], lane: ODDetectedLane,
+                                                 vpY: Float, afterT: Double, rot: ODRotation = .r0) -> Double? {
+        let pts = track.sorted { $0.t < $1.t }
+        guard pts.count >= 4 else { return nil }
+        func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
+        let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
+        let farD = expDiam(lane, far.contactRow)
+        let yA = max(0, Int(far.contactRow - 4 * farD)), yB = Int(far.contactRow + 4 * farD)
+        let (xaF, xbF) = laneX(lane, far.contactRow); let padX = 0.4 * (xbF - xaF)
+        let xA = max(0, Int(xaF - padX)), xB = Int(xbF + padX)
+        guard yB > yA + 8, xB > xA + 8 else { return nil }
+        let roiW = xB - xA, roiH = yB - yA
+        // t_enter: first track time the ball's top enters the ROI (ct − D < yB)
+        var tEnter = far.t - 0.5
+        for p in pts where Double(p.contactRow) - Double(expDiam(lane, p.contactRow)) < Double(yB) { tEnter = p.t; break }
+        // ball interpolation arrays
+        let tt = pts.map { Double($0.t) }, cxA = pts.map { $0.cx }, ctA = pts.map { $0.contactRow }
+        func ballAt(_ t: Double) -> (Float, Float) {
+            var k = 1; while k < tt.count && tt[k] < t { k += 1 }; k = min(max(k, 1), tt.count - 1)
+            let a = Float(min(max((t - tt[k-1]) / max(tt[k]-tt[k-1], 1e-6), 0), 1))
+            return (cxA[k-1] + a * (cxA[k]-cxA[k-1]), ctA[k-1] + a * (ctA[k]-ctA[k-1]))
+        }
         let asset = AVURLAsset(url: url)
         guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
         let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
-        let bw = cR - cL, bh = rBot - rTop
-        var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(Double, Float)] = []
+        var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(t: Double, v: Float)] = []
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
-            autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
-            guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
-            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
-            CVPixelBufferLockBaseAddress(px, .readOnly)
-            let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
-            var band = [Float](repeating: 0, count: bw * bh)
-            if let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) {
-                for yy in 0..<bh { let y = rTop + yy; if y < 0 || y >= H { continue }
-                    for xx in 0..<bw { let x = cL + xx; if x < 0 || x >= W { continue }
-                        let p = y * rb + x * 4; band[yy * bw + xx] = Float(max(base[p], base[p + 1], base[p + 2])) } }
-            }
-            CVPixelBufferUnlockBaseAddress(px, .readOnly)
-            if refs.count < 10 { refs.append(band) }
-            else {
-                if ref == nil {
-                    var r = [Float](repeating: 0, count: bw * bh); var col = [Float](repeating: 0, count: refs.count)
-                    for p in 0..<(bw * bh) { for k in 0..<refs.count { col[k] = refs[k][p] }; col.sort(); r[p] = col[col.count / 2] }
+            if Task.isCancelled { reader.cancelReading(); return nil }
+            autoreleasepool {
+                guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
+                let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+                if t < tEnter - 0.5 || t > far.t + 0.6 { return }
+                CVPixelBufferLockBaseAddress(px, .readOnly); defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
+                let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
+                guard let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return }
+                var roi = [Float](repeating: 0, count: roiW * roiH)
+                for yy in 0..<roiH { let y = yA + yy; if y < 0 || y >= H { continue }
+                    for xx in 0..<roiW { let x = xA + xx; if x < 0 || x >= W { continue }
+                        let p = y * rb + x * 4; roi[yy * roiW + xx] = Float(max(base[p], base[p+1], base[p+2])) } }
+                if t < tEnter - 0.05 { refs.append(roi); return }
+                if ref == nil, !refs.isEmpty {
+                    var r = [Float](repeating: 0, count: roiW * roiH); var col = [Float](repeating: 0, count: refs.count)
+                    for p in 0..<(roiW * roiH) { for k in 0..<refs.count { col[k] = refs[k][p] }; col.sort(); r[p] = col[col.count/2] }
                     ref = r
                 }
-                var acc: Float = 0; let rr = ref!
-                for p in 0..<(bw * bh) { acc += abs(band[p] - rr[p]) }
-                series.append((t, acc / Float(bw * bh)))
-            }
+                guard let rr = ref else { return }
+                // band JUST BEYOND the ball's top (toward the pins), tracking the ball → masks the ball itself
+                let (bx, by) = ballAt(t); let bd = expDiam(lane, by)
+                let r0 = max(0, Int(by - 2.2*bd) - yA), r1 = min(roiH, Int(by - 1.15*bd) - yA)
+                let c0 = max(0, Int(bx - 1.3*bd) - xA), c1 = min(roiW, Int(bx + 1.3*bd) - xA)
+                guard r1 > r0, c1 > c0 else { return }
+                var diffs: [Float] = []; diffs.reserveCapacity((r1-r0)*(c1-c0))
+                for yy in r0..<r1 { for xx in c0..<c1 { let p = yy*roiW + xx; diffs.append(abs(roi[p] - rr[p])) } }
+                diffs.sort(); let pct95 = diffs[min(diffs.count-1, Int(0.95 * Float(diffs.count)))]
+                series.append((t, pct95))
             }
         }
-        guard series.count > 10 else { return nil }
-        let quiet = series.filter { $0.0 < afterT }.map { $0.1 }
-        let base = quiet.isEmpty ? (series.map { $0.1 }.min() ?? 0) : quiet.reduce(0, +) / Float(quiet.count)
-        let sd = quiet.count > 2 ? (quiet.map { ($0 - base) * ($0 - base) }.reduce(0, +) / Float(quiet.count)).squareRoot() : base * 0.5 + 1
-        // 5σ/8 threshold: the on-device detector does NOT mask the ball in the pin ROI (the server does), so a
-        // lower threshold fires on the un-masked ball motion BEFORE it reaches the pins (regressed 8751/8754).
-        let thr = base + max(5 * sd, 8)
-        let peakT = series.max(by: { $0.1 < $1.1 })?.0 ?? 0
-        #if DEBUG
-        print("ONDEV: impact band rows[\(rTop)-\(rBot)] cols[\(cL)-\(cR)] frames=\(series.count) base=\(String(format: "%.1f", base)) sd=\(String(format: "%.1f", sd)) thr=\(String(format: "%.1f", thr)) peak=\(String(format: "%.1f", series.map { $0.1 }.max() ?? 0))@\(String(format: "%.2f", peakT))s afterT=\(String(format: "%.2f", afterT))")
-        #endif
+        guard series.count > 6 else { return nil }
+        // baseline + MAD over pre-arrival frames (server: E[:,0] < t_enter+0.6)
+        let pre = series.filter { $0.t < tEnter + 0.6 }.map { $0.v }
+        guard !pre.isEmpty else { return nil }
+        let med = pre.sorted()[pre.count/2]
+        let mad = pre.map { abs($0 - med) }.sorted()[pre.count/2]
+        let base = med, sd = 1.4826 * mad + 2
+        let thr = base + 5 * sd
+        var hotness: Double? = nil
         for k in 0..<(series.count - 3) {
-            if series[k].0 < afterT { continue }
-            if series[k].0 > ballEndT + 0.6 { break }     // not the shot's impact — a later pit/return/rack motion
-            if series[k].1 > thr && series[k..<min(k + 4, series.count)].filter({ $0.1 > thr }).count >= 2 { return series[k].0 }
+            if series[k].v > thr && series[k..<min(k+4, series.count)].filter({ $0.v > thr }).count >= 3 { hotness = series[k].t; break }
         }
-        return nil
+        guard let h = hotness else { return nil }
+        // clamp (DEC-117): a hotness BEFORE the ball entered the ROI is an early reflection → defer to far.t.
+        if Double(far.t) > h && h < tEnter { return Double(far.t) }
+        // Otherwise both estimates tend to OVERSHOOT the true contact — the pin-motion hotness by the pin-fall
+        // latency, the farthest tracked point by the ball continuing into the pit on a strike — so take the
+        // EARLIER of the two as the best contact estimate (recovers 8754's late hotness without re-overshooting).
+        return min(h, Double(far.t))
     }
 
     // MARK: foreground blobs — diff vs bg, threshold, 3x3 open, connected components (union-find)
