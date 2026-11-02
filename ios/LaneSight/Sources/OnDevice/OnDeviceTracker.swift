@@ -100,10 +100,13 @@ enum OnDeviceTracker {
         let tImpact: Double
         if let it = track.impactT { tImpact = it - PIN_FALL_S }
         else {
-            // No pin-motion spike (e.g. a weak strike on IMG_8752). Fall back to the ball's LAST tracked point,
-            // which — because the ball tracks TO/past the lane far extent (the near-pin region) — is ≈ ball-at-pins.
-            // (A trajectory extrapolation to lane.yFar undershoots: the ball passes yFar well before the pins.)
-            tImpact = pts.last!.t
+            // No pin-motion spike (e.g. a weak strike on IMG_8752). Fall back to the ball's FARTHEST-down-lane
+            // tracked point (max u = nearest the pins), mirroring the server's `far = track[argmax(u)]`. This is
+            // the turning point: once the ball contacts the pins it deflects/slows and its down-lane u stops
+            // increasing, so argmax(u) ≈ ball-at-pins — better than the last-by-time point, which can be the ball
+            // continuing into the pit.
+            let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
+            tImpact = far.t
         }
         let release = tFoulCross - 0.068                              // RELEASE_OFFSET_S (cv/metrics.py)
         let dt = tImpact - release
@@ -320,6 +323,8 @@ enum OnDeviceTracker {
         let quiet = series.filter { $0.0 < afterT }.map { $0.1 }
         let base = quiet.isEmpty ? (series.map { $0.1 }.min() ?? 0) : quiet.reduce(0, +) / Float(quiet.count)
         let sd = quiet.count > 2 ? (quiet.map { ($0 - base) * ($0 - base) }.reduce(0, +) / Float(quiet.count)).squareRoot() : base * 0.5 + 1
+        // 5σ/8 threshold: the on-device detector does NOT mask the ball in the pin ROI (the server does), so a
+        // lower threshold fires on the un-masked ball motion BEFORE it reaches the pins (regressed 8751/8754).
         let thr = base + max(5 * sd, 8)
         let peakT = series.max(by: { $0.1 < $1.1 })?.0 ?? 0
         #if DEBUG
