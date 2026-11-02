@@ -35,6 +35,7 @@ final class OnDeviceGateTests: XCTestCase {
                 "basis": body["basis"] as? String as Any,
                 "note": body["note"] as? String as Any,
                 "latency_s": perf["latency_s"] as? Double as Any,
+                "stage_ms": perf["stage_ms"] as? [String: Double] as Any,   // DEC-117 per-stage breakdown
                 "peak_mem_mb": perf["peak_mem_mb"] as? Double as Any,
                 "battery_delta": perf["battery_delta"] as? Double as Any,
                 "thermal": perf["thermal_state"] as? String as Any,
