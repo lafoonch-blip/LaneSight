@@ -61,7 +61,10 @@ _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion'
 # the app's aliases back on read. Email is NEVER a profile column — it lives in auth (DEC-087 §3).
 _PROFILE_COLS = {'display_name', 'first_name', 'last_name', 'phone', 'handed', 'style', 'units', 'usbc_id',
                  'dob', 'delivery_style', 'approach_steps', 'form_baseline', 'location', 'is_staged',
-                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in'}
+                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in',
+                 # DEC-123 F&F: account test phase + the F&F consent accepted (owner/staged forced to 'dev'
+                 # by migration 036's guard trigger; mirrored in MemoryStore.put_profile).
+                 'cohort', 'ff_consent_version', 'ff_consent_at'}
 
 # Bowler-level grip + PAP, stored in inches (DEC-074/087). Coerced to float on the way in.
 _PROFILE_NUMERIC = ('grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in')
@@ -90,7 +93,7 @@ def _profile_in(data: dict) -> dict:
         if d.get(k) is not None:
             out[k] = float(d[k])
     for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location',
-              'is_staged', 'staged_kind'):
+              'is_staged', 'staged_kind', 'cohort', 'ff_consent_version', 'ff_consent_at'):
         if d.get(k) is not None:
             out[k] = d[k]
     if 'form_baseline' in d and d['form_baseline'] is None:
@@ -227,6 +230,13 @@ class MemoryStore:
             dn = _compose_display_name(p.get('first_name'), p.get('last_name'))
             if dn:
                 p['display_name'] = dn
+        # Mirror migration 036's cohort default + guard trigger: cohort defaults to 'dev', and the owner and
+        # every staged account are ALWAYS 'dev' whatever the client sent (DEC-123).
+        from lanesight_core.owner import OWNER_USER_ID
+        if not p.get('cohort'):
+            p['cohort'] = 'dev'
+        if p.get('is_staged') or user_id == OWNER_USER_ID:
+            p['cohort'] = 'dev'
         self.profiles[user_id] = p
         return _profile_out(p)
 
@@ -529,9 +539,14 @@ class MemoryStore:
         and start at their defaults."""
         d = dict(data or {})
         tags = d.get('tags')
+        # app_phase is authoritative from the author's account cohort (DEC-124) — mirrors migration 036's
+        # feedback_set_app_phase trigger: a profile cohort wins over whatever the client sent; with no profile
+        # the client value (or 'dev') stands. Keeps Shayne's/staged data from ever mixing into F&F/beta/live.
+        _prof = self.profiles.get(user_id) or {}
+        _phase = _prof.get('cohort') or d.get('app_phase') or 'dev'
         row = dict(
             id=d.get('id') or _new_id(), user_id=user_id, user_ref=d.get('user_ref'),
-            source=d.get('source') or 'general', app_phase=d.get('app_phase') or 'dev',
+            source=d.get('source') or 'general', app_phase=_phase,
             app_version=d.get('app_version'), core_version=d.get('core_version'),
             rules_version=d.get('rules_version'), formula_version=d.get('formula_version'),
             session_id=d.get('session_id'), shot_id=d.get('shot_id'),
@@ -1000,7 +1015,18 @@ class PgStore(MemoryStore):
                       'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
                       'text', 'context', 'diagnostics')
 
+    def _profile_cohort(self, user_id):
+        """The author's account cohort (dev|ff|beta|live), or None if there's no profile row yet."""
+        rows = self._get('profiles', f'user_id=eq.{user_id}&select=cohort')
+        return (rows[0].get('cohort') if rows else None) or None
+
     def add_feedback(self, user_id, data):
+        # Resolve app_phase from the account cohort here too (DEC-124), so the row returned to the client
+        # matches what migration 036's feedback_set_app_phase trigger will stamp in the DB.
+        data = dict(data or {})
+        cohort = self._profile_cohort(user_id)
+        if cohort:
+            data['app_phase'] = cohort
         row = super().add_feedback(user_id, data)      # mirror in memory + normalize
         self._post('feedback', {k: row.get(k) for k in self._FEEDBACK_COLS})
         return row
