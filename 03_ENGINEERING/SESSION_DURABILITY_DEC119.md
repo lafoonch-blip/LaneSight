@@ -28,8 +28,13 @@ Driven on the connected device with `LS119` console telemetry at each state tran
    (Home showed the session instead of Home). Fix: the push is transient — RootTabs pops it when you leave its tab.
 
 ### Environment caveats (not app bugs)
-- A free/personal signing cert can't be verified **offline**, so the OS refuses to *launch* the dev build in airplane
-  mode (the "lose connection mid-session → reconnect → resume" path was tested with the app already running).
+- **Signing — must use Shayne's PAID Apple Developer team.** The build was tested on a free/personal signing cert,
+  which iOS can only verify **online**: the OS refuses to *launch* the app while offline (airplane mode), so the
+  **offline force-quit → relaunch → resume** test is still PENDING. It can only be run once the app is signed with
+  the paid Apple Developer team (paid certs launch offline). The in-session "lose connection → reconnect → resume"
+  path WAS validated (app already running when connectivity dropped); the untested gap is specifically relaunching
+  the app from cold while still offline. Re-sign with the paid team and run: airplane on → record → force-quit →
+  relaunch (should launch and show the resume prompt) → the pending clip uploads when back online.
 - **≥30 min warm-background prompt**: the threshold logic is unit-tested (`shouldPromptResume`) and the prompt UI is
   validated via cold launch; the real-time warm 30-min trigger is a manual step (background 30 min, foreground).
 

@@ -8,16 +8,49 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 core="$root/lanesight-core"
 cd "$core"
-# shellcheck disable=SC1091
-[ -f .venv/bin/activate ] && source .venv/bin/activate
+
+# Resolve an explicit venv Python that has pytest. Bare `python3` is Xcode's on this machine (no pytest), which
+# blocked every commit made outside an activated venv. Priority:
+#   1. this worktree's own lanesight-core/.venv
+#   2. $LANESIGHT_VENV override
+#   3. any other git worktree's lanesight-core/.venv (e.g. the main checkout — venvs aren't shared across worktrees)
+find_python() {
+  if [ -x "$core/.venv/bin/python" ]; then echo "$core/.venv/bin/python"; return 0; fi
+  if [ -n "${LANESIGHT_VENV:-}" ] && [ -x "$LANESIGHT_VENV/bin/python" ]; then echo "$LANESIGHT_VENV/bin/python"; return 0; fi
+  local wt cand
+  while IFS= read -r wt; do
+    cand="$wt/lanesight-core/.venv/bin/python"
+    [ -x "$cand" ] && { echo "$cand"; return 0; }
+  done < <(git worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2}')
+  return 1
+}
+
+if ! PY=$(find_python); then
+  echo "[pre-commit] ERROR: no Python venv found (looked for lanesight-core/.venv/bin/python in this and every"
+  echo "             other git worktree). The hook needs a venv with pytest — it won't fall back to a bare"
+  echo "             system python3 (that's Xcode's here and has no pytest)."
+  echo "  Create one:  cd \"$core\" && python3.12 -m venv .venv && source .venv/bin/activate && pip install -e . pytest"
+  echo "  Or point at an existing venv:  export LANESIGHT_VENV=/path/to/venv"
+  echo "  Or bypass this one commit:  git commit --no-verify"
+  exit 1
+fi
+if ! "$PY" -c 'import pytest' >/dev/null 2>&1; then
+  echo "[pre-commit] ERROR: the resolved venv python has no pytest installed:"
+  echo "             $PY"
+  echo "  Install it:  \"$PY\" -m pip install pytest   (or recreate lanesight-core/.venv)"
+  echo "  Or bypass this one commit:  git commit --no-verify"
+  exit 1
+fi
+echo "[pre-commit] python: $PY"
+
 tier=$(ops/tier_for_diff.sh HEAD 2>/dev/null || echo quick)   # staged diff (no head ref -> --cached)
 echo "[pre-commit] DEC-113 tier: $tier"
 echo "[pre-commit] Quick: pytest"
-python3 -m pytest -q >/tmp/ls_precommit_pytest.log 2>&1 || { echo "[pre-commit] pytest FAILED:"; tail -15 /tmp/ls_precommit_pytest.log; exit 1; }
+"$PY" -m pytest -q >/tmp/ls_precommit_pytest.log 2>&1 || { echo "[pre-commit] pytest FAILED:"; tail -15 /tmp/ls_precommit_pytest.log; exit 1; }
 echo "[pre-commit] pytest OK"
 if [ "$tier" = "standard" ]; then
   echo "[pre-commit] Standard: IMG_8751-54 regression (set LANESIGHT_SKIP_HOOK=1 to bypass)"
-  LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 python3 ops/regression_tier.py \
+  LANESIGHT_FFMPEG_DECODE=1 LANESIGHT_FRAME_CACHE_MB=5500 "$PY" ops/regression_tier.py \
     || { echo "[pre-commit] regression FAILED — commit blocked (see ESCALATE note)"; exit 1; }
 fi
 echo "[pre-commit] $tier tier passed"
