@@ -49,6 +49,58 @@ def _user_ref(user_id):
     return hmac.new(_USER_REF_SALT.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
 
 
+# DEC-122 §6: map the engine's Measurement.status vocabulary to metric_catalog's metric_outcome_status enum.
+# 'ok' reads as 'measured' in an outcome table; the rest pass through. value-presence is the source of truth:
+# no value -> 'unavailable' (honest; satisfies analysis_metric_outcome_value_chk), regardless of a stray status.
+_OUTCOME_STATUS = {'ok': 'measured', 'measured': 'measured', 'best_effort': 'best_effort',
+                   'low_confidence': 'low_confidence', 'calibrated_estimate': 'calibrated_estimate',
+                   'unavailable': 'unavailable'}
+
+
+def _metric_cell(meas):
+    """Normalise one metric (a Measurement dict {value,status,...} OR a raw scalar from the on-device payload)
+    into (status, value, confidence, reason_detail) for an analysis_metric_outcome row."""
+    if isinstance(meas, dict):
+        v, st, conf, note = meas.get('value'), meas.get('status'), meas.get('confidence'), meas.get('note')
+    else:
+        v, st, conf, note = meas, None, None, None
+    if v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
+        return 'unavailable', None, conf, note          # no usable numeric value -> honestly unavailable
+    return _OUTCOME_STATUS.get(st, 'measured'), float(v), conf, note
+
+
+def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, metrics, stage_report,
+                             camera_view=None, camera_group=None, context=None,
+                             reason_code=None, failed_stage=None):
+    """DEC-122 §6: build (metric_rows, stage_rows) for one analysis attempt. One metric row per EVERY catalog
+    metric for the capture mode (incl. the ones left unavailable); one stage row per entry in the stage report.
+    `reason_code`/`failed_stage` are the attempt-level cause, stamped on metrics that came out unavailable."""
+    from lanesight_core.cv.pipeline import _METRIC_CATALOG as _SHOT
+    from lanesight_core.form import FORM_P1 as _FORM
+    catalog = _SHOT if capture_mode == 'shot' else _FORM
+    metrics = metrics or {}
+    mrows = []
+    for key, unit in catalog:
+        st, v, conf, note = _metric_cell(metrics.get(key))
+        mrows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
+                      'capture_mode': capture_mode, 'metric_key': key, 'unit': unit, 'status': st, 'value': v,
+                      'confidence': conf, 'reason_detail': (str(note)[:500] if note else None),
+                      'reason_code': (reason_code if st == 'unavailable' else None),
+                      'failed_stage': (failed_stage if st == 'unavailable' else None),
+                      'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
+    srows = []
+    for stage, info in (stage_report or {}).items():
+        if not isinstance(info, dict):
+            continue
+        srows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
+                      'capture_mode': capture_mode, 'stage': stage,
+                      'status': info.get('status') if info.get('status') in ('ok', 'failed', 'skipped') else 'ok',
+                      'reason_code': info.get('reason_code'), 'duration_ms': info.get('duration_ms'),
+                      'diagnostics': info.get('diagnostics'),
+                      'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
+    return mrows, srows
+
+
 # Home Recent activity scope (DEC-055): only completed practice sessions, achievement unlocks, and
 # LaneSight tier (rank) changes. Anything else (e.g. personal_best score milestones, and never uploads)
 # is excluded from the feed. Enforced in both stores' list_activity.
@@ -386,6 +438,15 @@ class MemoryStore:
             r['user_ref'] = _user_ref(r.get('user_id'))
         self.analysis_attempts.append(r)
         return r
+
+    def log_outcomes(self, metric_rows, stage_rows):
+        """DEC-122 §6: in-memory sink for per-metric + per-stage outcome rows (tests + the memory backend)."""
+        if not hasattr(self, 'metric_outcomes'):
+            self.metric_outcomes = []
+        if not hasattr(self, 'stage_outcomes'):
+            self.stage_outcomes = []
+        self.metric_outcomes.extend(metric_rows or [])
+        self.stage_outcomes.extend(stage_rows or [])
 
     # ----------------------------------------------------------------- durable jobs (Part 3a)
     def save_job(self, row: dict):
@@ -1123,6 +1184,20 @@ class PgStore(MemoryStore):
             body['user_ref'] = _user_ref(body.get('user_id'))
         self._req('analysis_attempt', 'POST', body, prefer='return=minimal')
         return body
+
+    def log_outcomes(self, metric_rows, stage_rows):
+        """DEC-122 §6: write per-metric + per-stage outcome rows (migration 036). Best-effort — the caller
+        swallows errors so this can never fail an analysis. Upsert on the natural keys so a re-run of the same
+        attempt is idempotent. None-valued keys are dropped (unavailable rows carry no `value`, satisfying the
+        table's honesty check via the column default)."""
+        if metric_rows:
+            self._req('analysis_metric_outcome?on_conflict=attempt_id,metric_key', 'POST',
+                      [{k: v for k, v in r.items() if v is not None} for r in metric_rows],
+                      prefer='resolution=merge-duplicates,return=minimal')
+        if stage_rows:
+            self._req('analysis_stage_outcome?on_conflict=attempt_id,stage', 'POST',
+                      [{k: v for k, v in r.items() if v is not None} for r in stage_rows],
+                      prefer='resolution=merge-duplicates,return=minimal')
 
     def save_job(self, row: dict):
         """Part 3a: upsert the durable analysis_job row (PK=id). Lets the DB default created_at/updated_at on
