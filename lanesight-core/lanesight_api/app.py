@@ -1629,7 +1629,9 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
             mrows, srows = outcome_rows_from_record(
                 aid, 'iphone', row['algorithm_version'], mode, m, sr, context=ctx,
                 reason_code=(None if measured else row['failure_code']),
-                failed_stage=(None if measured else row['failure_stage']))
+                failed_stage=(None if measured else row['failure_stage']),
+                # DEC-126: the on-device engine has no ground truth, so its metrics are best_effort, not measured.
+                scalar_status='best_effort')
             st.log_outcomes(mrows, srows)
     except Exception as e:
         print(f'shadow attempt log skipped ({e})')

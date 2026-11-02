@@ -69,14 +69,16 @@ def _uniform_rows(rows):
     return [{k: r.get(k) for k in keys} for r in rows]
 
 
-def _metric_cell(meas):
+def _metric_cell(meas, scalar_status='measured'):
     """Normalise one metric (a Measurement dict {value,status,...} OR a raw scalar from the on-device payload)
-    into (status, value, confidence, reason_detail) for an analysis_metric_outcome row."""
+    into (status, value, confidence, reason_detail) for an analysis_metric_outcome row. `scalar_status` is the
+    status to assign a raw scalar that carries no status of its own — 'measured' for the server, 'best_effort'
+    for the on-device engine (DEC-126: no ground truth for the on-device path, so it never claims 'measured')."""
     if isinstance(meas, dict):
         v, st, conf, note = meas.get('value'), meas.get('status'), meas.get('confidence'), meas.get('note')
     else:
         v, st, conf, note = meas, None, None, None
-    mapped = _OUTCOME_STATUS.get(st, 'measured')
+    mapped = _OUTCOME_STATUS.get(st, scalar_status if st is None else 'measured')
     # Honesty invariant: an 'unavailable' metric carries NO value. The form engine marks unavailable metrics with
     # a 0.0 placeholder (not None), so map by STATUS first — else a 0.0 would slip through as a measured value and
     # an unavailable row would violate analysis_metric_outcome_value_chk (seen on live form attempts).
@@ -119,7 +121,7 @@ def _unavailable_reason(metric_key, meas, note, attempt_reason_code, attempt_fai
 
 def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, metrics, stage_report,
                              camera_view=None, camera_group=None, context=None,
-                             reason_code=None, failed_stage=None):
+                             reason_code=None, failed_stage=None, scalar_status='measured'):
     """DEC-122 §6: build (metric_rows, stage_rows) for one analysis attempt. One metric row per EVERY catalog
     metric for the capture mode (incl. the ones left unavailable); one stage row per entry in the stage report.
     `reason_code`/`failed_stage` are the attempt-level cause, stamped on metrics that came out unavailable."""
@@ -130,7 +132,7 @@ def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, m
     mrows = []
     for key, unit in catalog:
         meas = metrics.get(key)
-        st, v, conf, note = _metric_cell(meas)
+        st, v, conf, note = _metric_cell(meas, scalar_status)
         rc, fs = (None, None)
         if st == 'unavailable':
             rc, fs = _unavailable_reason(key, meas, note, reason_code, failed_stage)
