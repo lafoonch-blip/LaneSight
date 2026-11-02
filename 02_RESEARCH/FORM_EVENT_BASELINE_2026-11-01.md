@@ -1,6 +1,6 @@
 # Form event baseline + remaining-gap root causes (2026-11-01)
 Status: WORKING NOTES
-Version: 1.1
+Version: 1.2
 Last Updated: 2026-11-01
 Owner: Shayne (author: autonomous session)
 Scope: DEC-118 Form MVP metrics measured against Shayne's form labels; DEC-120 slide-stop fix; and the
@@ -58,6 +58,27 @@ are cause (b) — the combined-foot-speed signal — which needs per-step truth 
   with detector hints) is now in `validation/label_tasks/form_steps.json` → exports `form_steps_labels.json`.
   Once labeled, fix the foot-strike detector against per-plant truth (gate: every plant ±2 frames, count exact),
   likely a per-foot forward-position staircase (robust to the comb≈0 dropouts). Hold out IMG_8980 + future clips.
+
+**Update 2026-11-01 (per-plant labels landed; detector investigated, NOT yet at gate).** Shayne labeled every
+plant (`validation/form_steps_labels.json`): ALL approaches are 5 steps (no 6-step data); some early plants are
+off-frame → `null` (not scored), so the visible-plant count per clip is 8824:4, 8825:5, 8826:5, 8846:5, 8847:5,
+8848:5, 8980(held-out):3. Scoring harness: `examples/form_steps_baseline.py`.
+- **Root cause of the old detector found:** `_foot_strikes` used minima of the COMBINED `max(Rs,Ls)` — the
+  double-support moments BETWEEN plants, offset ~5 f early — not per-foot plants. A plant is one foot's own
+  speed dipping (foot at rest) while the other swings; plants alternate L,R,L,R,L. Direct inspection of 8847
+  confirms each labeled plant sits at a per-foot swing→stance transition.
+- **Three detectors tried vs per-plant truth** (combined-min; per-foot speed minima; per-foot position
+  staircase). Best was per-foot speed minima, but it still lands **2–9 frames off on multiple plants** and the
+  count is unstable (spurious dips split/merge steps): within ±2 f ≈ 0–3 of 5 per clip; held-out 8980 1/3.
+- **Why it's hard:** on this footage the MediaPipe foot landmarks jitter ±3–6 frames and the labeled contact
+  instant doesn't crisply align with any single feature (speed-min lands after contact; plateau-start before;
+  the offset isn't constant across clips). Side-view / far / small feet and 30 fps (8846) are worst.
+- **NOT shipped:** a detector still 5–9 f off on half the plants would not meet the ±2 f gate and could regress
+  the current counts — shipping it would violate accuracy-over-coverage. Kept the structural window fix only.
+- **Recommended path:** (1) higher-fidelity foot localization — crop each foot region and refine the contact
+  frame (sub-landmark), or a dedicated foot-contact signal — then re-fit the per-foot model; (2) or accept a
+  realistic ±3–4 f plant gate for phone pose and re-score; (3) more clips (incl. IMG_8980 held out) before
+  committing a change. The per-plant labels + harness are in the repo so this continues cleanly next session.
 
 ### 2b. E2 ball start — null on all 6
 - The bowling-wrist landmark (the current E2 cue) **does not move at the labeled pushaway onset** — its y is flat
