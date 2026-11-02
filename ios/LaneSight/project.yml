@@ -47,10 +47,17 @@ targets:
     sources:
       - path: Tests
         excludes:
-          - GateClips   # videos go in via the explicit resources entry below (avoid double-inclusion)
+          - GateClips        # videos go in via the explicit resources entry below (avoid double-inclusion)
+          - ParityFixtures   # plates/masks/golden go in via the explicit resources entry below
       # DEC-117 device-gate clips (local only; gitignored — never committed). Absent on other machines → the
       # gate test SKIPs. Comment this out if `xcodegen generate` can't find GateClips/.
       - path: Tests/GateClips
+        buildPhase: resources
+        optional: true
+      # DEC-117 lane-parity fixtures (local only; gitignored). Background plates (.bgra), the Python strict/loose
+      # masks (.u8) and the committed golden JSON for IMG_8751-54. Absent on other machines → OnDeviceLaneParityTests
+      # SKIPs. Regenerate with scratchpad/parity_gen.py.
+      - path: Tests/ParityFixtures
         buildPhase: resources
         optional: true
     dependencies:
