@@ -1131,7 +1131,10 @@ class PgStore(MemoryStore):
         return row
 
     def link_insight_feedback(self, insight_id, feedback_id):
-        self._post('feedback_insight_link', {'insight_id': insight_id, 'feedback_id': feedback_id})
+        # Idempotent: a re-link is a no-op via the (insight_id, feedback_id) unique constraint (migration 038).
+        self._req('feedback_insight_link?on_conflict=insight_id,feedback_id', 'POST',
+                  {'insight_id': insight_id, 'feedback_id': feedback_id},
+                  prefer='resolution=ignore-duplicates,return=minimal')
 
     _INSIGHT_RUN_COLS = ('id', 'started_at', 'finished_at', 'rows_considered', 'insights_created',
                          'insights_updated', 'model', 'tokens_in', 'tokens_out', 'cost_usd',

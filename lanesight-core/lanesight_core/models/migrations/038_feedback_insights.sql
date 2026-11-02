@@ -63,13 +63,19 @@ create trigger feedback_insight_updated before update on feedback_insight
 -- ---------------------------------------------------------------------------
 -- feedback_insight_link — many-to-many between an insight and the feedback rows that are its evidence.
 -- ---------------------------------------------------------------------------
+-- id is a surrogate PK (NOT the (insight_id, feedback_id) pair): feedback_id is ON DELETE SET NULL so that a
+-- link row survives the evidence feedback being purged — a PK column can't be null, so the pair can't be the
+-- PK. Uniqueness of the pair is a UNIQUE constraint instead (Postgres treats NULLs as distinct, so a nulled
+-- feedback_id never collides). Upserts target this unique constraint via `on_conflict=insight_id,feedback_id`.
 create table if not exists feedback_insight_link (
+  id           uuid primary key default gen_random_uuid(),
   insight_id   uuid not null references feedback_insight(id) on delete cascade,
   feedback_id  uuid references feedback(id) on delete set null,     -- keep the link row if the feedback is purged
   added_at     timestamptz not null default now(),
-  primary key (insight_id, feedback_id)
+  unique (insight_id, feedback_id)
 );
 create index if not exists feedback_insight_link_fb_idx on feedback_insight_link (feedback_id);
+create index if not exists feedback_insight_link_ins_idx on feedback_insight_link (insight_id);
 
 -- ---------------------------------------------------------------------------
 -- feedback_insight_run — audit log of each analyst run (cost + token accounting for the DEC-043 cap).
