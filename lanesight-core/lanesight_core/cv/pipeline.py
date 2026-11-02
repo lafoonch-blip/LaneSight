@@ -28,7 +28,7 @@ _METRIC_CATALOG = [
 ]
 
 
-def _unsupported_view_record(video, S, view_info, context, out_prefix, handed):
+def _unsupported_view_record(video, S, view_info, context, out_prefix, handed, stage_report=None):
     """Graceful 'no reliable data' ShotRecord for a view that can't yield lane metrics (side/approach/unknown):
     every metric `unavailable` with the camera reason, a `no_reliable_data` insight with the camera tip and no
     move, and capture_quality naming the view. Never fabricates a lane fit or a number."""
@@ -47,8 +47,30 @@ def _unsupported_view_record(video, S, view_info, context, out_prefix, handed):
         measurements=[m(name, None, unit, 0, tip) for name, unit in _METRIC_CATALOG],
         trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
         capture_quality={'view': view_info['view'], 'supported': False, 'far_lane': 'limited',
-                         'reason': tip, 'lane_center_frac': view_info.get('lane_center_frac')})
+                         'reason': tip, 'lane_center_frac': view_info.get('lane_center_frac')},
+        stage_report=stage_report)
     rec.insights = no_reliable_data_insight(tip)
+    return rec
+
+def _no_metrics_record(video, S, reason, stage, stages, out_prefix, handed, context, reason_code=None,
+                       far_lane='unavailable'):
+    """DEC-122: a COMPLETED analysis where an early stage (lane/foul/ball-track) failed so nothing downstream
+    could be measured — every metric `unavailable` with the stage + reason, plus the per-stage report. This is a
+    partial result, NOT a failed attempt: the video was readable and the code did not crash."""
+    try: fps = round(1 / float(np.median(np.diff(S['ts']))), 2)
+    except Exception: fps = None
+    rec = ShotRecord(
+        shot_id=(context or {}).get('shot_id', os.path.basename(out_prefix)),
+        handed=handed or 'R',
+        video=dict(file=os.path.basename(video), fps=fps,
+                   camera_motion_px=round(float(S['shift'].max()), 1) if S and 'shift' in S else None,
+                   reference_frame=int(S['ref']) if S and 'ref' in S else None),
+        events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
+        measurements=[m(name, None, unit, 0, f'Not measured — {reason} (stage: {stage})') for name, unit in _METRIC_CATALOG],
+        trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
+        capture_quality={'far_lane': far_lane, 'reason': reason, 'failed_stage': stage, 'reason_code': reason_code},
+        stage_report=stages)
+    rec.insights = no_reliable_data_insight(reason)
     return rec
 
 REV_SENSOR_FACTOR = 1.12        # video lane-rpm -> Ruby-equivalent (4-shot calibration; pending blind validation)
@@ -111,7 +133,7 @@ IMPACT_MISSED_TIP = ("Rev rate was measured. For speed and the lane read, keep t
 
 
 def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
-                          reason=None, impact_status='not_detected'):
+                          reason=None, impact_status='not_detected', stage_report=None):
     """Partial result when the impact-anchored depth scale isn't trustworthy (Shayne 2026-10-29, DEC-109/110):
     a single broken dependency must not throw away what doesn't depend on it. Rev rate (geometry-free) is
     reported as measured; every metric that rides the impact-anchored depth scale (all speeds, boards, angles,
@@ -145,7 +167,8 @@ def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed,
         context=context or {},
         capture_quality={'far_lane': 'limited', 'impact': impact_status, 'lane': chosen_lane, 'reason': reason,
                          'track_points': len(T),
-                         'track_last_t': round(float(T[-1]['t']), 3) if T else None})
+                         'track_last_t': round(float(T[-1]['t']), 3) if T else None},
+        stage_report=stage_report)
     rec.insights = no_reliable_data_insight(reason)
     return rec
 
@@ -212,18 +235,43 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             timing_video=None, core_end_s=None, timings=None):
     # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
     _T = timings if timings is not None else {}
+    # DEC-122 per-stage report: {stage_key: {status: ok|failed|skipped, duration_ms, [reason_code, reason,
+    # failed_stage, diagnostics]}}. `_stage` records ok + duration; a raise inside it marks the stage failed
+    # (and re-raises — the caller converts the former-fatal codes to a partial record below).
+    stages: dict = {}
+    _STAGE_KEY = {'stabilize_s': 'stabilize', 'find_lanes_s': 'lane', 'extract_blobs_s': 'ball_track',
+                  'link_s': 'ball_track', 'extend_s': 'ball_track', 'detect_impact_s': 'impact',
+                  'refine_s': 'refine', 'compute_s': 'compute', 'read_pins_s': 'pins', 'rev_rate_s': 'rev'}
     @contextmanager
     def _stage(name):
+        key = _STAGE_KEY.get(name, name)
         t = time.perf_counter()
-        try: yield
-        finally: _T[name] = round(_T.get(name, 0.0) + time.perf_counter() - t, 3)
+        try:
+            yield
+            stages.setdefault(key, {'status': 'ok'})
+        except AnalysisFailure as af:
+            stages[key] = {'status': 'failed', 'reason_code': af.code, 'reason': str(af),
+                           'failed_stage': af.stage, 'diagnostics': getattr(af, 'diagnostics', None)}
+            raise
+        finally:
+            _T[name] = round(_T.get(name, 0.0) + time.perf_counter() - t, 3)
+            if key in stages: stages[key]['duration_ms'] = round((time.perf_counter() - t) * 1000, 1)
+    def _mark(key, **kw): stages[key] = {'status': 'failed', **kw}   # failure outside a _stage block
     cache = out_prefix + '_stab.pkl'
     with _stage('stabilize_s'):
         if os.path.exists(cache): S = pickle.load(open(cache, 'rb'))
         else: S = stabilize(video, log=log, timing_path=timing_video, core_end_s=core_end_s); pickle.dump(S, open(cache, 'wb'))
     S['vp_y'] = None
-    with _stage('find_lanes_s'):
-        G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+    try:
+        with _stage('find_lanes_s'):
+            G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+    except AnalysisFailure as af:
+        # DEC-122: lane/foul-line detection failed (NO_WOOD / NO_EDGES / FOUL_LINE_NOT_IN_VIEW /
+        # LANE_GEOMETRY_UNUSABLE). No geometry ⇒ no ball track ⇒ nothing measurable — but this is a COMPLETED
+        # analysis with the stage report, not a failed attempt.
+        log(f'{af.code}: partial result — no lane geometry; all metrics unavailable')
+        return _no_metrics_record(video, S, str(af), af.stage or 'lane', stages, out_prefix, handed, context,
+                                  reason_code=af.code)
     # Capture-view gate (side-view-misroute handoff / DEC-061): refuse a view no lane metric can come from —
     # a side/approach clip fits a lane high in the frame and would otherwise fabricate confident-wrong geometry
     # (IMG_8905). Classify from the lane geometry BEFORE any ball extraction; if no candidate lane is a valid
@@ -232,7 +280,9 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     if views and not any(v['supported'] for v in views):
         vinfo = max(views, key=lambda v: (v.get('lane_center_frac') or 0.0))
         log(f"capture view unsupported ({vinfo['view']}, lane center {vinfo['lane_center_frac']}): refusing")
-        return _unsupported_view_record(video, S, vinfo, context, out_prefix, handed)
+        _mark('lane', reason_code='CAPTURE_VIEW_UNSUPPORTED', reason=vinfo['reason'], failed_stage='lane',
+              diagnostics={'view': vinfo['view'], 'lane_center_frac': vinfo.get('lane_center_frac')})
+        return _unsupported_view_record(video, S, vinfo, context, out_prefix, handed, stage_report=stages)
     bcache = out_prefix + '_blobs.pkl'
     best = None
     for lane in G['lanes']:
@@ -244,9 +294,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         span = T[-1]['u'] - T[0]['u'] if T else 0
         if best is None or span > best[0]: best = (span, lane, T, B)
     if best is None:
-        raise AnalysisFailure('LANE_NOT_DETECTED',
-                              'lane not detected: lane edges/foul line not found in the stabilized background',
-                              stage='lane', diagnostics={'candidates_tried': len(G.get('lanes') or [])})
+        reason = 'lane not detected: lane edges/foul line not found in the stabilized background'
+        _mark('lane', reason_code='LANE_NOT_DETECTED', reason=reason, failed_stage='lane',
+              diagnostics={'candidates_tried': len(G.get('lanes') or [])})
+        log('LANE_NOT_DETECTED: partial result — all metrics unavailable')
+        return _no_metrics_record(video, S, reason, 'lane', stages, out_prefix, handed, context,
+                                  reason_code='LANE_NOT_DETECTED')
     _, lane, T, B = best
     # Record which lane was selected among those detected (transparency — a mounted down-lane POV between two
     # lanes can lock onto the wrong one): the chosen lane's lateral centre at the foul line + the detected count.
@@ -254,8 +307,13 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     chosen_lane = {'center_x_px': round((_xa + _xb) / 2, 1), 'lanes_detected': len(G['lanes'])}
     pickle.dump(dict(G=G, lane=lane, B=B), open(bcache, 'wb'))
     if len(T) < 10:
-        raise AnalysisFailure('BALL_TRACK_NOT_FOUND', 'ball track not found', stage='track',
-                              diagnostics={'track_points': len(T), 'needed': 10})
+        # DEC-122: ball not tracked (lane found but the ball was never linked). Rev needs >=24 large ball
+        # frames, so with <10 points nothing is measurable — return the partial + stage report, don't fail.
+        _mark('ball_track', reason_code='BALL_TRACK_NOT_FOUND', reason='ball track not found', failed_stage='track',
+              diagnostics={'track_points': len(T), 'needed': 10})
+        log('BALL_TRACK_NOT_FOUND: partial result — all metrics unavailable')
+        return _no_metrics_record(video, S, 'ball track not found', 'track', stages, out_prefix, handed, context,
+                                  reason_code='BALL_TRACK_NOT_FOUND')
     with _stage('extend_s'):
         T = extend_back(B, T, lane, log=log)
         T = extend_forward(candidates(B, lane, vp), T, lane, vp, log=log)
@@ -263,18 +321,20 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         t_imp, _ = detect_impact(video, S, lane, T, log=log)
     ground = [c for c in T if not c.get('airborne_candidate')]
     if t_imp is None:
-        # DEC-109: a missed pin moment is not a failed shot. Rev rate needs no lane geometry or impact, so it is
-        # still measured; everything tied to the impact-anchored depth scale is unavailable with the reason.
-        # Only when nothing at all can be measured does the shot fail with the coded reason.
+        # DEC-109/122: a missed pin moment is not a failed shot. Rev rate needs no lane geometry or impact, so it
+        # is still measured; everything tied to the impact-anchored depth scale is unavailable with the reason.
+        _mark('impact', reason_code='PIN_IMPACT_NOT_DETECTED', reason='pin impact not detected', failed_stage='impact',
+              diagnostics={'track_points': len(T), 'track_last_t': round(float(T[-1]['t']), 3) if T else None})
         with _stage('rev_rate_s'):
             rev = measure_rev_rate(video, S, ground, None)
         if rev[0] is None:
-            raise AnalysisFailure('PIN_IMPACT_NOT_DETECTED', 'pin impact not detected', stage='impact',
-                                  diagnostics={'track_points': len(T),
-                                               'track_last_t': round(float(T[-1]['t']), 3) if T else None,
-                                               'rev_rate': rev[2]})
+            # DEC-122: even with nothing measurable this is a COMPLETED analysis (partial + stage report), not a fail.
+            log('PIN_IMPACT_NOT_DETECTED + rev unavailable: partial result — all metrics unavailable')
+            return _no_metrics_record(video, S, 'pin impact not detected and no readable spin', 'impact', stages,
+                                      out_prefix, handed, context, reason_code='PIN_IMPACT_NOT_DETECTED')
         log(f'pin impact not detected: partial result (rev rate {rev[0]:.0f} lane rpm); speed/geometry unavailable')
-        return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane)
+        return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
+                                     stage_report=stages)
     with _stage('refine_s'):
         TR = refine(video, S, lane, ground, t_imp, log=log)
     byf = {c['i']: c for c in T if c['t'] <= t_imp + 0.02}
@@ -302,15 +362,20 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     except AnalysisFailure as _af:
         if _af.code not in ('IMPOSSIBLE_SPEED_SCALE', 'TRACK_TOO_SPARSE_FOR_SPEED'):
             raise
+        _mark('compute', reason_code=_af.code, reason=str(_af), failed_stage=_af.stage,
+              diagnostics=getattr(_af, 'diagnostics', None))
         with _stage('rev_rate_s'):
             rev = measure_rev_rate(video, S, ground, t_imp)
         if rev[0] is None:
-            raise                                   # nothing measurable at all → keep the coded failure
+            # DEC-122: scale unreliable AND no readable spin — still a completed partial, not a failed attempt.
+            log(f'{_af.code} + rev unavailable: partial result — all metrics unavailable')
+            return _no_metrics_record(video, S, str(_af), _af.stage or 'compute', stages, out_prefix, handed,
+                                      context, reason_code=_af.code)
         reason = ("We couldn't pin down a trustworthy lane distance for this shot, so speed and the lane read "
                   "aren't available — but your rev rate is. " + IMPACT_MISSED_TIP)
         log(f'{_af.code}: partial result (rev rate {rev[0]:.0f} lane rpm); speed/geometry unavailable')
         return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
-                                     reason=reason, impact_status='scale_unreliable')
+                                     reason=reason, impact_status='scale_unreliable', stage_report=stages)
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]
@@ -544,7 +609,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
                      measurements=meas, trajectory=traj, key_points=kp, pins=pins, context=context or {},
                      capture_quality={'far_lane': 'limited' if cq_limited else 'ok', 'lane': chosen_lane,
                                       **({'reason': cq_reason} if cq_reason else {}),
-                                      **({'near_anchor_shadow': near_shadow} if near_shadow else {})})
+                                      **({'near_anchor_shadow': near_shadow} if near_shadow else {})},
+                     stage_report=stages)
     shot_view = {x.metric: x.value for x in meas}
     shot_view['_quality'] = quality_map(meas)   # DEC-094 §5/§6: per-metric status/uncertainty for the coaching gate
     shot_view['trajectory'] = traj          # lets the insights gate also see lateral-jump evidence

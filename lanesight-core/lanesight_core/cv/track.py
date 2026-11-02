@@ -193,7 +193,12 @@ def detect_impact(path, S, lane, track, log=print):
         if t > far['t'] + 0.6: break
         G = cv2.cvtColor(cv2.warpPerspective(f, S['Hs'][i], (w, h))[y_a:y_b, xa:xb], cv2.COLOR_BGR2GRAY).astype(np.float32)
         if t < t_enter - 0.05: refs.append(G); continue
-        if isinstance(refs, list): refs = np.median(np.stack(refs), 0).astype(np.float32)
+        # No pre-arrival reference frame was collected (the ball is already in the ROI at the window start, e.g. a
+        # tight trim on IMG_8975) — we can't build a motion baseline, so impact is simply not detectable here.
+        # Return no impact (→ the coded PIN_IMPACT_NOT_DETECTED partial path) instead of crashing on np.stack([]).
+        if isinstance(refs, list):
+            if not refs: return None, np.array([])
+            refs = np.median(np.stack(refs), 0).astype(np.float32)
         (dx, dy), _ = cv2.phaseCorrelate(refs, G)
         G = cv2.warpAffine(G, np.float32([[1, 0, -dx], [0, 1, -dy]]), (G.shape[1], G.shape[0]))
         dif = np.abs(G - refs)

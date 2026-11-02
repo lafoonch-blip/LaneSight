@@ -47,6 +47,7 @@ class ShotRecord:
     spare_plan: dict | None = None
     sensor: dict | None = None
     capture_quality: dict | None = None              # {far_lane: ok|limited, reason} — DEC-061 plausibility gate
+    stage_report: dict | None = None                 # DEC-122: per-stage {status: ok|failed|skipped, reason, diagnostics}
     context: dict = field(default_factory=dict)      # session_id, ball_id, pattern_id, lane, intent, frame/roll
     schema_version: str = SCHEMA_VERSION
     def to_dict(self):
