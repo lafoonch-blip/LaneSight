@@ -14,11 +14,7 @@
       "truth": 18.003,
       "baseline_ball_speed": 17.891,
       "dynamic_range": "sdr",
-      "labels": {"foul_cross_s": 18.5755, "first_pin_contact_s": 20.8266},
-      "known_issue": {
-        "delta": -2.515,
-        "reason": "d47bc12 (brightness-relative foreground threshold) shifted 8752's pin-impact anchor ~0.36s late, so speed_avg_foul_to_pins regressed 17.75 -> 15.49 (confirmed before/after). The SAME change moved the HEADLINE ball_speed (release) 18.308 -> 17.891, CLOSER to truth 18.00 — that's the improvement Session 3 saw and bypassed the gate for. Tracked, not blocking (capped: a further drift beyond +-tol fails). CLEAR this once 8752's impact anchor is fixed under the relative threshold. 8751/8753/8754 foul->pins avg are within 0.25 of truth."
-      }
+      "labels": {"foul_cross_s": 18.5755, "first_pin_contact_s": 20.8266}
     },
     "IMG_8753.MOV": {
       "truth": 18.275,

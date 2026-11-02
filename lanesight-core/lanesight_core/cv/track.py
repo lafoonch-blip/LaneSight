@@ -218,7 +218,12 @@ def detect_impact(path, S, lane, track, log=print):
     # which would truncate the track mid-lane and shrink the distance scale (~2.5x on shot 5). The ball cannot
     # strike before it arrives, so never place impact before far['t']. On well-tracked clips far['t'] already
     # equals the hotness time (impact lands at 0.0 diameters from far), so this is a no-op there.
-    if t_imp is not None and far['t'] > t_imp: t_imp = float(far['t'])
+    # Never place impact before the ball arrives: if the hotness fired BEFORE the ball entered the pin ROI
+    # (t_imp < t_enter) it is an early false trigger (a glossy-lane reflection ahead of the ball), so defer to the
+    # ball's farthest tracked point `far`. But once the ball is IN the ROI, a sustained hotness IS the pin contact
+    # — do NOT drag it late to a `far` that sits past the pins (a strike's ball tracked on into the pit, e.g.
+    # IMG_8752 where d47bc12 extended the tail 0.35 s past impact and the old unconditional clamp read −2.5 mph).
+    if t_imp is not None and far['t'] > t_imp and t_imp < t_enter: t_imp = float(far['t'])
     log(f'impact t={t_imp} (ROI rows {y_a}-{y_b}, ball enters ROI {t_enter:.2f}s, baseline {base:.4f}±{sd:.4f})')
     return t_imp, E
 
