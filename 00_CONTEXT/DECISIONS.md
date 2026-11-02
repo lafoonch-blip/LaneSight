@@ -1,6 +1,6 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.79  
+Version: 1.80  
 Last Updated: 2026-11-02  
 Owner: Shayne  
 Supersedes: v1.77
@@ -1268,6 +1268,17 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-123 — In-app Feedback button on Home (general feedback, categorized) (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- Home gets a **Feedback** button. Tapping it opens a small sheet: **category** (required, one of: Bug · Wrong/missing numbers · Confusing · Idea · Other), **text** (required), optional **screenshot**, and an "include diagnostics" toggle (default on). Submit shows a short thank-you and returns to Home.
+- It writes to the one retained `feedback` store (DEC-059) as `source = 'general'` via the existing `POST /feedback`, with the category in `tags[0]` and auto-attached context: app version/build, device model, iOS version, current screen, last session/shot id when present.
+- **Every row carries the real app phase**: `dev` (Shayne), `ff` (Friends & Family, DEC-122), `beta`, `live`. `ff` is added to the phase enum. Today the iOS app sends no phase and the server defaults to `dev`; that is fixed as part of this.
+- Same button and flow serve F&F, Beta and live, so F&F is the first real test of the feedback system. Session-end feedback, shot notes and advice ratings stay as they are.
+- Owner reads and triages all rows (new / reviewed / actioned / dismissed) through the ops dashboard / CSV export; feedback never changes the app live (DEC-059).
+- Design: the button and sheet follow "01 - Design Standards"; added to APP_DESIGN_CHANGES and needs a Figma component (Feedback button + Feedback sheet).
+**Why:** testers need one obvious place to report problems and ideas while they bowl, and the feedback store needs real use before Beta.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-122. Fills FEEDBACK_STORE_SPEC §2 `general` ("Settings › Send feedback", reserved) — the entry point is Home, not Settings.
 
 ### DEC-122 — Friends & Family test phase via TestFlight (pre-Beta, not gated by DEC-118) (2026-11-02)
 **Decision (Shayne, 2026-11-02):**
