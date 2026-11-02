@@ -1,0 +1,111 @@
+{
+  "_source": "LaneSight Labeler task 'speed_truth_1101' (lanesight-core/validation/labels/speed_truth_1101.json); null = not labeled or not visible",
+  "IMG_8963": {
+    "camera_group": "angled from the side",
+    "foul_cross_frame": 667,
+    "first_pin_contact_frame": 804,
+    "fps": 59.97278911564626
+  },
+  "IMG_8964": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 602,
+    "first_pin_contact_frame": 746,
+    "fps": 59.97374179431072
+  },
+  "IMG_8965": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 911,
+    "first_pin_contact_frame": 1050,
+    "fps": 59.97186620819006
+  },
+  "IMG_8966": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 670,
+    "first_pin_contact_frame": 811,
+    "fps": 59.97266514806378
+  },
+  "IMG_8967": {
+    "camera_group": "lower/wider, ball return lower-right",
+    "foul_cross_frame": 790,
+    "first_pin_contact_frame": 932,
+    "fps": 59.97048212528698
+  },
+  "IMG_8968": {
+    "camera_group": "lower/wider, ball return lower-right",
+    "foul_cross_frame": 723,
+    "first_pin_contact_frame": 866,
+    "fps": 59.97244757385581
+  },
+  "IMG_8969": {
+    "camera_group": "lower/wider, ball return lower-right",
+    "foul_cross_frame": 543,
+    "first_pin_contact_frame": 677,
+    "fps": 59.9734630694383
+  },
+  "IMG_8970": {
+    "camera_group": "lower/wider, ball return lower-right",
+    "foul_cross_frame": 774,
+    "first_pin_contact_frame": 915,
+    "fps": 59.974059662775616
+  },
+  "IMG_8971": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 822,
+    "first_pin_contact_frame": 961,
+    "fps": 59.97067448680352
+  },
+  "IMG_8972": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 728,
+    "first_pin_contact_frame": 871,
+    "fps": 59.969964959118975
+  },
+  "IMG_8973": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 691,
+    "first_pin_contact_frame": 828,
+    "fps": 59.971374045801525
+  },
+  "IMG_8974": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 692,
+    "first_pin_contact_frame": 832,
+    "fps": 59.97447894512973
+  },
+  "IMG_8975": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 902,
+    "first_pin_contact_frame": 1037,
+    "fps": 59.9739997111079
+  },
+  "IMG_8976": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 769,
+    "first_pin_contact_frame": 911,
+    "fps": 59.921542987904544
+  },
+  "IMG_8977": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 720,
+    "first_pin_contact_frame": 864,
+    "fps": 59.97008973080758
+  },
+  "IMG_8978": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 1130,
+    "first_pin_contact_frame": 1272,
+    "fps": 59.97403721332756
+  },
+  "IMG_8979": {
+    "camera_group": "centered behind ball return (mounted POV)",
+    "foul_cross_frame": 593,
+    "first_pin_contact_frame": 730,
+    "fps": 59.97179125528914
+  },
+  "IMG_8981": {
+    "camera_group": "behind ball return, offset right",
+    "foul_cross_frame": 867,
+    "first_pin_contact_frame": 999,
+    "fps": 59.971577451444816
+  }
+}
