@@ -232,7 +232,8 @@ async function openClip(i){
 }
 function firstOpenEvent(){
   const evs = labels().events||{};
-  const i = S.task.events.findIndex(e=>!evs[e.id]);
+  let i = S.task.events.findIndex(e=>!evs[e.id] && !e.optional);
+  if(i<0) i = S.task.events.findIndex(e=>!evs[e.id]);
   return i<0 ? 0 : i;
 }
 async function show(f){
@@ -279,7 +280,7 @@ function renderEvents(){
     const val = !v ? '<span class="val">not marked</span>'
       : v.status==='not_visible' ? '<span class="val nv">not visible</span>'
       : `<span class="val set">frame ${v.frame} · ${v.t_s!=null? v.t_s.toFixed(3)+' s':''}</span>`;
-    d.innerHTML = `<div class="top"><span class="name">${i+1}. ${e.label}</span>${val}</div>
+    d.innerHTML = `<div class="top"><span class="name">${i+1}. ${e.label}${e.optional?' <small style="color:var(--muted);font-weight:400">(optional)</small>':''}</span>${val}</div>
       ${e.help?`<div class="help">${e.help}</div>`:''}
       <div class="btns">
         <button class="primary" data-a="mark" ${ok?'':'disabled'}>Mark frame ${ok?S.frame:''}</button>
@@ -338,8 +339,9 @@ async function mark(evId, status){
   }
   // advance to the next unmarked moment; jump to its estimate if there is one
   const evs = labels().events;
-  let n = S.task.events.findIndex((e,i)=>i>S.evIdx && !evs[e.id]);
-  if(n<0) n = S.task.events.findIndex(e=>!evs[e.id]);
+  let n = S.task.events.findIndex((e,i)=>i>S.evIdx && !evs[e.id] && !e.optional);
+  if(n<0) n = S.task.events.findIndex(e=>!evs[e.id] && !e.optional);
+  if(n<0) n = S.task.events.findIndex((e,i)=>i>S.evIdx && !evs[e.id]);
   if(n>=0){ S.evIdx=n; const h=(clip().hints||{})[S.task.events[n].id]; if(h!=null) await show(h); }
   renderEvents();
 }

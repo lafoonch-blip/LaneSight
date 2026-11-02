@@ -1,6 +1,6 @@
 {
   "title": "Form: per-step foot plants",
-  "instructions": "Mark the frame where each foot touches the floor during the approach, in order: Step 1 (first step) through the slide-foot plant (the last step). Use the MOMENT the foot first contacts the floor. Press X (Not visible) for any step number beyond this bowler's approach (e.g. Step 6 on a 5-step approach) or a plant the camera cannot see. The hints open the player near the detector's current guess \u2014 move to the exact contact frame and set it. These per-plant times are the ground truth for the step-count + foot-strike detector (DEC-120 / form baseline).",
+  "instructions": "Mark the frame where each foot touches the floor during the approach, in order: Step 1 (first step) through the slide-foot plant (the last step). Use the MOMENT the foot first contacts the floor. Press X (Not visible) for any step number beyond this bowler's approach (e.g. Step 6 on a 5-step approach) or a plant the camera cannot see. The hints open the player near the detector's current guess — move to the exact contact frame and set it. These per-plant times are the ground truth for the step-count + foot-strike detector (DEC-120 / form baseline).\n\nSteps 5 and 6 are optional: leave them unmarked if your approach has fewer steps, and enter the total in 'Total steps'.",
   "clips": [
     {
       "id": "IMG_8824",
@@ -126,14 +126,16 @@
       "label": "Step 5 plant",
       "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
       "export_key": "step5_s",
-      "export_unit": "seconds"
+      "export_unit": "seconds",
+      "optional": true
     },
     {
       "id": "step6",
       "label": "Step 6 plant",
       "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
       "export_key": "step6_s",
-      "export_unit": "seconds"
+      "export_unit": "seconds",
+      "optional": true
     }
   ],
   "fields": [
