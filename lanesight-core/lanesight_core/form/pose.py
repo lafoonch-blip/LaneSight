@@ -979,9 +979,14 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                 else (' [slo-mo corrected %dx]' % factor) if is_slow else '')
     sw_src = ev['src']
 
-    out['step_count'] = _m('step_count', step_count, 'count',
-                           0.8 if 3 <= step_count <= 5 else 0.4, ok if 3 <= step_count <= 5 else be,
-                           note=f'{step_count} foot plants (slide foot: {slide_foot}){slow_tag}')
+    # Step count is APPROXIMATE, not yet validated to the exact-count MVP gate (DEC-121): on the labeled clips
+    # the foot-strike detector is ±1–2 off (combined- and per-foot models alike; crop-refining the feet lifted
+    # landmark confidence but not count/timing accuracy — the foot-contact instant isn't recoverable from phone
+    # pose on this footage). Reported best_effort with a reason so it is never shown as a confident exact count.
+    out['step_count'] = _m('step_count', step_count, 'count', 0.4, be,
+                           note=f'{step_count} foot plants (slide foot: {slide_foot}) — APPROXIMATE (±1–2 steps); '
+                                f'not yet validated to an exact count. Most reliable with both feet in frame for '
+                                f'the whole approach (DEC-121){slow_tag}')
     out['approach_time'] = _m('approach_time', approach_time, 's', 0.6, be,
                               note=f'first foot plant -> release (E1 true start not reliable in rear view){slow_tag}',
                               uncertainty=2 * unc)

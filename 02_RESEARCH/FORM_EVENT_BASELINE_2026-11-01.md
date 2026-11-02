@@ -1,7 +1,7 @@
 # Form event baseline + remaining-gap root causes (2026-11-01)
 Status: WORKING NOTES
-Version: 1.3
-Last Updated: 2026-11-01
+Version: 1.4
+Last Updated: 2026-11-02
 Owner: Shayne (author: autonomous session)
 Scope: DEC-118 Form MVP metrics measured against Shayne's form labels; DEC-120 slide-stop fix; and the
 root causes of the three remaining gaps (step count, E2 ball-start, IMG_8826 mis-segmentation).
@@ -96,6 +96,33 @@ errors 2–9 f (worst on the first plant at the setup→approach boundary and on
   the only shipped change. Concrete next step for Shayne to choose: (a) invest in foot-region crop+refine to
   raise landmark confidence (the only path to a true ±2 f gate on side view), or (b) adopt a ±3–4 f plant gate +
   rear-view-only step count for MVP. Either way, hold out IMG_8980 + new clips.
+
+**Update 2026-11-02 (option 1 — foot-crop refine — BUILT, TESTED; confidence up, accuracy flat → not shipped).**
+Re-ran pose on an upscaled person-bbox crop (original full-res frame) over the approach window, mapped the
+refined foot landmarks back, and re-scored per-foot stance plants. Harness: `examples/foot_refine.py`. Per clip,
+foot-landmark confidence (approach window) BEFORE → AFTER, and plants within ±3 f BEFORE → AFTER:
+
+| clip | view | conf before→after | ±3f before→after | count det vs visible |
+|---|---|---|---|---|
+| 8824 | side | 0.77 → 0.86 | 2/4 → 2/4 | 6 vs 4 |
+| 8825 | side | 0.72 → 0.82 | 2/5 → 2/5 | 4 vs 5 |
+| 8826 | side | 0.74 → 0.84 | 3/5 → 3/5 | 5 vs 5 |
+| 8846 | rear | 0.82 → 0.85 | 2/5 → 2/5 | 4 vs 5 |
+| 8847 | rear | 0.81 → 0.84 | 3/5 → 3/5 | 5 vs 5 |
+| 8848 | rear | 0.85 → 0.89 | 3/5 → 3/5 | 6 vs 5 |
+| 8980 | side, **HELD OUT** | 0.46 → 0.61 | 1/3 → 1/3 | 4 vs 3 |
+
+**Confidence rose on every clip (incl. side view and held-out 8980) but ±3 f accuracy and count did NOT move.**
+So landmark confidence was NOT the bottleneck — the labeled foot-contact instant is not recoverable from the
+foot position/velocity trace regardless of landmark quality (plateau-onset vs contact offset, genuine blur
+ambiguity). Crop-refine is therefore **not shipped** (runtime cost of a second pose pass, no metric gain).
+- **Gates recorded as DEC-121** (amends DEC-118): step COUNT exact; swing events ±2 f; per-plant timing ±3 f
+  (approach-duration/tempo only). **Step count shipped `best_effort`** (not `ok`) with a reason — it is ±1–2 and
+  not yet validated to exact on either view (DEC-026/094: no false-confident number).
+- **Capture (DEC-121):** Form recording floored at 60 fps (120 when supported at ≥1080p) + an on-screen "keep
+  both feet in frame" tip, so a future attempt has the frame rate and framing it needs. iOS needs an Xcode build.
+- **The real fix is a different foot-contact signal** (not whole-frame pose landmarks), validated per-plant with
+  IMG_8980 + new clips held out — not more tuning of the pose-landmark detector.
 
 ### 2b. E2 ball start — null on all 6
 - The bowling-wrist landmark (the current E2 cue) **does not move at the labeled pushaway onset** — its y is flat

@@ -31,6 +31,7 @@ struct CaptureView: View {
             if camera.isRunnable {
                 VStack(spacing: 0) {
                     topBar
+                    if model.captureMode == "form" { formFramingTip.padding(.top, 8) }
                     Spacer()
                     chipRow.padding(.bottom, 10)
                     zoomBar.padding(.bottom, 14)
@@ -42,7 +43,12 @@ struct CaptureView: View {
         .navigationTitle("Capture")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
+        // Form timing needs a high frame rate: floor Form capture at 60 fps (bestFormat still takes 120 when the
+        // device supports it at >=1080p). Shot keeps the user's preference. (DEC-118 form gates / form baseline.)
+        .task {
+            let fps = model.captureMode == "form" ? max(60.0, Double(model.preferredFPS)) : Double(model.preferredFPS)
+            await camera.start(preferredFPS: fps)
+        }
         // Keep the screen awake for the whole capture flow (recording, trimming, upload, analysis).
         // Auto-Lock otherwise sleeps the phone mid-shot.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true; model.prewarm() }   // warm the analyzer
@@ -90,6 +96,20 @@ struct CaptureView: View {
                 .background(.ultraThinMaterial, in: Capsule())
                 .accessibilityLabel("Mode: \(model.captureMode == "form" ? "Form" : "Shot")")
         }
+    }
+
+    /// Form capture framing tip: step count + swing timing need every foot plant in view, so remind the bowler
+    /// to keep both feet framed through the whole approach (DEC-118 form gates / supported-view coverage).
+    private var formFramingTip: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "figure.walk").font(.system(size: 12, weight: .semibold))
+            Text("Keep both feet in frame through your whole approach")
+                .font(.system(size: 12, weight: .semibold)).multilineTextAlignment(.leading)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(.ultraThinMaterial, in: Capsule())
+        .accessibilityLabel("Tip: keep both feet in frame through your whole approach")
     }
 
     /// "4K" / "1080p" / "720p" from the locked resolution string ("WxH").

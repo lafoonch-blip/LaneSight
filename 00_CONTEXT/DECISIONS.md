@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.77  
-Last Updated: 2026-11-01  
+Version: 1.78  
+Last Updated: 2026-11-02  
 Owner: Shayne  
-Supersedes: v1.76
+Supersedes: v1.77
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,20 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-121 — Form metric tolerances + step-count honesty + Form capture defaults (amends DEC-118) (2026-11-02)
+**Decision (Shayne, 2026-11-02):** per-plant form-step labels landed (`form_steps` task → `validation/form_steps_labels.json`; all approaches are 5 steps, no 6-step data; some early plants off-frame so visible-plant counts are 8824:4, others 5, IMG_8980:3). Amends DEC-118's Form gates with explicit tolerances and records an honest status for step count.
+- **Form metric gates (amends DEC-118 "events within ±2 frames"):**
+  - **Step COUNT — exact** (it is the MVP Form metric the user sees).
+  - **Swing events** (ball start, top of backswing, release, slide stop) — **±2 frames**.
+  - **Per-plant foot-strike timing — ±3 frames** (this only feeds approach duration / tempo, not a headline number, so a looser tolerance is acceptable).
+- **Step count is NOT yet a validated metric — shipped `best_effort`, not `ok` (DEC-026/094 honesty).** On the labeled clips the foot-strike detector is ±1–2 off on count and within-±3f on only ~2–3/5 plants; exact count on 2/6. Root cause investigated: combined-`max(Rs,Ls)` minima are the double-support moments *between* plants (fixed the model to per-foot stance), and the dominant *structural* bug — the step window starting after ball start — was fixed (DEC-120, made 8824 exact). But the remaining error is a **signal floor**: the foot-contact instant isn't recoverable from phone-pose foot landmarks on this footage. **Crop-refine tried (option 1):** re-running pose on an upscaled person-bbox crop lifted foot-landmark confidence on every clip (e.g. side 8825 0.72→0.82, 8824 0.77→0.86, held-out 8980 0.46→0.61) **but did NOT improve count or ±3f timing** → confidence was not the bottleneck, so crop-refine is not shipped (runtime cost, no metric gain). Experiment + numbers: `examples/foot_refine.py`, `02_RESEARCH/FORM_EVENT_BASELINE_2026-11-01.md`.
+- **Supported views / coverage:** step count is best_effort on both rear and side today; neither view meets the exact gate yet. Not promised as exact for Beta until it passes on independently-captured, well-framed clips. **IMG_8980 is held out** (never used for tuning) and re-scored separately; future recorded clips stay held out too.
+- **Form capture defaults (iOS):** Form recording floors at **60 fps** and takes **120 fps when the device supports it at ≥1080p** (`CaptureView` passes `max(60, preferredFPS)` for form; `bestFormat` already prefers the highest fps at ≥1080p). Added an on-screen Form framing tip — "keep both feet in frame through your whole approach" — because step count + swing timing need every plant visible. iOS change needs an Xcode build + device verification.
+- **Path to a real exact step count:** a dedicated foot-contact signal (not whole-frame pose landmarks) or better capture (fps + framing), validated per-plant held-out. Until then step count stays best_effort.
+
+**Why:** the per-plant labels proved higher landmark confidence alone can't make step-count exact from phone pose on this footage, so shipping it as a confident `ok` metric would be a false number (DEC-026/094). Make the tolerances explicit, mark step count honestly, and fix capture so a future attempt has the frame rate and framing it needs.
+**Date:** 2026-11-02 · **Status:** ACCEPTED — step_count→best_effort + capture defaults on `feat/form-baseline`; crop-refine kept as a documented experiment, not shipped. **Amends:** DEC-118 (Form gates). **Builds on:** DEC-120 (slide-stop + step-window fix), DEC-094 (labeled dataset).
 
 ### DEC-120 — Form event baseline on the labeled clips; slide-stop detector fixes the swing-event gate (2026-11-01)
 **Decision (2026-11-01):** Shayne's form event labels landed (LaneSight Labeler task `form_events` → `validation/form_labels.json`, 6 clips: IMG_8824–26 side, IMG_8846–48 rear; IMG_8980 added to the task, pending labels). These are the DEC-094/095/118 ground truth for form timing. A baseline harness (`examples/form_baseline.py`) scores the Python form engine against them in FRAMES.
