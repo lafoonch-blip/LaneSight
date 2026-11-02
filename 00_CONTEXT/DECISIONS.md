@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.76  
+Version: 1.77  
 Last Updated: 2026-11-01  
 Owner: Shayne  
-Supersedes: v1.75
+Supersedes: v1.76
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,16 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-120 — Form event baseline on the labeled clips; slide-stop detector fixes the swing-event gate (2026-11-01)
+**Decision (2026-11-01):** Shayne's form event labels landed (LaneSight Labeler task `form_events` → `validation/form_labels.json`, 6 clips: IMG_8824–26 side, IMG_8846–48 rear; IMG_8980 added to the task, pending labels). These are the DEC-094/095/118 ground truth for form timing. A baseline harness (`examples/form_baseline.py`) scores the Python form engine against them in FRAMES.
+- **Baseline (production engine, before fix):** every swing event (E2 ball-start, E4 backswing-top, E7 release) was **nulled on all 6 clips**, and E8 "slide stop" was **23–86 frames late** (median 56). Root cause: E8 was reported as `hold_start` — the *posted-finish* start (both feet still ≥0.45 s), which lands 0.4–1.0 s AFTER the real slide stop because the trail leg is still swinging up. The event gate then compared release to that late E8, found a ~0.7–1.4 s false gap, and dropped the whole delivery. Step count was exact on **0/6** (systematic under-count; approach window misses early steps).
+- **Fix (shipped in `lanesight_core/form/pose.py`):** (1) a **slide-stop detector** — E8 = the slide foot (opposite the bowling hand) settling at the line: its own speed falls and stays low after the slide's speed peak, anchored on the bottom of the swing arc (E6 ≈ release), ignoring the still-swinging trail leg; (2) release (E7) clamped so the on-lane ball only *confirms* the bottom of the arc, never drags it late; (3) the event gate anchors release on the corrected E8; the DEC-095 shadow flag `LANESIGHT_FORM_GATE_FIX` is **retired** (E8 is correct by construction now).
+- **After fix, vs labels (±2 frames = pass):** swing events now **surface on 5/6** (was 0/6). Rear view (8846/47/48): E4, E7, E8 all **within ±2 frames**. Side (8824/8825): E4/E7/E8 surface, mostly ±1–5 f. Per event across all 6: E8 slide-stop median **2 f** (was 56), within ±2 f on **4/6**; E7 release median **1 f**, 4/5; E4 median **1 f**, 5/5 scored. IMG_8826 (side) is still fully mis-segmented (6 steps, window wrong).
+- **Remaining gaps (honest, not fixed):** (a) **E2 ball-start null on all 6** — the bowling-wrist landmark does NOT move at the labeled pushaway onset (flat for 9–21 frames past it), so the wrist-Y method cannot time it; a real fix needs a ball-blob / off-hand onset cue, validated on more clips. (b) **Step count 0/6** — the approach foot-strike detector under-counts (misses early steps). Both block the Friends-Beta Form gates (steps exact ≥95%, events ±2 f) and are the next form CV work.
+
+**Why:** the Form MVP gate (DEC-118) needs events within ±2 frames and exact step count against independent ground truth. The slide-stop error was the single biggest and most systematic, and it cascaded into nulling every swing event; fixing it is validated and un-nulls the back-half events on the supported views. E2 and step count are characterized, not papered over (DEC-026/094 honesty).
+**Date:** 2026-11-01 · **Status:** ACCEPTED — slide-stop + gate fix merged on `feat/form-baseline` (403 tests pass); numbers from `examples/form_baseline.py` on the 6 labeled clips. Not yet on device (DEC-103 port). **Builds on:** DEC-094 (labeled dataset + gates), DEC-095 (form event gates), DEC-118 (Form MVP metrics + Beta gates), DEC-057 (fundamentals E1–E9).
 
 ### DEC-119 — An active session lasts until the user ends it
 **Decision (Shayne, 2026-11-01):**

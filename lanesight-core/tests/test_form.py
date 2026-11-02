@@ -156,15 +156,39 @@ def test_gate_events_missing_slide_stop_is_lenient():
     assert 'E7' in ok
 
 
-def test_gate_events_dec095_fix_uses_slide_plant_not_hold_start(monkeypatch):
-    """DEC-095 fix (Shayne 2026-10-31): the gate must anchor release to the slide-foot PLANT (E5), not
-    E8=hold_start (posted finish). Same delivery: release sits at the plant (E5) but ~0.85 s before the posted
-    finish (E8). OLD behavior (default) rejects it off E8; the spec fix (flag) accepts it off E5."""
-    # release at the plant, posted finish 0.85 s later (the IMG_8824/8846 shape)
-    ev = dict(E2=10.0, E3=10.3, E4=11.2, E5=11.75, E6=11.75, E7=11.8, E8=12.6)
-    monkeypatch.delenv('LANESIGHT_FORM_GATE_FIX', raising=False)
-    ok_old, reasons_old = pose.gate_events(ev)
-    assert ok_old == set() and 'slide stop' in reasons_old['E7']        # old (E8) rejects everything
-    monkeypatch.setenv('LANESIGHT_FORM_GATE_FIX', '1')
-    ok_new, reasons_new = pose.gate_events(ev)
-    assert ok_new == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons_new == {}   # spec (E5) accepts
+def test_gate_events_anchors_on_slide_stop_not_posted_finish():
+    """DEC-095 / Form baseline (2026-11-01): the gate anchors release to E8 = the slide-foot STOP (release
+    happens as the slide foot settles). E8 is now the slide stop itself — the detector no longer passes the much
+    later posted-finish start (hold_start) as E8, which created a ~0.85 s false gap that nulled EVERY real
+    delivery (IMG_8824/8846). Validated on form_labels.json: release sits within ±0.05 s of the labeled slide
+    stop. Same delivery, two E8 meanings:"""
+    base = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8)
+    # E8 = the real slide stop (release sits right at it) -> all events trusted
+    ok, reasons = pose.gate_events(dict(base, E8=11.75))
+    assert ok == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons == {}
+    # E8 = the OLD bug (posted-finish start, 0.85 s after release) -> release reads far from the "stop" -> dropped.
+    # This is the shape the slide-stop detector fix removed; the gate still rejects it if it ever recurs.
+    ok_bug, reasons_bug = pose.gate_events(dict(base, E8=12.6))
+    assert ok_bug == set() and 'slide stop' in reasons_bug['E7']
+
+
+def test_slide_stop_is_slide_foot_settling_not_both_feet_still():
+    """Slide stop (E8) = the slide foot's OWN speed settling after its slide peak, searched from an anchor near
+    release (the bottom of the swing arc). The trail foot is still swinging in the follow-through, so a
+    both-feet-still test would land much later — _slide_stop must ignore the trail foot and must not fire on the
+    slow setup before the slide."""
+    import numpy as np
+    fps = 60.0
+    t = np.arange(0, 3.0, 1.0 / fps)
+    # slide foot: slow in the setup (~0.05), one fast slide peak ~1.5s, then settles to rest (~0.03) by ~1.6s.
+    slide = np.full_like(t, 0.05)
+    slide[(t >= 1.3) & (t < 1.6)] = 1.0            # the slide itself
+    slide[t >= 1.6] = 0.03                         # at rest at the line
+    stop = pose._slide_stop(t, slide, anchor=1.55, t_to=2.5)
+    assert stop is not None and abs(stop - 1.6) <= 2.0 / fps     # within ~2 frames of the true settle
+    # the earlier low-speed setup (t<1.3) must not win, because it precedes the slide peak
+    assert stop > 1.3
+    # _slide_foot picks the foot that comes to rest; trail foot keeps moving through the window
+    trail = np.full_like(t, 0.6)
+    foot, spd = pose._slide_foot(t, Rs=trail, Ls=slide, t0=1.2, t1=2.5, handed='right')
+    assert foot == 'L' and spd is slide
