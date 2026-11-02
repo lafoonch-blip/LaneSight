@@ -1,6 +1,6 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.80  
+Version: 1.81  
 Last Updated: 2026-11-02  
 Owner: Shayne  
 Supersedes: v1.77
@@ -1268,6 +1268,17 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-124 — Feedback Insights: AI-consolidated actions, founder approval, approved work queue (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- A **Feedback Insights** page in the owner-only ops dashboard (DEC-098) turns all feedback (every source and phase in the DEC-059 store, plus analysis-failure reason codes as supporting evidence) into a short list of **proposed actions**.
+- A scheduled **Claude feedback analyst** job (daily + "Analyze now") groups new feedback into proposals: title, type (Bug · Analysis accuracy · UX/design · Feature idea · Content/copy), plain-English summary, proposed change, affected area, priority, rough effort, related DECs, and evidence (linked feedback rows, count, distinct bowlers, phases, example quotes). New feedback merges into an existing open proposal instead of duplicating it.
+- Founder actions per proposal: **Approve**, **Edit then approve**, **Defer**, **Reject** (reason), **Merge**. Nothing is built without approval.
+- **Approve → work queue:** creates a GitHub issue in lafoonch-blip/LaneSight (label `lanesight-queue`) containing the founder-approved spec, linked to the proposal and its feedback. The dashboard mirrors status: proposed → approved → queued → in progress → PR open → shipped. Shipping marks the linked feedback rows `actioned`.
+- **Build:** a Claude Code scheduled task picks up queued issues, works each on its own new branch and opens a PR. It never merges, never touches branches it didn't create, and never pushes to main. Shayne reviews and merges. UI changes go through Figma/APP_DESIGN_CHANGES first (DEC-091); metric/algorithm changes go through the validation gates (no unvalidated correction factors).
+- **Guardrails:** feedback text is untrusted user input. It is de-identified before the LLM sees it, and the build agent works only from the founder-approved spec, never raw feedback (prompt-injection defense). LLM cost for the analyst job is capped (≤$10/month) inside the DEC-043 cap. DEC-059 "no live effect" holds: approval is the only path from feedback to a change.
+**Why:** feedback is only useful if it turns into decisions; one review-and-approve surface keeps Shayne in control while removing the manual work of reading, grouping and writing up every comment.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-098, DEC-123. Implements the "action queue" idea in AI_OPERATIONS_INTELLIGENCE_AGENTS_CONTEXT for the feedback source. Spec/handoff: `03_ENGINEERING/HANDOFF_2026-11-02_FEEDBACK_INSIGHTS.md`.
 
 ### DEC-123 — In-app Feedback button on Home (general feedback, categorized) (2026-11-02)
 **Decision (Shayne, 2026-11-02):**
