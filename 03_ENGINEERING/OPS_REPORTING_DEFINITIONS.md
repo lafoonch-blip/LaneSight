@@ -1,8 +1,8 @@
 # LaneSight — Ops Reporting Definitions (§3)
 
 Status: CANONICAL (DEC-098; migration 025 applied live 2026-10-28)
-Version: 1.5
-Last Updated: 2026-10-29
+Version: 1.6
+Last Updated: 2026-11-02
 Owner: Shayne
 Related: `01_PRODUCT/PRODUCTION_MONITORING_OBSERVABILITY_CONTEXT.md` (§4 event model, §5 dashboard catalogue), `DEC-086` (analysis_attempt), `DEC-092` (latency P0), `DEC-063` (staged accounts), migration `025_ops_reporting.sql`, `definitions.json`.
 
@@ -68,7 +68,23 @@ Each metric: **source view.column** — definition — honesty rule.
 - **attempts, failure_rate, p50_attempt_seconds, avg_metrics_measured, distinct_users, first_seen, last_seen** — per release, for regression comparison (DEC-092 promotion discipline: accuracy/coverage/runtime compared separately; this view is the runtime/failure side).
 
 ### Feedback & support (`ops.feedback_summary`, day × app_phase × source)
-- **total, thumbs_up, thumbs_down, untriaged, avg_rating** — real feedback only (staged excluded, mirrors `feedback_review`, DEC-063). `untriaged` = `triage_status='new'`.
+- **total, thumbs_up, thumbs_down, untriaged, avg_rating** — real feedback only (staged excluded, mirrors `feedback_review`, DEC-063). `untriaged` = `triage_status='new'`. `app_phase` now includes **`ff`** (Friends & Family, DEC-123) alongside dev/beta/live — the dashboard Feedback page is thereby filterable by cohort.
+
+### Feedback Insights (DEC-125; migration 037 — tables in `public`, NOT an `ops` view)
+Served by `public.ops_rpc_feedback_insights(p_status)` (owner-checked, SECURITY DEFINER, `ops.is_owner()`) over
+`feedback_insight` + `feedback_insight_link` + `feedback_insight_run`. **These are tables, not an `ops`
+reporting view, so they are intentionally outside the `definitions.json` / `025_ops_reporting.sql` contract**
+(that contract covers the aggregate `ops.*` views only; `validate_definitions.py` is unaffected). Metrics,
+each owner-only and real-feedback-based:
+- **feedback_count / bowler_count / phases** (per insight) — distinct evidence feedback rows, distinct bowlers
+  (`user_ref`), and the set of app phases the evidence spans. Honesty: empty → 0 is real (an insight can exist
+  before fresh evidence links); phases `{}` = no linked feedback yet.
+- **insight counts by status** (proposed … shipped) — pipeline depth; source `feedback_insight.status`.
+- **approval rate** — approved / (approved + rejected + deferred) over a window; NULL (NO DATA) when the
+  denominator is 0 (never 0-as-fake).
+- **time-to-ship** — `shipped` timestamp − `created_at` per insight (median over shipped); NULL until ≥1 shipped.
+- **analyst cost / run** — `feedback_insight_run.cost_usd` (and tokens, status ok/failed/capped); the dashboard
+  header sums the current month vs the **$10 cap** (DEC-043/DEC-125). Read directly under owner-only RLS.
 
 ### Product usage (`ops.usage_daily`, day)
 - **shots, active_users_shots, sessions_started** — real-account production counts.

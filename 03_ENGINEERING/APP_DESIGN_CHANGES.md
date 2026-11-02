@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.3 · Last Updated: 2026-10-29 · Owner: Shayne
+Status: ACTIVE · Version: 1.4 · Last Updated: 2026-11-02 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -169,3 +169,15 @@ Status: **BUILT** (branch `fix/ux-batch-2026-10-28`). DIFFERS: no Figma frames e
 - **B5 coach card — BUILT** (`coach.py`): a lane move reads with real board numbers — feet in boards + eyes as an honest **before→after** ("eyes to the 11 board (from 10)", using the rule's `move_target` + adjust.py left=+/right=− convention) + the escalation line. The arrows board is quality-gated so a withheld read never cites a fabricated board.
 - **B3** (status chips + summaries) and **B6** (upload notice / All-metrics / notes rows) were already built from 2026-10-27-A/B/C.
 - **C verify — DONE (2026-10-31 overnight, staged `ls_smoke`).** Rendered shot `5ff7a596…` (IMG_8753 upload, live rev `lanesight-api-revrate`) via the harness and compared to `shot_card_state_far_lane_not_read.png`. Card STRUCTURE matches: ✕ top-left, "Result not read" badge, 3D far-lane-not-read lane state, YOUR THROW rings (**Release speed 16.0 mph**, **Rev rate 412 rpm**, Accuracy "Set a target line" — honestly unavailable, no target on an upload), LANE & PINS "Not read" with Entry point/angle/Power all "—"+"Not read", no bare "—" without a reason, no "−0.0". **Differences — all data-state, not design defects:** (1) staged account has <10 shots → "Building your normal (0/10)" instead of the "Good · your normal throw" chip + "= your avg" comparison lines (those appear once a baseline exists); (2) Accuracy shows "Set a target" vs the design's "92/100" because this upload carried no target; (3) the lane banner shows the SPEED-CONSISTENCY reason ("late speed reads faster than early — far-lane read withheld") rather than the design's camera-spot reason, because this specific clip tripped the consistency gate — both are honest, reason-specific copy. No fabricated numbers; all gated metrics render unavailable with a reason. Build succeeds.
+
+## 2026-11-02-A · Home Feedback button + Feedback sheet (DEC-124)
+**Status:** BUILT (code). **NEEDS FIGMA COMPONENT** — there is no v3.7 Figma design for this yet; built to "01 - Design Standards" tokens, not a specific node. Add a Figma "Feedback button + Feedback sheet" component and reconcile.
+**Decisions:** DEC-124 (Home Feedback button), DEC-123 (F&F phase).
+**Figma:** none yet — DIFFERS below. (The v3.7 screen inventory lists a "feedback sheet" for the session-end flow; this general-feedback sheet is a new, distinct surface.)
+- **Home Feedback card** (`Sources/Home/HomeView.swift`): a `.lsCard` row below Recent activity — bubble icon, "Send feedback", one-line subtitle, chevron; 44pt hit area. Opens the sheet.
+- **General feedback sheet** (`Sources/Feedback/GeneralFeedbackSheet.swift`): title + intro; **category** (required, single-select chips: Bug · Wrong/missing numbers · Confusing · Idea · Other); **text** (required, ≤2000, live counter); optional **screenshot** (PhotosPicker); **Include diagnostics** toggle (default on); Submit (disabled until category + text); thank-you state then Done. Follows LS tokens (dark, Roboto Condensed, status-standard spacing).
+- **Data/API:** `POST /feedback` `source=general`, `tags=[category]`, `text`, `app_phase` (account cohort), `app_version`; diagnostics (device/iOS/screen/last-session) only when the toggle is on. Failed send keeps the text for retry (feedback never lost).
+**DIFFERS:**
+- **No Figma design** — built to design-standard tokens. A Figma component + PNG is still owed; reconcile the layout/copy when it lands.
+- **Screenshot** is attached as a bounded base64 JPEG inside `diagnostics` (no `feedback-shots` private bucket / signed-URL endpoint exists yet). DEC-124 wants a private-bucket upload with the path in diagnostics — do that once the bucket exists; drop the base64 path then.
+**Done when:** Figma component exists and the built sheet is reconciled against its node/PNG; screenshot moves to bucket upload.
