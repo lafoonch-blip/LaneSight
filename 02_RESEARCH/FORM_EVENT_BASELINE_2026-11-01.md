@@ -1,6 +1,6 @@
 # Form event baseline + remaining-gap root causes (2026-11-01)
 Status: WORKING NOTES
-Version: 1.2
+Version: 1.3
 Last Updated: 2026-11-01
 Owner: Shayne (author: autonomous session)
 Scope: DEC-118 Form MVP metrics measured against Shayne's form labels; DEC-120 slide-stop fix; and the
@@ -79,6 +79,23 @@ off-frame → `null` (not scored), so the visible-plant count per clip is 8824:4
   frame (sub-landmark), or a dedicated foot-contact signal — then re-fit the per-foot model; (2) or accept a
   realistic ±3–4 f plant gate for phone pose and re-score; (3) more clips (incl. IMG_8980 held out) before
   committing a change. The per-plant labels + harness are in the repo so this continues cleanly next session.
+
+**Update 2026-11-01 (per-foot STANCE detector built + the bottleneck pinned to landmark confidence).** Built the
+correct model — per-foot forward-position STANCE (plateau) detection: each foot advances then holds; a plant =
+the hold onset; plants alternate; the last plant ≈ slide_stop (already detected ±2 f). Scored vs per-plant truth
+(`plant_v3`, tuned on the 6, IMG_8980 held out): still only **1–3 of 5 plants within ±2 f**, count off by ±1–2,
+errors 2–9 f (worst on the first plant at the setup→approach boundary and on side view). Held-out 8980: 1/3.
+- **Bottleneck = foot-landmark confidence, measured:** during the approach the MediaPipe foot landmarks
+  (ankle/heel/foot, both feet) average **rear ≈0.80, side 8824 ≈0.84 (min 0.19), side 8825 ≈0.53 with 43% of
+  frames <0.5 (min 0.01)**. The side-view / far / small feet jitter ±3–6 f, so no per-foot feature (speed-min,
+  plateau-onset) aligns to the labeled contact within ±2 f consistently — and the offset isn't constant, so it
+  can't be calibrated out. Four models (combined-min, per-foot-min, position-staircase, per-foot-stance) all
+  plateau here → it's a signal floor, not an algorithm choice.
+- **Decision: NOT shipped.** A detector 2–9 f off on half the plants fails its own ±2 f gate and would regress
+  the current counts (accuracy-over-coverage, DEC-026/094). The step-count structural window fix (DEC-120) is
+  the only shipped change. Concrete next step for Shayne to choose: (a) invest in foot-region crop+refine to
+  raise landmark confidence (the only path to a true ±2 f gate on side view), or (b) adopt a ±3–4 f plant gate +
+  rear-view-only step count for MVP. Either way, hold out IMG_8980 + new clips.
 
 ### 2b. E2 ball start — null on all 6
 - The bowling-wrist landmark (the current E2 cue) **does not move at the labeled pushaway onset** — its y is flat
