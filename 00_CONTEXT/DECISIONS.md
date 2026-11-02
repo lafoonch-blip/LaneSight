@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.76  
-Last Updated: 2026-11-01  
+Version: 1.77  
+Last Updated: 2026-11-02  
 Owner: Shayne  
-Supersedes: v1.75
+Supersedes: v1.76
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1418,6 +1418,22 @@ supported-camera guidance.
 engines, app, outcome tables + views). **Builds on:** DEC-086 (coded failures, honest unavailable), DEC-109/110
 (metric-independence partials), DEC-103/106 (engine provenance / per-metric promotion), DEC-118 (camera support).
 **Supersedes:** the hard-fail behavior of the former-fatal codes above (they become partial results).
+
+### DEC-126 — Usability first: the iPhone engine is primary for live shots; tune accuracy after the switch
+**Decision (Shayne, 2026-11-02):** The on-device **iPhone engine is now the PRIMARY** measurement path for live
+shots; the **server becomes the shadow/reference**. The switch happens on usability, not accuracy — **accuracy
+and iPhone↔server parity are tuned AFTER the switch, not before it.** **No accuracy gate blocks the switch.** The
+ONLY blockers are: the on-device analysis **crashes**, or it returns **a result slower than 30 s**. Everything
+else (speed/board deltas vs. the server, per-metric accuracy) is tuned in place once the iPhone path is primary.
+**Honesty rules still apply (DEC-086/DEC-122):** an unmeasured metric is `unavailable` + reason + failing stage —
+never a fabricated or estimated number — on the iPhone path exactly as on the server.
+**Why:** holding the on-device switch behind an accuracy/parity gate (DEC-103) stalls the offline-first, instant
+on-lane experience indefinitely; a fast, local, honest result the bowler gets immediately beats a marginally more
+accurate server result they wait for. Parity work is real but belongs after the primary path is in users' hands.
+**Date:** 2026-11-02 · **Status:** ACCEPTED.
+**Amends:** DEC-102 (offline-first hybrid) and DEC-103 (on-device stays shadow until the accuracy gates pass) —
+the iPhone→primary switch no longer waits on those gates; only the crash / >30 s blockers apply. DEC-117's
+phone-primary-with-server-review parity tolerance becomes a POST-switch tuning target, not a precondition.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
