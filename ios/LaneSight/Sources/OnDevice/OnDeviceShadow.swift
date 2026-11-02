@@ -21,6 +21,7 @@ enum OnDeviceShadow {
 
         var peak = currentFootprintBytes()
         var mph: Float?
+        var avgFoulToPins: Float?
         var basis = "unavailable"
         var note = ""
         var revRpm: Float?
@@ -31,9 +32,12 @@ enum OnDeviceShadow {
         func stage<T>(_ name: String, _ body: () -> T) -> T {
             let s = Date(); let r = body(); stageMs[name] = Date().timeIntervalSince(s) * 1000; return r
         }
-        let refFrame = stage("reference_frame") { OnDeviceLaneDetector.referenceFrame(url: clipURL, at: 30) }
-        if let px = refFrame {
-            let geo = stage("detect") { OnDeviceLaneDetector.detect(pixelBuffer: px) }
+        // DEC-117 Track A: detect on the rotation-corrected stabilized BACKGROUND PLATE (temporal median), the
+        // same input the Python find_lanes(bg) + ios_parity_golden use — not a lone raw frame.
+        let plateResult = stage("plate") { OnDeviceDecode.backgroundPlate(url: clipURL) }
+        if let (plate, rot) = plateResult {
+            diag["rotation"] = "\(rot)"
+            let geo = stage("detect") { OnDeviceLaneDetector.detect(pixelBuffer: plate) }
             diag["lane_found"] = geo.lanes.first != nil
             diag["lanes_detected"] = geo.lanes.count
             diag["foul_line_y"] = geo.foulLineY as Any
@@ -43,7 +47,7 @@ enum OnDeviceShadow {
                 diag["right_ab"] = [Double(l.right.a), Double(l.right.b)]
                 diag["y_near_far"] = [l.yNear, l.yFar]
             }
-            let track = stage("track") { OnDeviceTracker.track(url: clipURL, geo: geo) }
+            let track = stage("track") { OnDeviceTracker.track(url: clipURL, geo: geo, rot: rot) }
             peak = max(peak, currentFootprintBytes())
             diag["frames_scanned"] = track.framesScanned
             diag["candidate_frames"] = track.candidateFrames
@@ -52,8 +56,11 @@ enum OnDeviceShadow {
             if let it = track.impactT { diag["impact_t_detected"] = it }
             let sp = stage("speed") { OnDeviceTracker.speed(track: track, geo: geo) }
             mph = sp.mph; basis = sp.basis; note = sp.note
+            avgFoulToPins = sp.avgFoulToPinsMph
             if let tr = sp.tRelease { diag["t_release"] = tr }
             if let ti = sp.tImpact { diag["t_impact"] = ti }
+            if let fc = sp.tFoulCross { diag["t_foul_cross"] = fc }
+            if let a = sp.avgFoulToPinsMph { diag["speed_avg_foul_to_pins"] = Double(a) }
             if let tr = sp.tRelease, let ti = sp.tImpact { diag["foul_to_impact_s"] = ti - tr }
             diag["first_failing_stage"] = (geo.lanes.first == nil) ? "lane"
                 : (track.points.count < 6 ? "track"
@@ -65,8 +72,8 @@ enum OnDeviceShadow {
             if basis == "unavailable", rev.rpm != nil { basis = "best_effort" }   // rev stands alone (DEC-111)
             peak = max(peak, currentFootprintBytes())
         } else {
-            note = "no reference frame"
-            diag["first_failing_stage"] = "reference_frame"
+            note = "no background plate"
+            diag["first_failing_stage"] = "plate"
         }
         peak = max(peak, currentFootprintBytes())
 
@@ -76,6 +83,7 @@ enum OnDeviceShadow {
 
         var metrics: [String: Any] = [:]
         if let m = mph { metrics["ball_speed"] = Double(m) }
+        if let a = avgFoulToPins { metrics["speed_avg_foul_to_pins"] = Double(a) }
         if let rv = revRpm { metrics["rev_rate"] = Double(rv) }
         if let rs = revSigma { metrics["rev_rate_sigma"] = Double(rs) }
         if mph == nil, !revNote.isEmpty { note = note.isEmpty ? revNote : note + " | rev: " + revNote }

@@ -30,6 +30,7 @@ final class OnDeviceGateTests: XCTestCase {
             let row: [String: Any] = [
                 "clip": clip,
                 "ball_speed": metrics["ball_speed"] as? Double as Any,
+                "speed_avg_foul_to_pins": metrics["speed_avg_foul_to_pins"] as? Double as Any,   // DEC-117 truth-comparable
                 "rev_rate": metrics["rev_rate"] as? Double as Any,
                 "rev_sigma": metrics["rev_rate_sigma"] as? Double as Any,
                 "basis": body["basis"] as? String as Any,

@@ -26,6 +26,9 @@ struct SpeedEstimate: Equatable {
     let entryFrac: Float?
     let basis: String          // "best_effort" | "unavailable"
     let note: String
+    var avgFoulToPinsMph: Float? = nil   // DEC-064/DEC-112 full-lane average = 59.44 ft / (tImpact − tFoulCross),
+                                         // the TRUTH-comparable metric (matches Shayne's foul→pin labels)
+    var tFoulCross: Double? = nil
 }
 struct BallTrack: Equatable {
     let points: [TrackPoint]
@@ -49,6 +52,10 @@ private nonisolated(unsafe) let LANE_IN: Float = 41.5
 private nonisolated(unsafe) let THR_L_NOMINAL: Float = 165
 private nonisolated(unsafe) let THR_MIN: Float = 25
 private nonisolated(unsafe) let THR_MAX: Float = 55
+// Pin-fall visible-motion latency: time from ball→pin contact to the pins moving enough to register as a
+// motion spike. The on-device detector sees pin MOTION, so ball-contact = spike − PIN_FALL_S. ~0.15 s ≈ 9
+// frames at 60 fps (physical pin topple); measured +0.17/+0.18 s on IMG_8751/8754.
+private nonisolated(unsafe) let PIN_FALL_S: Double = 0.15
 
 enum OnDeviceTracker {
 
@@ -85,22 +92,39 @@ enum OnDeviceTracker {
         let intc = (su - slope * st) / n
         guard slope > 0 else { return fail("non-monotonic track (ball not clearly moving toward the pins)") }
         let tFoulCross = (Double(u(Float(foulY))) - intc) / slope     // ball crosses the foul line
-        // t_impact: detected pin-deck arrival if available (exact), else extrapolate to the lane far extent.
-        let tImpact = track.impactT ?? ((Double(u(Float(lane.yFar))) - intc) / slope)
+        // t_impact = ball-at-pins ("ball centre at first head-pin contact"). Use the pin-deck MOTION detector
+        // (track.impactT), which marks the pin location directly, MINUS the pin-fall latency: a struck pin takes
+        // ~0.15 s to move visibly, so the motion spike lags ball-contact by that much (measured +0.17/+0.18 s on
+        // 8751/8754). The lane far extent is NOT the pin row (the ball tracks past it; the true pin depth needs the
+        // gated metric plane), so a trajectory extrapolation undershoots — only used as a fallback when no spike.
+        let tImpact: Double
+        if let it = track.impactT { tImpact = it - PIN_FALL_S }
+        else {
+            // No pin-motion spike (e.g. a weak strike on IMG_8752). Fall back to the ball's LAST tracked point,
+            // which — because the ball tracks TO/past the lane far extent (the near-pin region) — is ≈ ball-at-pins.
+            // (A trajectory extrapolation to lane.yFar undershoots: the ball passes yFar well before the pins.)
+            tImpact = pts.last!.t
+        }
         let release = tFoulCross - 0.068                              // RELEASE_OFFSET_S (cv/metrics.py)
         let dt = tImpact - release
         guard dt > 0.5 && dt < 5 else { return fail("implausible foul→impact interval (\(String(format: "%.2f", dt))s)") }
         let mph = Float(60.0 / dt * 3600.0 / 5280.0)
         guard mph > 5 && mph < 30 else { return fail("speed out of range (\(String(format: "%.1f", mph)) mph) — track likely short of the pins") }
+        // DEC-064/DEC-112 full-lane average = 59.44 ft / (tImpact − tFoulCross): the TRUTH-comparable number
+        // (same interval the foul_cross→first_pin_contact labels measure), impact anchored to the ball at the pins.
+        let Z_IMPACT = 59.44
+        let dtAvg = tImpact - tFoulCross
+        let avg: Float? = (dtAvg > 0.5 && dtAvg < 5) ? Float(Z_IMPACT / dtAvg * 3600.0 / 5280.0) : nil
         return SpeedEstimate(mph: mph, tRelease: release, tImpact: tImpact, entryFrac: pts.last!.frac, basis: "best_effort",
-                             note: "fitted-trajectory anchors (foul + lane far extent ≈ pins); exact once pin-impact detection lands")
+                             note: "trajectory anchors: foul crossing + ball reaching the lane far extent (≈ pins)",
+                             avgFoulToPinsMph: avg, tFoulCross: tFoulCross)
     }
 
     nonisolated static func track(url: URL, geo: ODLaneGeometry, diffThr: Int = 35,
-                                  maxBgFrames: Int = 12) -> BallTrack {
+                                  maxBgFrames: Int = 12, rot: ODRotation = .r0) -> BallTrack {
         let t0 = CFAbsoluteTimeGetCurrent()
         guard let lane = geo.lanes.first, let vp = geo.vanishingPoint,
-              let (sw, sh, stride, ts, bg) = buildBackground(url: url, maxFrames: maxBgFrames) else {
+              let (sw, sh, stride, ts, bg) = buildBackground(url: url, maxFrames: maxBgFrames, rot: rot) else {
             return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
         }
         // Pass 2: per-frame foreground → blobs (at working res) → scale up → diameter-gated candidates (full-res geo).
@@ -116,7 +140,7 @@ enum OnDeviceTracker {
         var perFrame: [[Cand]] = []
         var scanned = 0
         let s = Float(stride)
-        forEachLuma(url: url, stride: stride, sw: sw, sh: sh) { i, luma in
+        forEachLuma(url: url, stride: stride, sw: sw, sh: sh, rot: rot) { i, luma in
             scanned += 1
             let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: thrEff)
             var cs: [Cand] = []
@@ -142,7 +166,11 @@ enum OnDeviceTracker {
         var result = BallTrack(points: pts, framesScanned: scanned, candidateFrames: candFrames,
                                seconds: CFAbsoluteTimeGetCurrent() - t0)
         if let first = pts.first {
-            result.impactT = detectImpact(url: url, lane: lane, vpY: vpY, foulY: foulY, afterT: first.t)
+            // Bound the pin-motion search to shortly after the ball's LAST tracked point (≈ at the pins), so it
+            // can't lock onto a spurious later motion in the pit / a ball return / the next rack (IMG_8752 fired
+            // ~7 s late otherwise). The ball cannot strike the pins long after it was last seen approaching them.
+            result.impactT = detectImpact(url: url, lane: lane, vpY: vpY, foulY: foulY,
+                                          afterT: first.t, ballEndT: pts.last!.t, rot: rot)
         }
         return result
     }
@@ -175,7 +203,7 @@ enum OnDeviceTracker {
     /// ONE decode pass: collect all timestamps + reservoir-sample up to maxFrames DOWNSCALED luma frames for the
     /// median background. Never holds all frames (that OOM-killed the app). Downscales to ~540p working height
     /// (stride) → ~stride² less memory + faster; blob coords are scaled back to full-res in track().
-    nonisolated private static func buildBackground(url: URL, maxFrames: Int) -> (Int, Int, Int, [Double], [UInt8])? {
+    nonisolated private static func buildBackground(url: URL, maxFrames: Int, rot: ODRotation = .r0) -> (Int, Int, Int, [Double], [UInt8])? {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -190,7 +218,7 @@ enum OnDeviceTracker {
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return nil }   // shadow cap / superseded (P0 2026-10-29)
             autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
-                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
                 ts.append(CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)))
                 if sw == 0 {
                     let fw = CVPixelBufferGetWidth(px), fh = CVPixelBufferGetHeight(px)
@@ -212,7 +240,7 @@ enum OnDeviceTracker {
         return (sw, sh, stride, ts, bg)
     }
 
-    nonisolated private static func forEachLuma(url: URL, stride: Int, sw: Int, sh: Int, _ body: (Int, [UInt8]) -> Void) {
+    nonisolated private static func forEachLuma(url: URL, stride: Int, sw: Int, sh: Int, rot: ODRotation = .r0, _ body: (Int, [UInt8]) -> Void) {
         let asset = AVURLAsset(url: url)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return }
@@ -224,7 +252,7 @@ enum OnDeviceTracker {
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return }       // shadow cap / superseded (P0 2026-10-29)
             autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
-                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
                 body(i, downsampledLuma(px, stride: stride, sw: sw, sh: sh))
                 i += 1
             }
@@ -250,7 +278,7 @@ enum OnDeviceTracker {
     /// Pin-deck arrival = t_impact. Watches the far quarter of the lane (where the pins stand); the first
     /// sustained motion spike there after the ball is rolling is the ball reaching the pins (cf. cv/track.py
     /// detect_impact, simplified for a tripod clip: reference = median of the first frames, no warp).
-    nonisolated private static func detectImpact(url: URL, lane: ODDetectedLane, vpY: Float, foulY: Float, afterT: Double) -> Double? {
+    nonisolated private static func detectImpact(url: URL, lane: ODDetectedLane, vpY: Float, foulY: Float, afterT: Double, ballEndT: Double = .infinity, rot: ODRotation = .r0) -> Double? {
         let rTop = max(0, Int(vpY) + 5), rBot = Int(vpY + 0.30 * (foulY - vpY))
         guard rBot > rTop + 8 else { return nil }
         let (xaF, xbF) = laneX(lane, Float(rBot)); let padX = 0.5 * (xbF - xaF)
@@ -264,7 +292,7 @@ enum OnDeviceTracker {
         var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(Double, Float)] = []
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             autoreleasepool {                                           // DEC-117: drain per frame (jetsam fix)
-            guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+            guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
             CVPixelBufferLockBaseAddress(px, .readOnly)
             let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
@@ -299,6 +327,7 @@ enum OnDeviceTracker {
         #endif
         for k in 0..<(series.count - 3) {
             if series[k].0 < afterT { continue }
+            if series[k].0 > ballEndT + 0.6 { break }     // not the shot's impact — a later pit/return/rack motion
             if series[k].1 > thr && series[k..<min(k + 4, series.count)].filter({ $0.1 > thr }).count >= 2 { return series[k].0 }
         }
         return nil
