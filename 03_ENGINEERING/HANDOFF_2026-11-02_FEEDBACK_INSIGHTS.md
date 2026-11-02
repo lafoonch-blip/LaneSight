@@ -1,6 +1,6 @@
-# Handoff — Feedback Insights dashboard + approved work queue (DEC-124)
+# Handoff — Feedback Insights dashboard + approved work queue (DEC-125)
 Status: READY FOR CLAUDE CODE · Date: 2026-11-02 · Owner: Shayne
-Depends on: DEC-123 Feedback button (`HANDOFF_2026-11-02_FEEDBACK_BUTTON.md`) — build that first.
+Depends on: DEC-124 Feedback button (`HANDOFF_2026-11-02_FEEDBACK_BUTTON.md`) — build that first.
 
 Run straight through to the end and report once. Stop only for a real blocker or an irreversible action (live migration, push to main, creating a scheduled task).
 

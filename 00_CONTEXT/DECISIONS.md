@@ -1269,7 +1269,7 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
 
-### DEC-124 — Feedback Insights: AI-consolidated actions, founder approval, approved work queue (2026-11-02)
+### DEC-125 — Feedback Insights: AI-consolidated actions, founder approval, approved work queue (2026-11-02)
 **Decision (Shayne, 2026-11-02):**
 - A **Feedback Insights** page in the owner-only ops dashboard (DEC-098) turns all feedback (every source and phase in the DEC-059 store, plus analysis-failure reason codes as supporting evidence) into a short list of **proposed actions**.
 - A scheduled **Claude feedback analyst** job (daily + "Analyze now") groups new feedback into proposals: title, type (Bug · Analysis accuracy · UX/design · Feature idea · Content/copy), plain-English summary, proposed change, affected area, priority, rough effort, related DECs, and evidence (linked feedback rows, count, distinct bowlers, phases, example quotes). New feedback merges into an existing open proposal instead of duplicating it.
@@ -1278,20 +1278,20 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 - **Build:** a Claude Code scheduled task picks up queued issues, works each on its own new branch and opens a PR. It never merges, never touches branches it didn't create, and never pushes to main. Shayne reviews and merges. UI changes go through Figma/APP_DESIGN_CHANGES first (DEC-091); metric/algorithm changes go through the validation gates (no unvalidated correction factors).
 - **Guardrails:** feedback text is untrusted user input. It is de-identified before the LLM sees it, and the build agent works only from the founder-approved spec, never raw feedback (prompt-injection defense). LLM cost for the analyst job is capped (≤$10/month) inside the DEC-043 cap. DEC-059 "no live effect" holds: approval is the only path from feedback to a change.
 **Why:** feedback is only useful if it turns into decisions; one review-and-approve surface keeps Shayne in control while removing the manual work of reading, grouping and writing up every comment.
-**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-098, DEC-123. Implements the "action queue" idea in AI_OPERATIONS_INTELLIGENCE_AGENTS_CONTEXT for the feedback source. Spec/handoff: `03_ENGINEERING/HANDOFF_2026-11-02_FEEDBACK_INSIGHTS.md`.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-098, DEC-124. Implements the "action queue" idea in AI_OPERATIONS_INTELLIGENCE_AGENTS_CONTEXT for the feedback source. Spec/handoff: `03_ENGINEERING/HANDOFF_2026-11-02_FEEDBACK_INSIGHTS.md`.
 
-### DEC-123 — In-app Feedback button on Home (general feedback, categorized) (2026-11-02)
+### DEC-124 — In-app Feedback button on Home (general feedback, categorized) (2026-11-02)
 **Decision (Shayne, 2026-11-02):**
 - Home gets a **Feedback** button. Tapping it opens a small sheet: **category** (required, one of: Bug · Wrong/missing numbers · Confusing · Idea · Other), **text** (required), optional **screenshot**, and an "include diagnostics" toggle (default on). Submit shows a short thank-you and returns to Home.
 - It writes to the one retained `feedback` store (DEC-059) as `source = 'general'` via the existing `POST /feedback`, with the category in `tags[0]` and auto-attached context: app version/build, device model, iOS version, current screen, last session/shot id when present.
-- **Every row carries the real app phase**: `dev` (Shayne), `ff` (Friends & Family, DEC-122), `beta`, `live`. `ff` is added to the phase enum. Today the iOS app sends no phase and the server defaults to `dev`; that is fixed as part of this.
+- **Every row carries the real app phase**: `dev` (Shayne), `ff` (Friends & Family, DEC-123), `beta`, `live`. `ff` is added to the phase enum. Today the iOS app sends no phase and the server defaults to `dev`; that is fixed as part of this.
 - Same button and flow serve F&F, Beta and live, so F&F is the first real test of the feedback system. Session-end feedback, shot notes and advice ratings stay as they are.
 - Owner reads and triages all rows (new / reviewed / actioned / dismissed) through the ops dashboard / CSV export; feedback never changes the app live (DEC-059).
 - Design: the button and sheet follow "01 - Design Standards"; added to APP_DESIGN_CHANGES and needs a Figma component (Feedback button + Feedback sheet).
 **Why:** testers need one obvious place to report problems and ideas while they bowl, and the feedback store needs real use before Beta.
-**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-122. Fills FEEDBACK_STORE_SPEC §2 `general` ("Settings › Send feedback", reserved) — the entry point is Home, not Settings.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-123. Fills FEEDBACK_STORE_SPEC §2 `general` ("Settings › Send feedback", reserved) — the entry point is Home, not Settings.
 
-### DEC-122 — Friends & Family test phase via TestFlight (pre-Beta, not gated by DEC-118) (2026-11-02)
+### DEC-123 — Friends & Family test phase via TestFlight (pre-Beta, not gated by DEC-118) (2026-11-02)
 **Decision (Shayne, 2026-11-02):**
 - Add a **Friends & Family (F&F) test phase** between Shayne-only MVP testing and the friends Beta. A handful of close friends and family get the app, sign up, use it when they bowl, and send feedback. Purpose: **more real-world videos and feedback for analysis**, not a Beta.
 - **Not gated by DEC-118.** The app does not need to be Beta-ready; the DEC-118 accuracy, coverage and <30 s gates still apply to the friends **Beta** only. DEC-047 (Beta is Shayne's call) is unchanged.
@@ -1301,6 +1301,9 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 - Server-fallback cost stays inside the DEC-043 $100/month private cap; a few testers are well within it.
 **Why:** the bottleneck right now is labeled real-world clips and observations from more bowlers, houses and phones; waiting for Beta readiness delays the data that gets LaneSight there.
 **Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-047, DEC-059, DEC-099/104, DEC-118 (Beta gates unchanged).
+
+### DEC-122 — (reserved, not in this branch)
+DEC-122 is assigned on `feat/ios-lane-parity` ("No analysis fails as a whole because one part failed" — partial results + per-stage outcome tracking). The F&F / feedback decisions that originally drafted as 122–124 were renumbered to **DEC-123–DEC-125** to avoid the collision. This stub holds the number's place until that branch merges.
 
 ### DEC-121 — Form metric tolerances + step-count honesty + Form capture defaults (amends DEC-118) (2026-11-02)
 **Decision (Shayne, 2026-11-02):** per-plant form-step labels landed (`form_steps` task → `validation/form_steps_labels.json`; all approaches are 5 steps, no 6-step data; some early plants off-frame so visible-plant counts are 8824:4, others 5, IMG_8980:3). Amends DEC-118's Form gates with explicit tolerances and records an honest status for step count.
