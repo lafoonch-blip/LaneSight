@@ -169,7 +169,10 @@ _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion'
 # the app's aliases back on read. Email is NEVER a profile column — it lives in auth (DEC-087 §3).
 _PROFILE_COLS = {'display_name', 'first_name', 'last_name', 'phone', 'handed', 'style', 'units', 'usbc_id',
                  'dob', 'delivery_style', 'approach_steps', 'form_baseline', 'location', 'is_staged',
-                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in'}
+                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in',
+                 # DEC-123 F&F: account test phase + the F&F consent accepted (owner/staged forced to 'dev'
+                 # by migration 037's guard trigger; mirrored in MemoryStore.put_profile).
+                 'cohort', 'ff_consent_version', 'ff_consent_at'}
 
 # Bowler-level grip + PAP, stored in inches (DEC-074/087). Coerced to float on the way in.
 _PROFILE_NUMERIC = ('grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in')
@@ -198,7 +201,7 @@ def _profile_in(data: dict) -> dict:
         if d.get(k) is not None:
             out[k] = float(d[k])
     for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location',
-              'is_staged', 'staged_kind'):
+              'is_staged', 'staged_kind', 'cohort', 'ff_consent_version', 'ff_consent_at'):
         if d.get(k) is not None:
             out[k] = d[k]
     if 'form_baseline' in d and d['form_baseline'] is None:
@@ -227,6 +230,8 @@ class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
         self.feedback_rows = []       # the one retained feedback store (DEC-059); survives shot/session/account deletion
+        # DEC-125 Feedback Insights: AI-consolidated proposals, their evidence links, and analyst-run audit log.
+        self.insights, self.insight_links, self.insight_runs = [], [], []
         self.profiles, self.sensors, self.arsenal = {}, {}, {}
         # score/tier/achievement/benchmark engine state (SCORE_TIERS §7, BENCHMARKS §6)
         self.tier_state = {}          # user_id -> state dict
@@ -335,6 +340,13 @@ class MemoryStore:
             dn = _compose_display_name(p.get('first_name'), p.get('last_name'))
             if dn:
                 p['display_name'] = dn
+        # Mirror migration 037's cohort default + guard trigger: cohort defaults to 'dev', and the owner and
+        # every staged account are ALWAYS 'dev' whatever the client sent (DEC-123).
+        from lanesight_core.owner import OWNER_USER_ID
+        if not p.get('cohort'):
+            p['cohort'] = 'dev'
+        if p.get('is_staged') or user_id == OWNER_USER_ID:
+            p['cohort'] = 'dev'
         self.profiles[user_id] = p
         return _profile_out(p)
 
@@ -646,9 +658,14 @@ class MemoryStore:
         and start at their defaults."""
         d = dict(data or {})
         tags = d.get('tags')
+        # app_phase is authoritative from the author's account cohort (DEC-124) — mirrors migration 037's
+        # feedback_set_app_phase trigger: a profile cohort wins over whatever the client sent; with no profile
+        # the client value (or 'dev') stands. Keeps Shayne's/staged data from ever mixing into F&F/beta/live.
+        _prof = self.profiles.get(user_id) or {}
+        _phase = _prof.get('cohort') or d.get('app_phase') or 'dev'
         row = dict(
             id=d.get('id') or _new_id(), user_id=user_id, user_ref=d.get('user_ref'),
-            source=d.get('source') or 'general', app_phase=d.get('app_phase') or 'dev',
+            source=d.get('source') or 'general', app_phase=_phase,
             app_version=d.get('app_version'), core_version=d.get('core_version'),
             rules_version=d.get('rules_version'), formula_version=d.get('formula_version'),
             session_id=d.get('session_id'), shot_id=d.get('shot_id'),
@@ -657,6 +674,7 @@ class MemoryStore:
             tags=list(tags) if tags else [], text=d.get('text'), context=d.get('context'),
             diagnostics=d.get('diagnostics'), triage_status='new', owner_notes=None, action_ref=None,
             anonymized_at=None, created_at=time.time(), updated_at=time.time(),
+            insight_considered_at=None,     # DEC-125: set once an analyst run has grouped this row
             # mirror migration 018's trigger: staged feedback is flagged from the author's profile so it is
             # excluded from feedback review/analytics (DEC-063).
             is_staged=bool((self.profiles.get(user_id) or {}).get('is_staged')))
@@ -665,6 +683,63 @@ class MemoryStore:
 
     def list_feedback(self, user_id):
         return [r for r in self.feedback_rows if r.get('user_id') == user_id]
+
+    # Feedback Insights (DEC-125) -----------------------------------------------------------------------
+    # Owner/analyst surface — not per-bowler. The analyst job (service role) reads unconsidered REAL
+    # feedback, writes proposals + evidence links, and records a per-run audit row for the cost cap.
+    _INSIGHT_OPEN_STATUSES = ('proposed', 'approved', 'queued', 'in_progress', 'pr_open')
+
+    def list_unconsidered_feedback(self, limit=200):
+        """REAL feedback (staged excluded, DEC-063) not yet grouped by an analyst run, oldest first."""
+        rows = [r for r in self.feedback_rows
+                if not r.get('is_staged') and r.get('insight_considered_at') is None]
+        rows.sort(key=lambda r: r.get('created_at') or 0)
+        return rows[:limit]
+
+    def mark_feedback_considered(self, feedback_ids, at=None):
+        at = at if at is not None else time.time()
+        ids = set(feedback_ids)
+        for r in self.feedback_rows:
+            if r.get('id') in ids:
+                r['insight_considered_at'] = at
+
+    def list_open_insights(self):
+        return [dict(i) for i in self.insights if i.get('status') in self._INSIGHT_OPEN_STATUSES]
+
+    def create_insight(self, data):
+        d = dict(data or {})
+        row = dict(
+            id=d.get('id') or _new_id(), title=d.get('title'), type=d.get('type'),
+            summary=d.get('summary'), proposed_change=d.get('proposed_change'),
+            affected_area=d.get('affected_area'), priority=d.get('priority'), effort=d.get('effort'),
+            related_decs=list(d.get('related_decs') or []), status=d.get('status') or 'proposed',
+            founder_notes=None, reject_reason=None, merged_into=None, github_issue_number=None,
+            pr_url=None, approved_at=None, created_at=time.time(), updated_at=time.time())
+        self.insights.append(row)
+        return row
+
+    def link_insight_feedback(self, insight_id, feedback_id):
+        if not any(l for l in self.insight_links
+                   if l['insight_id'] == insight_id and l['feedback_id'] == feedback_id):
+            self.insight_links.append({'insight_id': insight_id, 'feedback_id': feedback_id,
+                                       'added_at': time.time()})
+
+    def record_insight_run(self, data):
+        row = dict(id=_new_id(), created_at=time.time(), **(data or {}))
+        self.insight_runs.append(row)
+        return row
+
+    def month_insight_cost_usd(self, year, month):
+        """Sum analyst cost for runs started in the given calendar month (for the DEC-043/DEC-125 cap)."""
+        total = 0.0
+        for r in self.insight_runs:
+            ts = r.get('started_at') or r.get('created_at')
+            if ts is None:
+                continue
+            t = time.gmtime(ts)
+            if t.tm_year == year and t.tm_mon == month:
+                total += float(r.get('cost_usd') or 0)
+        return total
 
     def save_feedback(self, user_id, session_id, fb):
         row = dict(id=_new_id(), user_id=user_id, session_id=session_id, created_at=time.time(), **fb)
@@ -1117,10 +1192,87 @@ class PgStore(MemoryStore):
                       'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
                       'text', 'context', 'diagnostics')
 
+    def _profile_cohort(self, user_id):
+        """The author's account cohort (dev|ff|beta|live), or None if there's no profile row yet."""
+        rows = self._get('profiles', f'user_id=eq.{user_id}&select=cohort')
+        return (rows[0].get('cohort') if rows else None) or None
+
     def add_feedback(self, user_id, data):
+        # Resolve app_phase from the account cohort here too (DEC-124), so the row returned to the client
+        # matches what migration 037's feedback_set_app_phase trigger will stamp in the DB.
+        data = dict(data or {})
+        cohort = self._profile_cohort(user_id)
+        if cohort:
+            data['app_phase'] = cohort
         row = super().add_feedback(user_id, data)      # mirror in memory + normalize
         self._post('feedback', {k: row.get(k) for k in self._FEEDBACK_COLS})
         return row
+
+    # Feedback Insights (DEC-125) — PostgREST-backed; the analyst job runs as the service role. --------
+    @staticmethod
+    def _iso(ts):
+        import datetime
+        if ts is None:
+            return None
+        if isinstance(ts, str):
+            return ts
+        return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat()
+
+    def list_unconsidered_feedback(self, limit=200):
+        q = (f'is_staged=eq.false&insight_considered_at=is.null'
+             f'&order=created_at.asc&limit={int(limit)}&select=*')
+        return self._get('feedback', q)
+
+    def mark_feedback_considered(self, feedback_ids, at=None):
+        ids = [i for i in (feedback_ids or []) if i]
+        if not ids:
+            return
+        at_iso = self._iso(at if at is not None else time.time())
+        self._req(f"feedback?id=in.({','.join(ids)})", 'PATCH', {'insight_considered_at': at_iso})
+
+    def list_open_insights(self):
+        statuses = ','.join(self._INSIGHT_OPEN_STATUSES)
+        return self._get('feedback_insight', f'status=in.({statuses})&select=*')
+
+    _INSIGHT_COLS = ('id', 'title', 'type', 'summary', 'proposed_change', 'affected_area', 'priority',
+                     'effort', 'related_decs', 'status')
+
+    def create_insight(self, data):
+        d = dict(data or {})
+        row = {'id': d.get('id') or _new_id(), 'title': d.get('title'), 'type': d.get('type'),
+               'summary': d.get('summary'), 'proposed_change': d.get('proposed_change'),
+               'affected_area': d.get('affected_area'), 'priority': d.get('priority'),
+               'effort': d.get('effort'), 'related_decs': list(d.get('related_decs') or []),
+               'status': d.get('status') or 'proposed'}
+        self._post('feedback_insight', {k: row.get(k) for k in self._INSIGHT_COLS})
+        return row
+
+    def link_insight_feedback(self, insight_id, feedback_id):
+        # Idempotent: a re-link is a no-op via the (insight_id, feedback_id) unique constraint (migration 038).
+        self._req('feedback_insight_link?on_conflict=insight_id,feedback_id', 'POST',
+                  {'insight_id': insight_id, 'feedback_id': feedback_id},
+                  prefer='resolution=ignore-duplicates,return=minimal')
+
+    _INSIGHT_RUN_COLS = ('id', 'started_at', 'finished_at', 'rows_considered', 'insights_created',
+                         'insights_updated', 'model', 'tokens_in', 'tokens_out', 'cost_usd',
+                         'status', 'error')
+
+    def record_insight_run(self, data):
+        d = dict(data or {})
+        d.setdefault('id', _new_id())
+        for k in ('started_at', 'finished_at'):
+            if d.get(k) is not None:
+                d[k] = self._iso(d[k])
+        self._post('feedback_insight_run', {k: d.get(k) for k in self._INSIGHT_RUN_COLS if d.get(k) is not None})
+        return d
+
+    def month_insight_cost_usd(self, year, month):
+        start = f'{year:04d}-{month:02d}-01'
+        ny, nm = (year + 1, 1) if month == 12 else (year, month + 1)
+        end = f'{ny:04d}-{nm:02d}-01'
+        rows = self._get('feedback_insight_run',
+                         f'started_at=gte.{start}&started_at=lt.{end}&select=cost_usd')
+        return sum(float(r.get('cost_usd') or 0) for r in rows)
 
     def save_feedback(self, user_id, session_id, fb):
         # super() mirrors memory AND routes a 'session_feedback' row into feedback via self.add_feedback

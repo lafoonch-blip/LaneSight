@@ -250,6 +250,27 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         static let saveVideosToPhone = "ls.saveVideosToPhone"
         static let activeSession = "ls.activeSession"       // DEC-119 persisted active-session mirror
         static let backgroundedAt = "ls.backgroundedAt"     // DEC-119 last background-enter time (resume decision)
+        static let ffConsent = "ls.ffConsentVersion"        // DEC-123 accepted F&F consent version (local gate)
+    }
+
+    // MARK: DEC-123 Friends & Family phase / owner gating ------------------------------------------------
+    /// The current F&F consent version. Bump when the consent copy materially changes so testers re-accept.
+    static let ffConsentVersion = "ff-2026-11-02"
+    /// The build's declared phase (Debug → dev, F&F TestFlight Release → ff). Sent on feedback and, for F&F,
+    /// written to the account cohort at consent. The server cohort is authoritative (owner/staged forced dev).
+    var appPhase: String { AppPhase.current.rawValue }
+    /// True only for Shayne's account (or the dev-user escape hatch). Owner-only screens — the Dev build panel
+    /// and test-account switching — are hidden from F&F testers unless this is true (DEC-123).
+    var isOwner: Bool { useDevUser || session?.user_id == Owner.userID }
+    /// The F&F consent the tester has accepted on this device (nil = not accepted). Persisted locally so the
+    /// one-screen consent shows once; the version + timestamp are also stored on the account (migration 037).
+    @Published private(set) var ffConsentAcceptedVersion: String? {
+        didSet { defaults.set(ffConsentAcceptedVersion, forKey: Keys.ffConsent) }
+    }
+    /// Show the one-screen F&F consent: an F&F build, signed in, and the current consent not yet accepted.
+    var needsFFConsent: Bool {
+        AppPhase.current.requiresFFConsent && session != nil
+            && ffConsentAcceptedVersion != Self.ffConsentVersion
     }
 
     /// DEC-119: ≥30 min in the background (with an active session) prompts Continue/End on return; shorter gaps
@@ -276,6 +297,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         speakAdjustments = defaults.bool(forKey: Keys.speak)
         preferredFPS = (defaults.object(forKey: Keys.preferredFPS) as? Int) ?? 120
         saveVideosToPhone = defaults.bool(forKey: Keys.saveVideosToPhone)
+        ffConsentAcceptedVersion = defaults.string(forKey: Keys.ffConsent)
 
         // Restore a persisted Keychain session (tokens survive relaunch; cleared on sign out).
         if let access = Keychain.get(Keychain.Account.accessToken) {
@@ -1425,12 +1447,49 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         try await client.patchShotSensor(shotId: shotId, sensorUsed: used, sensorId: sensorId)
     }
 
-    /// Full session feedback (rating + tags + diagnostics), used by the feedback sheet.
+    /// Full session feedback (rating + tags + diagnostics), used by the session-end feedback sheet.
     func submitSessionFeedback(rating: Int, tags: [String], text: String, diagnostics: Bool) async throws {
         guard let sid = sessionId else { return }
         let client = try makeClient()
         try await client.feedbackFull(sessionId: sid, rating: rating, tags: tags,
-                                      text: text.isEmpty ? nil : text, diagnostics: diagnostics)
+                                      text: text.isEmpty ? nil : text, diagnostics: diagnostics,
+                                      appPhase: appPhase)
+    }
+
+    /// DEC-123: records the F&F consent — stores the version + timestamp on the account (and the build's phase
+    /// as the account cohort; the server forces owner/staged to dev) and marks it accepted on this device.
+    func recordFFConsent() async {
+        let now = ISO8601DateFormatter().string(from: Date())
+        if let client = try? makeClient() {
+            // Best-effort: never block entry on a profile write failing — the local flag still advances so the
+            // tester isn't stuck behind the consent screen offline; the cohort re-syncs on the next profile save.
+            try? await client.putProfile(["cohort": appPhase,
+                                          "ff_consent_version": Self.ffConsentVersion,
+                                          "ff_consent_at": now])
+        }
+        ffConsentAcceptedVersion = Self.ffConsentVersion
+    }
+
+    /// DEC-124: general feedback from the Home Feedback button → the one retained store (source='general').
+    /// Category rides in tags[0]; app_phase + app_version always sent; device/iOS/screen/last-session go in
+    /// diagnostics only when the tester leaves "Include diagnostics" on. Throws so the sheet can keep the
+    /// typed text and let the user retry.
+    func submitGeneralFeedback(category: String, text: String, includeDiagnostics: Bool,
+                               currentScreen: String, screenshotJPEGBase64: String?) async throws {
+        let client = try makeClient()
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        var diagnostics: [String: Any]? = nil
+        if includeDiagnostics {
+            var d: [String: Any] = ["device_model": UIDevice.modelIdentifier,
+                                    "ios_version": UIDevice.current.systemVersion,
+                                    "current_screen": currentScreen]
+            if let sid = activeSession?.id ?? sessionId { d["last_session_id"] = sid }
+            if let shot = result?.shotId { d["last_shot_id"] = shot }
+            if let shot = screenshotJPEGBase64 { d["screenshot_jpeg_b64"] = shot }
+            diagnostics = d
+        }
+        try await client.submitGeneralFeedback(category: category, text: text, appPhase: appPhase,
+                                               appVersion: appVersion, diagnostics: diagnostics)
     }
 
     /// Ends the active session; stores the returned summary for the summary screen.

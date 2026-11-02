@@ -20,6 +20,7 @@ dev = ["pytest>=8", "httpx>=0.27"]
 form = ["mediapipe>=0.10"]       # rear/bowler-side Form P1 pose backend (lanesight_core.form.pose)
 runner = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 api = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "pyjwt[crypto]>=2.8"]
+analyst = ["anthropic>=0.69"]    # DEC-125 Feedback Insights analyst job (only needed where the job runs)
 [tool.setuptools.packages.find]
 include = ["lanesight_core*", "lanesight_runner*", "lanesight_api*"]
 
