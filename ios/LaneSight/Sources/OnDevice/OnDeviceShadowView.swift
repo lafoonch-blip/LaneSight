@@ -35,6 +35,11 @@ struct OnDeviceShadowView: View {
                 } label: {
                     HStack { Text("Run ball tracking (stage 3)"); if running { Spacer(); ProgressView() } }
                 }.disabled(running || clipURL == nil)
+                Button {
+                    Task { await runFull() }
+                } label: {
+                    HStack { Text("Run FULL engine — DEC-126 latency"); if running { Spacer(); ProgressView() } }
+                }.disabled(running || clipURL == nil)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled) }
             } header: { Text("On-device analysis — Stage 1 (shadow)") } footer: {
                 Text("Ports the server's stabilization (frame→reference homography) to Vision on-device. Streams frames (memory-safe). Compare timing/quality to the server's cv.stabilize_s (~15s/clip).")
@@ -80,6 +85,36 @@ struct OnDeviceShadowView: View {
             in the parity gate. Transforms are the stage-1 input for tracking (not yet ported).
             """
         } catch { self.error = "stabilize failed: \(error.localizedDescription)" }
+        running = false
+    }
+
+    /// DEC-126: run the FULL on-device engine (plate → detect → track → speed → rev) and report the latency the
+    /// 30 s primary guardrail is measured against, plus the measured speed/rev and basis. The exact call the
+    /// live-shot primary path makes.
+    private func runFull() async {
+        guard let url = clipURL else { return }
+        running = true; error = nil; report = ""
+        let body = await OnDeviceShadow.run(clipURL: url, shotId: "devtest", source: "upload",
+                                            sessionId: nil, captureMode: "shot", appVersion: "dev")
+        let perf = body["device_perf"] as? [String: Any] ?? [:]
+        let m = body["metrics"] as? [String: Any] ?? [:]
+        let lat = perf["latency_s"] as? Double ?? -1
+        func f(_ v: Double, _ n: Int = 2) -> String { String(format: "%.\(n)f", v) }
+        func val(_ k: String) -> String { (m[k] as? Double).map { f($0) } ?? "unavailable" }
+        report = """
+        FULL on-device engine — DEC-126 primary path
+        Device: \(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)
+
+        latency: \(f(lat))s   \(lat >= 0 && lat <= 30 ? "✅ under 30 s (primary)" : "❌ over 30 s → falls back to server")
+        peak_mem: \(f((perf["peak_mem_mb"] as? Double) ?? 0)) MB
+        basis: \(body["basis"] as? String ?? "?")
+
+        ball_speed: \(val("ball_speed")) mph
+        speed_avg_foul_to_pins: \(val("speed_avg_foul_to_pins")) mph
+        rev_rate: \(val("rev_rate")) rpm
+
+        note: \(body["note"] as? String ?? "")
+        """
         running = false
     }
 
