@@ -1,5 +1,7 @@
--- 037 Feedback Insights: AI-consolidated actions + founder approval + approved work queue (DEC-125).
--- Additive and idempotent. DO NOT apply to live — that is Shayne's step.
+-- 038 Feedback Insights: AI-consolidated actions + founder approval + approved work queue (DEC-125).
+-- Additive and idempotent. DO NOT apply to live — that is Shayne's step. (Number 038 follows 037_ff_cohort;
+-- 036 is taken by feat/ios-lane-parity. Apply 037 before 038 — this migration's incremental marker column is
+-- independent, but keep them in order.)
 --
 -- A scheduled Claude "feedback analyst" job groups new feedback into proposed ACTIONS (insights). The founder
 -- approves / edits / defers / rejects / merges them on the owner-only ops dashboard; approving creates a

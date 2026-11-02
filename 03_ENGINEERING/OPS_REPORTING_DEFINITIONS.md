@@ -70,7 +70,7 @@ Each metric: **source view.column** — definition — honesty rule.
 ### Feedback & support (`ops.feedback_summary`, day × app_phase × source)
 - **total, thumbs_up, thumbs_down, untriaged, avg_rating** — real feedback only (staged excluded, mirrors `feedback_review`, DEC-063). `untriaged` = `triage_status='new'`. `app_phase` now includes **`ff`** (Friends & Family, DEC-123) alongside dev/beta/live — the dashboard Feedback page is thereby filterable by cohort.
 
-### Feedback Insights (DEC-125; migration 037 — tables in `public`, NOT an `ops` view)
+### Feedback Insights (DEC-125; migration 038 — tables in `public`, NOT an `ops` view)
 Served by `public.ops_rpc_feedback_insights(p_status)` (owner-checked, SECURITY DEFINER, `ops.is_owner()`) over
 `feedback_insight` + `feedback_insight_link` + `feedback_insight_run`. **These are tables, not an `ops`
 reporting view, so they are intentionally outside the `definitions.json` / `025_ops_reporting.sql` contract**

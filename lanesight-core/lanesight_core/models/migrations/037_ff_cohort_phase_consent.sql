@@ -1,6 +1,6 @@
--- 036 Friends & Family cohort + app-phase 'ff' + F&F consent (DEC-123, DEC-124). Additive and idempotent.
--- DO NOT apply to live — that is Shayne's step. Next free migration number after 035_engine_parity (checked
--- across all remote branches 2026-11-02).
+-- 037 Friends & Family cohort + app-phase 'ff' + F&F consent (DEC-123, DEC-124). Additive and idempotent.
+-- DO NOT apply to live — that is Shayne's step. Number 037: re-checked across all remote branches 2026-11-02;
+-- 036 is taken by feat/ios-lane-parity's 036_dec122_outcome_tracking, so this + 038 are the next free numbers.
 --
 -- What this adds:
 --   * profiles.cohort (dev|ff|beta|live) — the account's test phase, so Stats, the ops dashboard and the

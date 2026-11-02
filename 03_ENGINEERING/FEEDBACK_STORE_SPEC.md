@@ -25,7 +25,7 @@ Collect every piece of bowler feedback in one place, across dev, beta and the li
 | `id` | uuid pk | |
 | `created_at`, `updated_at` | timestamptz | Autosaved notes update the same row |
 | `source` | text enum (§2) | |
-| `app_phase` | text: `dev` · `ff` · `beta` · `live` | The account's cohort at write time (DEC-124). **Stamped from `profiles.cohort`** by a trigger (migration 036), not the client — so Shayne (`dev`) and staged accounts (`dev`) never mix into F&F/beta/live. `ff` added for Friends & Family (DEC-123). |
+| `app_phase` | text: `dev` · `ff` · `beta` · `live` | The account's cohort at write time (DEC-124). **Stamped from `profiles.cohort`** by a trigger (migration 037), not the client — so Shayne (`dev`) and staged accounts (`dev`) never mix into F&F/beta/live. `ff` added for Friends & Family (DEC-123). |
 | `app_version`, `core_version`, `rules_version`, `formula_version` | text | What produced the results the feedback is about |
 | `user_id` | uuid null, FK → users **ON DELETE SET NULL** | Null once the account is deleted (§5) |
 | `user_ref` | text | Stable pseudonymous id (e.g. salted hash), kept after deletion so one person's feedback can still be grouped |
@@ -73,7 +73,7 @@ Indexes: `(created_at)`, `(source, app_phase)`, `(user_ref)`, `(shot_id)`, `(ses
 - New API: `PUT /shots/{id}/note` and `POST /feedback` write `feedback` rows. The CSV export reads from `feedback`.
 
 ## 8. Feedback Insights — AI-consolidated actions + work queue (DEC-125)
-Migration 037. A scheduled Claude analyst groups unconsidered **real** feedback into proposed ACTIONS the
+Migration 038. A scheduled Claude analyst groups unconsidered **real** feedback into proposed ACTIONS the
 founder reviews on the owner-only ops dashboard (`/insights`). Nothing is built without approval (DEC-059 "no
 live effect"); Approve creates a `lanesight-queue` GitHub issue carrying the approved spec only (never raw
 feedback — prompt-injection defense).

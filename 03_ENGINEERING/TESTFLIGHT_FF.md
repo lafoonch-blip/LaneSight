@@ -16,7 +16,7 @@ only you can do (App Store Connect + the archive upload).
   so App Store Connect won't ask the per-build export-compliance question.
 - Build phase: the Release configuration sets `LS_APP_PHASE = ff` → the app runs as the F&F cohort (shows the
   one-screen consent, tags all feedback `ff`, hides owner-only dev screens). Your own account stays `dev`
-  (the server forces the owner + staged accounts to `dev`, migration 036).
+  (the server forces the owner + staged accounts to `dev`, migration 037).
 
 ## 1. App Store Connect — app record
 1. App Store Connect → **Apps → +** → **New App**. Platform iOS, name **LaneSight**, primary language English,
@@ -103,7 +103,7 @@ an App Store Connect API key.)
   email.
 
 ## Related
-- Consent copy + cohort: DEC-123; account cohort/consent fields: migration 036.
+- Consent copy + cohort: DEC-123; account cohort/consent fields: migration 037.
 - Feedback button: DEC-124 / HANDOFF_2026-11-02_FEEDBACK_BUTTON.md.
 - Account deletion (App Store 5.1.1(v)): Settings → Delete account → `DELETE /me` (anonymizes feedback,
   deletes the account + its clips/sessions). Verified end-to-end (see report).

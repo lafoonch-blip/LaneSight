@@ -6,7 +6,7 @@ import UIKit
 /// App Store builds set it to `beta` / `live` by changing `LS_APP_PHASE` in project.yml — no code change.
 ///
 /// This is only the build's *request*. The server treats the account cohort as authoritative and forces the
-/// owner (Shayne) and every staged test account to `dev` (migration 036), so Shayne's real data and staged test
+/// owner (Shayne) and every staged test account to `dev` (migration 037), so Shayne's real data and staged test
 /// data never mix into F&F / beta / live.
 enum AppPhase: String {
     case dev, ff, beta, live

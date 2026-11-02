@@ -260,7 +260,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// and test-account switching — are hidden from F&F testers unless this is true (DEC-123).
     var isOwner: Bool { useDevUser || session?.user_id == Owner.userID }
     /// The F&F consent the tester has accepted on this device (nil = not accepted). Persisted locally so the
-    /// one-screen consent shows once; the version + timestamp are also stored on the account (migration 036).
+    /// one-screen consent shows once; the version + timestamp are also stored on the account (migration 037).
     @Published private(set) var ffConsentAcceptedVersion: String? {
         didSet { defaults.set(ffConsentAcceptedVersion, forKey: Keys.ffConsent) }
     }

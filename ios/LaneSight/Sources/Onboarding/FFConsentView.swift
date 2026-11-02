@@ -3,7 +3,7 @@ import SwiftUI
 /// DEC-123: one-screen Friends & Family consent, shown once on an F&F (TestFlight) build after sign-up and
 /// before the app. Plain English: it's an early test build whose numbers may be wrong or missing; recordings
 /// are analyzed and clips are kept on the server for 7 days (DEC-099/104); clips and feedback are used to
-/// improve LaneSight. Accepting stores the consent version + timestamp on the account (migration 036).
+/// improve LaneSight. Accepting stores the consent version + timestamp on the account (migration 037).
 struct FFConsentView: View {
     @EnvironmentObject var model: AppModel
     @State private var busy = false
