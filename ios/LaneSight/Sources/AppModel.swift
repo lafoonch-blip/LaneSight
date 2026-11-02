@@ -918,21 +918,20 @@ final class AppModel: ObservableObject {
             built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
-            // DEC-126: on-device is PRIMARY for ball shots — its measurement drives the displayed speed/rev; the
-            // server stays shadow + authoritative for Score/coaching/boards. Falls back to the server-built metrics
-            // on crash or > 30 s (no accuracy gate). Off for real users until the switch ships; applies to uploads
-            // too (behind the flag) so it can be validated on existing videos.
+            // DEC-126: on-device is PRIMARY for ball shots — its measurement ALWAYS drives the displayed speed/rev.
+            // DEVICE-ONLY: there is NO server fallback — if the on-device engine can't measure (crash or > 30 s),
+            // the speed/rev show an honest `unavailable`, never the server's number. The server stays a background
+            // shadow + authoritative only for Score/coaching/boards. Kill switch: the `ls.ondevice_primary` flag
+            // (Dev Panel toggle) — off ⇒ server primary. Applies to uploads too (behind the flag) for validation.
             if Self.onDevicePrimary && !isForm {
                 let t0 = Date()
-                if let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: created.shot_id,
-                                                         source: source, sessionId: sid, mode: "shot") {
-                    built = Self.applyOnDevicePrimary(built, od)
-                    track("ondevice_primary", props: ["engine_s": Date().timeIntervalSince(t0),
-                                                      "latency_s": od.latencyS, "basis": od.basis])
-                } else {
-                    track("ondevice_fallback", props: ["reason": "crash_or_slow",
-                                                       "elapsed_s": Date().timeIntervalSince(t0)])   // server stays primary
-                }
+                let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: created.shot_id,
+                                                      source: source, sessionId: sid, mode: "shot")
+                let m = od ?? OnDeviceMeasurement(ballSpeed: nil, foulToPins: nil, revRate: nil, basis: "unavailable",
+                                                  note: "on-device analysis didn't finish within 30 s", latencyS: -1)
+                built = Self.applyOnDevicePrimary(built, m)
+                track(od != nil ? "ondevice_primary" : "ondevice_unavailable",
+                      props: ["engine_s": Date().timeIntervalSince(t0), "latency_s": m.latencyS, "basis": m.basis])
             }
             result = built
             shotCount += 1

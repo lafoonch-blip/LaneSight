@@ -410,7 +410,12 @@ enum OnDeviceTracker {
     // foul→pins, so u INCREASES (slope > 0); the roll is SHORT (≤ ~5 s); it covers real lane distance (u-range).
     // This rejects the ball return (u decreasing), the bowler (tiny motion), and whole-clip flat fits.
     nonisolated private static func ransacLink(_ perFrame: [[Cand]], vpY: Float, iters: Int = 6000) -> [TrackPoint] {
-        let flat = perFrame.flatMap { $0 }
+        // DETERMINISM (DEC-126 P0): pin the candidate order. Swift Dictionary/Set iteration uses a per-RUN random
+        // hash seed, so any upstream unordered structure (or an unstable sort downstream) made the RANSAC sample
+        // different (a,b) each run → a 1-frame-different track → the 8754 16.4↔17.4 non-determinism. Sorting flat by
+        // (t, i, cx) makes the whole linker reproducible regardless of upstream order.
+        let flat = perFrame.flatMap { $0 }.sorted {
+            ($0.t, Double($0.i), Double($0.cx)) < ($1.t, Double($1.i), Double($1.cx)) }
         guard flat.count >= 8 else { return [] }
         func u(_ c: Cand) -> Float { 1 / max(c.ct - vpY, 1) }
         let uRange = (flat.map { u($0) }.max() ?? 1) - (flat.map { u($0) }.min() ?? 0)
@@ -433,7 +438,7 @@ enum OnDeviceTracker {
                     else { chosen[c.i] = c }
                 }
             }
-            let inl = chosen.values.sorted { $0.t < $1.t }
+            let inl = chosen.values.sorted { ($0.t, Double($0.i)) < ($1.t, Double($1.i)) }
             guard inl.count >= 8, let f = inl.first, let l = inl.last else { continue }
             let span = l.t - f.t
             let du = u(l) - u(f)
@@ -441,7 +446,7 @@ enum OnDeviceTracker {
             guard span >= 0.5, span <= 5.0, du > 0.35 * uRange else { continue }
             if inl.count > best.count { best = inl }
         }
-        return best.sorted { $0.t < $1.t }
+        return best.sorted { ($0.t, Double($0.i)) < ($1.t, Double($1.i)) }
             .map { TrackPoint(i: $0.i, t: $0.t, cx: $0.cx, contactRow: $0.ct, frac: $0.frac) }
     }
 }
