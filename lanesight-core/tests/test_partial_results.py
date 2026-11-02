@@ -57,6 +57,28 @@ def test_impact_partial_carries_stage_report():
     assert rec.stage_report is stages and rec.stage_report['impact']['status'] == 'failed'
 
 
+def test_form_delivery_not_isolated_is_a_partial_not_a_fail():
+    """DEC-122: when every swing event fails the gates (FORM_DELIVERY_NOT_ISOLATED) the form analysis still
+    COMPLETES — events unavailable, but it returns with a stage report (the API no longer raises)."""
+    from lanesight_core.form.analyze import analyze_form_clip
+    from lanesight_core.form import FORM_P1
+
+    def fake_backend(video, out_prefix=None, handed=None):
+        # all P1 metrics unavailable (events nulled), with a stage report marking the isolation failure
+        out = {k: {'metric': k, 'value': None, 'unit': u, 'status': 'unavailable', 'confidence': 0.0,
+                   'note': 'swing events failed the sanity gates'} for k, u in FORM_P1}
+        out['_extras'] = {'events': {'E2': None, 'E3': None, 'E4': None, 'E6': None, 'E7': None}, 'fps': 60.0}
+        out['stage_report'] = {'decode': {'status': 'ok'}, 'pose': {'status': 'ok'},
+                               'swing_events': {'status': 'failed', 'reason_code': 'FORM_DELIVERY_NOT_ISOLATED'},
+                               'delivery_isolation': {'status': 'failed', 'reason_code': 'FORM_DELIVERY_NOT_ISOLATED'}}
+        return out
+
+    rec = analyze_form_clip('clip.mov', pose_backend=fake_backend)
+    assert rec['status'] == 'ok'                         # completed, not failed
+    assert rec.get('stage_report') and rec['stage_report']['delivery_isolation']['status'] == 'failed'
+    assert all(mm['value'] is None for mm in rec['metrics'].values())   # events unavailable, nothing fabricated
+
+
 @pytest.mark.parametrize('clip,ext', [('IMG_8973', 'MOV'), ('IMG_8963', 'MOV')])
 def test_real_clip_returns_partial_not_raise(clip, ext):
     """End-to-end: a clip that used to hard-fail now returns a record (no raise) with a stage report. Skips if the

@@ -431,9 +431,15 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
                 rec['shot_id'] = shot_id
                 gated = _form_not_isolated(rec)
                 if gated:
-                    from lanesight_core.failures import AnalysisFailure as _AF
-                    raise _AF('FORM_DELIVERY_NOT_ISOLATED', 'every swing event failed the DEC-095 sanity gates',
-                              stage='form_pose', diagnostics=gated)
+                    # DEC-122: delivery isolation failing does NOT fail the whole form analysis. The swing events
+                    # are already `unavailable` (pose.analyze nulls them with a reason); step count / approach
+                    # duration / tempo that don't depend on the isolation gate still stand. Record the stage as
+                    # failed in the per-stage report and continue to persist + return the partial.
+                    sr = rec.setdefault('stage_report', {})
+                    sr['delivery_isolation'] = {'status': 'failed', 'reason_code': 'FORM_DELIVERY_NOT_ISOLATED',
+                                                'reason': 'every swing event failed the DEC-095 sanity gates',
+                                                'diagnostics': gated}
+                    print(f'FORM_DELIVERY_NOT_ISOLATED: partial result — swing events unavailable, other form metrics kept')
                 # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
                 # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
                 for fkey in (rec.get('key_frames') or []):

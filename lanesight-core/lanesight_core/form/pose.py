@@ -992,6 +992,23 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                             raw_first_to_release=None if raw_first_to_release is None else round(raw_first_to_release, 3))
     extras['swing_source'] = sw_src
     extras['fps'] = round(fps, 2)
+    # DEC-122 per-stage report for the form pipeline (decode + pose already succeeded to reach here; a backend/
+    # decode failure raised PoseBackendError earlier = the only way form fails wholesale). swing_events /
+    # delivery_isolation fail when every gated key event (E2/E3/E4/E6/E7) is None — the form still returns the
+    # step count / approach duration / tempo that don't depend on the isolation gate.
+    _gk = [extras['events'].get(k) for k in ('E2', 'E3', 'E4', 'E6', 'E7')]
+    _iso_ok = any(v is not None for v in _gk)
+    out['stage_report'] = {
+        'decode': {'status': 'ok'},
+        'pose': {'status': 'ok', 'frames': int(len(t))},
+        'swing_events': {'status': 'ok' if _iso_ok else 'failed', 'source': sw_src,
+                         **({'reason_code': 'FORM_DELIVERY_NOT_ISOLATED',
+                             'reason': 'every swing event failed the DEC-095 sanity gates',
+                             'diagnostics': ev_reasons} if not _iso_ok else {})},
+        'delivery_isolation': {'status': 'ok' if _iso_ok else 'failed',
+                               **({'reason_code': 'FORM_DELIVERY_NOT_ISOLATED'} if not _iso_ok else {})},
+        'slowmo': {'status': 'ok', 'is_slowmo': bool(is_slow), 'uncorrected': bool(slow_uncorrected)},
+    }
 
     # When slo-mo is detected but uncorrected, every delivery timing is raw file-time and the event isolation is
     # unreliable: downgrade each measured metric to low_confidence and prepend the reason (never silently wrong).
