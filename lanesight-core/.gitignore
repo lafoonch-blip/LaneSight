@@ -11,3 +11,4 @@ ops/staged_accounts.toml
 # deploy single-deployer lock (session-local)
 ops/.deploy_lock
 ops/.expected_rev
+.venv
