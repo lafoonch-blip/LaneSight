@@ -1,7 +1,7 @@
 """DEC-122 §6: the outcome-row writer (store.outcome_rows_from_record) must emit one row per EVERY catalog
 metric (incl. unavailable), map the engine's Measurement.status vocabulary correctly, and never violate the
 analysis_metric_outcome honesty invariant (unavailable <=> value is null)."""
-from lanesight_api.store import outcome_rows_from_record, MemoryStore
+from lanesight_api.store import outcome_rows_from_record, MemoryStore, _uniform_rows
 from lanesight_core.cv.pipeline import _METRIC_CATALOG as SHOT
 from lanesight_core.form import FORM_P1
 
@@ -10,8 +10,12 @@ def _honest(rows):
     for r in rows:
         if r['status'] == 'unavailable':
             assert r['value'] is None, f"{r['metric_key']}: unavailable must have null value"
+            # DEC-122: every unavailable row MUST carry a non-null reason_code AND failed_stage.
+            assert r['reason_code'], f"{r['metric_key']}: unavailable needs a reason_code"
+            assert r['failed_stage'], f"{r['metric_key']}: unavailable needs a failed_stage"
         else:
             assert r['value'] is not None, f"{r['metric_key']}: {r['status']} must have a value"
+            assert r['reason_code'] is None and r['failed_stage'] is None
 
 
 def test_shot_record_one_row_per_catalog_metric_with_status_mapping():
@@ -47,6 +51,36 @@ def test_shot_record_one_row_per_catalog_metric_with_status_mapping():
     assert sby['impact']['status'] == 'failed' and sby['impact']['reason_code'] == 'PIN_IMPACT_NOT_DETECTED'
 
 
+def test_successful_shot_unavailable_metrics_get_structural_codes_without_attempt_cause():
+    # Mirrors a FULLY successful shot: measured headline metrics + structurally-unavailable far-lane / spin / grip
+    # metrics (note only, no attempt-level reason_code). Every unavailable row must still get code + stage.
+    metrics = {
+        'ball_speed': {'value': 18.5, 'status': 'ok'},
+        'speed_late': {'value': None, 'status': 'unavailable', 'note': 'Far-lane metric gated until Phase-2 validation (DEC-065).'},
+        'entry_board': {'value': None, 'status': 'unavailable', 'note': 'Far-lane metric gated until Phase-2 validation (DEC-065).'},
+        'axis_rotation': {'value': None, 'status': 'unavailable', 'note': 'not yet measured from video'},
+        'pap': {'value': None, 'status': 'unavailable', 'note': 'needs grip reference (holes/marker/profile)'},
+    }
+    mrows, _ = outcome_rows_from_record('att-s', 'server', 'v', 'shot', metrics, {'lane': {'status': 'ok'}})
+    _honest(mrows)                                   # proves no null reason_code/failed_stage anywhere
+    by = {r['metric_key']: r for r in mrows}
+    assert (by['speed_late']['reason_code'], by['speed_late']['failed_stage']) == ('FAR_LANE_UNVALIDATED', 'compute')
+    assert (by['entry_board']['reason_code'], by['entry_board']['failed_stage']) == ('FAR_LANE_UNVALIDATED', 'compute')
+    assert (by['axis_rotation']['reason_code'], by['axis_rotation']['failed_stage']) == ('AXIS_NOT_MEASURED_FROM_VIDEO', 'rev')
+    assert (by['pap']['reason_code'], by['pap']['failed_stage']) == ('PAP_NEEDS_GRIP_REFERENCE', 'rev')
+
+
+def test_spin_grip_structural_code_wins_over_attempt_cause():
+    # Even when a stage failed (attempt-level cause present), spin/grip stay structural (never video-measured).
+    mrows, _ = outcome_rows_from_record('att-x', 'server', 'v', 'shot',
+                                        {'axis_tilt': {'value': None, 'status': 'unavailable'}}, None,
+                                        reason_code='PIN_IMPACT_NOT_DETECTED', failed_stage='impact')
+    by = {r['metric_key']: r for r in mrows}
+    assert by['axis_tilt']['reason_code'] == 'AXIS_NOT_MEASURED_FROM_VIDEO'
+    # a non-structural unavailable metric inherits the attempt-level cause
+    assert by['ball_speed']['reason_code'] == 'PIN_IMPACT_NOT_DETECTED' and by['ball_speed']['failed_stage'] == 'impact'
+
+
 def test_form_catalog_and_ios_raw_scalar_shape():
     # on-device payload: metric -> raw scalar (no Measurement dict). Present = measured; missing = unavailable.
     metrics = {'approach_time': 1.1, 'step_count': 5, 'slide_length': None}
@@ -66,6 +100,18 @@ def test_non_numeric_value_is_treated_as_unavailable():
     by = {r['metric_key']: r for r in mrows}
     assert by['ball_speed']['status'] == 'unavailable' and by['ball_speed']['value'] is None
     _honest(mrows)
+
+
+def test_uniform_rows_guards_postgrest_bulk_insert():
+    # Mixed measured + unavailable rows have different populated keys; the batch sent to PostgREST must still
+    # have one common key set (PGRST102 "All object keys must match" otherwise).
+    mrows, _ = outcome_rows_from_record('att-u', 'server', 'v', 'shot',
+                                        {'ball_speed': {'value': 18.0, 'status': 'ok'}}, None)
+    uni = _uniform_rows(mrows)
+    keysets = {frozenset(r.keys()) for r in uni}
+    assert len(keysets) == 1, 'all rows in a batch must share the same keys'
+    # value is still present (as None) on unavailable rows so the honesty check sees an explicit null
+    assert all('value' in r and 'reason_code' in r for r in uni)
 
 
 def test_memory_store_log_outcomes_accumulates():

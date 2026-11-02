@@ -57,6 +57,18 @@ _OUTCOME_STATUS = {'ok': 'measured', 'measured': 'measured', 'best_effort': 'bes
                    'unavailable': 'unavailable'}
 
 
+def _uniform_rows(rows):
+    """Normalise a list of row dicts to the UNION of their keys (missing -> None). PostgREST bulk insert requires
+    every object in the array to have the same keys (PGRST102 otherwise)."""
+    rows = [r for r in (rows or []) if r]
+    if not rows:
+        return rows
+    keys = set()
+    for r in rows:
+        keys.update(r.keys())
+    return [{k: r.get(k) for k in keys} for r in rows]
+
+
 def _metric_cell(meas):
     """Normalise one metric (a Measurement dict {value,status,...} OR a raw scalar from the on-device payload)
     into (status, value, confidence, reason_detail) for an analysis_metric_outcome row."""
@@ -67,6 +79,38 @@ def _metric_cell(meas):
     if v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
         return 'unavailable', None, conf, note          # no usable numeric value -> honestly unavailable
     return _OUTCOME_STATUS.get(st, 'measured'), float(v), conf, note
+
+
+# DEC-122 §6: metrics that are unavailable for a STRUCTURAL reason (not a stage failure), independent of the
+# attempt outcome — spin/grip metrics are never read from a plain video today, so they win over any attempt-level
+# code. (key -> (reason_code, failed_stage).)
+_ALWAYS_STRUCTURAL = {'axis_rotation': ('AXIS_NOT_MEASURED_FROM_VIDEO', 'rev'),
+                      'axis_tilt': ('AXIS_NOT_MEASURED_FROM_VIDEO', 'rev'),
+                      'pap': ('PAP_NEEDS_GRIP_REFERENCE', 'rev')}
+# Far-lane metrics are gated until the Phase-2 camera validation (DEC-065) when the attempt itself succeeded.
+_FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
+                     'entry_board', 'entry_angle', 'entry_angle_52_55'}
+
+
+def _unavailable_reason(metric_key, meas, note, attempt_reason_code, attempt_failed_stage):
+    """DEC-122 §6: every unavailable metric row carries a non-null (reason_code, failed_stage) — never both null.
+    Precedence: a per-metric code the engine set -> always-structural metrics (spin/grip) -> the attempt-level
+    cause (a stage that failed and blanked downstream metrics) -> structural note (far-lane gate) -> a last-resort
+    non-null fallback."""
+    if isinstance(meas, dict) and meas.get('reason_code'):
+        return meas.get('reason_code'), meas.get('failed_stage') or attempt_failed_stage or 'compute'
+    if metric_key in _ALWAYS_STRUCTURAL:
+        return _ALWAYS_STRUCTURAL[metric_key]
+    if attempt_reason_code or attempt_failed_stage:
+        return attempt_reason_code or 'METRIC_UNAVAILABLE', attempt_failed_stage or 'compute'
+    n = (note or '').lower()
+    if 'far-lane' in n or metric_key in _FAR_LANE_METRICS:
+        return 'FAR_LANE_UNVALIDATED', 'compute'
+    if 'not yet measured from video' in n:
+        return 'NOT_MEASURED_FROM_VIDEO', 'rev'
+    if 'grip reference' in n:
+        return 'PAP_NEEDS_GRIP_REFERENCE', 'rev'
+    return 'METRIC_UNAVAILABLE', 'compute'
 
 
 def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, metrics, stage_report,
@@ -81,12 +125,15 @@ def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, m
     metrics = metrics or {}
     mrows = []
     for key, unit in catalog:
-        st, v, conf, note = _metric_cell(metrics.get(key))
+        meas = metrics.get(key)
+        st, v, conf, note = _metric_cell(meas)
+        rc, fs = (None, None)
+        if st == 'unavailable':
+            rc, fs = _unavailable_reason(key, meas, note, reason_code, failed_stage)
         mrows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
                       'capture_mode': capture_mode, 'metric_key': key, 'unit': unit, 'status': st, 'value': v,
                       'confidence': conf, 'reason_detail': (str(note)[:500] if note else None),
-                      'reason_code': (reason_code if st == 'unavailable' else None),
-                      'failed_stage': (failed_stage if st == 'unavailable' else None),
+                      'reason_code': rc, 'failed_stage': fs,
                       'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
     srows = []
     for stage, info in (stage_report or {}).items():
@@ -1188,16 +1235,15 @@ class PgStore(MemoryStore):
     def log_outcomes(self, metric_rows, stage_rows):
         """DEC-122 §6: write per-metric + per-stage outcome rows (migration 036). Best-effort — the caller
         swallows errors so this can never fail an analysis. Upsert on the natural keys so a re-run of the same
-        attempt is idempotent. None-valued keys are dropped (unavailable rows carry no `value`, satisfying the
-        table's honesty check via the column default)."""
+        attempt is idempotent. Rows in a batch are normalised to a COMMON key set (nulls included): PostgREST
+        rejects a bulk insert whose objects have differing keys (PGRST102), and an unavailable row's explicit
+        `value: null` satisfies the table's honesty check."""
         if metric_rows:
             self._req('analysis_metric_outcome?on_conflict=attempt_id,metric_key', 'POST',
-                      [{k: v for k, v in r.items() if v is not None} for r in metric_rows],
-                      prefer='resolution=merge-duplicates,return=minimal')
+                      _uniform_rows(metric_rows), prefer='resolution=merge-duplicates,return=minimal')
         if stage_rows:
             self._req('analysis_stage_outcome?on_conflict=attempt_id,stage', 'POST',
-                      [{k: v for k, v in r.items() if v is not None} for r in stage_rows],
-                      prefer='resolution=merge-duplicates,return=minimal')
+                      _uniform_rows(stage_rows), prefer='resolution=merge-duplicates,return=minimal')
 
     def save_job(self, row: dict):
         """Part 3a: upsert the durable analysis_job row (PK=id). Lets the DB default created_at/updated_at on

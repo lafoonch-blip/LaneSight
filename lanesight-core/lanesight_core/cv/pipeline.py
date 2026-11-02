@@ -47,7 +47,8 @@ def _unsupported_view_record(video, S, view_info, context, out_prefix, handed, s
         measurements=[m(name, None, unit, 0, tip) for name, unit in _METRIC_CATALOG],
         trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
         capture_quality={'view': view_info['view'], 'supported': False, 'far_lane': 'limited',
-                         'reason': tip, 'lane_center_frac': view_info.get('lane_center_frac')},
+                         'reason': tip, 'reason_code': 'CAPTURE_VIEW_UNSUPPORTED', 'failed_stage': 'lane',
+                         'lane_center_frac': view_info.get('lane_center_frac')},
         stage_report=stage_report)
     rec.insights = no_reliable_data_insight(tip)
     return rec
@@ -190,6 +191,11 @@ def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed,
         measurements=meas, trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None,
         context=context or {},
         capture_quality={'far_lane': 'limited', 'impact': impact_status, 'lane': chosen_lane, 'reason': reason,
+                         # DEC-122: the machine reason the scale-dependent metrics are unavailable, so the
+                         # outcome writer stamps every withheld metric with a non-null code + stage.
+                         'reason_code': 'IMPOSSIBLE_SPEED_SCALE' if impact_status == 'scale_unreliable'
+                                        else 'PIN_IMPACT_NOT_DETECTED',
+                         'failed_stage': 'compute' if impact_status == 'scale_unreliable' else 'impact',
                          'track_points': len(T),
                          'track_last_t': round(float(T[-1]['t']), 3) if T else None},
         stage_report=stage_report)
