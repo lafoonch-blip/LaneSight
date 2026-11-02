@@ -14,6 +14,7 @@ enum PipelineState: Equatable {
     case fetching
     case done
     case failed(String)
+    case offlineQueued                     // DEC-119: no connection — clip is saved + will upload when online
 }
 
 /// The data shown on the result screen. Everything here is fetched live from the API.
@@ -192,11 +193,19 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// in the background, with an active session. The app root presents a "Continue / End session" alert.
     struct ResumePrompt: Identifiable, Equatable { let id = UUID(); let session: PersistedSession }
     @Published var resumePrompt: ResumePrompt?
-    /// A request to open the Active Session (banner tap, or "Continue" from the resume prompt). The root observes
-    /// it, switches to the appropriate tab/screen, then clears it.
+    /// A request to open the Active Session (Home banner tap, or "Continue" from the resume prompt). Drives the
+    /// push on Home's stack; RootTabs switches to Home when it flips true, and pops it when you leave the Home tab.
     @Published var openActiveSessionRequest = false
+    /// Same, for the Lab tab's banner (pushes on Lab's stack; popped when you leave Lab). Separate per tab so each
+    /// Active Session push is transient — leaving a tab returns it to its own root (not a sticky detail).
+    @Published var openActiveSessionFromLab = false
     /// The ShotUpload record id currently driving the foreground Analyzing cover (nil for background work).
     private var foregroundUploadId: String?
+    /// Records with an upload PUT in flight / an analyze request in flight. Guards against the several resume
+    /// triggers (scenePhase, RootTabs task, Connectivity) each (re)starting the same record concurrently —
+    /// which would duplicate the upload and, worse, the analyze → duplicate shots server-side.
+    private var inFlightUploads: Set<String> = []
+    private var inFlightAnalyze: Set<String> = []
     // -----------------------------------------------------------------------------------------------------
 
     // An analysis that finished (or failed) while the app was CLOSED. Surfaced non-intrusively on Home as a
@@ -314,11 +323,13 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                                              shotCount: count)
             sessionId = live.id
             persistActiveSession()
+            ls119log("active-session mirror ← server id=\(live.id) shots=\(count)")
         } else if activeSession != nil {
             // The server has no active session (it was ended elsewhere) → drop the stale local mirror.
             activeSession = nil
             sessionId = nil
             persistActiveSession()
+            ls119log("active-session mirror cleared (server shows none active)")
         }
     }
 
@@ -339,6 +350,9 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         if Self.shouldPromptResume(coldLaunch: coldLaunch, backgroundedAt: bg,
                                    now: Date().timeIntervalSince1970, hasActiveSession: true) {
             resumePrompt = ResumePrompt(session: s)
+            ls119log("resume PROMPT shown (cold=\(coldLaunch), session=\(s.id), shots=\(s.shotCount))")
+        } else {
+            ls119log("resume: no prompt (cold=\(coldLaunch), bgStamp=\(bg), session=\(s.id))")
         }
     }
 
@@ -822,6 +836,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         foregroundUploadId = id
         lastCaptureURL = URL(fileURLWithPath: clipPath)
         lastSource = source
+        ls119log("enqueue id=\(id) source=\(source) persisted clip=\(clipPath) state=pending")
 
         // 3. Trim on-device (DEC-101: form clips keep the full approach; shot clips window-trim). Swap the
         //    durable clip for the trimmed one so the kept clip == what we upload.
@@ -858,7 +873,9 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// (re-)signs a fresh Storage URL (the previous one may have expired), then hands the clip to the background
     /// URLSession so the transfer survives app suspension.
     private func startUpload(id: String) async {
+        guard !inFlightUploads.contains(id) else { return }   // already uploading — don't double-start
         guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal else { return }
+        inFlightUploads.insert(id)
         do {
             let client = try makeClient()
             // Live shots need a session; create one lazily and record it as the active session (persisted).
@@ -881,21 +898,37 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             if foregroundUploadId == id { pipeline = .uploading(0) }
             BackgroundUploadManager.shared.observer = self
             BackgroundUploadManager.shared.start(rec)
+            ls119log("upload start id=\(id) session=\(rec.sessionId ?? "nil") signed-ok")
         } catch {
-            // Can't sign / create a session (likely offline). Keep the record pending with backoff; the clip is
-            // safe on disk and resume will try again. Don't surface a hard failure yet — it's recoverable.
+            // Can't sign / create a session. The clip is safe on disk; keep the record pending and retry.
+            inFlightUploads.remove(id)   // the PUT never started; allow a later (re)start
             rec.attempts += 1
             rec.state = .pending
             rec.lastError = String(String(describing: error).prefix(200))
             rec.nextAttemptAt = Date().timeIntervalSince1970 + UploadBackoff.delay(attempt: rec.attempts)
             ShotUploadStore.shared.save(rec)
-            if foregroundUploadId == id { pipeline = .uploading(0) }   // stay in the "uploading" step; retry pending
-            if rec.attempts >= UploadBackoff.maxAttempts {
+            // Offline/transport is NOT a terminal failure (DEC-119): never mark the record `.failed` for it —
+            // a `.failed` record wouldn't auto-resume, which would lose the shot. Stay `.pending`, tell the user
+            // it's saved + queued, and let reconnect / foreground resume it. Only a NON-transport error can hit
+            // the terminal cap (e.g. a persistent bad response).
+            if isTransport(error) {
+                if foregroundUploadId == id { pipeline = .offlineQueued }
+                ls119log("upload offline id=\(id) → queued pending (attempt \(rec.attempts)); will resume on reconnect")
+                scheduleUploadRetry(id: id)
+            } else if rec.attempts >= UploadBackoff.maxAttempts {
                 failUpload(id: id, message: rec.lastError ?? "Upload failed")
             } else {
+                if foregroundUploadId == id { pipeline = .uploading(0) }
                 scheduleUploadRetry(id: id)
             }
         }
+    }
+
+    /// True for a connectivity/transport error (offline, timeout, lost connection) — recoverable, not terminal.
+    private func isTransport(_ error: Error) -> Bool {
+        if case APIError.transport = error { return true }
+        let ns = error as NSError
+        return ns.domain == NSURLErrorDomain
     }
 
     /// Re-run the upload after the record's backoff elapses. Self-healing: if the app is killed during the wait,
@@ -919,6 +952,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         rec.lastError = message
         ShotUploadStore.shared.save(rec)
         reportClientFailure(rec: rec, stage: "upload", error: message)
+        ls119log("upload FAILED id=\(id) msg=\(message) → reported client-failure stage=upload")
         if foregroundUploadId == id {
             pipeline = .failed("We couldn't upload this clip. Check your connection and tap Retry.")
         }
@@ -948,6 +982,8 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     }
 
     func uploadFinished(id: String, outcome: UploadOutcome) {
+        ls119log("upload finished id=\(id) outcome=\(outcome) appState=\(UIApplication.shared.applicationState.rawValue)")
+        inFlightUploads.remove(id)   // this PUT task is done (success or failure)
         guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal else { return }
         switch outcome {
         case .success:
@@ -991,15 +1027,23 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// server-side (DEC-110) even if this request drops — so we also set the pendingAnalysis marker and only
     /// remove the durable upload record after the analyze request returns.
     private func runAnalyze(id: String) async {
-        guard let rec = ShotUploadStore.shared.load(id), !rec.isTerminal,
+        guard !inFlightAnalyze.contains(id) else { return }   // one analyze per record (guards duplicate shots)
+        guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal,
               let storagePath = rec.storagePath else { return }
+        inFlightAnalyze.insert(id)
+        defer { inFlightAnalyze.remove(id) }
         let present = (foregroundUploadId == id)
         // Keep the analyze request alive briefly if the user switches away (iOS otherwise suspends in seconds).
         var bgTask = UIApplication.shared.beginBackgroundTask(withName: "ls-analyze")
         func endBG() { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid } }
         defer { endBG() }
         if present { pipeline = .analyzing(state: "running", timings: [:]) }
+        // Persist `.analyzing` BEFORE the POST so a kill mid-analysis is recovered by a shot-existence check on
+        // resume (not a blind re-POST, which could duplicate a shot the server already started — DEC-110).
+        rec.state = .analyzing
+        ShotUploadStore.shared.save(rec)
         markPendingAnalysis(source: rec.source, sessionId: (rec.source == "upload" ? nil : rec.sessionId))
+        ls119log("analyze start id=\(id) present=\(present)")
         do {
             let client = try makeClient()
             let metaObj = (try? JSONSerialization.jsonObject(with: Data(rec.metadataJSON.utf8))) as? [String: Any] ?? [:]
@@ -1043,10 +1087,33 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             if rec.source == "live", shotCount == 1 { track("first_shot_analyzed") }
             clearPendingAnalysis()
             ShotUploadStore.shared.remove(id)            // delivered (or durable server-side) — drop record + clip
+            ls119log("analyze done id=\(id) shot=\(created.shot_id) delivered; record removed")
         } catch {
             // Analyze request dropped/failed. The result is durable server-side; leave the record `uploaded` so
             // resume can re-run analyze, and keep the pendingAnalysis marker so reconcile can recover it too.
+            ls119log("analyze error id=\(id) err=\(error.localizedDescription) (record kept uploaded for resume)")
             if present { pipeline = .failed(error.localizedDescription) }
+        }
+    }
+
+    /// Recover a record that was mid-analyze when the app died. If the shot already exists server-side (durable
+    /// job/shot, DEC-110) it will show up in the session/uploads list — drop the record. If no shot exists (the
+    /// analyze POST never landed), re-run analyze. This avoids duplicating a shot the server already started.
+    private func recoverAnalyzing(id: String) async {
+        guard !inFlightAnalyze.contains(id) else { return }   // an analyze is already running for this id
+        guard let rec = ShotUploadStore.shared.load(id), rec.state == .analyzing,
+              let client = try? makeClient() else { return }
+        let pending = PendingAnalysis(source: rec.source,
+                                      sessionId: (rec.source == "upload" ? nil : rec.sessionId),
+                                      startedAt: rec.createdAt)
+        if let found = await latestPendingShot(pending, client) {
+            ls119log("resume analyzing id=\(id) → shot \(found.id) exists server-side (\(found.state ?? "?")); record dropped")
+            clearPendingAnalysis()
+            ShotUploadStore.shared.remove(id)
+        } else {
+            ls119log("resume analyzing id=\(id) → no shot server-side; re-running analyze")
+            var r = rec; r.state = .uploaded; ShotUploadStore.shared.save(r)
+            await runAnalyze(id: id)
         }
     }
 
@@ -1055,19 +1122,30 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     func resumePendingUploads() async {
         BackgroundUploadManager.shared.observer = self
         let live = await BackgroundUploadManager.shared.liveTaskIDs()
-        let now = Date().timeIntervalSince1970
-        for rec in ShotUploadStore.shared.active() {
+        let pending = ShotUploadStore.shared.active()
+        ls119log("resume: \(pending.count) active record(s); liveTasks=\(live.count)")
+        for rec in pending {
+            ls119log("resume record id=\(rec.id) state=\(rec.state.rawValue) live=\(live.contains(rec.id))")
+        }
+        for rec in pending {
             switch rec.state {
             case .pending:
-                if rec.nextAttemptAt <= now { await startUpload(id: rec.id) } else { scheduleUploadRetry(id: rec.id) }
+                // Resume is an explicit reconnect/foreground trigger → try now, bypassing the offline backoff
+                // timer (the in-flight guard prevents a concurrent double-start).
+                await startUpload(id: rec.id)
             case .uploading:
                 // A live background task will deliver completion itself; if none survived, re-start (re-sign).
                 if !live.contains(rec.id) { await startUpload(id: rec.id) }
             case .uploaded:
-                // Analyze is long; run it off the resume path so other records aren't blocked behind it.
+                // Upload done, analyze never started → run it (off the resume path, so others aren't blocked).
                 let rid = rec.id
                 Task { await self.runAnalyze(id: rid) }
-            case .analyzing, .done, .failed:
+            case .analyzing:
+                // Analyze was in flight when we died. Don't blindly re-POST (would duplicate a shot the server
+                // already started) — check whether the shot exists server-side first.
+                let rid = rec.id
+                Task { await self.recoverAnalyzing(id: rid) }
+            case .done, .failed:
                 break
             }
         }
@@ -1197,6 +1275,8 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         guard let id = foregroundUploadId else { return }
         BackgroundUploadManager.shared.cancel(id: id)
         ShotUploadStore.shared.remove(id)
+        inFlightUploads.remove(id)
+        inFlightAnalyze.remove(id)
         foregroundUploadId = nil
         clearPendingAnalysis()
     }

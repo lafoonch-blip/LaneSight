@@ -137,6 +137,10 @@ struct LaneSightApp: App {
                     break
                 }
             }
+            // DEC-119: when connectivity returns, resume any uploads parked offline (don't wait for a relaunch).
+            .onChange(of: connectivity.isOnline) { _, online in
+                if online { Task { await model.resumePendingUploads() } }
+            }
             // DEC-119: "You have a session in progress" prompt on cold launch / long-background return.
             .alert("Session in progress", isPresented: Binding(
                 get: { model.gate == .ready && model.resumePrompt != nil },
@@ -332,5 +336,11 @@ struct RootTabs: View {
         // DEC-119: "Continue" / a banner tap routed from elsewhere lands on Home, whose stack pushes the Active
         // Session (so the tab bar stays visible — amends DEC-099).
         .onChange(of: model.openActiveSessionRequest) { _, open in if open { tab = 0 } }
+        // The Active Session push is transient: leaving its tab pops it, so returning to a tab shows that tab's
+        // own root (Home = Home) and you re-enter via the banner. Never pop the tab you're entering.
+        .onChange(of: tab) { _, newTab in
+            if newTab != 0 { model.openActiveSessionRequest = false }   // left Home → pop Home's Active Session
+            if newTab != 2 { model.openActiveSessionFromLab = false }   // left Lab  → pop Lab's Active Session
+        }
     }
 }

@@ -10,7 +10,6 @@ struct LabView: View {
     private var sessions: Loadable<[SessionRow]> { tabs.lab.sessions }
     private var uploads: Loadable<[UploadRow]> { tabs.lab.uploads }
     @State private var showUploadResult = false
-    @State private var showActiveSession = false   // DEC-119: Lab banner pushes within Lab's own stack
 
     var body: some View {
         NavigationStack {
@@ -20,7 +19,7 @@ struct LabView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         if let s = model.activeSession {
                             ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
-                                showActiveSession = true
+                                model.openActiveSessionFromLab = true
                             }
                         }
                         analyzeSection
@@ -39,7 +38,7 @@ struct LabView: View {
             }
             .background(LSBackground())
             .navigationBarHidden(true)
-            .navigationDestination(isPresented: $showActiveSession) {
+            .navigationDestination(isPresented: $model.openActiveSessionFromLab) {
                 ActiveSessionScreen().environmentObject(model)
             }
             .sheet(isPresented: $showUploadResult) {

@@ -1,5 +1,13 @@
 import Foundation
 
+/// DEC-119 durability telemetry — compiled out of Release so it never logs for real users. Kept for on-device
+/// diagnosis of the upload/analyze/resume state machine (`log`/console shows "LS119 …" lines).
+@inline(__always) nonisolated func ls119log(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    NSLog("%@", "LS119 " + message())
+    #endif
+}
+
 // DEC-119: session durability + upload reliability.
 //
 // Three durable pieces survive relaunch / force-quit / crash / dead battery:
@@ -177,6 +185,7 @@ final class BackgroundUploadManager: NSObject {
         let task = session.uploadTask(with: req, fromFile: rec.clipURL)
         task.taskDescription = rec.id
         task.resume()
+        ls119log("bg PUT start id=\(rec.id) → \(url.host ?? "?")")
     }
 
     /// Reconnect to in-flight transfers after (re)launch. Returns the set of record ids that still have a live
@@ -232,6 +241,7 @@ extension BackgroundUploadManager: URLSessionDataDelegate {
         let cancelled = nsErr?.domain == NSURLErrorDomain && nsErr?.code == NSURLErrorCancelled
         Task { @MainActor [weak self] in
             guard let self else { return }
+            ls119log("bg PUT complete id=\(id) status=\(status.map(String.init) ?? "nil") err=\(error?.localizedDescription ?? "none") cancelled=\(cancelled)")
             if cancelled { return }
             let outcome = self.classify(status: status, error: error, body: "")
             self.observer?.uploadFinished(id: id, outcome: outcome)

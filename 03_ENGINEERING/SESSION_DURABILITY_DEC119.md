@@ -1,9 +1,37 @@
 ---
 title: Session durability + upload reliability (DEC-119 build)
-status: BUILT (iOS) — compiles for device + sim, unit-tested; on-device lifecycle matrix is the acceptance gate (manual)
+status: BUILT + ON-DEVICE VALIDATED (iPhone 17 Pro Max) — 3 bugs found & fixed during device testing
 date: 2026-11-01
 decision: DEC-119 (amends DEC-096, DEC-099)
 ---
+
+## ON-DEVICE VALIDATION — 2026-11-01 (iPhone 17 Pro Max, via devicectl + console telemetry)
+Driven on the connected device with `LS119` console telemetry at each state transition (DEBUG-gated). Confirmed:
+- **Persist-before-upload** → clip written to `Application Support/LaneSightUploads/clips/` (NOT tmp/) before upload.
+- **Background `URLSession` PUT** to Supabase Storage (`status=200`) → `upload finished` → `analyze start`.
+- **Tab bar visible on the Active Session**; tab switching works mid-session; banner on Home + Lab.
+- **Cold-launch resume prompt** fires on every launch with an active session; Continue → Active Session.
+- **Active-session mirror** reconciled from the server (`ended_at` null).
+- **Offline:** record stays `pending` with capped backoff, shows "Saved — we'll finish when you're online" (never a
+  data-loss failure); **reconnect → auto-resume** upload → analyze.
+- **Process death mid-analyze:** `.analyzing` record persists; on relaunch `recoverAnalyzing` does a shot-existence
+  check (deliver if the server has it, re-run if not) — no duplicate shot.
+
+### Bugs found on-device and fixed (this is why on-device testing was required)
+1. **Offline uploads terminally failed** after ~34 s of retries and a `.failed` record won't auto-resume → the shot
+   would be lost. Fix: transport/offline errors keep the record `.pending` (never `.failed`); added the
+   `.offlineQueued` UI state + auto-resume on reconnect (`Connectivity.onChange`).
+2. **Concurrent double-start:** the several resume triggers (scenePhase, RootTabs task, Connectivity) each
+   (re)started the same record → the clip was PUT 3× and analyzed 3× (→ duplicate shots). Fix: in-flight guards
+   (`inFlightUploads` / `inFlightAnalyze`) — exactly one upload + one analyze per record.
+3. **Sticky Active-Session nav:** opening the Active Session from Home's stack left it pushed after switching tabs
+   (Home showed the session instead of Home). Fix: the push is transient — RootTabs pops it when you leave its tab.
+
+### Environment caveats (not app bugs)
+- A free/personal signing cert can't be verified **offline**, so the OS refuses to *launch* the dev build in airplane
+  mode (the "lose connection mid-session → reconnect → resume" path was tested with the app already running).
+- **≥30 min warm-background prompt**: the threshold logic is unit-tested (`shouldPromptResume`) and the prompt UI is
+  validated via cold launch; the real-time warm 30-min trigger is a manual step (background 30 min, foreground).
 
 ## BUILT — 2026-11-01 (branch `feat/session-durability`)
 All five items are implemented in `ios/LaneSight`. Builds clean for the connected device (signed) and the
