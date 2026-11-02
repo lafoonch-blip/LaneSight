@@ -1626,12 +1626,16 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
                 sr = {(row['failure_stage'] or 'track'): {'status': 'failed', 'reason_code': row['failure_code']}}
             ctx = {k: (perf.get(k) if k in perf else b.get(k)) for k in ('fps', 'thermal_state')
                    if (perf.get(k) is not None or b.get(k) is not None)} or None
+            # DEC-127: on-device metrics follow the SAME per-metric status rules as the server — the engine marks
+            # ball_speed/rev/boards 'ok', speed_avg_foul_to_pins 'best_effort' (approximated impact, DEC-112), and
+            # anything it couldn't read 'unavailable' + reason. Prefer the STRUCTURED `metrics_detailed` (carries
+            # that per-metric status) so a value is never "measured" just because it came from the phone; the flat
+            # scalars are a legacy fallback. `scalar_status` only fills a status-less scalar.
+            out_metrics = b.get('metrics_detailed') if isinstance(b.get('metrics_detailed'), dict) else m
             mrows, srows = outcome_rows_from_record(
-                aid, 'iphone', row['algorithm_version'], mode, m, sr, context=ctx,
+                aid, 'iphone', row['algorithm_version'], mode, out_metrics, sr, context=ctx,
                 reason_code=(None if measured else row['failure_code']),
                 failed_stage=(None if measured else row['failure_stage']),
-                # DEC-127 (reverses DEC-126): a real user's shot has no ground truth, so an on-device MEASURED
-                # metric is 'measured' (counts for the Score), not best_effort. Validation-vs-truth is a dev gate.
                 scalar_status='measured')
             st.log_outcomes(mrows, srows)
     except Exception as e:

@@ -98,7 +98,12 @@ def test_outcome_rows_written_measured_engine_iphone():
     rows = [r for r in getattr(get_store(), 'metric_outcomes', []) if r.get('engine') == 'iphone']
     assert rows, 'on-device outcome rows must be written'
     by_metric = {r['metric_key']: r for r in rows}
+    # a genuinely measured on-device metric is 'measured' (counts for the Score)...
     assert by_metric['entry_board']['status'] == 'measured'
+    assert by_metric['ball_speed']['status'] == 'measured'
+    # ...but the per-metric status rules still apply: the foul→pins average is best_effort by METHOD (approximated
+    # impact, DEC-112) on the phone exactly as on the server — never "measured" just because it came from the phone.
+    assert by_metric['speed_avg_foul_to_pins']['status'] == 'best_effort'
     # every unavailable row carries a non-null reason_code + failed_stage (DEC-122 honesty invariant)
     rev = by_metric['rev_rate']
     assert rev['status'] == 'unavailable'
