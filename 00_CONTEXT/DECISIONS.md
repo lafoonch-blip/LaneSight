@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.77  
+Version: 1.78  
 Last Updated: 2026-11-02  
 Owner: Shayne  
-Supersedes: v1.76
+Supersedes: v1.77
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1434,6 +1434,72 @@ accurate server result they wait for. Parity work is real but belongs after the 
 **Amends:** DEC-102 (offline-first hybrid) and DEC-103 (on-device stays shadow until the accuracy gates pass) —
 the iPhone→primary switch no longer waits on those gates; only the crash / >30 s blockers apply. DEC-117's
 phone-primary-with-server-review parity tolerance becomes a POST-switch tuning target, not a precondition.
+
+### DEC-127 — On-device-first metrics + a lightweight metrics-only server call; two deliberate result states
+**Decision (Shayne, 2026-11-02):** Finalizes the DEC-126 architecture into a clean split of responsibilities.
+
+**1. All video metrics compute on the phone.** The on-device engine produces every result-card metric — speed,
+rev rate, and the **board metrics** (entry/target/breakpoint) — ported from the server. **Honesty is a per-shot
+property, not a validation-against-truth property (Shayne, 2026-11-02):** a real user's shot has no ground truth,
+so a metric the engine measures is **`measured` (status `ok`) and counts toward the LaneSight Score exactly like a
+server-measured metric.** There is **no "best_effort because the engine isn't validated"** label — that conflated
+a development QA activity with runtime logic. The only honest downgrades are derived from *this shot's own data*:
+`unavailable` + reason_code + failing stage when a metric genuinely can't be measured (track too short, foul
+crossing extrapolated > 6 ft, far lane not read), and the foul→pins *average* speed stays `best_effort` solely
+because its method approximates the impact frame (DEC-112) — identical on server and device, and not a Score input.
+The 7 truth clips (IMG_8751–54, …) are the **developer gate** that the port is correct *before a build ships* —
+they never appear in app logic or per-shot scoring. **This reverses DEC-126's "on-device metrics are best_effort,
+not measured" treatment and the shadow outcome writer's blanket `scalar_status='best_effort'`.**
+
+**2. A new lightweight metrics-only endpoint returns score + coaching.** After measuring, the phone calls a NEW
+endpoint with **metrics JSON only** — the metric values + their status/reason codes, capture context, ball,
+session, user — **no video**. The server computes the **score / tier update + coaching insight + recommended
+adjustment** from that metrics record using the existing server logic, refactored so **score/insights take a
+metrics record, not a video**. Target: **< 2 s server time, payload in KB.**
+
+**3. The result screen renders ONCE**, when (1) and (2) are both done. **Target ≤ 15 s from shot end.** The shown
+result is **never updated piecemeal** and **never shifts content** after it appears.
+
+**4. Offline path.** Wait up to **10 s** for the server call; if it doesn't return, render the **full on-device
+metrics** with coaching marked "available when back online", **queue** the metrics call, and **attach the coaching
+to the shot in history** when it lands. A screen the user is currently viewing is never mutated; queued coaching
+enriches the saved shot (and optionally sends a notification) instead.
+
+**5. Video upload is background + afterward.** The clip uploads after the result is shown — **Wi-Fi only by
+default, with a user setting to allow cellular.** The **server shadow analysis** on that video is for
+validation / the comparison check **only** and **never changes what was shown.**
+
+**6. Outcome tracking (DEC-122) is fed by the on-device metrics in the metrics call**, so `analysis_metric_outcome`
+rows are written without waiting for the video.
+
+**Presentation — two deliberate result states, each rendered once, never filled in on screen:**
+- **Complete Analysis:** shot outcome + validated metrics + AI coaching + recommended adjustment + confidence
+  indicators where appropriate.
+- **Offline Analysis:** all on-device measurements, a clear offline status, and one concise line that coaching
+  needs connectivity. No empty cards, loading placeholders, or half-populated sections — the coaching section is
+  simply **absent**, replaced by that line.
+- **Progress screen before the result:** "Analyzing your shot" → "Generating coaching" → "Your results", advancing
+  as each step actually completes; show the result the moment everything is ready (no artificial waits).
+- When queued coaching arrives later, **enrich the saved shot in history** and optionally send a notification;
+  never change a screen the user is currently viewing. No content shifting on the result screen.
+- **Design:** no Figma yet for the offline state or the progress steps — built from the "01 - Design Standards"
+  tokens and logged in `03_ENGINEERING/APP_DESIGN_CHANGES.md` with **DIFFERS: no Figma yet** so the designs can
+  catch up.
+
+**Verify on device:** 3 clips with Wi-Fi on (tap → result time), 1 with airplane mode (offline path); report
+payload size, server time, total time, and board deltas vs the server. Install Release.
+
+**Why:** puts a fast, honest, offline-capable result in the bowler's hands immediately (the DEC-126 goal) while
+keeping the server authoritative for score/coaching — but on a KB-scale, <2 s call instead of a multi-minute video
+round-trip. Decoupling tracking + coaching from the video upload means neither the result nor the outcome rows
+wait on the network.
+**Date:** 2026-11-02 · **Status:** ACCEPTED.
+**Amends/extends:** DEC-126 — concrete end-to-end primary-path switch, **and reverses its "on-device metrics are
+best_effort, not measured" treatment**: measured on-device metrics are `measured`/`ok` and count toward the Score;
+validation-against-truth is a developer build gate, not a runtime per-shot label. DEC-102/DEC-103 (the server's role
+on the live path narrows to the metrics-only score/coaching call + video shadow validation); DEC-068/DEC-080
+(the blocking "Analyzing" screen becomes the three-step progress screen above). Honesty rules DEC-086/DEC-122 and
+the score/tier definitions (DEC-036/DEC-038/DEC-090) are unchanged — only their **input** becomes a metrics record.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
