@@ -799,19 +799,20 @@ final class AppModel: ObservableObject {
             // 1. Ensure a session exists for this app run — LIVE captures only. An upload (DEC-055) is a
             // STANDALONE analysis: it never creates or joins a session (so it stays out of Recent
             // sessions / activity and never feeds Stats, the Score, tiers or achievements).
-            let sid: String?
+            var sid: String? = nil
             if source == "live" {
                 if let existing = sessionId {
                     sid = existing
-                } else {
+                } else if !Self.onDevicePrimary {
                     pipeline = .creatingSession
                     let created = try await client.createSession(mode: "practice").id
                     sessionId = created
                     sid = created
                     track("session_started")   // §2 (DEC-098 M3): session auto-created on first live shot
                 }
-            } else {
-                sid = nil
+                // DEC-126: on-device primary — do NOT block the result on session creation (network). The session
+                // is created in the background AFTER the on-device result is shown (below). Offline ⇒ stays nil
+                // and the shot syncs standalone later.
             }
 
             // 2. Trim the clip to the shot window ON-DEVICE and fit it under the upload size cap. Both live
@@ -854,6 +855,14 @@ final class AppModel: ObservableObject {
                 clearPendingAnalysis()
                 track(od != nil ? "ondevice_primary_shown" : "ondevice_unavailable_shown",
                       props: ["ondevice_s": ct["ondevice_s"] ?? 0, "latency_s": m.latencyS, "basis": m.basis])
+            }
+
+            // DEC-126: live + on-device primary — create the session NOW (the result is already shown), so the
+            // server shot joins it. Best-effort: offline leaves it nil and the server analyze runs standalone.
+            if source == "live" && sid == nil {
+                if let created = try? await client.createSession(mode: "practice").id {
+                    sessionId = created; sid = created; track("session_started")
+                }
             }
 
             // 3. Upload the clip (multipart) with progress.
