@@ -292,6 +292,22 @@ struct ProcessingCover: View {
                     stage(title: "Finishing up…")
                 }
 
+            case .offlineQueued:
+                // DEC-119: offline — the clip is saved and resumes automatically; never a data-loss failure.
+                VStack(spacing: 18) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 44)).foregroundStyle(LS.dataYellow)
+                    Text("Saved — we'll finish when you're online")
+                        .font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary).multilineTextAlignment(.center)
+                    Text("No connection right now. Your shot is saved and will upload and analyze automatically as soon as you're back online.")
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary).multilineTextAlignment(.center)
+                    Button(model.inLiveCapture ? "Back to session" : "Done") {
+                        if model.inLiveCapture { model.exitToSession() } else { model.resetPipeline(); busy = false }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(32)
+
             case .failed(let msg):
                 VStack(spacing: 18) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -337,7 +353,7 @@ struct ProcessingCover: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             ProgressView(value: overallFrac).tint(LS.action)
-            Button("Cancel analysis") { model.resetPipeline(); busy = false }
+            Button("Cancel analysis") { model.cancelForegroundUpload(); model.resetPipeline(); busy = false }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link).padding(.top, 2)
         }
         .padding(20)

@@ -77,7 +77,8 @@ struct SessionView: View {
         .background(LSBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
+        // DEC-119 amends DEC-099: the tab bar is NO LONGER hidden on the Active Session — the user can switch
+        // tabs mid-session and return via the "Session in progress" banner.
         .toolbar { ToolbarItem(placement: .principal) { header } }
         .navigationDestination(isPresented: $showLatestCard) {
             if let r = model.result { ShotCardView(result: r) }

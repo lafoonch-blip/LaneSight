@@ -436,12 +436,21 @@ struct APIClient {
     func analyzeFromStorage(storagePath: String, sessionId: String?,
                             metadata: ShotMetadata,
                             clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
+        let metaObj = (try? JSONSerialization.jsonObject(with: Data(metadata.jsonString().utf8))) as? [String: Any] ?? [:]
+        return try await analyzeFromStorage(storagePath: storagePath, sessionId: sessionId,
+                                            metadataObject: metaObj, clientTimings: clientTimings)
+    }
+
+    /// DEC-119: analyze from a pre-serialized metadata object. Used when resuming a durable ShotUpload record
+    /// whose metadata was snapshotted (as JSON) at record time, so the ball/oil/target it was thrown with is
+    /// locked even across a relaunch.
+    func analyzeFromStorage(storagePath: String, sessionId: String?,
+                            metadataObject: [String: Any],
+                            clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
         var req = makeRequest("shots/analyze", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
-        let metaObj = (try? JSONSerialization.jsonObject(
-            with: Data(metadata.jsonString().utf8))) ?? [:]
-        var body: [String: Any] = ["storage_path": storagePath, "metadata": metaObj]
+        var body: [String: Any] = ["storage_path": storagePath, "metadata": metadataObject]
         if let sessionId { body["session_id"] = sessionId }
         if let clientTimings { body["client_timings"] = clientTimings }   // DEC-092 P0: phone-side stage times
         req.httpBody = try JSONSerialization.data(withJSONObject: body)

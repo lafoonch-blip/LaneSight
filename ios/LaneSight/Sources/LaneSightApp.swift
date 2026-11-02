@@ -1,7 +1,29 @@
 import SwiftUI
+import UIKit
+
+/// DEC-119: receives background `URLSession` events so a clip upload that completes while the app is suspended
+/// (or that relaunches the app in the background) is handled, and the system's completion handler is honored.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        _ = BackgroundUploadManager.shared     // attach the background session's delegate early (relaunch path)
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        if identifier == BackgroundUploadManager.sessionIdentifier {
+            BackgroundUploadManager.shared.backgroundCompletionHandler = completionHandler
+        } else {
+            completionHandler()
+        }
+    }
+}
 
 @main
 struct LaneSightApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
     /// DEC-099: shared Home/Stats/Lab data (parallel loads, one publish per page, silent revalidation).
     @StateObject private var tabData = TabDataStore()
@@ -97,13 +119,46 @@ struct LaneSightApp: App {
             // Recover analyses that finished while we were away. On WARM resume (app still alive, mid-analysis)
             // present the recovered result as before. On COLD launch (first activation after process start) land
             // on Home and surface it as a non-intrusive "away" banner instead — never a result sheet at launch.
+            // DEC-119: also reconcile the active-session mirror, resume durable uploads, and decide whether to
+            // show the Continue/End resume prompt (cold launch, or ≥30 min in the background).
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
+                switch phase {
+                case .active:
                     let cold = !didFirstActivation; didFirstActivation = true
-                    Task { await model.reconcilePendingAnalysis(coldLaunch: cold) }
+                    Task {
+                        await model.refreshActiveSessionFromServer()
+                        model.evaluateResumeOnForeground(coldLaunch: cold)
+                        await model.resumePendingUploads()
+                        await model.reconcilePendingAnalysis(coldLaunch: cold)
+                    }
+                case .background:
+                    model.noteDidEnterBackground()
+                default:
+                    break
                 }
             }
+            // DEC-119: when connectivity returns, resume any uploads parked offline (don't wait for a relaunch).
+            .onChange(of: connectivity.isOnline) { _, online in
+                if online { Task { await model.resumePendingUploads() } }
+            }
+            // DEC-119: "You have a session in progress" prompt on cold launch / long-background return.
+            .alert("Session in progress", isPresented: Binding(
+                get: { model.gate == .ready && model.resumePrompt != nil },
+                set: { if !$0 { model.resumePrompt = nil } })) {
+                Button("Continue") { model.resumePromptContinue() }
+                Button("End session", role: .destructive) { Task { await model.resumePromptEnd() } }
+            } message: {
+                if let s = model.resumePrompt?.session { Text(Self.resumeMessage(s)) }
+            }
         }
+    }
+
+    /// "You have a session in progress (started 2:14 PM, 5 shots)." — the resume-prompt body (DEC-119).
+    static func resumeMessage(_ s: PersistedSession) -> String {
+        let time = Date(timeIntervalSince1970: s.startedAt).formatted(date: .omitted, time: .shortened)
+        let n = s.shotCount
+        let shots = "\(n) shot\(n == 1 ? "" : "s")"
+        return "You have a session in progress (started \(time), \(shots)). Continue it, or end it and start fresh."
     }
 
     @ViewBuilder private var gateView: some View {
@@ -272,5 +327,20 @@ struct RootTabs: View {
         // Make the server the source of truth for the arsenal on authed load (also runs the one-time
         // migration of any locally-stored ball). Harmless in dev-user mode.
         .task { await model.syncArsenal() }
+        // DEC-119: reconcile the active-session mirror with the server (ended_at null) on authed load so the
+        // banner is right after a sign-in, and resume any durable uploads from a previous launch.
+        .task {
+            await model.refreshActiveSessionFromServer()
+            await model.resumePendingUploads()
+        }
+        // DEC-119: "Continue" / a banner tap routed from elsewhere lands on Home, whose stack pushes the Active
+        // Session (so the tab bar stays visible — amends DEC-099).
+        .onChange(of: model.openActiveSessionRequest) { _, open in if open { tab = 0 } }
+        // The Active Session push is transient: leaving its tab pops it, so returning to a tab shows that tab's
+        // own root (Home = Home) and you re-enter via the banner. Never pop the tab you're entering.
+        .onChange(of: tab) { _, newTab in
+            if newTab != 0 { model.openActiveSessionRequest = false }   // left Home → pop Home's Active Session
+            if newTab != 2 { model.openActiveSessionFromLab = false }   // left Lab  → pop Lab's Active Session
+        }
     }
 }

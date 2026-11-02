@@ -17,6 +17,11 @@ struct LabView: View {
                 LSTabHeader(title: "Lab")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        if let s = model.activeSession {
+                            ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
+                                model.openActiveSessionFromLab = true
+                            }
+                        }
                         analyzeSection
                         if !tabs.labReady {
                             LSPageLoading()
@@ -33,6 +38,9 @@ struct LabView: View {
             }
             .background(LSBackground())
             .navigationBarHidden(true)
+            .navigationDestination(isPresented: $model.openActiveSessionFromLab) {
+                ActiveSessionScreen().environmentObject(model)
+            }
             .sheet(isPresented: $showUploadResult) {
                 if let result = model.result {
                     if result.isForm { FormCardView(result: result).environmentObject(model) }

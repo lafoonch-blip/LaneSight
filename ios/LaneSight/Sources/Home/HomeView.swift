@@ -53,6 +53,12 @@ struct HomeView: View {
                         LSPageLoading()
                     } else {
                     VStack(alignment: .leading, spacing: 18) {
+                        // DEC-119: a session stays active until the user ends it → offer a way back in.
+                        if let s = model.activeSession {
+                            ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
+                                model.openActiveSessionRequest = true
+                            }
+                        }
                         if showWelcome { welcomeStartCard }
                         if let away = model.awayResult { awayBanner(away) }   // analyzed/failed while the app was closed
 
@@ -81,6 +87,11 @@ struct HomeView: View {
             .background(LSBackground())
             .navigationBarHidden(true)
             .task { await loadAll() }
+            // DEC-119: "Continue" from the resume prompt / a banner tap pushes the Active Session here so the
+            // tab bar stays visible (amends DEC-099). RootTabs switches to Home first when the request fires.
+            .navigationDestination(isPresented: $model.openActiveSessionRequest) {
+                ActiveSessionScreen().environmentObject(model)
+            }
         }
     }
 

@@ -14,6 +14,7 @@ enum PipelineState: Equatable {
     case fetching
     case done
     case failed(String)
+    case offlineQueued                     // DEC-119: no connection — clip is saved + will upload when online
 }
 
 /// The data shown on the result screen. Everything here is fetched live from the API.
@@ -90,7 +91,7 @@ enum AuthGate: Equatable {
 }
 
 @MainActor
-final class AppModel: ObservableObject {
+final class AppModel: ObservableObject, BackgroundUploadObserver {
     // Persisted settings
     @Published var apiBaseURL: String { didSet { defaults.set(apiBaseURL, forKey: Keys.baseURL) } }
     @Published var devUser: String { didSet { defaults.set(devUser, forKey: Keys.devUser) } }
@@ -183,6 +184,30 @@ final class AppModel: ObservableObject {
     private(set) var lastCaptureURL: URL?
     private var lastSource = "live"
 
+    // DEC-119 session durability --------------------------------------------------------------------------
+    /// The one active session, mirrored from the server (`sessions.ended_at` null) and persisted locally so the
+    /// banner + resume prompt survive relaunch / force-quit / offline. The Active Session screen always re-reads
+    /// the authoritative shot list from the server.
+    @Published private(set) var activeSession: PersistedSession?
+    /// Set when a resume prompt should be shown: cold launch (post force-quit/crash) or foreground after ≥30 min
+    /// in the background, with an active session. The app root presents a "Continue / End session" alert.
+    struct ResumePrompt: Identifiable, Equatable { let id = UUID(); let session: PersistedSession }
+    @Published var resumePrompt: ResumePrompt?
+    /// A request to open the Active Session (Home banner tap, or "Continue" from the resume prompt). Drives the
+    /// push on Home's stack; RootTabs switches to Home when it flips true, and pops it when you leave the Home tab.
+    @Published var openActiveSessionRequest = false
+    /// Same, for the Lab tab's banner (pushes on Lab's stack; popped when you leave Lab). Separate per tab so each
+    /// Active Session push is transient — leaving a tab returns it to its own root (not a sticky detail).
+    @Published var openActiveSessionFromLab = false
+    /// The ShotUpload record id currently driving the foreground Analyzing cover (nil for background work).
+    private var foregroundUploadId: String?
+    /// Records with an upload PUT in flight / an analyze request in flight. Guards against the several resume
+    /// triggers (scenePhase, RootTabs task, Connectivity) each (re)starting the same record concurrently —
+    /// which would duplicate the upload and, worse, the analyze → duplicate shots server-side.
+    private var inFlightUploads: Set<String> = []
+    private var inFlightAnalyze: Set<String> = []
+    // -----------------------------------------------------------------------------------------------------
+
     // An analysis that finished (or failed) while the app was CLOSED. Surfaced non-intrusively on Home as a
     // "Shot analyzed while you were away · View" banner — NOT a result sheet at launch (2026-10-30). Tapping
     // opens the result; a failed one shows the friendly reason + Retry.
@@ -220,7 +245,13 @@ final class AppModel: ObservableObject {
         static let arsenalMigrated = "ls.arsenalMigrated"
         static let seenIntro = "ls.hasSeenIntro"
         static let saveVideosToPhone = "ls.saveVideosToPhone"
+        static let activeSession = "ls.activeSession"       // DEC-119 persisted active-session mirror
+        static let backgroundedAt = "ls.backgroundedAt"     // DEC-119 last background-enter time (resume decision)
     }
+
+    /// DEC-119: ≥30 min in the background (with an active session) prompts Continue/End on return; shorter gaps
+    /// return straight to where the user was.
+    nonisolated static let resumePromptBackgroundThreshold: TimeInterval = 30 * 60
 
     init() {
         // Cloud Run HTTPS backend (no Mac dependency). Override in the Dev Panel.
@@ -250,6 +281,102 @@ final class AppModel: ObservableObject {
                                   expires_in: nil,
                                   user_id: Keychain.get(Keychain.Account.userId))
         }
+
+        // DEC-119: restore the persisted active session (survives force-quit/crash) and become the background
+        // upload manager's observer so in-flight / resumed transfers report progress + completion here.
+        if let d = defaults.data(forKey: Keys.activeSession),
+           let s = try? JSONDecoder().decode(PersistedSession.self, from: d) {
+            activeSession = s
+            sessionId = s.id
+            captureMode = s.mode
+        }
+        BackgroundUploadManager.shared.observer = self
+    }
+
+    // MARK: DEC-119 active-session mirror
+
+    private func persistActiveSession() {
+        if let s = activeSession, let d = try? JSONEncoder().encode(s) {
+            defaults.set(d, forKey: Keys.activeSession)
+        } else {
+            defaults.removeObject(forKey: Keys.activeSession)
+        }
+    }
+
+    /// Records a newly-created session as the one active session and persists the mirror.
+    private func setActiveSession(id: String, mode: String, startedAt: Double) {
+        activeSession = PersistedSession(id: id, mode: mode, startedAt: startedAt, shotCount: shotCount)
+        sessionId = id
+        persistActiveSession()
+    }
+
+    /// Server is the source of truth for "active" (DEC-119): reconcile the local mirror with `sessions.ended_at`.
+    /// Offline (list fails) → keep the local mirror untouched. Called on authed load + on foreground.
+    func refreshActiveSessionFromServer() async {
+        guard let client = try? makeClient() else { return }
+        guard let rows = try? await client.listSessions() else { return }   // offline → keep local mirror
+        if let live = rows.first(where: { $0.ended_at == nil }) {
+            let count = (activeSession?.id == live.id) ? (activeSession?.shotCount ?? 0) : 0
+            activeSession = PersistedSession(id: live.id,
+                                             mode: live.capture_mode ?? captureMode,
+                                             startedAt: live.started_at ?? Date().timeIntervalSince1970,
+                                             shotCount: count)
+            sessionId = live.id
+            persistActiveSession()
+            ls119log("active-session mirror ← server id=\(live.id) shots=\(count)")
+        } else if activeSession != nil {
+            // The server has no active session (it was ended elsewhere) → drop the stale local mirror.
+            activeSession = nil
+            sessionId = nil
+            persistActiveSession()
+            ls119log("active-session mirror cleared (server shows none active)")
+        }
+    }
+
+    // MARK: DEC-119 background / resume lifecycle
+
+    /// Call when the app enters the background: stamp the time so a ≥30 min absence can prompt on return.
+    func noteDidEnterBackground() {
+        defaults.set(Date().timeIntervalSince1970, forKey: Keys.backgroundedAt)
+    }
+
+    /// Decide whether to show the Continue/End resume prompt. Cold launch (post force-quit/crash) always prompts
+    /// when a session is active; a warm foreground prompts only after ≥30 min in the background. Shorter gaps
+    /// return straight back with no prompt.
+    func evaluateResumeOnForeground(coldLaunch: Bool) {
+        let bg = defaults.double(forKey: Keys.backgroundedAt)
+        defaults.removeObject(forKey: Keys.backgroundedAt)
+        guard let s = activeSession else { return }
+        if Self.shouldPromptResume(coldLaunch: coldLaunch, backgroundedAt: bg,
+                                   now: Date().timeIntervalSince1970, hasActiveSession: true) {
+            resumePrompt = ResumePrompt(session: s)
+            ls119log("resume PROMPT shown (cold=\(coldLaunch), session=\(s.id), shots=\(s.shotCount))")
+        } else {
+            ls119log("resume: no prompt (cold=\(coldLaunch), bgStamp=\(bg), session=\(s.id))")
+        }
+    }
+
+    /// Pure resume-prompt decision (DEC-119), separated for testing: cold launch (post force-quit/crash) always
+    /// prompts when a session is active; a warm foreground prompts only after ≥30 min in the background.
+    nonisolated static func shouldPromptResume(coldLaunch: Bool, backgroundedAt: Double?, now: Double,
+                                               hasActiveSession: Bool) -> Bool {
+        guard hasActiveSession else { return false }
+        if coldLaunch { return true }
+        guard let bg = backgroundedAt, bg > 0 else { return false }
+        return now - bg >= resumePromptBackgroundThreshold
+    }
+
+    /// "Continue" from the resume prompt (or a banner tap): open the Active Session.
+    func resumePromptContinue() {
+        resumePrompt = nil
+        openActiveSessionRequest = true
+    }
+
+    /// "End session" from the resume prompt: close the session (becomes history; summary/feedback skipped per
+    /// DEC-119) and stay on Home.
+    func resumePromptEnd() async {
+        resumePrompt = nil
+        try? await endCurrentSession()
     }
 
     // MARK: client construction
@@ -350,6 +477,11 @@ final class AppModel: ObservableObject {
         sessionSuggested = nil
         homeLoaded = false          // re-show the launch splash on the next sign-in
         avatarImage = nil
+        // DEC-119: drop the active-session mirror + any durable upload records/clips for this account.
+        activeSession = nil
+        resumePrompt = nil
+        persistActiveSession()
+        ShotUploadStore.shared.purgeAll()
         Keychain.delete(Keychain.Account.accessToken)
         Keychain.delete(Keychain.Account.refreshToken)
         Keychain.delete(Keychain.Account.userId)
@@ -524,11 +656,10 @@ final class AppModel: ObservableObject {
     // MARK: full shot pipeline
 
     func processShot(fileURL: URL) async {
-        lastCaptureURL = fileURL; lastSource = "live"
         // DEC-099: save the ORIGINAL recording to Photos first (before trimming/cleanup), so the bowler keeps
         // the clip even if the analysis fails. Never blocks the analysis on a Photos error.
         if saveVideosToPhone { _ = await Self.saveVideoToPhotos(fileURL) }
-        await runPipeline(fileURL: fileURL, source: "live")
+        await enqueueAndStart(originalURL: fileURL, source: "live")
     }
 
     /// Asks for add-only Photos access (no read access to the library). Returns true when granted.
@@ -558,18 +689,24 @@ final class AppModel: ObservableObject {
     /// Analyze a clip picked from Photos/Files (POST /uploads) through the same job pipeline + Shot card.
     /// Raises the root-level blocking cover (DEC-086) for the whole analysis so it's never orphaned.
     func processUpload(fileURL: URL) async {
-        lastCaptureURL = fileURL; lastSource = "upload"
         pipeline = .trimming
         uploadBusy = true
-        await runPipeline(fileURL: fileURL, source: "upload")
+        await enqueueAndStart(originalURL: fileURL, source: "upload")
     }
 
-    /// DEC-096: re-analyze the last clip after a failure — no re-recording. Stays in whichever cover is up
-    /// (the live capture cover or the root upload cover).
+    /// DEC-096/119: retry the foreground shot after a failure — no re-recording. Resumes from wherever the
+    /// durable record stalled (re-upload if the upload failed, re-analyze if the upload had succeeded).
     func retryLastAnalysis() async {
-        guard let url = lastCaptureURL else { return }
-        if lastSource == "upload" { uploadBusy = true }
-        await runPipeline(fileURL: url, source: lastSource)
+        guard let id = foregroundUploadId, let rec = ShotUploadStore.shared.load(id) else { return }
+        if rec.source == "upload" { uploadBusy = true }
+        switch rec.state {
+        case .uploaded, .analyzing:
+            await runAnalyze(id: id)
+        default:
+            // reset the backoff so Retry starts the upload immediately
+            var r = rec; r.attempts = 0; r.nextAttemptAt = 0; r.state = .pending; ShotUploadStore.shared.save(r)
+            await startUpload(id: id)
+        }
     }
 
     /// DEC-096: collapse the live capture/analyze/result cover back to the Active Session.
@@ -653,208 +790,364 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func runPipeline(fileURL: URL, source: String) async {
-        // Keep the upload + analyze request running if the user switches apps mid-analysis (iOS otherwise
-        // suspends the app in a few seconds and the request dies). This buys the background-execution window;
-        // the result is also durable server-side, so Lab › Uploads / the session still has it on return.
+    // MARK: DEC-119 persist-before-upload → background upload → analyze
+
+    /// DEC-119 item 3/4. The moment recording finishes (BEFORE any upload): copy the clip to a durable dir and
+    /// write a ShotUpload record, so a kill/crash/force-quit between here and a completed upload can't lose it
+    /// (the 13:56 bug). Then trim on-device and hand the clip to the background URLSession.
+    private func enqueueAndStart(originalURL: URL, source: String) async {
+        let capturedMode = captureMode
+        let tTap = Date()
+
+        // 1. Snapshot the target (uploads seed theirs from the Upload screen's fields) + build the metadata that
+        //    is LOCKED for this shot (ball / oil / target at record time), serialized for durability.
+        if source != "live" {
+            sessionTarget = ShotIntent(
+                feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
+                arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
+                breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
+            sessionSuggested = nil
+        }
+        let ball = currentBall
+        let metadata = ShotMetadata(
+            handed: handed, captureMode: capturedMode, source: source,
+            intent: sessionTarget, suggested: sessionSuggested,
+            ballConfigurationId: ball?.ball_configuration_id, userBallId: ball?.id,
+            oilPatternId: source == "live" ? selectedOilPatternId : nil)
+
+        // 2. Persist the clip + record immediately (durable). clipPath starts as the ORIGINAL copy; if the trim
+        //    succeeds we swap in the trimmed clip. Either way the clip is safe before the upload begins.
+        let id = UUID().uuidString
+        let ext = originalURL.pathExtension.isEmpty ? "mov" : originalURL.pathExtension
+        let durable = ShotUploadStore.shared.durableClipURL(for: id, ext: ext)
+        try? FileManager.default.removeItem(at: durable)
+        do { try FileManager.default.copyItem(at: originalURL, to: durable) }
+        catch {
+            // Couldn't copy to the durable dir — fall back to the original path so we still upload something.
+            if (try? FileManager.default.copyItem(at: originalURL, to: durable)) == nil {}
+        }
+        let clipPath = FileManager.default.fileExists(atPath: durable.path) ? durable.path : originalURL.path
+        var rec = ShotUpload(id: id, sessionId: (source == "live" ? sessionId : nil), source: source,
+                             captureMode: capturedMode, createdAt: Date().timeIntervalSince1970,
+                             clipPath: clipPath, state: .pending, storagePath: nil, uploadURL: nil,
+                             metadataJSON: metadata.jsonString(), clientTimingsJSON: nil,
+                             attempts: 0, nextAttemptAt: 0, lastError: nil)
+        ShotUploadStore.shared.save(rec)
+        foregroundUploadId = id
+        lastCaptureURL = URL(fileURLWithPath: clipPath)
+        lastSource = source
+        ls119log("enqueue id=\(id) source=\(source) persisted clip=\(clipPath) state=pending")
+
+        // 3. Trim on-device (DEC-101: form clips keep the full approach; shot clips window-trim). Swap the
+        //    durable clip for the trimmed one so the kept clip == what we upload.
+        pipeline = .trimming
+        var ct: [String: Double] = [:]
+        let tTrim = Date()
+        let clipURL = URL(fileURLWithPath: clipPath)
+        let (trimmedURL, trimOutcome) = await VideoTrimmer.trimForUpload(clipURL, windowTrim: capturedMode != "form")
+        ct["trim_s"] = Date().timeIntervalSince(tTrim)
+        ct["trim_outcome"] = trimOutcome.rawValue
+        if trimmedURL != clipURL {
+            try? FileManager.default.removeItem(at: clipURL)
+            if (try? FileManager.default.moveItem(at: trimmedURL, to: clipURL)) == nil {
+                // move failed — upload the trimmed temp directly and point the record at it
+                rec.clipPath = trimmedURL.path
+                lastCaptureURL = trimmedURL
+            }
+        }
+        if let d = await VideoTrimmer.duration(clipURL) { ct["upload_duration_s"] = d }
+        if let b = (try? FileManager.default.attributesOfItem(atPath: rec.clipPath))?[.size] as? Int { ct["upload_bytes"] = Double(b) }
+        ct["client_pre_analyze_s"] = Date().timeIntervalSince(tTap)
+        rec.clientTimingsJSON = String(data: (try? JSONSerialization.data(withJSONObject: ct)) ?? Data(), encoding: .utf8)
+        ShotUploadStore.shared.save(rec)
+
+        // Original tmp recording is no longer needed (we hold a durable copy).
+        if originalURL.path != rec.clipPath { try? FileManager.default.removeItem(at: originalURL) }
+
+        // 4. Sign + start the background upload.
+        pipeline = .uploading(0)
+        await startUpload(id: id)
+    }
+
+    /// (Re)start the background PUT for a record. Ensures a session for live shots (survives offline via retry),
+    /// (re-)signs a fresh Storage URL (the previous one may have expired), then hands the clip to the background
+    /// URLSession so the transfer survives app suspension.
+    private func startUpload(id: String) async {
+        guard !inFlightUploads.contains(id) else { return }   // already uploading — don't double-start
+        guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal else { return }
+        inFlightUploads.insert(id)
+        do {
+            let client = try makeClient()
+            // Live shots need a session; create one lazily and record it as the active session (persisted).
+            if rec.source == "live", rec.sessionId == nil {
+                if let existing = sessionId {
+                    rec.sessionId = existing
+                } else {
+                    pipeline = (foregroundUploadId == id) ? .creatingSession : pipeline
+                    let created = try await client.createSession(mode: "practice").id
+                    setActiveSession(id: created, mode: rec.captureMode, startedAt: Date().timeIntervalSince1970)
+                    rec.sessionId = created
+                    track("session_started")
+                }
+            }
+            let target = try await client.signedUploadURL()
+            rec.storagePath = target.path
+            rec.uploadURL = target.upload_url
+            rec.state = .uploading
+            ShotUploadStore.shared.save(rec)
+            if foregroundUploadId == id { pipeline = .uploading(0) }
+            BackgroundUploadManager.shared.observer = self
+            BackgroundUploadManager.shared.start(rec)
+            ls119log("upload start id=\(id) session=\(rec.sessionId ?? "nil") signed-ok")
+        } catch {
+            // Can't sign / create a session. The clip is safe on disk; keep the record pending and retry.
+            inFlightUploads.remove(id)   // the PUT never started; allow a later (re)start
+            rec.attempts += 1
+            rec.state = .pending
+            rec.lastError = String(String(describing: error).prefix(200))
+            rec.nextAttemptAt = Date().timeIntervalSince1970 + UploadBackoff.delay(attempt: rec.attempts)
+            ShotUploadStore.shared.save(rec)
+            // Offline/transport is NOT a terminal failure (DEC-119): never mark the record `.failed` for it —
+            // a `.failed` record wouldn't auto-resume, which would lose the shot. Stay `.pending`, tell the user
+            // it's saved + queued, and let reconnect / foreground resume it. Only a NON-transport error can hit
+            // the terminal cap (e.g. a persistent bad response).
+            if isTransport(error) {
+                if foregroundUploadId == id { pipeline = .offlineQueued }
+                ls119log("upload offline id=\(id) → queued pending (attempt \(rec.attempts)); will resume on reconnect")
+                scheduleUploadRetry(id: id)
+            } else if rec.attempts >= UploadBackoff.maxAttempts {
+                failUpload(id: id, message: rec.lastError ?? "Upload failed")
+            } else {
+                if foregroundUploadId == id { pipeline = .uploading(0) }
+                scheduleUploadRetry(id: id)
+            }
+        }
+    }
+
+    /// True for a connectivity/transport error (offline, timeout, lost connection) — recoverable, not terminal.
+    private func isTransport(_ error: Error) -> Bool {
+        if case APIError.transport = error { return true }
+        let ns = error as NSError
+        return ns.domain == NSURLErrorDomain
+    }
+
+    /// Re-run the upload after the record's backoff elapses. Self-healing: if the app is killed during the wait,
+    /// resume() on relaunch re-starts the still-`pending` record anyway.
+    private func scheduleUploadRetry(id: String) {
+        guard let rec = ShotUploadStore.shared.load(id) else { return }
+        let delay = max(0, rec.nextAttemptAt - Date().timeIntervalSince1970)
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self else { return }
+            guard let r = ShotUploadStore.shared.load(id), r.state == .pending else { return }
+            await self.startUpload(id: id)
+        }
+    }
+
+    /// Terminal upload failure: mark the record failed, report it to the server (DEC-100 `stage=upload`), and
+    /// surface a friendly error + Retry if this is the foreground shot.
+    private func failUpload(id: String, message: String) {
+        guard var rec = ShotUploadStore.shared.load(id) else { return }
+        rec.state = .failed
+        rec.lastError = message
+        ShotUploadStore.shared.save(rec)
+        reportClientFailure(rec: rec, stage: "upload", error: message)
+        ls119log("upload FAILED id=\(id) msg=\(message) → reported client-failure stage=upload")
+        if foregroundUploadId == id {
+            pipeline = .failed("We couldn't upload this clip. Check your connection and tap Retry.")
+        }
+    }
+
+    /// DEC-100: report a client-side failure (`stage=upload` etc.) so no failed attempt is invisible in ops.
+    private func reportClientFailure(rec: ShotUpload, stage: String, error: String) {
+        var report: [String: Any] = [
+            "stage": stage, "error": String(error.prefix(500)),
+            "source": rec.source, "capture_mode": rec.captureMode,
+            "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"]
+        if let sid = rec.sessionId { report["session_id"] = sid }
+        if let b = (try? FileManager.default.attributesOfItem(atPath: rec.clipPath))?[.size] as? Int { report["clip_bytes"] = b }
+        if let json = try? JSONSerialization.data(withJSONObject: report), let client = try? makeClient() {
+            Task { try? await client.reportClientFailure(json) }
+        }
+    }
+
+    // MARK: BackgroundUploadObserver (DEC-119)
+
+    func uploadProgress(id: String, fraction: Double) {
+        guard foregroundUploadId == id else { return }     // background work doesn't drive the cover
+        switch pipeline {
+        case .uploading, .trimming, .creatingSession: pipeline = .uploading(fraction)
+        default: break
+        }
+    }
+
+    func uploadFinished(id: String, outcome: UploadOutcome) {
+        ls119log("upload finished id=\(id) outcome=\(outcome) appState=\(UIApplication.shared.applicationState.rawValue)")
+        inFlightUploads.remove(id)   // this PUT task is done (success or failure)
+        guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal else { return }
+        switch outcome {
+        case .success:
+            rec.state = .uploaded
+            rec.attempts = 0
+            ShotUploadStore.shared.save(rec)
+            // Run the analyze request in the foreground where it has a full window. If we were only woken in the
+            // background for the transfer event, leave it `uploaded`; resume() analyzes on the next foreground.
+            if UIApplication.shared.applicationState == .active {
+                Task { await runAnalyze(id: id) }
+            }
+        case .transientFailure(let msg):
+            rec.attempts += 1
+            rec.lastError = msg
+            if rec.attempts >= UploadBackoff.maxAttempts {
+                ShotUploadStore.shared.save(rec)
+                failUpload(id: id, message: msg)
+            } else {
+                rec.state = .pending
+                rec.nextAttemptAt = Date().timeIntervalSince1970 + UploadBackoff.delay(attempt: rec.attempts)
+                ShotUploadStore.shared.save(rec)
+                scheduleUploadRetry(id: id)
+            }
+        case .permanentFailure(let msg):
+            // Usually an expired signed URL — re-sign and retry a couple of times before giving up.
+            rec.attempts += 1
+            rec.lastError = msg
+            if rec.attempts < 3 {
+                rec.state = .pending
+                rec.nextAttemptAt = Date().timeIntervalSince1970 + UploadBackoff.delay(attempt: rec.attempts)
+                ShotUploadStore.shared.save(rec)
+                scheduleUploadRetry(id: id)
+            } else {
+                ShotUploadStore.shared.save(rec)
+                failUpload(id: id, message: msg)
+            }
+        }
+    }
+
+    /// Analyze an uploaded clip and deliver its result. Once the analyze request is sent, the result is durable
+    /// server-side (DEC-110) even if this request drops — so we also set the pendingAnalysis marker and only
+    /// remove the durable upload record after the analyze request returns.
+    private func runAnalyze(id: String) async {
+        guard !inFlightAnalyze.contains(id) else { return }   // one analyze per record (guards duplicate shots)
+        guard var rec = ShotUploadStore.shared.load(id), !rec.isTerminal,
+              let storagePath = rec.storagePath else { return }
+        inFlightAnalyze.insert(id)
+        defer { inFlightAnalyze.remove(id) }
+        let present = (foregroundUploadId == id)
+        // Keep the analyze request alive briefly if the user switches away (iOS otherwise suspends in seconds).
         var bgTask = UIApplication.shared.beginBackgroundTask(withName: "ls-analyze")
         func endBG() { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask); bgTask = .invalid } }
         defer { endBG() }
+        if present { pipeline = .analyzing(state: "running", timings: [:]) }
+        // Persist `.analyzing` BEFORE the POST so a kill mid-analysis is recovered by a shot-existence check on
+        // resume (not a blind re-POST, which could duplicate a shot the server already started — DEC-110).
+        rec.state = .analyzing
+        ShotUploadStore.shared.save(rec)
+        markPendingAnalysis(source: rec.source, sessionId: (rec.source == "upload" ? nil : rec.sessionId))
+        ls119log("analyze start id=\(id) present=\(present)")
         do {
             let client = try makeClient()
-            // Snapshot the capture mode for THIS shot up front so detection later can't be confused by a
-            // mode change while the clip is analyzing. This is also exactly what's sent as `capture_mode`.
-            let capturedMode = captureMode
-            // DEC-092 P0 (M1): phone-side per-stage timings. The pre-analyze parts (trim, upload) are the
-            // wait the server can't see; they ride along with the analyze request onto the attempt row.
-            let tTap = Date()
-            var ct: [String: Double] = [:]
-
-            // 1. Ensure a session exists for this app run — LIVE captures only. An upload (DEC-055) is a
-            // STANDALONE analysis: it never creates or joins a session (so it stays out of Recent
-            // sessions / activity and never feeds Stats, the Score, tiers or achievements).
-            let sid: String?
-            if source == "live" {
-                if let existing = sessionId {
-                    sid = existing
-                } else {
-                    pipeline = .creatingSession
-                    let created = try await client.createSession(mode: "practice").id
-                    sessionId = created
-                    sid = created
-                    track("session_started")   // §2 (DEC-098 M3): session auto-created on first live shot
-                }
-            } else {
-                sid = nil
+            let metaObj = (try? JSONSerialization.jsonObject(with: Data(rec.metadataJSON.utf8))) as? [String: Any] ?? [:]
+            let ct = rec.clientTimingsJSON.flatMap {
+                (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Double]
             }
-
-            // 2. Trim the clip to the shot window ON-DEVICE and fit it under the upload size cap. Both live
-            // captures and Photos uploads go through this: the window trim is lossless (original fps +
-            // resolution preserved, dead time at head/tail cut); only a clip still over the cap is re-encoded
-            // to fit (bitrate only). This keeps uploads under Supabase's ~50 MB free-tier limit; the server
-            // re-trims precisely afterwards.
-            pipeline = .trimming
-            let tTrim = Date()
-            // DEC-101: Form clips are never window-trimmed (the start of the approach matters); Shot clips use the
-            // head-only trim in VideoTrimmer (the tail always runs ≥10 s past motion onset so the ball reaches the pins).
-            let (uploadURL, trimOutcome) = await VideoTrimmer.trimForUpload(fileURL, windowTrim: capturedMode != "form")
-            ct["trim_s"] = Date().timeIntervalSince(tTrim)
-            // Part 3d: record WHICH trim outcome fired (0/1 = trimmed, 2–6 = a named full-clip fallback, 7 =
-            // form). A full-clip upload is no longer silent — ops can see why the window trim didn't cut.
-            ct["trim_outcome"] = trimOutcome.rawValue
-            // DEC-100: record what the phone trim kept, so a failure shows whether the trim cut the shot.
-            if let d = await VideoTrimmer.duration(fileURL) { ct["orig_duration_s"] = d }
-            if let d = await VideoTrimmer.duration(uploadURL) { ct["upload_duration_s"] = d }
-            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
-                ct["orig_bytes"] = Double(b)
-            }
-            if let b = (try? FileManager.default.attributesOfItem(atPath: uploadURL.path))?[.size] as? Int {
-                ct["upload_bytes"] = Double(b)
-            }
-
-            // 3. Upload the clip (multipart) with progress.
-            pipeline = .uploading(0)
-            // Live shots carry the session's current target (carry-forward / chip / Apply-this-move).
-            // Uploads seed that target from the Upload screen's fields so the Shot card shows it too.
-            if source != "live" {
-                sessionTarget = ShotIntent(
-                    feetBoard: Double(feetBoardText.trimmingCharacters(in: .whitespaces)),
-                    arrowsBoard: Double(arrowsBoardText.trimmingCharacters(in: .whitespaces)),
-                    breakpointBoard: Double(breakpointBoardText.trimmingCharacters(in: .whitespaces)))
-                sessionSuggested = nil      // uploads have no Apply-this-move proposal
-            }
-            let ball = currentBall
-            let metadata = ShotMetadata(
-                handed: handed,
-                captureMode: capturedMode,
-                source: source,
-                intent: sessionTarget,
-                suggested: sessionSuggested,
-                ballConfigurationId: ball?.ball_configuration_id,
-                userBallId: ball?.id,
-                oilPatternId: source == "live" ? selectedOilPatternId : nil   // DEC-097: lock oil per live shot
-            )
-            // Upload the clip straight to Supabase Storage (no API request-size cap), then analyze from there.
-            let tUrl = Date()
-            let target = try await client.signedUploadURL()
-            ct["signed_url_s"] = Date().timeIntervalSince(tUrl)
-            let tUp = Date()
-            try await client.putClipToStorage(uploadURL: target.upload_url, fileURL: uploadURL) { [weak self] frac in
-                self?.pipeline = .uploading(frac)
-            }
-            ct["upload_s"] = Date().timeIntervalSince(tUp)
-
-            // 4. Analyze. The Phase-1 backend runs the CV INLINE, so this one request blocks for the whole
-            //    analysis — we show the processing state for its full duration (treated as async in the UI;
-            //    the result is durable in Supabase). `sessionId` nil → standalone upload; set → live shot.
-            pipeline = .analyzing(state: "running", timings: [:])
-            // Mark the in-flight analysis so a backgrounded/dropped request can be recovered on resume.
-            markPendingAnalysis(source: source, sessionId: (source == "upload" ? nil : sid))
-            ct["client_pre_analyze_s"] = Date().timeIntervalSince(tTap)   // tap-stop → analyze request sent
             let created = try await client.analyzeFromStorage(
-                storagePath: target.path,
-                sessionId: (source == "upload" ? nil : sid),
-                metadata: metadata,
-                clientTimings: ct)
+                storagePath: storagePath,
+                sessionId: (rec.source == "upload" ? nil : rec.sessionId),
+                metadataObject: metaObj, clientTimings: ct)
 
-            // DEC-106 shadow: run the native on-device engine on the same clip in the background and record it
-            // (platform='ios') for engine comparison. Never shown to the user, never scored. Ball shots only.
-            launchShadow(clipURL: uploadURL, shotId: created.shot_id, source: source,
-                         sessionId: (source == "upload" ? nil : sid))
+            // DEC-106 shadow on the same durable clip (ball shots only; never shown/scored).
+            launchShadow(clipURL: rec.clipURL, shotId: created.shot_id, source: rec.source,
+                         sessionId: (rec.source == "upload" ? nil : rec.sessionId))
 
-            // Synchronous backend ⇒ the job is already terminal; one fetch gets its state + timings footer.
-            // Best-effort ONLY for a DECODE hiccup — the shot record is the source of truth after analysis. A job
-            // with state=failed (or any transport error) must NEVER be swallowed; it has to surface the DEC-086
-            // failure + Retry, not silently drop the user back to Upload (P0 2026-10-29).
+            // Synchronous backend ⇒ the job is terminal; fetch its state + footer (tolerate a schema drift).
             let last: JobResponse?
-            do {
-                last = try await client.job(created.job_id)
-            } catch let e as APIError {
-                if case .decoding = e { last = nil } else { throw e }   // tolerate a schema drift; rethrow the rest
-            }
+            do { last = try await client.job(created.job_id) }
+            catch let e as APIError { if case .decoding = e { last = nil } else { throw e } }
             if last?.state == "failed" {
-                // DEC-086: show the server's friendly, user-facing copy — never the raw code/reason.
                 let friendly = last?.failure?.display
-                pipeline = .failed(friendly?.isEmpty == false ? friendly!
-                                   : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
-                clearPendingAnalysis()      // a real analysis failure — nothing to recover
+                if present {
+                    pipeline = .failed(friendly?.isEmpty == false ? friendly!
+                        : "We couldn't analyze this clip. Try recording the full shot with the lane in view.")
+                }
+                clearPendingAnalysis()
+                ShotUploadStore.shared.remove(id)        // a real analysis failure — nothing left to recover
                 return
             }
-            pipeline = .analyzing(state: last?.state ?? "done", timings: last?.timings?.values ?? [:])
 
-            // 5. Fetch the shot record + score; carry the analyze-job footer onto the card.
-            pipeline = .fetching
-            let shot = try await client.shot(created.shot_id)
-            let score = try await client.score()
-            let record = shot.record
-
-            // Detect a form result: the mode this shot was captured in wins; otherwise fall back to the
-            // record carrying `form_version` or FORM_P1 keys. This never misroutes a ball shot — a ball
-            // record has neither form_version nor the FORM_P1 keys.
-            let isForm = capturedMode == "form"
-                || record?.form_version != nil
-                || FormMetricDisplay.looksLikeForm(record?.metrics)
-
-            // Order metrics with the right grouping for the kind of result.
-            let rawMetrics = record?.metrics ?? [:]
-            let metrics = isForm ? FormMetricDisplay.ordered(rawMetrics) : MetricDisplay.ordered(rawMetrics)
-
-            let insights = record?.insights
-            // The actionable move rec (reason/direction for the "Apply this move" label): first rec that
-            // names a direction + move distance; otherwise the first rec with a reason. Ball-only.
-            let moveRec = insights?.recommendations?.first { $0.direction != nil && $0.move_feet != nil }
-                ?? insights?.recommendations?.first { $0.reason?.isEmpty == false }
-            var built = ShotResult(shotId: created.shot_id, metrics: metrics, score: score,
-                                   footer: isForm ? nil : last?.result,
-                                   suggestedTarget: isForm ? nil : insights?.suggested_target,
-                                   recommendation: isForm ? nil : moveRec,
-                                   insightsState: isForm ? nil : insights?.state,
-                                   insightsConfidence: isForm ? nil : insights?.confidence,
-                                   insightsNote: isForm ? nil : insights?.note,
-                                   captureFarLaneLimited: record?.capture_quality?.far_lane == "limited",
-                                   captureReason: record?.capture_quality?.reason,
-                                   isUpload: false,
-                                   isForm: isForm,
-                                   formView: record?.view,
-                                   formStatus: record?.status,
-                                   formVersion: record?.form_version)
-            built.ballName = currentBall?.displayName    // DEC-097: live shot uses the ball at record time
-            if isForm { Self.attachFormFundamentals(&built, record) }
-            else { Self.attachShotCard(&built, record) }
-            result = built
+            // Build + deliver the result (footer carried only for the foreground shot).
+            if present {
+                if await loadShotResult(shotId: created.shot_id, captureModeHint: rec.captureMode) {
+                    if var r = result { r.footer = last?.result; result = r }
+                    pipeline = .done
+                    showResult = true
+                }
+            }
             shotCount += 1
-            // §2 (DEC-098 M3): first successful live shot in this session (uploads are standalone, no session).
-            if source == "live", shotCount == 1 { track("first_shot_analyzed") }
-            pipeline = .done
-            showResult = true
-            clearPendingAnalysis()      // delivered in-app; nothing to recover
-
-            // Clean up the temp clips (the original recording and, if different, the trimmed upload).
-            try? FileManager.default.removeItem(at: fileURL)
-            if uploadURL != fileURL { try? FileManager.default.removeItem(at: uploadURL) }
+            if activeSession != nil { activeSession?.shotCount = shotCount; persistActiveSession() }
+            if rec.source == "live", shotCount == 1 { track("first_shot_analyzed") }
+            clearPendingAnalysis()
+            ShotUploadStore.shared.remove(id)            // delivered (or durable server-side) — drop record + clip
+            ls119log("analyze done id=\(id) shot=\(created.shot_id) delivered; record removed")
         } catch {
-            // DEC-100: the server never logged this one — report it so no failed attempt is invisible.
-            let stage: String
-            switch pipeline {
-            case .creatingSession: stage = "session"
-            case .trimming: stage = "trim"
-            case .uploading: stage = "upload"
-            case .analyzing: stage = "analyze_request"
-            case .fetching: stage = "fetch_result"
-            default: stage = "unknown"
+            // Analyze request dropped/failed. The result is durable server-side; leave the record `uploaded` so
+            // resume can re-run analyze, and keep the pendingAnalysis marker so reconcile can recover it too.
+            ls119log("analyze error id=\(id) err=\(error.localizedDescription) (record kept uploaded for resume)")
+            if present { pipeline = .failed(error.localizedDescription) }
+        }
+    }
+
+    /// Recover a record that was mid-analyze when the app died. If the shot already exists server-side (durable
+    /// job/shot, DEC-110) it will show up in the session/uploads list — drop the record. If no shot exists (the
+    /// analyze POST never landed), re-run analyze. This avoids duplicating a shot the server already started.
+    private func recoverAnalyzing(id: String) async {
+        guard !inFlightAnalyze.contains(id) else { return }   // an analyze is already running for this id
+        guard let rec = ShotUploadStore.shared.load(id), rec.state == .analyzing,
+              let client = try? makeClient() else { return }
+        let pending = PendingAnalysis(source: rec.source,
+                                      sessionId: (rec.source == "upload" ? nil : rec.sessionId),
+                                      startedAt: rec.createdAt)
+        if let found = await latestPendingShot(pending, client) {
+            ls119log("resume analyzing id=\(id) → shot \(found.id) exists server-side (\(found.state ?? "?")); record dropped")
+            clearPendingAnalysis()
+            ShotUploadStore.shared.remove(id)
+        } else {
+            ls119log("resume analyzing id=\(id) → no shot server-side; re-running analyze")
+            var r = rec; r.state = .uploaded; ShotUploadStore.shared.save(r)
+            await runAnalyze(id: id)
+        }
+    }
+
+    /// DEC-119 item 3/4: resume durable uploads/analyses on relaunch or foreground. Reconnects the background
+    /// URLSession, (re)starts stalled uploads, and runs analyze for clips that finished uploading while away.
+    func resumePendingUploads() async {
+        BackgroundUploadManager.shared.observer = self
+        let live = await BackgroundUploadManager.shared.liveTaskIDs()
+        let pending = ShotUploadStore.shared.active()
+        ls119log("resume: \(pending.count) active record(s); liveTasks=\(live.count)")
+        for rec in pending {
+            ls119log("resume record id=\(rec.id) state=\(rec.state.rawValue) live=\(live.contains(rec.id))")
+        }
+        for rec in pending {
+            switch rec.state {
+            case .pending:
+                // Resume is an explicit reconnect/foreground trigger → try now, bypassing the offline backoff
+                // timer (the in-flight guard prevents a concurrent double-start).
+                await startUpload(id: rec.id)
+            case .uploading:
+                // A live background task will deliver completion itself; if none survived, re-start (re-sign).
+                if !live.contains(rec.id) { await startUpload(id: rec.id) }
+            case .uploaded:
+                // Upload done, analyze never started → run it (off the resume path, so others aren't blocked).
+                let rid = rec.id
+                Task { await self.runAnalyze(id: rid) }
+            case .analyzing:
+                // Analyze was in flight when we died. Don't blindly re-POST (would duplicate a shot the server
+                // already started) — check whether the shot exists server-side first.
+                let rid = rec.id
+                Task { await self.recoverAnalyzing(id: rid) }
+            case .done, .failed:
+                break
             }
-            var report: [String: Any] = [
-                "stage": stage, "error": String(String(describing: error).prefix(500)),
-                "source": source, "capture_mode": captureMode,
-                "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"]
-            if source == "live", let sid = sessionId { report["session_id"] = sid }
-            if let b = (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int {
-                report["clip_bytes"] = b
-            }
-            if let json = try? JSONSerialization.data(withJSONObject: report), let client = try? makeClient() {
-                Task { try? await client.reportClientFailure(json) }    // best effort; never blocks the UI
-            }
-            pipeline = .failed(error.localizedDescription)
         }
     }
 
@@ -976,6 +1269,18 @@ final class AppModel: ObservableObject {
         uploadBusy = false
     }
 
+    /// DEC-119: the user explicitly cancelled the foreground shot's analysis cover — cancel the in-flight upload
+    /// task and drop its durable record so it doesn't keep uploading in the background and deliver later.
+    func cancelForegroundUpload() {
+        guard let id = foregroundUploadId else { return }
+        BackgroundUploadManager.shared.cancel(id: id)
+        ShotUploadStore.shared.remove(id)
+        inFlightUploads.remove(id)
+        inFlightAnalyze.remove(id)
+        foregroundUploadId = nil
+        clearPendingAnalysis()
+    }
+
     // MARK: recover-on-resume (an analysis that was in flight when the app was backgrounded)
 
     private func markPendingAnalysis(source: String, sessionId: String?) {
@@ -1084,8 +1389,10 @@ final class AppModel: ObservableObject {
         let client = try makeClient()
         let session = try await client.createSessionFull(mode: "practice", lanePair: lane, oilPatternId: oilPatternId)
         sessionId = session.id
-        track("session_started")      // §2 (DEC-098 M3): explicit start from Setup
         shotCount = 0
+        // DEC-119: persist the active-session mirror (shotCount 0) so the banner / resume prompt survive relaunch & offline.
+        setActiveSession(id: session.id, mode: mode, startedAt: session.started_at ?? Date().timeIntervalSince1970)
+        track("session_started")      // §2 (DEC-098 M3): explicit start from Setup
         endSummary = nil
         captureMode = mode
         // Seed the carry-forward target from the Setup fields (optional). It then carries shot-to-shot
@@ -1117,6 +1424,9 @@ final class AppModel: ObservableObject {
         let client = try makeClient()
         endSummary = try await client.endSession(sid)
         sessionId = nil
+        // DEC-119: the user explicitly ended it → drop the active-session mirror (banner/prompt stop showing).
+        activeSession = nil
+        persistActiveSession()
     }
 
     /// Marks the bowler profile complete after the setup + add-ball steps → the app root switches to Home.

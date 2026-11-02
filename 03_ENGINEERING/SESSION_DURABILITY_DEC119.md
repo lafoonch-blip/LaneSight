@@ -1,9 +1,64 @@
 ---
 title: Session durability + upload reliability (DEC-119 build)
-status: scoped — backend ready, iOS app work pending
+status: BUILT + ON-DEVICE VALIDATED (iPhone 17 Pro Max) — 3 bugs found & fixed during device testing
 date: 2026-11-01
 decision: DEC-119 (amends DEC-096, DEC-099)
 ---
+
+## ON-DEVICE VALIDATION — 2026-11-01 (iPhone 17 Pro Max, via devicectl + console telemetry)
+Driven on the connected device with `LS119` console telemetry at each state transition (DEBUG-gated). Confirmed:
+- **Persist-before-upload** → clip written to `Application Support/LaneSightUploads/clips/` (NOT tmp/) before upload.
+- **Background `URLSession` PUT** to Supabase Storage (`status=200`) → `upload finished` → `analyze start`.
+- **Tab bar visible on the Active Session**; tab switching works mid-session; banner on Home + Lab.
+- **Cold-launch resume prompt** fires on every launch with an active session; Continue → Active Session.
+- **Active-session mirror** reconciled from the server (`ended_at` null).
+- **Offline:** record stays `pending` with capped backoff, shows "Saved — we'll finish when you're online" (never a
+  data-loss failure); **reconnect → auto-resume** upload → analyze.
+- **Process death mid-analyze:** `.analyzing` record persists; on relaunch `recoverAnalyzing` does a shot-existence
+  check (deliver if the server has it, re-run if not) — no duplicate shot.
+
+### Bugs found on-device and fixed (this is why on-device testing was required)
+1. **Offline uploads terminally failed** after ~34 s of retries and a `.failed` record won't auto-resume → the shot
+   would be lost. Fix: transport/offline errors keep the record `.pending` (never `.failed`); added the
+   `.offlineQueued` UI state + auto-resume on reconnect (`Connectivity.onChange`).
+2. **Concurrent double-start:** the several resume triggers (scenePhase, RootTabs task, Connectivity) each
+   (re)started the same record → the clip was PUT 3× and analyzed 3× (→ duplicate shots). Fix: in-flight guards
+   (`inFlightUploads` / `inFlightAnalyze`) — exactly one upload + one analyze per record.
+3. **Sticky Active-Session nav:** opening the Active Session from Home's stack left it pushed after switching tabs
+   (Home showed the session instead of Home). Fix: the push is transient — RootTabs pops it when you leave its tab.
+
+### Environment caveats (not app bugs)
+- A free/personal signing cert can't be verified **offline**, so the OS refuses to *launch* the dev build in airplane
+  mode (the "lose connection mid-session → reconnect → resume" path was tested with the app already running).
+- **≥30 min warm-background prompt**: the threshold logic is unit-tested (`shouldPromptResume`) and the prompt UI is
+  validated via cold launch; the real-time warm 30-min trigger is a manual step (background 30 min, foreground).
+
+## BUILT — 2026-11-01 (branch `feat/session-durability`)
+All five items are implemented in `ios/LaneSight`. Builds clean for the connected device (signed) and the
+simulator; 16 iOS unit tests pass (incl. 11 new DEC-119 tests). On-device lifecycle correctness (kill / crash /
+airplane / ≥30 min background) is verified by the manual matrix below — it can't be driven headlessly.
+
+- **New:** `Sources/Session/SessionDurability.swift` — `PersistedSession` (active-session mirror),
+  `ShotUpload` + `ShotUploadStore` (durable per-shot record + clip in Application Support, NOT tmp/),
+  `BackgroundUploadManager` (a background `URLSession`, `isDiscretionary=false`, request 90 s / resource 600 s,
+  `sessionSendsLaunchEvents`), `UploadOutcome`/`UploadBackoff`. `Sources/Session/ActiveSessionBanner.swift` —
+  the "Session in progress · Return" banner + the Active Session screen router.
+- **`AppModel`**: persist-before-upload (`enqueueAndStart` writes the record + durable clip, then trims, then
+  uploads), background PUT via the manager (progress → Analyzing screen), retry with backoff, terminal-failure
+  `POST /analysis/client-failure` (`stage=upload`), analyze-on-upload-complete, `resumePendingUploads()` on
+  relaunch/foreground, the active-session mirror (`activeSession`, server-reconciled), the ≥30 min / cold-launch
+  resume decision (`shouldPromptResume`), and End clears the mirror.
+- **`LaneSightApp`**: `AppDelegate` for `handleEventsForBackgroundURLSession`; scenePhase stamps background time,
+  resumes uploads + reconciles the session on foreground; the Continue/End resume alert; routes Continue/banner
+  to the Active Session (tab bar visible).
+- **`SessionView`**: tab bar no longer hidden (amends DEC-099). **`HomeView`/`LabView`**: the active-session banner.
+
+### Known limits (noted, not blockers)
+- The analyze request is still a single long synchronous call; if it drops after the PUT, recovery relies on the
+  existing `pendingAnalysis` + reconcile mechanism (shot is durable server-side, DEC-110). A kill *during* the
+  analyze request can, in the worst case, re-POST analyze on resume (same duplicate window the pre-existing
+  Retry already had). Not worse than before.
+- Legacy `APIClient.putClipToStorage` (foreground PUT) is now unused but left in place (other branches may use it).
 
 # DEC-119 build — session lasts until the user ends it; uploads never hang silently
 
