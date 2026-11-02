@@ -672,11 +672,34 @@ struct APIClient {
         try await updateBall(id: id, patch: ["is_current": true])
     }
 
-    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool) async throws {
+    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool,
+                      appPhase: String? = nil) async throws {
         var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: Any] = ["rating": rating, "tags": tags, "diagnostics": diagnostics]
         if let text, !text.isEmpty { body["text"] = text }
+        if let appPhase { body["app_phase"] = appPhase }      // DEC-124: every feedback source carries the phase
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try await sendRaw(req)
+    }
+
+    /// DEC-124: build the POST /feedback body for a general (Home Feedback button) submission. Pure + internal
+    /// so it can be unit-tested without a network call. Category rides in tags[0]; app_phase is always present
+    /// (the server overrides it from the account cohort); diagnostics are attached only when provided.
+    static func generalFeedbackBody(category: String, text: String, appPhase: String, appVersion: String?,
+                                    diagnostics: [String: Any]?) -> [String: Any] {
+        var body: [String: Any] = ["source": "general", "tags": [category], "text": text, "app_phase": appPhase]
+        if let appVersion { body["app_version"] = appVersion }
+        if let diagnostics { body["diagnostics"] = diagnostics }
+        return body
+    }
+
+    func submitGeneralFeedback(category: String, text: String, appPhase: String, appVersion: String?,
+                               diagnostics: [String: Any]?) async throws {
+        var req = makeRequest("feedback", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = Self.generalFeedbackBody(category: category, text: text, appPhase: appPhase,
+                                            appVersion: appVersion, diagnostics: diagnostics)
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         try await sendRaw(req)
     }

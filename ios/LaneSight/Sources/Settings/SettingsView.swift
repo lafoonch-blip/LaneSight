@@ -75,11 +75,15 @@ struct SettingsView: View {
                     }
                 }
 
-                section("Developer") {
-                    card {
-                        NavigationLink { DevPanelView() } label: {
-                            rowLabel("Dev build", color: LS.textPrimary, chevron: true)
-                        }.buttonStyle(.plain)
+                // DEC-123: owner-only. The Dev build panel (which also holds test-account switching) is hidden
+                // from Friends & Family testers — only Shayne's account (or the dev-user escape hatch) sees it.
+                if model.isOwner {
+                    section("Developer") {
+                        card {
+                            NavigationLink { DevPanelView() } label: {
+                                rowLabel("Dev build", color: LS.textPrimary, chevron: true)
+                            }.buttonStyle(.plain)
+                        }
                     }
                 }
 

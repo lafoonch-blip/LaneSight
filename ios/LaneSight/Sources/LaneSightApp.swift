@@ -116,6 +116,11 @@ struct LaneSightApp: App {
                     .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
                     .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
             }
+            // DEC-123: Friends & Family consent — shown once on an F&F build after sign-up, before the app.
+            // Dismisses itself when recordFFConsent() advances the accepted version.
+            .fullScreenCover(isPresented: Binding(get: { model.needsFFConsent }, set: { _ in })) {
+                FFConsentView().environmentObject(model)
+            }
             // Recover analyses that finished while we were away. On WARM resume (app still alive, mid-analysis)
             // present the recovered result as before. On COLD launch (first activation after process start) land
             // on Home and surface it as a non-intrusive "away" banner instead — never a result sheet at launch.
