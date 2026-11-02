@@ -53,7 +53,7 @@ def _unsupported_view_record(video, S, view_info, context, out_prefix, handed, s
     return rec
 
 def _no_metrics_record(video, S, reason, stage, stages, out_prefix, handed, context, reason_code=None,
-                       far_lane='unavailable'):
+                       far_lane='unavailable', geomfree_avg=None):
     """DEC-122: a COMPLETED analysis where an early stage (lane/foul/ball-track) failed so nothing downstream
     could be measured — every metric `unavailable` with the stage + reason, plus the per-stage report. This is a
     partial result, NOT a failed attempt: the video was readable and the code did not crash."""
@@ -66,7 +66,10 @@ def _no_metrics_record(video, S, reason, stage, stages, out_prefix, handed, cont
                    camera_motion_px=round(float(S['shift'].max()), 1) if S and 'shift' in S else None,
                    reference_frame=int(S['ref']) if S and 'ref' in S else None),
         events=dict(t_release=None, t_touchdown=None, t_impact=None, release_source=None),
-        measurements=[m(name, None, unit, 0, f'Not measured — {reason} (stage: {stage})') for name, unit in _METRIC_CATALOG],
+        measurements=[m('speed_avg_foul_to_pins', geomfree_avg, unit, 0.6, GEOMFREE_AVG_NOTE, status='best_effort')
+                      if (name == 'speed_avg_foul_to_pins' and geomfree_avg is not None)
+                      else m(name, None, unit, 0, f'Not measured — {reason} (stage: {stage})')
+                      for name, unit in _METRIC_CATALOG],
         trajectory=dict(lane=[], smoothed=[], pixel=[]), key_points={}, pins=None, context=context or {},
         capture_quality={'far_lane': far_lane, 'reason': reason, 'failed_stage': stage, 'reason_code': reason_code},
         stage_report=stages)
@@ -130,10 +133,29 @@ IMPACT_MISSED_SPEED_NOTE = ("Speed needs a lane distance reference. Today the on
                             "reported. Rev rate doesn't depend on it.")
 IMPACT_MISSED_TIP = ("Rev rate was measured. For speed and the lane read, keep the ball in view all the way to "
                      "the pins with the pin deck in frame.")
+GEOMFREE_AVG_NOTE = ("Average speed over the foul line -> pins, measured from the time between those two events "
+                     "(no lane-distance scale needed). The release/early-lane speed isn't available for this "
+                     "shot, so this full-lane average is reported instead.")
+_GF_MIN_MPH, _GF_MAX_MPH = 8.0, 30.0
+
+
+def geomfree_avg(M):
+    """DEC-122 step 7c: the time-based foul->pins average (speed_avg_foul_to_pins_mph) is independent of the lane
+    homography, so it survives an IMPOSSIBLE_SPEED_SCALE (which is a scale-anchor failure). Return it only when it
+    exists and is physically plausible for a thrown ball (step 7d honesty gate) — never a plausible-but-wrong
+    number. Returns float mph or None."""
+    v = (M or {}).get('speed_avg_foul_to_pins_mph')
+    if v is None:
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return v if (np.isfinite(v) and _GF_MIN_MPH <= v <= _GF_MAX_MPH) else None
 
 
 def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
-                          reason=None, impact_status='not_detected', stage_report=None):
+                          reason=None, impact_status='not_detected', stage_report=None, geomfree_avg=None):
     """Partial result when the impact-anchored depth scale isn't trustworthy (Shayne 2026-10-29, DEC-109/110):
     a single broken dependency must not throw away what doesn't depend on it. Rev rate (geometry-free) is
     reported as measured; every metric that rides the impact-anchored depth scale (all speeds, boards, angles,
@@ -145,8 +167,10 @@ def _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed,
     except Exception:
         fps = None
     rev_names = ('rev_rate_lane', 'rev_rate')
-    meas = [m(name, None, unit, 0, IMPACT_MISSED_SPEED_NOTE if unit == 'mph' else
-              'Not measured: the ball was lost before the pins, so the lane depth scale has no anchor.')
+    meas = [m('speed_avg_foul_to_pins', geomfree_avg, unit, 0.6, GEOMFREE_AVG_NOTE, status='best_effort')
+            if (name == 'speed_avg_foul_to_pins' and geomfree_avg is not None)
+            else m(name, None, unit, 0, IMPACT_MISSED_SPEED_NOTE if unit == 'mph' else
+                   'Not measured: the ball was lost before the pins, so the lane depth scale has no anchor.')
             for name, unit in _METRIC_CATALOG if name not in rev_names
             and name not in ('axis_rotation', 'axis_tilt', 'pap')]
     meas += _rev_measurements(rpm, rconf, rev_note, rev_sigma, rev_fps)
@@ -347,6 +371,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # DEC-110 metric-independence: rather than FAIL the whole shot (the old behavior), fall back to the partial
     # record — the geometry-free rev rate still stands, and only the scale-dependent metrics are withheld. Same
     # for a track too sparse to fit speed. Only when the rev rate is unmeasurable too does the shot hard-fail.
+    M = None
     try:
         with _stage('compute_s'):
             M = compute(sorted(byf.values(), key=lambda c: c['t']), lane, vp, t_imp, t_touch=touchdown(B, T), anchor_track=ground)
@@ -364,18 +389,26 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             raise
         _mark('compute', reason_code=_af.code, reason=str(_af), failed_stage=_af.stage,
               diagnostics=getattr(_af, 'diagnostics', None))
+        # DEC-122 step 7c: the foul->pins average is TIME-BASED (59.44 ft / (t_impact - t_foul)), not homography-
+        # scaled, so the bad depth scale that trips IMPOSSIBLE_SPEED_SCALE does NOT corrupt it. Surface it as a
+        # best_effort partial when it exists and is physically plausible (honesty gate, step 7d: 8-30 mph) — the
+        # scale-dependent release speed, boards and lane read stay unavailable.
+        gf = geomfree_avg(M)
         with _stage('rev_rate_s'):
             rev = measure_rev_rate(video, S, ground, t_imp)
         if rev[0] is None:
             # DEC-122: scale unreliable AND no readable spin — still a completed partial, not a failed attempt.
-            log(f'{_af.code} + rev unavailable: partial result — all metrics unavailable')
+            log(f'{_af.code} + rev unavailable: partial result'
+                + (f' (geometry-free foul->pins {gf:.1f} mph only)' if gf is not None else ' — all metrics unavailable'))
             return _no_metrics_record(video, S, str(_af), _af.stage or 'compute', stages, out_prefix, handed,
-                                      context, reason_code=_af.code)
-        reason = ("We couldn't pin down a trustworthy lane distance for this shot, so speed and the lane read "
-                  "aren't available — but your rev rate is. " + IMPACT_MISSED_TIP)
-        log(f'{_af.code}: partial result (rev rate {rev[0]:.0f} lane rpm); speed/geometry unavailable')
+                                      context, reason_code=_af.code, geomfree_avg=gf)
+        reason = ("We couldn't pin down a trustworthy lane distance for this shot, so release speed and the lane "
+                  "read aren't available — but your rev rate is. " + IMPACT_MISSED_TIP)
+        log(f'{_af.code}: partial result (rev rate {rev[0]:.0f} lane rpm)'
+            + (f'; geometry-free foul->pins {gf:.1f} mph' if gf is not None else '; speed/geometry unavailable'))
         return _impact_missed_record(video, S, T, ground, rev, context, out_prefix, handed, chosen_lane,
-                                     reason=reason, impact_status='scale_unreliable', stage_report=stages)
+                                     reason=reason, impact_status='scale_unreliable', stage_report=stages,
+                                     geomfree_avg=gf)
     hand = handed or ('R' if M['right_handed'] else 'L')
     # pins
     Tp = [c for c in ground if c['t'] <= t_imp]
