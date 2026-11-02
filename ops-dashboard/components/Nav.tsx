@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/releases", label: "Releases" },
   { href: "/engine-compare", label: "Engine A/B" },
   { href: "/feedback", label: "Feedback" },
+  { href: "/insights", label: "Insights" },
 ];
 
 export function Nav() {
