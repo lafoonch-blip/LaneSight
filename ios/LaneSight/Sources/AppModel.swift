@@ -47,6 +47,9 @@ struct ShotResult: Equatable {
     /// DEC-122: per-stage analysis outcome (ok/failed/skipped). Populated for every result; shown only on
     /// dev/TestFlight builds as the "What worked" list. Empty when the server didn't send a stage report.
     var stageReport: [String: StageOutcome] = [:]
+    /// DEC-126: which engine produced the DISPLAYED measurement — "server" (default) or "iphone" (on-device
+    /// primary). The server-only metrics (boards/entry/loft) + Score/coaching are always server-authoritative.
+    var engine: String = "server"
     // Uploaded clip (DEC-055): no Score / achievement block, show the upload footer instead.
     var isUpload: Bool = false
 
@@ -605,6 +608,18 @@ final class AppModel: ObservableObject {
         #endif
     }
 
+    /// DEC-126: the on-device engine is the PRIMARY measurement for live shots. OFF until the switch ships; flip
+    /// per-device / on TestFlight via `ls.ondevice_primary` to validate. When on, a live shot's speed/rev come
+    /// from the on-device engine; the server stays the shadow/reference and remains authoritative for Score,
+    /// coaching, and the server-only metrics (boards/entry/loft).
+    static var onDevicePrimary: Bool {
+        if let v = UserDefaults.standard.object(forKey: "ls.ondevice_primary") as? Bool { return v }
+        return false
+    }
+    /// DEC-126 guardrail: a live on-device result slower than this falls back to the server. The ONLY blockers are
+    /// a crash or > 30 s — no accuracy gate. `nonisolated` so the off-main-actor measurement task can read it.
+    nonisolated static let ondevicePrimaryMaxLatencyS: Double = 30.0
+
     /// The in-flight shadow, if any. Single-flight: a new shot cancels the previous shadow so the on-device
     /// engine can never pile up across shots (battery / thermal / next-shot contention — P0 2026-10-29).
     private var shadowTask: Task<Void, Never>?
@@ -665,6 +680,73 @@ final class AppModel: ObservableObject {
                 Task { try? await client.postShadow(json) }        // POST via a fresh client, like the failure hook
             }
         }
+    }
+
+    /// DEC-126: the on-device engine's measurement, carried back to the UI as a Sendable value (no [String:Any]
+    /// crosses the task boundary). All three speeds are best_effort by policy; nil = the engine couldn't measure it.
+    struct OnDeviceMeasurement: Sendable {
+        let ballSpeed: Double?
+        let foulToPins: Double?
+        let revRate: Double?
+        let basis: String       // best_effort | unavailable
+        let note: String        // honest reason when a value is unavailable
+        let latencyS: Double
+    }
+
+    /// DEC-126: run the on-device engine as the PRIMARY measurement for a live shot. Returns the measurement, or
+    /// `nil` to FALL BACK to the server — the ONLY fallback triggers are a crash or > 30 s (no accuracy gate). An
+    /// `unavailable`-but-fast result is a valid primary result (honest unavailable + reason), NOT a fallback.
+    /// Mirrors the shadow's shot-window trim + hard cap.
+    nonisolated private func measureOnDevicePrimary(clipURL: URL, shotId: String, source: String,
+                                                    sessionId: String?, mode: String) async -> OnDeviceMeasurement? {
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odp-\(shotId).mov")
+        try? FileManager.default.removeItem(at: copy)
+        guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
+        let result: OnDeviceMeasurement? = await withTaskGroup(of: OnDeviceMeasurement?.self) { group in
+            group.addTask {
+                let clip = (mode == "form") ? copy : await VideoTrimmer.trimToShotWindow(copy, tail: 5.0)
+                defer { if clip != copy { try? FileManager.default.removeItem(at: clip) } }
+                let body = await OnDeviceShadow.run(clipURL: clip, shotId: shotId, source: source,
+                                                    sessionId: sessionId, captureMode: mode, appVersion: appVersion)
+                let perf = body["device_perf"] as? [String: Any] ?? [:]
+                let m = body["metrics"] as? [String: Any] ?? [:]
+                return OnDeviceMeasurement(
+                    ballSpeed: m["ball_speed"] as? Double, foulToPins: m["speed_avg_foul_to_pins"] as? Double,
+                    revRate: m["rev_rate"] as? Double, basis: body["basis"] as? String ?? "unavailable",
+                    note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
+                return nil      // > 30 s -> fall back to the server
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        try? FileManager.default.removeItem(at: copy)
+        guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
+        return result
+    }
+
+    /// DEC-126: override ONLY the on-device metrics (speed/rev) on a server-built result with the on-device
+    /// values; everything else (boards/entry/loft, Score, coaching) stays server-authoritative. A nil on-device
+    /// value becomes an honest `unavailable` + reason (DEC-122) — never the server's value.
+    private static func applyOnDevicePrimary(_ r: ShotResult, _ od: OnDeviceMeasurement) -> ShotResult {
+        var r = r
+        func cell(_ key: String, _ v: Double?) -> Metric {
+            Metric(metric: key, value: v, unit: key == "rev_rate" ? "rpm" : "mph",
+                   status: v != nil ? "best_effort" : "unavailable",
+                   note: v != nil ? "measured on iPhone (on-device)"
+                                  : (od.note.isEmpty ? "not measured on device" : od.note),
+                   confidence: nil, uncertainty: nil)
+        }
+        let od3: [String: Double?] = ["ball_speed": od.ballSpeed, "speed_avg_foul_to_pins": od.foulToPins,
+                                      "rev_rate": od.revRate]
+        r.metrics = r.metrics.map { kv in od3.keys.contains(kv.0) ? (kv.0, cell(kv.0, od3[kv.0] ?? nil)) : kv }
+        r.engine = "iphone"
+        return r
     }
 
     private func runPipeline(fileURL: URL, source: String) async {
@@ -836,6 +918,17 @@ final class AppModel: ObservableObject {
             built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
+            // DEC-126: on-device is PRIMARY for live ball shots — its measurement drives the displayed speed/rev;
+            // the server stays shadow + authoritative for Score/coaching/boards. Falls back to the server-built
+            // metrics on crash or > 30 s (no accuracy gate). Off for real users until the switch ships.
+            if Self.onDevicePrimary && source != "upload" && !isForm {
+                if let od = await measureOnDevicePrimary(clipURL: uploadURL, shotId: created.shot_id,
+                                                         source: source, sessionId: sid, mode: "shot") {
+                    built = Self.applyOnDevicePrimary(built, od)
+                } else {
+                    track("ondevice_fallback", props: ["reason": "crash_or_slow"])   // server stays primary
+                }
+            }
             result = built
             shotCount += 1
             // §2 (DEC-098 M3): first successful live shot in this session (uploads are standalone, no session).

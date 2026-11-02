@@ -779,7 +779,7 @@ struct ShotCardView: View {
     private var whatWorkedSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("What worked").font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
-            Text("Per-stage analysis outcome · dev/TestFlight only")
+            Text("Measured on: \(result.engine == "iphone" ? "iPhone (on-device)" : "server") · per-stage outcome · dev/TestFlight only")
                 .font(.lsCaption).foregroundStyle(LS.textSecondary)
             ForEach(Self.stageOrder, id: \.0) { key, label in
                 if let s = result.stageReport[key] {
