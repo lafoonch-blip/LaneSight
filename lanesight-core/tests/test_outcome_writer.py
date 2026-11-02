@@ -51,6 +51,16 @@ def test_shot_record_one_row_per_catalog_metric_with_status_mapping():
     assert sby['impact']['status'] == 'failed' and sby['impact']['reason_code'] == 'PIN_IMPACT_NOT_DETECTED'
 
 
+def test_stage_duration_ms_float_is_coerced_to_int():
+    # The stage report records float ms; the duration_ms column is INTEGER (else PostgREST 22P02).
+    _, srows = outcome_rows_from_record('att-d', 'server', 'v', 'shot', {},
+                                        {'stabilize': {'status': 'ok', 'duration_ms': 131033.9},
+                                         'lane': {'status': 'ok', 'duration_ms': None}})
+    sby = {r['stage']: r for r in srows}
+    assert sby['stabilize']['duration_ms'] == 131034 and isinstance(sby['stabilize']['duration_ms'], int)
+    assert sby['lane']['duration_ms'] is None
+
+
 def test_successful_shot_unavailable_metrics_get_structural_codes_without_attempt_cause():
     # Mirrors a FULLY successful shot: measured headline metrics + structurally-unavailable far-lane / spin / grip
     # metrics (note only, no attempt-level reason_code). Every unavailable row must still get code + stage.

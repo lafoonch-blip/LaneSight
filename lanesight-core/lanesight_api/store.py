@@ -139,10 +139,15 @@ def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, m
     for stage, info in (stage_report or {}).items():
         if not isinstance(info, dict):
             continue
+        dur = info.get('duration_ms')
+        try:
+            dur = int(round(float(dur))) if dur is not None else None   # the column is INTEGER; stage timings are float ms
+        except (TypeError, ValueError):
+            dur = None
         srows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
                       'capture_mode': capture_mode, 'stage': stage,
                       'status': info.get('status') if info.get('status') in ('ok', 'failed', 'skipped') else 'ok',
-                      'reason_code': info.get('reason_code'), 'duration_ms': info.get('duration_ms'),
+                      'reason_code': info.get('reason_code'), 'duration_ms': dur,
                       'diagnostics': info.get('diagnostics'),
                       'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
     return mrows, srows
