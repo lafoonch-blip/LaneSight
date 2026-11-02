@@ -8,6 +8,10 @@ struct DevPanelView: View {
     @State private var health: HealthResponse?
     @State private var latencyMs: Int?
     @State private var errorText: String?
+    /// DEC-126: flip the on-device engine to PRIMARY for shots (live + upload here, for validation). When a shot's
+    /// on-device run clears the 30 s guardrail, its speed/rev come from the iPhone; otherwise it falls back to the
+    /// server. The "What worked" card shows "Measured on: iPhone/server".
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimaryFlag = false
 
     /// True when the server is live but can't reach Supabase (or is degraded) — the app is NOT working.
     private var supabaseDown: Bool {
@@ -48,8 +52,11 @@ struct DevPanelView: View {
                 NavigationLink { OnDeviceShadowView() } label: {
                     Label("On-device analysis (shadow)", systemImage: "cpu")
                 }
+                Toggle(isOn: $onDevicePrimaryFlag) {
+                    Label("On-device PRIMARY for shots (DEC-126)", systemImage: "iphone.gen3")
+                }
             } footer: {
-                Text("OD-01 measures device capability. The shadow runner ports the first real CV stage (stabilization) on-device to compare against the server (DEC-103 parity).")
+                Text("DEC-126: when ON, a shot's speed/rev come from the on-device engine if it finishes under 30 s; otherwise it falls back to the server. Applies to uploads here too so you can test with existing videos. The result's \"What worked\" card shows which engine measured it.")
             }
 
             // Fail visibly: if the service can't reach the database, the app is not actually working.

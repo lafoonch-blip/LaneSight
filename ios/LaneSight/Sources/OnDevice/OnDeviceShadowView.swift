@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AVFoundation
 
 // DEC-102/103 — Phase 3 shadow runner (dev-only). Runs the on-device stabilization stage on a picked clip and
 // reports timing + registration quality so it can be compared to the server (parity gate). SHADOW: nothing
@@ -94,20 +95,30 @@ struct OnDeviceShadowView: View {
     private func runFull() async {
         guard let url = clipURL else { return }
         running = true; error = nil; report = ""
-        let body = await OnDeviceShadow.run(clipURL: url, shotId: "devtest", source: "upload",
+        // Mirror the live primary path EXACTLY: trim to the shot window first (the primary path never runs the
+        // engine on the full recording), then run the engine on the trimmed window.
+        let t0 = Date()
+        let clip = await VideoTrimmer.trimToShotWindow(url, tail: 5.0)
+        let trimS = Date().timeIntervalSince(t0)
+        let origDur = CMTimeGetSeconds(AVURLAsset(url: url).duration)
+        let trimDur = CMTimeGetSeconds(AVURLAsset(url: clip).duration)
+        let body = await OnDeviceShadow.run(clipURL: clip, shotId: "devtest", source: "upload",
                                             sessionId: nil, captureMode: "shot", appVersion: "dev")
+        if clip != url { try? FileManager.default.removeItem(at: clip) }
         let perf = body["device_perf"] as? [String: Any] ?? [:]
         let m = body["metrics"] as? [String: Any] ?? [:]
-        let lat = perf["latency_s"] as? Double ?? -1
+        let engLat = perf["latency_s"] as? Double ?? -1
+        let total = trimS + engLat
         func f(_ v: Double, _ n: Int = 2) -> String { String(format: "%.\(n)f", v) }
         func val(_ k: String) -> String { (m[k] as? Double).map { f($0) } ?? "unavailable" }
         report = """
-        FULL on-device engine — DEC-126 primary path
+        FULL on-device engine — DEC-126 primary path (shot-window trimmed)
         Device: \(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)
+        Clip: \(f(origDur, 1))s recording → trimmed to \(f(trimDur, 1))s window
 
-        latency: \(f(lat))s   \(lat >= 0 && lat <= 30 ? "✅ under 30 s (primary)" : "❌ over 30 s → falls back to server")
-        peak_mem: \(f((perf["peak_mem_mb"] as? Double) ?? 0)) MB
-        basis: \(body["basis"] as? String ?? "?")
+        trim: \(f(trimS))s   engine: \(f(engLat))s
+        TOTAL: \(f(total))s   \(total >= 0 && total <= 30 ? "✅ under 30 s (primary)" : "❌ over 30 s → falls back to server")
+        peak_mem: \(f((perf["peak_mem_mb"] as? Double) ?? 0)) MB   basis: \(body["basis"] as? String ?? "?")
 
         ball_speed: \(val("ball_speed")) mph
         speed_avg_foul_to_pins: \(val("speed_avg_foul_to_pins")) mph
