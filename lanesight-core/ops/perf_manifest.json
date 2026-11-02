@@ -125,6 +125,12 @@
       "expected": "failed",
       "failure_code": "FOUL_LINE_NOT_IN_VIEW",
       "note": "wide oblique low POV beside the ball return; multiple lanes, bowler lane/approach runs off the bottom, no single lane framed foul->pins, ~623px camera motion. Pipeline correctly fails. FIXED 2026-10-29: precheck now confident-rejects FOUL_LINE_NOT_IN_VIEW (ok=false) so the app warns upfront instead of a 2-min wait; gated on ops/precheck_vs_pipeline.py = 0 false rejections (8751-8754 reach ok=true)."
+    },
+    {
+      "clip": "shot_1356_BF834572.mov",
+      "expected": "failed",
+      "failure_code": "PIN_IMPACT_NOT_DETECTED",
+      "note": "2026-11-01 recovered 13:56 shot (DEC-119: signed URL issued, upload never started, nothing persisted; recovered intact from the device tmp/ container to ~/LaneSightData/recovered/, symlinked into training_videos/). HEVC 1440x1080 rotation -90 (portrait 1080x1440), ~60fps, 29MB, SDR. Ran through the canonical pipeline (LANESIGHT_FFMPEG_DECODE=1, engine-identical to the Cloud Run server per DEC-113): lane detected at a pale-lane floor s_min=70, VP (755,558), 1/1 lanes consistent BUT foul residual high (foul +/-94.8px); ball enters the pin ROI at 12.65s but no sustained impact spike -> PIN_IMPACT_NOT_DETECTED (stage=impact), ~89.5s wall. No sustained-burst trim window found ('no trim'). Honest coded failure (DEC-086), not a crash. No ground truth labelled yet (not in cv_eval); add foul/impact labels to diagnose the impact miss + the weak foul fit on this unusual 4:3 portrait framing."
     }
   ]
 }

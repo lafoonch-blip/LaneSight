@@ -45,6 +45,9 @@ struct ShotResult: Equatable {
     // Capture-quality banner (B): shown above "Target vs actual" when the far lane was limited.
     var captureFarLaneLimited: Bool = false
     var captureReason: String?
+    /// DEC-122: per-stage analysis outcome (ok/failed/skipped). Populated for every result; shown only on
+    /// dev/TestFlight builds as the "What worked" list. Empty when the server didn't send a stage report.
+    var stageReport: [String: StageOutcome] = [:]
     // Uploaded clip (DEC-055): no Score / achievement block, show the upload footer instead.
     var isUpload: Bool = false
 
@@ -750,6 +753,17 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         #endif
     }
 
+    /// DEC-122: show per-analysis diagnostics (the "What worked" stage list) on DEV and TESTFLIGHT builds, never
+    /// for App Store users. TestFlight is detected by the sandbox receipt. Overridable via `ls.diagnostics`.
+    static var diagnosticsEnabled: Bool {
+        if let v = UserDefaults.standard.object(forKey: "ls.diagnostics") as? Bool { return v }
+        #if DEBUG
+        return true
+        #else
+        return Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+        #endif
+    }
+
     /// The in-flight shadow, if any. Single-flight: a new shot cancels the previous shadow so the on-device
     /// engine can never pile up across shots (battery / thermal / next-shot contention — P0 2026-10-29).
     private var shadowTask: Task<Void, Never>?
@@ -1210,6 +1224,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                                    formVersion: record?.form_version)
             built.shotNumber = shot.sequence
             built.ballName = shot.ball_name          // DEC-097: the ball this shot was thrown with
+            built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
             if isForm { Self.attachFormFundamentals(&built, record) }
             else { Self.attachShotCard(&built, record) }
             result = built

@@ -61,6 +61,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
                   '(pending a pose dependency + validation on the training clips).')
         measurements = _unavailable(reason)
         status = 'unavailable'
+        stage_report = {'pose': {'status': 'failed', 'reason_code': 'FORM_POSE_BACKEND_UNAVAILABLE', 'reason': reason}}
     else:
         got = pose_backend(video, out_prefix, handed) or {}
         extras = got.get('_extras') or {}
@@ -68,6 +69,7 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
                                                           note='not returned by pose backend'))
                         for k, u in FORM_P1]
         status = 'ok'
+        stage_report = got.get('stage_report')      # DEC-122 per-stage report from the form engine
     # Capture view (MVP-03): an explicit caller view wins; otherwise use the pose-detected view.
     view = caller_view or (extras.get('view_info') or {}).get('view', 'unknown')
     view = view if view in VIEWS else 'unknown'
@@ -89,4 +91,5 @@ def analyze_form_clip(video, out_prefix=None, handed=None, view=None, pose_backe
         events=extras.get('events', {}),
         measured_positions=measured_positions,
         fps=extras.get('fps'),
+        stage_report=stage_report,              # DEC-122: decode/pose/swing_events/delivery_isolation ok|failed
     )

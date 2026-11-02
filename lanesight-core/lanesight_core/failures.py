@@ -43,6 +43,11 @@ def failure_block(code: str, stage: str = 'internal') -> dict:
 # code -> user_title / user_message / tip (capture advice). Keep the copy plain-language and honest; never
 # reference boards/code internals the bowler wouldn't know. `tip` may be None when there's no useful advice.
 FAILURE_COPY: dict[str, dict] = {
+    'CAPTURE_VIEW_UNSUPPORTED': {
+        'user_title': "This camera angle can't be measured",
+        'user_message': "From this position we can't read the lane, so the shot metrics aren't available.",
+        'tip': "Set the camera behind the lane, square to it, with the foul line and pins in frame.",
+    },
     'LANE_NOT_DETECTED_NO_WOOD': {
         'user_title': "We couldn't find the lane",
         'user_message': "The lane wasn't clear enough in the video for us to read it.",

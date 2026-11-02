@@ -69,6 +69,7 @@ struct ShotCardView: View {
                     // "Was a sensor in the ball?" card on the shot screen (kept wired for the report sheet).
                     if result.isUpload { uploadFooter }
                     ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
+                    if AppModel.diagnosticsEnabled && !result.stageReport.isEmpty { whatWorkedSection }
                     analyzedFooter
                     // Dock (2026-10-29-A B2): live shot → "Record next shot"; upload / pushed review → bottom Done.
                     if !result.isUpload && !result.isForm { recordNextCTA } else { doneCTA }
@@ -757,6 +758,55 @@ struct ShotCardView: View {
         }
         .font(.lsCaption).foregroundStyle(LS.textSecondary)
         .accessibilityElement(children: .combine)
+    }
+
+    // DEC-122 "What worked": the per-stage analysis report, shown on dev/TestFlight only. Stages in pipeline
+    // order; a shot carries the ball stages, a form clip the pose stages — only present keys render.
+    private static let stageOrder: [(String, String)] = [
+        ("decode", "Decode"), ("stabilize", "Stabilize"), ("lane", "Lane detect"), ("foul", "Foul line"),
+        ("ball_track", "Ball track"), ("impact", "Pin impact"), ("refine", "Refine"), ("compute", "Geometry"),
+        ("pins", "Pin read"), ("rev", "Rev rate"),
+        ("pose", "Pose"), ("swing_events", "Swing events"), ("delivery_isolation", "Delivery"), ("slowmo", "Slow-mo")]
+
+    private func stageIcon(_ s: String?) -> String {
+        switch s { case "ok": return "checkmark.circle.fill"; case "failed": return "xmark.octagon.fill"
+        default: return "minus.circle" }
+    }
+    private func stageColor(_ s: String?) -> Color {
+        switch s { case "ok": return .green; case "failed": return .red; default: return LS.textSecondary }
+    }
+
+    private var whatWorkedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What worked").font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+            Text("Per-stage analysis outcome · dev/TestFlight only")
+                .font(.lsCaption).foregroundStyle(LS.textSecondary)
+            ForEach(Self.stageOrder, id: \.0) { key, label in
+                if let s = result.stageReport[key] {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: stageIcon(s.status)).foregroundStyle(stageColor(s.status))
+                            .font(.system(size: 14, weight: .semibold)).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(label).font(.system(size: 14, weight: .medium)).foregroundStyle(LS.textPrimary)
+                                Spacer()
+                                if let ms = s.duration_ms {
+                                    Text("\(Int(ms)) ms").font(.lsCaption).foregroundStyle(LS.textSecondary)
+                                }
+                            }
+                            if s.status == "failed", let r = s.reason_code ?? s.reason {
+                                Text(r).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     /// Job timing isn't carried onto the result record in this build, so it's shown as "—" rather than a

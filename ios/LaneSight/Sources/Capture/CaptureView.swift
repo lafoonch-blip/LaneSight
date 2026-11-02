@@ -44,7 +44,7 @@ struct CaptureView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         // Form timing needs a high frame rate: floor Form capture at 60 fps (bestFormat still takes 120 when the
-        // device supports it at >=1080p). Shot keeps the user's preference. (DEC-118 form gates / form baseline.)
+        // device supports it at >=1080p). Shot keeps the user's preference. (DEC-121 Form capture defaults.)
         .task {
             let fps = model.captureMode == "form" ? max(60.0, Double(model.preferredFPS)) : Double(model.preferredFPS)
             await camera.start(preferredFPS: fps)
@@ -99,7 +99,7 @@ struct CaptureView: View {
     }
 
     /// Form capture framing tip: step count + swing timing need every foot plant in view, so remind the bowler
-    /// to keep both feet framed through the whole approach (DEC-118 form gates / supported-view coverage).
+    /// to keep both feet framed through the whole approach (DEC-121 Form capture / supported-view coverage).
     private var formFramingTip: some View {
         HStack(spacing: 6) {
             Image(systemName: "figure.walk").font(.system(size: 12, weight: .semibold))

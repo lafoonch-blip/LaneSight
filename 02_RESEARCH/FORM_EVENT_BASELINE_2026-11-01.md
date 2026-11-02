@@ -1,6 +1,6 @@
 # Form event baseline + remaining-gap root causes (2026-11-01)
 Status: WORKING NOTES
-Version: 1.4
+Version: 1.5
 Last Updated: 2026-11-02
 Owner: Shayne (author: autonomous session)
 Scope: DEC-118 Form MVP metrics measured against Shayne's form labels; DEC-120 slide-stop fix; and the
@@ -154,3 +154,42 @@ Added to the labeler `form_events` task (side view), pending Shayne's labels —
 Once labeled, `python examples/form_baseline.py` scores it automatically (the harness reads `form_labels.json`
 and resolves the clip from `~/LaneSightData/.../11:1 Shots/`). Engine on 8980 today: side view, E4/E7/E8 surface,
 E2 null, step count 14 (over-counts — multiple deliveries / walking in that clip; labels will confirm).
+
+## 4. Periodic whole-body step COUNT — tried (hip / knee / thigh), does NOT pass; Form work paused (2026-11-02)
+Per Shayne's direction, prototyped step COUNT from a periodic whole-body cue counted between setup-hold-end and
+slide-stop (`examples/form_step_count_cues.py`), instead of locating individual foot plants. Cues tried: pelvis
+(hip) vertical bounce, knee vertical bounce, knee forward-swing (thigh), and thigh angle (hip→knee), plus
+shoulder as a cross-check. Shayne's note that the thigh moves more than the hips and stays visible when the foot
+doesn't is correct — but it didn't rescue the count.
+
+Counts vs GT 5 (IMG_8980 held out):
+
+| clip | hip-y | knee-y | knee-fwd | thigh-angle (L+R) |
+|---|---|---|---|---|
+| 8824 | 5 | 4 | 4 | 8 |
+| 8825 | 3 | 3 | 3 | 5 |
+| 8826 | 3 | 4 | 4 | 5 |
+| 8846 | 4 | 4 | 3 | 7 |
+| 8847 | 4 | 4 | 4 | 7 |
+| 8848 | 6 | 6 | 6 | 8 |
+| 8980* | 4 | 2 | 2 | 8 |
+
+**No cue gives exactly 5 on all 7 (counts range 2–8).** Why: a bowling approach is NOT steady-state periodic
+gait — it is 4–5 ACCELERATING steps ending in a glide/slide. The early steps glide with sub-1-cycle-per-step
+vertical bounce (hip oscillates ~0.6–0.8 cycle/step: on 8847 only ~3 hip-high minima across 5 steps), the slide
+adds no clean bounce, and phone-pose lower-body landmarks are noisy. The thigh angle has more amplitude but is
+noisy per leg (each leg should swing 3/2 times for an L-start 5-step; it over-counts). So periodic counting
+over/under-shoots per clip.
+
+**Decision: NOT shipped (gate not met), and per Shayne, STOP here.** Step count stays `best_effort` (DEC-121);
+no periodic-cue detector added. `examples/form_step_count_cues.py` keeps the negative result reproducible.
+
+**Form work is PAUSED** pending **10–15 new 60 fps form deliveries (side + rear)** from Shayne. Those plus
+IMG_8980 are the held-out validation set; nothing gets tuned on them until they exist. The likely real fix needs
+either higher-fps, better-framed capture (so the gait signal is cleaner) or a dedicated foot-contact signal —
+decided after the new clips are in hand.
+
+**iOS capture change needs a device build (Session 1 TODO).** DEC-121's Form capture defaults — floor Form
+recording at 60 fps (120 if supported at ≥1080p) and the "keep both feet in frame through your whole approach"
+tip — are code-complete in `ios/LaneSight/Sources/Capture/CaptureView.swift` but were written here without an
+Xcode build. They must be built + verified on a device before relying on them (and before the new-clip capture).

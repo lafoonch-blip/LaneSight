@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.81  
+Version: 1.82  
 Last Updated: 2026-11-02  
 Owner: Shayne  
-Supersedes: v1.77
+Supersedes: v1.81 (merge of feat/ff-feedback DEC-123/124/125 + dev-build-v0 DEC-122; real DEC-122 kept, reserved stub removed)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1302,9 +1302,6 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 **Why:** the bottleneck right now is labeled real-world clips and observations from more bowlers, houses and phones; waiting for Beta readiness delays the data that gets LaneSight there.
 **Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-047, DEC-059, DEC-099/104, DEC-118 (Beta gates unchanged).
 
-### DEC-122 — (reserved, not in this branch)
-DEC-122 is assigned on `feat/ios-lane-parity` ("No analysis fails as a whole because one part failed" — partial results + per-stage outcome tracking). The F&F / feedback decisions that originally drafted as 122–124 were renumbered to **DEC-123–DEC-125** to avoid the collision. This stub holds the number's place until that branch merges.
-
 ### DEC-121 — Form metric tolerances + step-count honesty + Form capture defaults (amends DEC-118) (2026-11-02)
 **Decision (Shayne, 2026-11-02):** per-plant form-step labels landed (`form_steps` task → `validation/form_steps_labels.json`; all approaches are 5 steps, no 6-step data; some early plants off-frame so visible-plant counts are 8824:4, others 5, IMG_8980:3). Amends DEC-118's Form gates with explicit tolerances and records an honest status for step count.
 - **Form metric gates (amends DEC-118 "events within ±2 frames"):**
@@ -1436,6 +1433,48 @@ DEC-122 is assigned on `feat/ios-lane-parity` ("No analysis fails as a whole bec
 
 **Why:** The job queue was `SerialJobQueue._jobs` in instance memory only, so `GET /jobs/:id` 404'd whenever the poll didn't land on the instance that ran it (concurrency 8, max-instances 3) or after scale-to-zero. The shot analyzed and persisted, but the client could never re-resolve its job — the "analysis hang + lost session" of 2026-10-29. Verified live: a 202 s inline job persisted `done` + resolved via `GET /jobs/:id` after the fact.
 **Date:** 2026-10-30 · **Status:** ACCEPTED — migration 034 applied, deployed (rev `lanesight-api-durjobs`).
+
+### DEC-122 — No analysis fails as a whole because one part failed (partial results + stage report)
+**Decision (Shayne, 2026-11-02):** Every analysis — shot and form, on BOTH the iPhone and the server (shadow)
+engine — runs to completion and RETURNS a result. It is never aborted because one stage could not produce its
+metric. Each returned analysis carries:
+- **(a) every metric that WAS measured** (with status measured | best_effort | low_confidence);
+- **(b) every metric that was NOT measured**, marked `unavailable` with the **stage** that failed and the
+  **reason** — no fallback, no estimated numbers (unmeasured ⇒ unavailable + reason, DEC-086 honesty);
+- **(c) a per-stage report**: decode, stabilize, lane, foul line, ball track, impact, pose, form events — each
+  `ok` / `failed` + reason + key diagnostics.
+**An attempt is `failed` ONLY if the video can't be read or the code crashes** — and even then the stage report
+(whatever was reached) is stored. **"Nothing measured" is still a COMPLETED analysis with a stage report, not a
+failure.** This extends DEC-109/DEC-110 (metric-independence partials for impact/scale/sparse-track) to EVERY
+stage and former-fatal code.
+- **Former-fatal codes → partial** (audit, shot + form): `PIN_IMPACT_NOT_DETECTED`, `FOUL_LINE_NOT_IN_VIEW`,
+  `FORM_DELIVERY_NOT_ISOLATED`, `SHADOW_UNAVAILABLE`, `BALL_TRACK_NOT_FOUND`, `LANE_NOT_DETECTED_*`,
+  `LANE_GEOMETRY_UNUSABLE`, `TRACK_TOO_SPARSE_FOR_SPEED`. For each, measure what does NOT depend on the failed
+  stage (e.g. rev rate needs only the ball track, not impact/geometry; a form timing metric that doesn't depend
+  on the delivery-isolation gate) and withhold the rest with the reason. A dependency chain that blocks
+  everything (e.g. no lane ⇒ no ball track ⇒ no rev) still returns a completed all-`unavailable` record + stage
+  report — it does not raise.
+- **App (dev/TestFlight):** show the partial result normally; each missing metric reads
+  **"Not measured — <reason>"**; a **"What worked"** stage list (✓/✗ + reason) appears on the shot/form detail.
+  A failed stage must NEVER hide a stage that succeeded.
+- **Outcome tracking (Supabase, append-only history; `measurements` stays the user-facing current values):**
+  a versioned **`metric_catalog`** (key, capture_mode, required stages, introduced_in); **`analysis_metric_outcome`**
+  (one row per attempt × EVERY catalog metric, incl. unavailable: engine iphone|server, engine_version, status,
+  value, unit, confidence, machine-countable `reason_code` enum, reason_detail, failed_stage);
+  **`analysis_stage_outcome`** (one row per attempt × stage: status ok|failed|skipped, reason_code, duration_ms,
+  diagnostics jsonb). Written for EVERY attempt (incl. failed/crashed — whatever was reached) from both engines,
+  with per-attempt context (camera view/group, device, fps, resolution, capture mode, `profiles.staged_kind`).
+  Views: metric success-rate by metric × engine_version × camera-view × week; top reason_codes per metric; stage
+  failure funnel; iPhone-vs-server agreement per metric — **staged/test accounts excluded by default.**
+**Why:** in testing (and for beta/production observability) a single weak stage was blanking an entire shot/form —
+hiding the metrics that DID work and making failures uncountable. Returning a partial + a machine-countable
+stage/metric outcome for every attempt turns "it failed" into "exactly these metrics/stages failed, here, for
+this camera/engine, N% of the time" — the data that drives per-metric promotion (DEC-106) and the DEC-118
+supported-camera guidance.
+**Date:** 2026-11-02 · **Status:** ACCEPTED — implementation in progress (pipeline partial+stage-report refactor,
+engines, app, outcome tables + views). **Builds on:** DEC-086 (coded failures, honest unavailable), DEC-109/110
+(metric-independence partials), DEC-103/106 (engine provenance / per-metric promotion), DEC-118 (camera support).
+**Supersedes:** the hard-fail behavior of the former-fatal codes above (they become partial results).
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

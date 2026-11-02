@@ -356,6 +356,36 @@ def _quality(rec) -> dict | None:
     return {k: v for k, v in out.items() if v is not None} or None
 
 
+def _log_outcomes(store, attempt_id, mode, record, failure, clip=None):
+    """DEC-122 §6: emit per-metric + per-stage outcome rows for a SERVER attempt (migration 036). Best-effort;
+    the caller swallows errors so this never fails an analysis. A completed partial (record present, some metrics
+    unavailable) writes a full row set; a hard failure with no record still records the failed stage so the
+    stage funnel and the "every attempt writes outcomes" invariant hold."""
+    if not attempt_id:
+        return
+    from .store import outcome_rows_from_record
+    cq = (record or {}).get('capture_quality') or {}
+    ctx = None
+    if clip:
+        ctx = {k: clip.get(k) for k in ('fps', 'width', 'height', 'short_side_px', 'rotation', 'hdr', 'source')
+               if clip.get(k) is not None} or None
+    cam_view = cq.get('camera_view') or (record or {}).get('view')      # camera_group tagging is future (DEC-118)
+    rcode = cq.get('reason_code') or getattr(failure, 'code', None)
+    rstage = cq.get('failed_stage') or getattr(failure, 'stage', None)
+    if record is not None:
+        mrows, srows = outcome_rows_from_record(attempt_id, 'server', ALGO_VERSION, mode,
+                                                record.get('metrics'), record.get('stage_report'),
+                                                camera_view=cam_view, context=ctx,
+                                                reason_code=rcode, failed_stage=rstage)
+    else:
+        mrows, srows = [], []
+        if rstage:
+            srows = [{'attempt_id': attempt_id, 'engine': 'server', 'engine_version': ALGO_VERSION,
+                      'capture_mode': mode, 'stage': rstage, 'status': 'failed', 'reason_code': rcode,
+                      'diagnostics': getattr(failure, 'diagnostics', None), 'context': ctx}]
+    store.log_outcomes(mrows, srows)
+
+
 def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
                mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
                client_timings: dict | None = None, clip_storage_path: str | None = None):
@@ -399,10 +429,10 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
             except Exception as pe:
                 attempt['clip']['precheck'] = {'error': str(pe)[:150]}
 
-        def _log(status, failure=None, diagnostics=None):
+        def _log(status, failure=None, diagnostics=None, record=None):
             try:
                 dur_ms = int((time.monotonic() - t0) * 1000)
-                store.log_analysis_attempt({**attempt, 'status': status,
+                logged = store.log_analysis_attempt({**attempt, 'status': status,
                                             'failure_code': getattr(failure, 'code', None),
                                             'failure_stage': getattr(failure, 'stage', None),
                                             # failure numbers, or (on success) capture-quality + geometry signals
@@ -411,6 +441,8 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
                                             # DEC-098 §2 (M1): measured compute/egress for cost reporting
                                             'cost': _attempt_cost(dur_ms, attempt.get('clip')),
                                             'step_timings': {k: v for k, v in job.timings.items()}})
+                _log_outcomes(store, (logged or {}).get('id'), mode, record, failure,
+                              clip=attempt.get('clip'))
             except Exception as le:
                 print(f'analysis_attempt log skipped ({le})')
 
@@ -431,9 +463,15 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
                 rec['shot_id'] = shot_id
                 gated = _form_not_isolated(rec)
                 if gated:
-                    from lanesight_core.failures import AnalysisFailure as _AF
-                    raise _AF('FORM_DELIVERY_NOT_ISOLATED', 'every swing event failed the DEC-095 sanity gates',
-                              stage='form_pose', diagnostics=gated)
+                    # DEC-122: delivery isolation failing does NOT fail the whole form analysis. The swing events
+                    # are already `unavailable` (pose.analyze nulls them with a reason); step count / approach
+                    # duration / tempo that don't depend on the isolation gate still stand. Record the stage as
+                    # failed in the per-stage report and continue to persist + return the partial.
+                    sr = rec.setdefault('stage_report', {})
+                    sr['delivery_isolation'] = {'status': 'failed', 'reason_code': 'FORM_DELIVERY_NOT_ISOLATED',
+                                                'reason': 'every swing event failed the DEC-095 sanity gates',
+                                                'diagnostics': gated}
+                    print(f'FORM_DELIVERY_NOT_ISOLATED: partial result — swing events unavailable, other form metrics kept')
                 # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
                 # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
                 for fkey in (rec.get('key_frames') or []):
@@ -450,7 +488,7 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
                                                           analyze_seconds=job.timings['analyze'],
                                                           persist=not is_upload)
                 store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'}, algo_version=ALGO_VERSION)
-                _log('analyzed', diagnostics=_quality(rec))
+                _log('analyzed', diagnostics=_quality(rec), record=rec)
                 return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
                             focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
                             footer=form_footer.get('footer'))
@@ -477,10 +515,10 @@ def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session
             # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
             # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
             if is_upload:
-                _log('analyzed', diagnostics=_quality(rec))
+                _log('analyzed', diagnostics=_quality(rec), record=rec)
                 return dict(shot_id=shot_id)
             footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
-            _log('analyzed', diagnostics=_quality(rec))
+            _log('analyzed', diagnostics=_quality(rec), record=rec)
             return dict(shot_id=shot_id, **footer)
         except Exception as e:
             # Persist the failure on the shot row (so Lab › Uploads can show it) + log the attempt, then
@@ -1586,7 +1624,24 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
            'step_timings': {'client': b.get('timings')} if b.get('timings') else None,
            'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
     try:
-        get_store().log_analysis_attempt(row)
+        st = get_store()
+        logged = st.log_analysis_attempt(row)
+        # DEC-122 §6: per-metric + per-stage outcomes for the on-device engine (platform 'ios' -> engine 'iphone').
+        # Metrics come from the device's per-metric dict; stage_report if the client sent one (else just the
+        # single failed stage for an unavailable shadow run, so the funnel still sees it). Best-effort.
+        aid = (logged or {}).get('id')
+        if aid:
+            from .store import outcome_rows_from_record
+            sr = b.get('stage_report') if isinstance(b.get('stage_report'), dict) else None
+            if not sr and not measured:
+                sr = {(row['failure_stage'] or 'track'): {'status': 'failed', 'reason_code': row['failure_code']}}
+            ctx = {k: (perf.get(k) if k in perf else b.get(k)) for k in ('fps', 'thermal_state')
+                   if (perf.get(k) is not None or b.get(k) is not None)} or None
+            mrows, srows = outcome_rows_from_record(
+                aid, 'iphone', row['algorithm_version'], mode, m, sr, context=ctx,
+                reason_code=(None if measured else row['failure_code']),
+                failed_stage=(None if measured else row['failure_stage']))
+            st.log_outcomes(mrows, srows)
     except Exception as e:
         print(f'shadow attempt log skipped ({e})')
     return {'logged': True, 'platform': 'ios', 'status': row['status']}
