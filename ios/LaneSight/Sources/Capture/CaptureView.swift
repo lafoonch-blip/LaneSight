@@ -337,7 +337,7 @@ struct ProcessingCover: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             ProgressView(value: overallFrac).tint(LS.action)
-            Button("Cancel analysis") { model.resetPipeline(); busy = false }
+            Button("Cancel analysis") { model.cancelForegroundUpload(); model.resetPipeline(); busy = false }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link).padding(.top, 2)
         }
         .padding(20)

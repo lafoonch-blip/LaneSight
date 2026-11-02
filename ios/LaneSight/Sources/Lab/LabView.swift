@@ -10,6 +10,7 @@ struct LabView: View {
     private var sessions: Loadable<[SessionRow]> { tabs.lab.sessions }
     private var uploads: Loadable<[UploadRow]> { tabs.lab.uploads }
     @State private var showUploadResult = false
+    @State private var showActiveSession = false   // DEC-119: Lab banner pushes within Lab's own stack
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,11 @@ struct LabView: View {
                 LSTabHeader(title: "Lab")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        if let s = model.activeSession {
+                            ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
+                                showActiveSession = true
+                            }
+                        }
                         analyzeSection
                         if !tabs.labReady {
                             LSPageLoading()
@@ -33,6 +39,9 @@ struct LabView: View {
             }
             .background(LSBackground())
             .navigationBarHidden(true)
+            .navigationDestination(isPresented: $showActiveSession) {
+                ActiveSessionScreen().environmentObject(model)
+            }
             .sheet(isPresented: $showUploadResult) {
                 if let result = model.result {
                     if result.isForm { FormCardView(result: result).environmentObject(model) }

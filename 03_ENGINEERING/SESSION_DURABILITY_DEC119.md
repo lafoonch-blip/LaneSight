@@ -1,9 +1,36 @@
 ---
 title: Session durability + upload reliability (DEC-119 build)
-status: scoped — backend ready, iOS app work pending
+status: BUILT (iOS) — compiles for device + sim, unit-tested; on-device lifecycle matrix is the acceptance gate (manual)
 date: 2026-11-01
 decision: DEC-119 (amends DEC-096, DEC-099)
 ---
+
+## BUILT — 2026-11-01 (branch `feat/session-durability`)
+All five items are implemented in `ios/LaneSight`. Builds clean for the connected device (signed) and the
+simulator; 16 iOS unit tests pass (incl. 11 new DEC-119 tests). On-device lifecycle correctness (kill / crash /
+airplane / ≥30 min background) is verified by the manual matrix below — it can't be driven headlessly.
+
+- **New:** `Sources/Session/SessionDurability.swift` — `PersistedSession` (active-session mirror),
+  `ShotUpload` + `ShotUploadStore` (durable per-shot record + clip in Application Support, NOT tmp/),
+  `BackgroundUploadManager` (a background `URLSession`, `isDiscretionary=false`, request 90 s / resource 600 s,
+  `sessionSendsLaunchEvents`), `UploadOutcome`/`UploadBackoff`. `Sources/Session/ActiveSessionBanner.swift` —
+  the "Session in progress · Return" banner + the Active Session screen router.
+- **`AppModel`**: persist-before-upload (`enqueueAndStart` writes the record + durable clip, then trims, then
+  uploads), background PUT via the manager (progress → Analyzing screen), retry with backoff, terminal-failure
+  `POST /analysis/client-failure` (`stage=upload`), analyze-on-upload-complete, `resumePendingUploads()` on
+  relaunch/foreground, the active-session mirror (`activeSession`, server-reconciled), the ≥30 min / cold-launch
+  resume decision (`shouldPromptResume`), and End clears the mirror.
+- **`LaneSightApp`**: `AppDelegate` for `handleEventsForBackgroundURLSession`; scenePhase stamps background time,
+  resumes uploads + reconciles the session on foreground; the Continue/End resume alert; routes Continue/banner
+  to the Active Session (tab bar visible).
+- **`SessionView`**: tab bar no longer hidden (amends DEC-099). **`HomeView`/`LabView`**: the active-session banner.
+
+### Known limits (noted, not blockers)
+- The analyze request is still a single long synchronous call; if it drops after the PUT, recovery relies on the
+  existing `pendingAnalysis` + reconcile mechanism (shot is durable server-side, DEC-110). A kill *during* the
+  analyze request can, in the worst case, re-POST analyze on resume (same duplicate window the pre-existing
+  Retry already had). Not worse than before.
+- Legacy `APIClient.putClipToStorage` (foreground PUT) is now unused but left in place (other branches may use it).
 
 # DEC-119 build — session lasts until the user ends it; uploads never hang silently
 
