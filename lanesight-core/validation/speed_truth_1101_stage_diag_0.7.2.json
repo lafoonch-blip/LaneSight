@@ -1,0 +1,363 @@
+[
+ {
+  "clip": "IMG_8963",
+  "group": "angled from the side",
+  "truth": 17.74,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "impact",
+    "PIN_IMPACT_NOT_DETECTED"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8964",
+  "group": "behind ball return, offset right",
+  "truth": 16.88,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "ok",
+   "pins": "ok",
+   "rev": "ok"
+  },
+  "failed": [],
+  "lane": {
+   "center_x_px": 979.4,
+   "lanes_detected": 2
+  },
+  "ball_speed": null,
+  "foul_to_pins": 16.831,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8965",
+  "group": "behind ball return, offset right",
+  "truth": 17.49,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "compute",
+    "IMPOSSIBLE_SPEED_SCALE"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8966",
+  "group": "behind ball return, offset right",
+  "truth": 17.24,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "compute",
+    "IMPOSSIBLE_SPEED_SCALE"
+   ]
+  ],
+  "lane": {
+   "center_x_px": 348.9,
+   "lanes_detected": 2
+  },
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": 363.085,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8967",
+  "group": "lower/wider, ball return lower-right",
+  "truth": 17.12,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "compute",
+    "IMPOSSIBLE_SPEED_SCALE"
+   ]
+  ],
+  "lane": {
+   "center_x_px": 470.3,
+   "lanes_detected": 1
+  },
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": 379.37,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8968",
+  "group": "lower/wider, ball return lower-right",
+  "truth": 17.0,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "ok",
+   "pins": "ok",
+   "rev": "ok"
+  },
+  "failed": [],
+  "lane": {
+   "center_x_px": 407.6,
+   "lanes_detected": 2
+  },
+  "ball_speed": 16.192,
+  "foul_to_pins": 16.284,
+  "rev": 422.803,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8969",
+  "group": "lower/wider, ball return lower-right",
+  "truth": 18.14,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "ok",
+   "pins": "ok",
+   "rev": "ok"
+  },
+  "failed": [],
+  "lane": {
+   "center_x_px": 404.9,
+   "lanes_detected": 1
+  },
+  "ball_speed": 17.175,
+  "foul_to_pins": 17.787,
+  "rev": 372.808,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8970",
+  "group": "lower/wider, ball return lower-right",
+  "truth": 17.24,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "ok",
+   "pins": "ok",
+   "rev": "ok"
+  },
+  "failed": [],
+  "lane": {
+   "center_x_px": 627.5,
+   "lanes_detected": 1
+  },
+  "ball_speed": null,
+  "foul_to_pins": 24.331,
+  "rev": 359.966,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8971",
+  "group": "behind ball return, offset right",
+  "truth": 17.49,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "impact",
+    "PIN_IMPACT_NOT_DETECTED"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8972",
+  "group": "behind ball return, offset right",
+  "truth": 17.0,
+  "attempt": "RAISED",
+  "exc": "AnalysisFailure: LANE_GEOMETRY_UNUSABLE: lane geometry unusable: the detected lane produced an em"
+ },
+ {
+  "clip": "IMG_8973",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 17.74,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "impact",
+    "PIN_IMPACT_NOT_DETECTED"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8974",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 17.36,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "failed"
+  },
+  "failed": [
+   [
+    "lane",
+    "LANE_NOT_DETECTED_NO_WOOD"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8975",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 18.0,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "failed",
+   "rev": "ok"
+  },
+  "failed": [
+   [
+    "impact",
+    "PIN_IMPACT_NOT_DETECTED"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8976",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 17.1,
+  "attempt": "RAISED",
+  "exc": "AnalysisFailure: LANE_GEOMETRY_UNUSABLE: lane geometry unusable: the detected lane produced an em"
+ },
+ {
+  "clip": "IMG_8977",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 16.88,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "failed"
+  },
+  "failed": [
+   [
+    "lane",
+    "LANE_NOT_DETECTED_NO_WOOD"
+   ]
+  ],
+  "lane": null,
+  "ball_speed": null,
+  "foul_to_pins": null,
+  "rev": null,
+  "attempt": "completed"
+ },
+ {
+  "clip": "IMG_8978",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 17.12,
+  "attempt": "RAISED",
+  "exc": "AnalysisFailure: LANE_GEOMETRY_UNUSABLE: lane geometry unusable: the detected lane produced an em"
+ },
+ {
+  "clip": "IMG_8979",
+  "group": "centered behind ball return (mounted POV)",
+  "truth": 17.74,
+  "attempt": "RAISED",
+  "exc": "AnalysisFailure: LANE_GEOMETRY_UNUSABLE: lane geometry unusable: the detected lane produced an em"
+ },
+ {
+  "clip": "IMG_8981",
+  "group": "behind ball return, offset right",
+  "truth": 18.41,
+  "stages": {
+   "stabilize": "ok",
+   "lane": "ok",
+   "ball_track": "ok",
+   "impact": "ok",
+   "refine": "ok",
+   "compute": "ok",
+   "pins": "ok",
+   "rev": "ok"
+  },
+  "failed": [],
+  "lane": {
+   "center_x_px": 430.7,
+   "lanes_detected": 2
+  },
+  "ball_speed": 18.261,
+  "foul_to_pins": 18.804,
+  "rev": 385.099,
+  "attempt": "completed"
+ }
+]

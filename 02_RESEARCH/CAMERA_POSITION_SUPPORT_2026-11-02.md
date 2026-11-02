@@ -1,6 +1,27 @@
 # Supported camera positions — the 11/1 speed-truth set (DEC-118)
 Status: FINDING · Date: 2026-11-02 · Owner: Shayne · Engine: lanesight-cv-0.7.1 (live)
 
+## CORRECTION (2026-11-02, DEC-122 stage evidence) — it is NOT "degenerate geometry"
+The earlier verdict below blamed degenerate far-lane geometry **without stage evidence**. With the DEC-122
+per-stage report, the real per-clip causes are now measured (`validation/speed_truth_1101_stage_diag_0.7.2.json`):
+**lane + ball_track SUCCEED on 12 of 18 clips.** The failures are NOT geometry — they are:
+- **IMPACT detection** (pin contact not found): IMG_8963, 8971, 8973, 8975 — lane ✓, ball_track ✓, impact ✗.
+- **Speed-scale / compute** (IMPOSSIBLE_SPEED_SCALE): IMG_8965, 8966, 8967 — lane ✓, ball_track ✓, impact ✓,
+  but the homography-scaled RELEASE speed is implausible (wrong-lane selection among the n=2 detected lanes, or
+  the track stops short of the pins → stretched scale). The geometry-free foul→pins average (time-based) is NOT
+  affected by this and should still be reported (step 7c).
+- **Lane detection (genuine)**: only IMG_8974, 8977 (mounted POV, pale/no-wood) — LANE_NOT_DETECTED_NO_WOOD.
+- **Completed with a measured speed**: IMG_8964, 8968, 8969, 8970, 8981 (+ 8972/8976/8978/8979 returned no-metrics).
+
+Per-group FIRST failing stage: angled-side {impact:1}; behind-ball-return-offset {completed:2, compute:2, impact:1,
+no-metrics:1}; mounted-POV {impact:2, lane:2, no-metrics:3}; lower/wider {compute:1, completed:3}. So
+"centered behind the ball return" is **not** a geometry dead-end — 8973/8975 produced a lane + full ball track
+(impact-detection is the miss), and 8974/8977 are a pale-lane wood-detection miss. This supports the plan: fix
+lane-selection-from-the-ball + a geometry-free 60 ft average + impact robustness; do NOT write it off as geometry.
+The sections below are the EARLIER (superseded) framing, kept for history.
+
+---
+
 Shayne labeled 18 shot clips recorded 2026-11-01 from FOUR deliberately-varied camera positions
 (`validation/labels/speed_truth_1101.json` + `validation/speed_truth_1101_labels.json` for the group tags).
 Truth speed = 59.44 ft / ((first_pin_contact_frame − foul_cross_frame) / fps). Ran the 0.7.1 engine
