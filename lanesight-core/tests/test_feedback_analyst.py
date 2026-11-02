@@ -53,9 +53,12 @@ def test_validate_output_accepts_and_rejects():
 
 
 def test_estimate_cost():
-    # sonnet-5: $3/1M in, $15/1M out
-    assert abs(fa.estimate_cost('claude-sonnet-5', 1_000_000, 1_000_000) - 18.0) < 1e-6
-    assert abs(fa.estimate_cost('claude-opus-4-8', 0, 1_000_000) - 25.0) < 1e-6
+    # claude-sonnet-5-5 (default): $2/1M in, $10/1M out (platform.claude.com pricing, verified 2026-11-02)
+    assert fa.DEFAULT_MODEL == 'claude-sonnet-5-5'
+    assert abs(fa.estimate_cost('claude-sonnet-5-5', 1_000_000, 1_000_000) - 12.0) < 1e-6
+    assert abs(fa.estimate_cost('claude-sonnet-5-5', 0, 1_000_000) - 10.0) < 1e-6
+    # unknown model prices at the most-expensive tier so the cap errs high ($10/$50)
+    assert abs(fa.estimate_cost('some-future-model', 1_000_000, 0) - 10.0) < 1e-6
 
 
 def test_run_analyst_creates_insights_links_and_marks_considered():

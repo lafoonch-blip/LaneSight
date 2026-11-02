@@ -23,15 +23,20 @@ import re
 import time
 
 # DEC-043/DEC-125 cost cap. Default to a cheaper capable model to stay inside the >=$10/month analyst cap
-# (Shayne's explicit cap is a cost decision; override with LANESIGHT_ANALYST_MODEL). Rates are $/1M tokens.
-DEFAULT_MODEL = os.environ.get('LANESIGHT_ANALYST_MODEL', 'claude-sonnet-5')
+# (Shayne's explicit cap is a cost decision; override with LANESIGHT_ANALYST_MODEL). Rates are $/1M tokens,
+# (input, output), verified against https://platform.claude.com/docs/en/about-claude/pricing (2026-11-02).
+DEFAULT_MODEL = os.environ.get('LANESIGHT_ANALYST_MODEL', 'claude-sonnet-5-5')
 MONTHLY_CAP_USD = 10.0
 _MODEL_RATES = {                      # (input $/1M, output $/1M)
-    'claude-sonnet-5': (3.0, 15.0),
+    'claude-sonnet-5-5': (2.0, 10.0),    # current Sonnet (default)
+    'claude-opus-5-5': (4.0, 20.0),
+    'claude-haiku-5-5': (0.10, 0.50),
+    'claude-fable-5-1': (10.0, 50.0),
+    'claude-sonnet-5': (3.0, 15.0),      # prior-gen, kept for an explicit override
     'claude-opus-4-8': (5.0, 25.0),
     'claude-haiku-4-5': (1.0, 5.0),
 }
-_FALLBACK_RATE = (5.0, 25.0)          # unknown model -> price like Opus so the cap errs conservative
+_FALLBACK_RATE = (10.0, 50.0)         # unknown model -> price like the most expensive tier so the cap errs high
 
 INSIGHT_TYPES = ('bug', 'analysis_accuracy', 'ux_design', 'feature_idea', 'content')
 PRIORITIES = ('P0', 'P1', 'P2', 'P3')
