@@ -20,6 +20,7 @@ from ..insights.spares import spare_plan
 # support lane metrics (side/approach view), so we never fabricate geometry (DEC-061 / side-view-misroute).
 _METRIC_CATALOG = [
     ('ball_speed', 'mph'), ('speed_release', 'mph'), ('speed_early', 'mph'), ('speed_late', 'mph'),
+    ('speed_avg_foul_to_pins', 'mph'),
     ('loft', 'ft'), ('laydown_board', 'board'), ('board_at_7ft', 'board'), ('arrows_board', 'board'),
     ('launch_angle', 'deg'), ('breakpoint_board', 'board'), ('breakpoint_distance', 'ft'),
     ('entry_board', 'board'), ('entry_angle', 'deg'), ('entry_angle_52_55', 'deg'),
@@ -444,6 +445,9 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'early-lane (release) speed, front ~4–24 ft; best effort until the DEC-065 pose solver anchors the near-lane Z-scale (today it still rides the impact-anchored 2-point homography)', status='best_effort' if M.get('ball_speed_mph') is not None else None),
         m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
         m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
+        m('speed_avg_foul_to_pins', M.get('speed_avg_foul_to_pins_mph'), 'mph', 0.7,
+          'full-lane average, foul_cross -> first head-pin contact (59.44 ft); DEC-064/DEC-112 TRUTH-comparable (matches Shayne\'s foul->pin labels). Needs the ball tracked to the pins.',
+          status='best_effort' if M.get('speed_avg_foul_to_pins_mph') is not None else None),
         m('loft', M['loft_ft'], 'ft', 0.6, 'touchdown unseen' if M['loft_ft'] is None else '±0.45 ft at 60 fps'),
         m('laydown_board', M.get('board_at_0ft'), 'board', lat_c if M['track_first_ft'] < 3 else 0.3),
         m('board_at_7ft', M.get('board_at_7ft'), 'board', lat_c if M['track_first_ft'] < 6 else 0.3),
@@ -461,7 +465,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     # going the wrong way) must never surface as a number — mark it unavailable with the reason. The headline
     # ball_speed is already hard-gated above, so this covers the per-segment speeds.
     for x in meas:
-        if x.metric in ('ball_speed', 'speed_release', 'speed_early', 'speed_late') and x.value is not None \
+        if x.metric in ('ball_speed', 'speed_release', 'speed_early', 'speed_late', 'speed_avg_foul_to_pins') and x.value is not None \
            and (not np.isfinite(x.value) or x.value <= 0):
             x.value, x.status, x.confidence = None, 'unavailable', 0.0
             x.note = (x.note + ' ' if x.note else '') + 'Segment speed came out non-physical (≤0); not reported.'
