@@ -1,6 +1,6 @@
 # Form event baseline + remaining-gap root causes (2026-11-01)
 Status: WORKING NOTES
-Version: 1.0
+Version: 1.1
 Last Updated: 2026-11-01
 Owner: Shayne (author: autonomous session)
 Scope: DEC-118 Form MVP metrics measured against Shayne's form labels; DEC-120 slide-stop fix; and the
@@ -47,9 +47,17 @@ feet briefly slow). Two independent problems:
   position-staircase counter (per-foot forward advance) was prototyped and merged steps (2–4), no better.
 - **No per-step ground truth.** The labels have only the step COUNT, so any window/threshold tuned to hit 5 on
   these 6 clips cannot be distinguished from overfitting and would not be a real validation.
-- **Fix path:** add per-step (or at least first-step) frame marks to the labeler `form_events` task, then build
-  and validate a step counter against them. Likely a per-foot forward-position staircase (robust to the comb≈0
-  velocity dropouts) + a window anchored [approach onset, slide_stop]. Validate held-out on IMG_8980.
+
+**Update 2026-11-01 (structural window fix SHIPPED):** cause (a) is now fixed — `_setup_hold_end` anchors the
+step search at the end of the setup stance (where step 1 breaks the stillness) instead of `b0−0.25`, so steps
+1–2 are no longer structurally excluded. Step counts after, vs GT 5: **8824 5 (EXACT, was 3)**, 8825 3, 8826 6,
+8846 3, 8847 4, 8848 6 → **1/6 exact (was 0/6)**; swing events E4/E7/E8 unchanged. The residual over/under-counts
+are cause (b) — the combined-foot-speed signal — which needs per-step truth to fix without overfitting.
+
+- **Next (item 3, gated on labels):** the `form_steps` labeler task (per-plant times for the 6 clips + IMG_8980,
+  with detector hints) is now in `validation/label_tasks/form_steps.json` → exports `form_steps_labels.json`.
+  Once labeled, fix the foot-strike detector against per-plant truth (gate: every plant ±2 frames, count exact),
+  likely a per-foot forward-position staircase (robust to the comb≈0 dropouts). Hold out IMG_8980 + future clips.
 
 ### 2b. E2 ball start — null on all 6
 - The bowling-wrist landmark (the current E2 cue) **does not move at the labeled pushaway onset** — its y is flat

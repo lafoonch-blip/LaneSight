@@ -305,6 +305,34 @@ def _foot_strikes(t, lms, win, Rs, Ls):
     return out
 
 
+def _setup_hold_end(t, Rs, Ls, burst_start, max_lookback=1.5, still_thr=FOOT_STILL_FINISH, min_still_s=0.25):
+    """Where the approach's FIRST step begins — the end of the setup stance. The bowler stands still (both feet
+    below `still_thr`) in the setup, then step 1 breaks that stillness; the motion-burst detector only fires a
+    step or two later, so a step window starting at the burst clips steps 1–2. Scanning back from `burst_start`,
+    return the end of the last sustained (>= `min_still_s`) both-feet-still run — i.e. the instant the approach
+    starts. Falls back to `burst_start - 0.4` if no clear setup hold is found (e.g. a rolling start)."""
+    both = _smooth(np.fmax(np.nan_to_num(Rs, nan=9.0), np.nan_to_num(Ls, nan=9.0)), 5)
+    still = both < still_thr
+    dt = float(np.median(np.diff(t))) or (1.0 / 30.0)
+    need = max(1, int(round(min_still_s / dt)))
+    lo = max(t[0], burst_start - max_lookback)
+    i = int(np.searchsorted(t, burst_start))
+    i = min(i, len(t) - 1)
+    # walk backwards from the burst; the first time we enter a long enough still run, its trailing edge is the
+    # setup-hold end (the next frame, where motion resumes = step 1).
+    while i > 0 and t[i] >= lo:
+        if still[i]:
+            j = i
+            while j > 0 and still[j]:
+                j -= 1
+            if (t[i] - t[j]) >= min_still_s * 0.8 or (i - j) >= need:
+                return float(t[min(i + 1, len(t) - 1)])
+            i = j
+        else:
+            i -= 1
+    return float(burst_start - 0.4)
+
+
 # slide stop (E8): the slide foot — the foot OPPOSITE the bowling hand (left for a right-hander) — glides to the
 # foul line and comes to rest. The trail leg is still swinging up into the follow-through, so the "both feet
 # still" posted finish (hold_start) lands 0.4–1.0 s LATER; comparing release to it produced the big false gap
@@ -851,11 +879,14 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     ev = _swing_events(t, lms, ball, swing_win, torso)
     E2, E3, E4, E6, E7 = ev['E2'], ev['E3'], ev['E4'], ev['E6'], ev['E7']
 
-    # foot plants: combined-motion dips from just before the burst to release (the approach ends at release;
-    # post-release trail-leg / walk-off motion is not a step).
+    # foot plants: combined-motion dips from the SETUP-HOLD END (where step 1 breaks the stance) to release (the
+    # approach ends at release; post-release trail-leg / walk-off motion is not a step). The window used to start
+    # at b0-0.25 (0.15 s into the motion burst), which is AFTER ball start on every labeled clip, so steps 1–2
+    # could never be found — a structural clip, not a tuning choice. Anchoring on the setup-hold end fixes it.
     rel_bound = (E7 if E7 is not None else hold_start) + 0.12
-    strikes = _foot_strikes(t, lms, (b0 - 0.25, rel_bound + 0.1), Rs, Ls)
-    plants = [s for s in strikes if (b0 - 0.2) <= s[0] <= rel_bound]
+    step_start = _setup_hold_end(t, Rs, Ls, b0)
+    strikes = _foot_strikes(t, lms, (step_start, rel_bound + 0.1), Rs, Ls)
+    plants = [s for s in strikes if step_start <= s[0] <= rel_bound]
     if not plants:
         reason = 'delivery found but no foot plants detected in the approach window.'
         for k, u in (('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'),

@@ -192,3 +192,22 @@ def test_slide_stop_is_slide_foot_settling_not_both_feet_still():
     trail = np.full_like(t, 0.6)
     foot, spd = pose._slide_foot(t, Rs=trail, Ls=slide, t0=1.2, t1=2.5, handed='right')
     assert foot == 'L' and spd is slide
+
+
+def test_setup_hold_end_anchors_step_search_at_the_first_step():
+    """The step window must start where the setup stance ends (step 1 breaks the stillness), not inside the
+    motion burst — else steps 1–2 can never be found (DEC-120). Synthetic: both feet still until 1.0s, then the
+    approach moves; the motion-burst detector would only fire ~0.4s later, but _setup_hold_end returns ~1.0s."""
+    import numpy as np
+    fps = 60.0
+    t = np.arange(0, 3.0, 1.0 / fps)
+    both_still_until = 1.0
+    Rs = np.where(t < both_still_until, 0.02, 0.6)      # stance still, then walking
+    Ls = np.where(t < both_still_until, 0.02, 0.6)
+    burst_start = 1.4                                   # detector fires late (after step 1)
+    start = pose._setup_hold_end(t, Rs, Ls, burst_start)
+    assert abs(start - both_still_until) <= 3.0 / fps and start < burst_start
+    # no clear setup hold (rolling start: always moving) -> safe fallback near the burst, never crashes
+    moving = np.full_like(t, 0.6)
+    fb = pose._setup_hold_end(t, moving, moving, burst_start)
+    assert abs(fb - (burst_start - 0.4)) <= 3.0 / fps
