@@ -1,0 +1,82 @@
+{
+  "_source": "LaneSight Labeler task 'form_steps' (lanesight-core/validation/labels/form_steps.json); null = not labeled or not visible",
+  "clips": {
+    "IMG_8824": {
+      "view": "side",
+      "step1_s": null,
+      "step2_s": 2.9893,
+      "step3_s": 3.34,
+      "step4_s": 3.6406,
+      "step5_s": 4.2752,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.87963891675025
+    },
+    "IMG_8825": {
+      "view": "side",
+      "step1_s": 17.2677,
+      "step2_s": 17.6852,
+      "step3_s": 18.0359,
+      "step4_s": 18.3699,
+      "step5_s": 18.9377,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.88053758088601
+    },
+    "IMG_8826": {
+      "view": "side",
+      "step1_s": 15.9481,
+      "step2_s": 16.3655,
+      "step3_s": 16.7663,
+      "step4_s": 17.1504,
+      "step5_s": 17.7349,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.88189604724158
+    },
+    "IMG_8846": {
+      "view": "rear",
+      "step1_s": 12.8667,
+      "step2_s": 13.6333,
+      "step3_s": 14.0,
+      "step4_s": 14.3667,
+      "step5_s": 14.8333,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 30.0
+    },
+    "IMG_8847": {
+      "view": "rear",
+      "step1_s": 15.0894,
+      "step2_s": 15.623,
+      "step3_s": 16.0231,
+      "step4_s": 16.3066,
+      "step5_s": 16.8068,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.97586484312148
+    },
+    "IMG_8848": {
+      "view": "rear",
+      "step1_s": 12.8892,
+      "step2_s": 13.4728,
+      "step3_s": 13.8729,
+      "step4_s": 14.2231,
+      "step5_s": 14.69,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.97288339861404
+    },
+    "IMG_8980": {
+      "view": "side",
+      "step1_s": null,
+      "step2_s": null,
+      "step3_s": 16.2066,
+      "step4_s": 16.5237,
+      "step5_s": 16.9576,
+      "step6_s": null,
+      "step_count": 5,
+      "fps": 59.91404011461318
+    }
+  }
+}

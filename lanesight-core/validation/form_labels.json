@@ -60,6 +60,16 @@
       "E8_slide_stop_s": 14.6733,
       "E9_finish_hold_end_s": 14.9401,
       "step_count": 5
+    },
+    "IMG_8980": {
+      "view": "side",
+      "E2_ball_start_s": 15.4722,
+      "E4_backswing_top_s": 16.5404,
+      "E5_slide_start_s": 16.6739,
+      "E7_release_s": 16.9576,
+      "E8_slide_stop_s": 16.9576,
+      "E9_finish_hold_end_s": 17.1746,
+      "step_count": 5
     }
   }
 }
