@@ -31,6 +31,8 @@ class Measurement:
     algorithm_version: str = ALGO_VERSION
     note: str | None = None
     uncertainty: float | None = None     # ± in `unit`: the honest resolution band (e.g. rev's frame-lag quantum)
+    reason_code: str | None = None       # DEC-128: machine code when unavailable (e.g. IMPLAUSIBLE_VALUE); the
+                                         # outcome writer prefers this over its note-derived fallback
 
 def m(metric, value, unit, conf, note=None, min_conf=0.5, status=None, source='lanesight_video', uncertainty=None):
     if value is None: return Measurement(metric, None, unit, 0.0, 'unavailable', source, note=note)

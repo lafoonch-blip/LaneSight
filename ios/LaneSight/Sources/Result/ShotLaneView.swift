@@ -16,6 +16,13 @@ struct ShotLaneView: View {
     private static let viewW: CGFloat = 344, viewH: CGFloat = 360
     private static let calloutW: CGFloat = 116, calloutH: CGFloat = 50
     private var farLaneNotRead: Bool { result.coachLane?.status == "not_read" }
+    /// A target line is drawn only when the laydown was measured AND there's an intended move target. Uploads
+    /// usually have no target → the legend says "No target set" instead of a Target swatch (DEC-128).
+    private var hasTarget: Bool {
+        let laydown = result.metrics.first { $0.0 == "laydown_board" }?.1
+        let laydownMeasured = laydown?.status != "unavailable" && (laydown?.value != nil || result.keyPoints["laydown"]?.board != nil)
+        return laydownMeasured && result.recommendation?.move_target != nil
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -105,8 +112,15 @@ struct ShotLaneView: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 10) { legendDot(LS.blue, "Target"); legendDot(Color(hex: 0x00EB92), "Your ball") }
-            .padding(.horizontal, 10).padding(.vertical, 5).background(.ultraThinMaterial, in: Capsule())
+        HStack(spacing: 10) {
+            if hasTarget {
+                legendDot(LS.blue, "Target")
+            } else {
+                Text("No target set").font(.system(size: 10, weight: .medium)).foregroundStyle(LS.textSecondary)
+            }
+            legendDot(Color(hex: 0x00EB92), "Your ball")
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5).background(.ultraThinMaterial, in: Capsule())
     }
     private func legendDot(_ c: Color, _ t: String) -> some View {
         HStack(spacing: 4) { Circle().fill(c).frame(width: 7, height: 7)
@@ -133,6 +147,12 @@ struct ShotLaneView: View {
     /// isn't measured — the honesty fix so the ball path never hooks into pins we didn't read.
     static func sceneData(_ r: ShotResult) -> String {
         func m(_ k: String) -> Double? { r.metrics.first { $0.0 == k }?.1.value }
+        // DEC-128: a metric the shown engine marked unavailable (implausible / gated / not measured) must not draw
+        // a marker or feed the path — show only what was actually measured.
+        func blocked(_ k: String) -> Bool { r.metrics.first { $0.0 == k }?.1.status == "unavailable" }
+        func boardIf(_ metricKey: String, _ kpKey: String) -> Double? {
+            blocked(metricKey) ? nil : (kp[kpKey]?.board ?? m(metricKey))
+        }
         let kp = r.keyPoints
         let gated = r.coachLane?.status == "not_read"
         // dense measured path (to the last measured distance; `cut` trims it in-scene)
@@ -143,24 +163,24 @@ struct ShotLaneView: View {
         // the pins ~2× too big; verified by the compare/ overlays.)
         var data: [String: Any] = [
             "cam": [0, 10, -30], "look": [0, 0, 15.5], "fov": 16,
-            "act": [[0, 20, 0], [30, 14, 0], [60, 17.5, "e", 4.0]],   // fallback anchors if no dense path
-            "marks": [] as [[String: Any]],
+            "act": [] as [[Double]],           // DEC-128: no baked-in fallback — the path is drawn ONLY from the
+            "marks": [] as [[String: Any]],    // engine's measured points, so an unmeasured shot shows no path.
         ]
         if act.count > 1 { data["actDense"] = act }
         // DEC-127 honesty: far-lane gated ⇒ stop the path mid-lane (matches lane_render_far_lane_not_read: cut 32).
         if gated { data["cut"] = 32.0 }
-        // target line: laydown → arrows target → pocket (only when we have an intent to aim at)
-        if let lay = kp["laydown"]?.board ?? m("laydown_board"), let tgt = r.recommendation?.move_target {
+        // target line: laydown → arrows target → pocket (only when we have a measured laydown AND an intent to aim at)
+        if let lay = boardIf("laydown_board", "laydown"), let tgt = r.recommendation?.move_target {
             data["tgt"] = [[0, lay, -0.3], [15, tgt, -0.3], [60, 17.5, "e", 4.5]]
         }
-        // markers → rings in the scene; the SwiftUI callouts pin to their projected points
+        // markers → rings in the scene; the SwiftUI callouts pin to their projected points. Only measured points.
         var marks: [[String: Any]] = []
-        if let b = kp["laydown"]?.board ?? m("laydown_board") { marks.append(["k": "laydown", "z": 0, "b": b, "c": "#cfd8e6"]) }
-        if let b = kp["arrows"]?.board ?? m("arrows_board") { marks.append(["k": "arrows", "z": 15, "b": b, "c": "#00eb92"]) }
+        if let b = boardIf("laydown_board", "laydown") { marks.append(["k": "laydown", "z": 0, "b": b, "c": "#cfd8e6"]) }
+        if let b = boardIf("arrows_board", "arrows") { marks.append(["k": "arrows", "z": 15, "b": b, "c": "#00eb92"]) }
         if !gated {
-            if let b = kp["breakpoint"]?.board ?? m("breakpoint_board") {
+            if let b = boardIf("breakpoint_board", "breakpoint") {
                 marks.append(["k": "bp", "z": kp["breakpoint"]?.z_ft ?? m("breakpoint_distance") ?? 43, "b": b, "c": "#f5cd31"]) }
-            if let b = kp["entry"]?.board ?? m("entry_board") { marks.append(["k": "entry", "z": 59.4, "b": b, "c": "#fa923c"]) }
+            if let b = boardIf("entry_board", "entry") { marks.append(["k": "entry", "z": 59.4, "b": b, "c": "#fa923c"]) }
         }
         data["marks"] = marks
         return (try? JSONSerialization.data(withJSONObject: data)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"

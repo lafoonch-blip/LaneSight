@@ -11,7 +11,7 @@ from .refine import refine
 from .pins import read_pins
 from .revrate import ball_crops, rev_rate
 from ..models.shot import ShotRecord, m, ALGO_VERSION
-from ..failures import AnalysisFailure
+from ..failures import AnalysisFailure, implausible_reason, IMPLAUSIBLE_VALUE
 from ..insights.adjust import strike_adjustment, no_reliable_data_insight
 from ..insights.uncertainty import quality_map
 from ..insights.spares import spare_plan
@@ -677,6 +677,15 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             if x.metric in _FAR_LANE_METRICS and x.value is not None and x.status not in ('unavailable',):
                 x.status = 'low_confidence'
                 x.note = (x.note + ' ' if x.note else '') + 'Far-lane read limited by camera position.'
+    # DEC-128 plausibility bounds: a board off the 39-board lane, a speed outside 8–30 mph or a rev outside
+    # 100–700 rpm is physically impossible (mis-track / wrong-lane pick) — report it unavailable with
+    # IMPLAUSIBLE_VALUE rather than a wrong number. Same bounds the on-device engine applies (parity).
+    for x in meas:
+        reason = implausible_reason(x.metric, x.value)
+        if reason and x.status != 'unavailable':
+            x.value, x.status, x.confidence = None, 'unavailable', 0.0
+            x.reason_code = IMPLAUSIBLE_VALUE
+            x.note = (x.note + ' ' if x.note else '') + f'Not reported — {reason}.'
     for x in meas:                                 # A4: never surface "-0.0" (a rounding artifact) — normalize it
         if isinstance(x.value, float) and x.value == 0.0:
             x.value = 0.0

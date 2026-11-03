@@ -1696,6 +1696,7 @@ def _far_lane_read(metrics: dict) -> str | None:
 # imported from the pipeline (single source) so the two can't drift. A value the phone already marked 'unavailable'
 # (it genuinely couldn't measure it) always wins.
 from lanesight_core.cv.pipeline import _FAR_LANE_METRICS as _PIPE_FAR, FAR_LANE_VALIDATED as _PIPE_FAR_OK
+from lanesight_core.failures import implausible_reason as _implausible_reason, IMPLAUSIBLE_VALUE as _IMPLAUSIBLE_VALUE
 _ONDEVICE_CANON_STATUS = {'ball_speed': 'best_effort', 'speed_release': 'best_effort', 'speed_early': 'best_effort',
                           'speed_late': 'best_effort', 'speed_avg_foul_to_pins': 'best_effort',
                           'rev_rate': 'calibrated_estimate'}
@@ -1721,6 +1722,14 @@ def _apply_status_policy(metrics: dict) -> dict:
             continue
         if cell.get('status') == 'unavailable' or cell.get('value') is None:
             continue                                   # phone couldn't measure it — keep unavailable + its reason
+        reason = _implausible_reason(key, cell.get('value'))
+        if reason:                                     # DEC-128 backstop: a physically-impossible on-device value
+            cell['value'] = None                       #   (wrong-lane pick / mis-track) is never scored as measured,
+            cell['status'] = 'unavailable'             #   even from a stale app build. Same bounds as the video path.
+            cell['reason_code'] = _IMPLAUSIBLE_VALUE
+            cell['failed_stage'] = cell.get('failed_stage') or 'compute'
+            cell['note'] = f'Not reported — {reason}.'
+            continue
         if key in _PIPE_FAR and not _PIPE_FAR_OK:      # DEC-065 far-lane gate (same as the video path)
             cell['value'] = None
             cell['status'] = 'unavailable'

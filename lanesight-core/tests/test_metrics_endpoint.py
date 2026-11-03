@@ -158,6 +158,44 @@ def test_engine_failure_reason_propagates_to_every_metric():
     assert bs['reason_code'] == 'LANE_NOT_DETECTED' and bs['failed_stage'] == 'lane'
 
 
+def test_implausible_ondevice_value_rejected_not_scored():
+    """DEC-128: an on-device value physically off the lane / out of range must come back unavailable +
+    IMPLAUSIBLE_VALUE, never 'measured' — even if the (stale) app submitted it with status 'ok'."""
+    u = 'dec128i'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    bad = _metrics(arrows=37.1, laydown=50.6, speed=95.0, rev=900.0)   # 50.6 board, 95 mph, 900 rpm impossible
+    r = _post(u, sid, metrics=bad)
+    assert r.status_code == 200, r.text
+    rows = [x for x in getattr(get_store(), 'metric_outcomes', []) if x.get('engine') == 'iphone']
+    latest = {}
+    for x in rows:                              # keep the most recent row per metric (this shot is last)
+        latest[x['metric_key']] = x
+    for key in ('laydown_board', 'ball_speed', 'rev_rate'):
+        assert latest[key]['status'] == 'unavailable', key
+        assert latest[key]['reason_code'] == 'IMPLAUSIBLE_VALUE', key
+        assert latest[key]['value'] is None, key
+    # an in-band value on the same record is untouched (arrows 37.1 is on the lane)
+    assert latest['arrows_board']['status'] == 'measured' and latest['arrows_board']['value'] == 37.1
+
+
+def test_stage_rows_written_for_every_ios_attempt():
+    """DEC-128: a successful on-device attempt that forwards a full stage_report must write platform=ios stage
+    rows (analysis_stage_outcome) for lane/track/metrics — not only failures."""
+    u = 'dec128s'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    body = {'metrics': _metrics(), 'capture_mode': 'shot', 'source': 'live',
+            'algorithm_version': 'ios-ondevice-test', 'metadata': {'handed': 'R'}, 'session_id': sid,
+            'stage_report': {'lane': {'status': 'ok', 'duration_ms': 120},
+                             'track': {'status': 'ok', 'duration_ms': 300},
+                             'metrics': {'status': 'ok', 'duration_ms': 90}}}
+    r = client.post('/shots/metrics', json=body, headers=H(u))
+    assert r.status_code == 200, r.text
+    srows = [x for x in getattr(get_store(), 'stage_outcomes', []) if x.get('engine') == 'iphone']
+    stages = {x['stage']: x for x in srows}
+    assert {'lane', 'track', 'metrics'} <= set(stages), srows
+    assert all(stages[s]['status'] == 'ok' for s in ('lane', 'track', 'metrics'))
+
+
 def test_upload_does_not_feed_score():
     u = 'dec127d'
     r = _post(u, None)                          # no session_id -> standalone upload

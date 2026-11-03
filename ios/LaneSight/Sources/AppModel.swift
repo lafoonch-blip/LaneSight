@@ -702,6 +702,12 @@ final class AppModel: ObservableObject {
         // DEC-127: the ball path (trajectory.smoothed/series, board vs ft) as JSON — drives the shot-card lane view
         // (path_fit) online via the server + is rendered locally in the Offline state. nil when no path was fit.
         var trajectoryJSON: Data? = nil
+        // DEC-128: the per-stage report ({stage:{status,reason_code,duration_ms}}) as JSON + the attempt-level
+        // reason_code/failed_stage, forwarded to POST /shots/metrics so the server writes platform=ios stage rows
+        // (analysis_stage_outcome) for EVERY on-device-first attempt — not only the dev-only /analysis/shadow path.
+        var stageReportJSON: Data? = nil
+        var reasonCode: String? = nil
+        var failedStage: String? = nil
     }
 
     /// DEC-126: run the on-device engine as the PRIMARY measurement for a live shot. Returns the measurement, or
@@ -727,11 +733,14 @@ final class AppModel: ObservableObject {
                 let dj = detailed.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
                 let traj = body["trajectory"] as? [String: Any]
                 let tj = traj.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+                let stageRep = body["stage_report"] as? [String: Any]
+                let sj = stageRep.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
                 return OnDeviceMeasurement(
                     ballSpeed: m["ball_speed"] as? Double, foulToPins: m["speed_avg_foul_to_pins"] as? Double,
                     revRate: m["rev_rate"] as? Double, basis: body["basis"] as? String ?? "unavailable",
                     note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity,
-                    detailedJSON: dj, trajectoryJSON: tj)
+                    detailedJSON: dj, trajectoryJSON: tj, stageReportJSON: sj,
+                    reasonCode: body["reason_code"] as? String, failedStage: body["failed_stage"] as? String)
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -1000,11 +1009,13 @@ final class AppModel: ObservableObject {
                 if let detailed {
                     pipeline = .analyzing(state: "coaching", timings: [:])     // "Generating coaching"
                     do {
+                        let stageRep = m.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                         let resp = try await client.scoreFromMetrics(
                             metricsDetailed: detailed, trajectory: traj, keyPoints: nil,
                             sessionId: (source == "upload" ? nil : sid), metadata: metadata,
                             devicePerf: ["latency_s": m.latencyS], algorithmVersion: OnDeviceShadow.engineVersion,
-                            appVersion: appVersion, timeoutS: 10)
+                            appVersion: appVersion, stageReport: stageRep, reasonCode: m.reasonCode,
+                            failedStage: m.failedStage, timeoutS: 10)
                         built = Self.buildResultFromCard(resp, isUpload: source != "live")   // Complete Analysis
                         serverShotId = resp.shot_id
                         track("ondevice_metrics_complete",

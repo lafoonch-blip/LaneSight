@@ -142,6 +142,35 @@ enum OnDeviceShadow {
                 trajectory["series"] = b.seriesZBoard.map { ["z_ft": $0[0], "board": $0[1]] }
             }
         }
+        // DEC-128 plausibility bounds — parity with cv/pipeline.py + failures.IMPLAUSIBLE_VALUE. A value physically
+        // off the lane is NEVER shown as measured: boards live on a 39-board lane (1–39), ball speed 8–30 mph, rev
+        // 100–700 rpm. Out of band ⇒ unavailable + IMPLAUSIBLE_VALUE (the engine mis-tracked or picked the wrong
+        // lane). The near-lane boards all ride one homography, so if any is off the lane the whole near-lane read
+        // is corrupt (catches the wrong-lane case: arrows 37 + board_at_7ft 50) — drop all of them and the path.
+        let nearBoards: Set<String> = ["laydown_board", "board_at_7ft", "arrows_board"]
+        let allBoards: Set<String> = nearBoards.union(["breakpoint_board", "entry_board"])
+        let speedKeys: Set<String> = ["ball_speed", "speed_avg_foul_to_pins", "speed_release", "speed_early", "speed_late"]
+        func outOfBand(_ key: String, _ v: Double) -> Bool {
+            if allBoards.contains(key) { return v < 1 || v > 39 }
+            if speedKeys.contains(key) { return v < 8 || v > 30 }
+            if key == "rev_rate" { return v < 100 || v > 700 }
+            return false
+        }
+        func cellValue(_ key: String) -> Double? { (detailed[key] as? [String: Any])?["value"] as? Double }
+        func markImplausible(_ key: String) {
+            guard let c = detailed[key] as? [String: Any] else { return }
+            let unit = c["unit"] as? String ?? ""
+            let vtxt = (c["value"] as? Double).map { String(format: "%.1f", $0) } ?? "?"
+            detailed[key] = ["status": "unavailable", "unit": unit, "reason_code": "IMPLAUSIBLE_VALUE",
+                             "note": "Measured \(vtxt) \(unit) is out of range — not a real read (the engine likely mis-tracked or picked the wrong lane)."]
+            metrics.removeValue(forKey: key)
+        }
+        let nearCorrupt = nearBoards.contains { k in cellValue(k).map { outOfBand(k, $0) } ?? false }
+        for key in detailed.keys {
+            guard let v = cellValue(key) else { continue }
+            if outOfBand(key, v) || (nearCorrupt && nearBoards.contains(key)) { markImplausible(key) }
+        }
+        if nearCorrupt { trajectory.removeAll() }   // the path rides the same corrupt plane — don't draw it
         var perf: [String: Any] = [
             "latency_s": latency,
             "peak_mem_mb": Double(peak) / 1_048_576.0,
@@ -153,23 +182,46 @@ enum OnDeviceShadow {
 
         // DEC-127: propagate the REAL failing stage + a server-matching reason_code (not a blanket
         // METRIC_UNAVAILABLE), so every unavailable metric shows WHY — the same codes the server raises.
+        // DEC-122/DEC-128: emit a COMPLETE per-stage report for EVERY attempt (not just failures), so
+        // analysis_stage_outcome has platform=ios rows for success and failure alike. Canonical server stage
+        // names (lane → track → metrics); durations sum the sub-steps that make up each stage. The failing stage
+        // carries the server-matching reason_code; downstream stages that never ran are 'skipped'.
         let failStage = diag["first_failing_stage"] as? String
         var reasonCode: String? = nil, failedStage: String? = nil
         var stageReport: [String: Any] = [:]
+        let laneMs = (stageMs["plate"] ?? 0) + (stageMs["detect"] ?? 0)
+        let trackMs = stageMs["track"] ?? 0
+        let metricsMs = (stageMs["speed"] ?? 0) + (stageMs["boards"] ?? 0) + (stageMs["rev"] ?? 0)
+        func stageRow(_ status: String, _ code: String?, _ ms: Double) -> [String: Any] {
+            var d: [String: Any] = ["status": status, "duration_ms": ms]
+            if let code { d["reason_code"] = code }
+            return d
+        }
         switch failStage {
         case "plate", "lane":
             reasonCode = "LANE_NOT_DETECTED"; failedStage = "lane"
-            stageReport["lane"] = ["status": "failed", "reason_code": "LANE_NOT_DETECTED"]
+            stageReport["lane"] = stageRow("failed", "LANE_NOT_DETECTED", laneMs)
+            stageReport["track"] = stageRow("skipped", nil, 0)
+            stageReport["metrics"] = stageRow("skipped", nil, 0)
         case "track":
             reasonCode = "BALL_TRACK_NOT_FOUND"; failedStage = "track"
-            stageReport["lane"] = ["status": "ok"]
-            stageReport["track"] = ["status": "failed", "reason_code": "BALL_TRACK_NOT_FOUND"]
+            stageReport["lane"] = stageRow("ok", nil, laneMs)
+            stageReport["track"] = stageRow("failed", "BALL_TRACK_NOT_FOUND", trackMs)
+            stageReport["metrics"] = stageRow("skipped", nil, 0)
         case "speed":
             reasonCode = "TRACK_TOO_SPARSE_FOR_SPEED"; failedStage = "metrics"
-            stageReport["lane"] = ["status": "ok"]; stageReport["track"] = ["status": "ok"]
-            stageReport["metrics"] = ["status": "failed", "reason_code": "TRACK_TOO_SPARSE_FOR_SPEED"]
-        default:
-            break
+            stageReport["lane"] = stageRow("ok", nil, laneMs)
+            stageReport["track"] = stageRow("ok", nil, trackMs)
+            stageReport["metrics"] = stageRow("failed", "TRACK_TOO_SPARSE_FOR_SPEED", metricsMs)
+        default:   // "none" (success) or nil — the chain ran end to end
+            stageReport["lane"] = stageRow("ok", nil, laneMs)
+            stageReport["track"] = stageRow("ok", nil, trackMs)
+            if nearCorrupt {   // DEC-128: speed ran but the near-lane plane was off-lane → metrics unreliable
+                reasonCode = "IMPLAUSIBLE_VALUE"; failedStage = "metrics"
+                stageReport["metrics"] = stageRow("failed", "IMPLAUSIBLE_VALUE", metricsMs)
+            } else {
+                stageReport["metrics"] = stageRow("ok", nil, metricsMs)
+            }
         }
         var body: [String: Any] = [
             "shot_id": shotId, "source": source, "capture_mode": captureMode,
