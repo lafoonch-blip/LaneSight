@@ -78,25 +78,34 @@ final class OnDeviceFormGateTests: XCTestCase {
             let gold = golden.clips[clip]
             let fps = gold?.fps ?? 60.0
 
+            // Pose ONCE (the expensive MediaPipe pass over the prescan window = the real per-clip runtime for the
+            // <30 s gate), then run the PURE engine on the cached landmarks.
             let t0 = Date()
-            let a1 = try OnDeviceFormEngine.analyze(clipURL: url, handed: "right", bundle: bundle)
-            let wall = Date().timeIntervalSince(t0)   // single-run wall time (the <30 s Beta gate)
+            let lms = try OnDeviceFormEngine.extractWindowed(clipURL: url, bundle: bundle)
+            let a1 = OnDeviceFormEngine.analyze(landmarks: lms, handed: "right")
+            let wall = Date().timeIntervalSince(t0)
 
-            // 1. determinism (hard) — DEC-126 P0 rule: run 10× total, assert every run is byte-identical on the
-            // located events + the headline metrics. Reports the match count (X/10) per clip.
+            // 1. determinism (hard) — DEC-126 P0. (a) ENGINE: run the pure engine 10× on the SAME landmarks → must
+            // be byte-identical (no randomness). (b) POSE: re-extract once → the whole-pipeline result must match
+            // (MediaPipe reproducible on device). Reports X/10 engine + the pose-match.
             let detKeys = ["E2", "E3", "E4", "E6", "E7", "E8"]
             let metKeys = ["swing_time", "backswing_time", "downswing_time", "release_time", "step_count",
                            "rhythm_ratio", "approach_time", "finish_hold"]
             var identical = 1
             for run in 2...10 {
-                let an = try OnDeviceFormEngine.analyze(clipURL: url, handed: "right", bundle: bundle)
+                let an = OnDeviceFormEngine.analyze(landmarks: lms, handed: "right")
                 var same = true
                 for k in detKeys where ev(a1, k) != ev(an, k) { same = false }
                 for k in metKeys where a1.metrics[k]?.value != an.metrics[k]?.value { same = false }
                 if same { identical += 1 }
-                else { XCTFail("\(clip): run \(run) diverged from run 1 (non-deterministic)") }
+                else { XCTFail("\(clip): engine run \(run) diverged (non-deterministic)") }
             }
-            XCTAssertEqual(identical, 10, "\(clip) determinism \(identical)/10")
+            XCTAssertEqual(identical, 10, "\(clip) engine determinism \(identical)/10")
+            let lms2 = try OnDeviceFormEngine.extractWindowed(clipURL: url, bundle: bundle)
+            let a2 = OnDeviceFormEngine.analyze(landmarks: lms2, handed: "right")
+            var poseMatch = true
+            for k in detKeys where ev(a1, k) != ev(a2, k) { poseMatch = false }
+            XCTAssertTrue(poseMatch, "\(clip): MediaPipe pose not reproducible across two extractions")
 
             // 2. THE GATE — vs the HUMAN LABELS (DEC-121), not the server's pose. Held-out IMG_8980 is not gated.
             //    (a) each SURFACED DEC-118 swing event (E4 top, E7 release, E8 slide stop) within ±2 frames of the

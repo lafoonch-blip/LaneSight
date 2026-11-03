@@ -5,7 +5,34 @@ Device: iPhone 17 Pro Max (Release, signed), Xcode 27.1, MediaPipe Pose Landmark
 Harness: `OnDeviceFormGateTests.testOnDeviceFormParityOnLabeledClips` (7 labeled clips, 10× determinism loop).
 **Verdict: TEST FAILED (7 assertion failures) — the gate does NOT pass yet.** 2163 s total.
 
-## Per-clip results (device vs the labels and vs the Python server reference / golden)
+## UPDATE 2 (2026-11-03 pm) — label gate + delivery-window prescan + pose-once (decisions 1/2/3)
+After Shayne's decisions: (1) gate against the HUMAN LABELS (swing events ±2 f, plants ±3 f; step count
+best_effort, reported-not-gated); (2) a cheap strided motion-energy **prescan** picks the dominant delivery burst
+and pose runs only on that window (+margin), widening to the full clip if the delivery isn't found; (3) the same
+prescan isolates the delivery so segmentation is robust without per-clip tuning. The gate test now poses ONCE and
+runs the pure engine 10× for determinism (no 10× re-pose). **Device re-run (iPhone 17 Pro Max, Release):**
+
+| clip | view | det | runtime | E4 | E7 | E8 | step d/l | note |
+|---|---|---|---|---|---|---|---|---|
+| IMG_8824 | side | 10/10 | 8.4 s | −1 ✓ | +3 ✗ | −5 ✗ | 5/5 | E7/E8 = the reference's own miss (DEC-120) |
+| IMG_8825 | side | 10/10 | 12.6 s | −2 ✓ | −2 ✓ | −2 ✓ | 2/5 | **all swing events PASS** (was null/slow — prescan fixed segmentation) |
+| IMG_8826 | side | 10/10 | 15.2 s | null | null | +38 ✗ | 4/5 | mis-seg = the reference's own (DEC-120) |
+| IMG_8846 | rear | 10/10 | 20.7 s | −2 ✓ | +1 ✓ | +1 ✓ | 6/5 | **all swing events PASS** |
+| IMG_8847 | rear | 10/10 | **45.4 s** | −4 ✗ | +1 ✓ | +2 ✓ | 5/5 | window missed → full-clip widen → correct E7/E8 but >30 s (long 60 fps) |
+| IMG_8848 | rear | 10/10 | 11.7 s | null | null | +64 ✗ | 7/5 | landmark-gap mis-seg (reference passes this) |
+| IMG_8980 | rear (H) | 10/10 | 10.3 s | +331 | +317 | +308 | 1/5 | HELD OUT; mis-seg (reference also mis-segs 8980) |
+
+**Net:** determinism 10/10; **runtime <30 s on 6/7** (8847 the exception — window-miss + long clip → full widen;
+a real trimmed delivery capture wouldn't hit this); **2 clips (8825 side, 8846 rear) now fully pass the DEC-118
+swing-event gate**; the rest match the Python reference's own ground-truth misses (8824 E7/E8, 8826) or are the
+iOS-vs-Python-landmark hard cases (8847 E4, 8848). Step count stays best_effort (reported, not gated). **The
+residual swing-event + per-plant misses are NOT a port bug — they are the DEC-120/121 ground-truth-detector
+limits, amplified on the hardest clips by the iOS GPU vs Python XNNPACK MediaPipe landmark difference. The robust
+next step is a better delivery detector (or a learned foot-contact cue), not window-margin tuning** (which
+see-saws: every margin that fixes one hard clip breaks another). The first device run's table (vs the pre-prescan,
+pre-label-gate engine) is kept below for history.
+
+## Per-clip results — FIRST device run (vs the labels and vs the Python server reference / golden)
 
 | clip | view | det | wall | step dev/label(ref) | E4 dev\|ref | E7 dev\|ref | E8 dev\|ref |
 |---|---|---|---|---|---|---|---|

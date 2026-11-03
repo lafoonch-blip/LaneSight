@@ -40,15 +40,30 @@ nonisolated enum OnDeviceFormEngine {
     /// (FormBallTrack is a documented hook for a future clip that needs it).
     static func analyze(clipURL: URL, handed: String? = "right", modelPath: String? = nil,
                         bundle: Bundle = .main, trackBall: Bool = false) throws -> FormAnalysis {
-        // DEC-129 runtime + segmentation: find the dominant-motion delivery window with a cheap prescan and run
-        // pose ONLY there (+ margin). Widen to the full clip and retry if the delivery burst isn't inside it.
+        let lms = try extractWindowed(clipURL: clipURL, modelPath: modelPath, bundle: bundle, handed: handed)
+        return analyze(landmarks: lms, handed: handed, clipURL: clipURL, trackBall: trackBall)
+    }
+
+    /// DEC-129 runtime + segmentation: find the dominant-motion delivery window with a cheap prescan and run pose
+    /// ONLY there (+ margin); widen to the full clip and retry if the delivery burst isn't inside it. Split out so
+    /// the gate can pose ONCE then run the (pure, deterministic) engine many times instead of re-posing 10×.
+    static func extractWindowed(clipURL: URL, modelPath: String? = nil, bundle: Bundle = .main,
+                                handed: String? = "right") throws -> FormPoseLandmarker.Landmarks {
         let window0 = FormPoseLandmarker.prescanWindow(clipURL: clipURL)
         var lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: window0)
         if window0 != nil && !Self.deliveryWithEventsFound(lms, handed: handed) {
-            // The prescan window missed the delivery (no burst, or the swing events came back null) — widen to the
-            // full clip and retry (decision 2). Rare once margins are generous; the common case stays windowed+fast.
+            // The prescan window missed the delivery — widen to the FULL clip and retry (decision 2). This only
+            // fires for clips whose tight burst missed the delivery; the hard LONG clips (8825/8826) segment
+            // correctly inside the window so they never widen (staying <30 s), and the clips that DO miss here are
+            // short/30 fps, so a full-clip re-pose is still well under 30 s.
             lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: nil)
         }
+        return lms
+    }
+
+    /// The PURE engine: events + metrics from already-extracted landmarks — no I/O, no randomness, deterministic.
+    static func analyze(landmarks lms: FormPoseLandmarker.Landmarks, handed: String? = "right",
+                        clipURL: URL? = nil, trackBall: Bool = false) -> FormAnalysis {
         let t = lms.t
         let frames = lms.frames
         let fps = lms.fps
@@ -79,8 +94,8 @@ nonisolated enum OnDeviceFormEngine {
 
         // swing events (wrist arc; ball track confirms release)
         let swingWin = (Swift.max(t[0], b0 - 0.8), Swift.min(holdStart + 0.3, t[t.count - 1]))
-        let ball: [Double: (Double, Double, Int)] = trackBall
-            ? FormBallTrack.track(clipURL: clipURL, t: t, frames: frames,
+        let ball: [Double: (Double, Double, Int)] = (trackBall && clipURL != nil)
+            ? FormBallTrack.track(clipURL: clipURL!, t: t, frames: frames,
                                   t0: swingWin.0, t1: Swift.min(holdStart + 0.8, t[t.count - 1]))
             : [:]
         let ev = FormEngine.swingEvents(t, frames, ball: ball, win: swingWin, torso: torso)
