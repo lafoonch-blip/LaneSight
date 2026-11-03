@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.83  
+Version: 1.84  
 Last Updated: 2026-11-03  
 Owner: Shayne  
-Supersedes: v1.82 (merge of feat/ios-lane-parity DEC-127/128 lane-card + plausibility/stage work into dev-build-v0 v1.82; both sides kept)
+Supersedes: v1.83 (adds the DEC-128 entry — real-clip parity: plausibility bounds, honest stage reporting, lane-card data honesty, parity harness)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1557,6 +1557,35 @@ validation-against-truth is a developer build gate, not a runtime per-shot label
 on the live path narrows to the metrics-only score/coaching call + video shadow validation); DEC-068/DEC-080
 (the blocking "Analyzing" screen becomes the three-step progress screen above). Honesty rules DEC-086/DEC-122 and
 the score/tier definitions (DEC-036/DEC-038/DEC-090) are unchanged — only their **input** becomes a metrics record.
+
+### DEC-128 — Real-clip parity: plausibility bounds, honest stage reporting, lane-card data honesty
+**Decision (Shayne, 2026-11-03):** From a device test (uploads 80ae104f / 6ecfcfee / 82eb0b4f) where the iPhone
+engine showed physically-impossible "measured" numbers, emitted no stage rows, and the lane card drew a path with
+no measurements, four honesty rules are now binding on the on-device path:
+1. **Plausibility bounds on BOTH engines.** A metric outside its physical band is reported `unavailable` +
+   `reason_code = IMPLAUSIBLE_VALUE`, never "measured": boards on the 39-board lane (1–39), ball speed 8–30 mph,
+   rev 100–700 rpm. Shared helper `failures.implausible_reason()`; enforced in `cv/pipeline.py`, the on-device
+   engine (`OnDeviceShadow`), and `app._apply_status_policy` (a backstop so even a stale app build can't score an
+   impossible value). The near-lane boards ride one homography, so if any is off-lane the whole near-lane read +
+   the path are dropped (the wrong-lane case).
+2. **A real stage report for EVERY on-device attempt.** `POST /shots/metrics` forwards `stage_report` +
+   `reason_code` + `failed_stage`, so `analysis_stage_outcome` gets `platform=ios` rows for success and failure
+   alike (previously only the dev `/analysis/shadow` path wrote them). Every unavailable metric carries the real
+   stage reason, never a blanket `METRIC_UNAVAILABLE`.
+3. **The lane card shows only what the shown engine measured.** No baked-in fallback path — the ball path is drawn
+   ONLY from measured points; markers/callouts are status-gated; the target line shows only when a target exists
+   ("No target set" otherwise, e.g. uploads). The far-lane path still stops at the cut (DEC-065).
+4. **Parity is validated on real clips, not just the 7-clip set.** A harness runs the iPhone engine on retained
+   live/upload clips and compares per-metric with the server outcome rows; the gate is: on every clip where the
+   server measures a metric, the iPhone measures it within tolerance or returns `unavailable` with a reason, and
+   zero implausible values. (`ops/parity_fetch.py` + `ops/parity_report.py` + `OnDeviceGateTests`.)
+**Why:** an impossible number drives wrong coaching and destroys trust faster than an honest "not read". Bounding
+both engines + honest stage reporting + measured-only rendering keeps the on-device-first result (DEC-127)
+trustworthy; real-clip parity keeps the two engines from silently diverging in the field.
+**Date:** 2026-11-03 · **Status:** ACCEPTED.
+**Amends/extends:** DEC-127 (same on-device-first path; adds the bounds + stage-report + card-honesty rules);
+DEC-122 (on-device attempts now write stage + metric outcome rows for real use); DEC-086 honesty vocabulary gains
+`IMPLAUSIBLE_VALUE`; DEC-065 far-lane gating unchanged.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
