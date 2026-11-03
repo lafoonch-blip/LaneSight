@@ -3,7 +3,7 @@ Status: CANONICAL
 Version: 1.84  
 Last Updated: 2026-11-03  
 Owner: Shayne  
-Supersedes: v1.82 (feat/ff-feedback DEC-123/124/125 + DEC-122) merged with feat/ios-lane-parity (DEC-126/127); + DEC-129 on-device Form
+Supersedes: v1.83 (feat/ios-lane-parity DEC-126/127 + DEC-128 real-clip parity/plausibility/stage-report/lane-honesty) + ff-feedback DEC-123/124/125 + DEC-122; + DEC-129 on-device Form
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1590,16 +1590,43 @@ server **shadow** for comparison; DEC-122 outcome rows are written from both eng
 **Why:** the same wins as DEC-117/126 for shots — instant offline feedback at ~$0/clip, no server CV latency, and
 the server stays authoritative for coaching/Score/tiers. One capture → one result screen for both products.
 **Date:** 2026-11-03 · **Status:** ACCEPTED — engine + parity golden + gate test + Python reference committed
-(447 pytest pass); app wiring + server form metrics/shadow branches on `feat/form-ondevice`. iOS build +
+(456 pytest pass); app wiring + server form metrics/shadow branches on `feat/form-ondevice`. iOS build +
 MediaPipe pod/xcframework + the on-device parity-gate run on Shayne's iPhone are PENDING (no Xcode/device in the
 build session). **Builds on:** DEC-126/127 (shot on-device-first + metrics endpoint), DEC-118 (Form MVP metrics +
 Beta gates), DEC-120/121 (form event baseline + tolerances + step-count honesty), DEC-122 (partial results +
 outcome rows), DEC-057 (form fundamentals). **Supersedes:** the Apple-Vision `OnDeviceFormShadow` as the on-device
 form measurer.
-**Numbering note:** this on-device-**Form** decision is **DEC-129**. **DEC-128 is Session 1's** (reserved for its
-`feat/ios-lane-parity` SHOT-side on-device items — plausibility bounds, iOS stage report, lane-card data honesty,
-the real-clip parity harness — already used in its pushed commits). Renumbered from DEC-128 → DEC-129 on Shayne's
-instruction (2026-11-03) after confirming the highest written DEC across all remote branches was DEC-127.
+**Numbering note:** this on-device-**Form** decision is **DEC-129**; **DEC-128 is Session 1's real-clip-parity
+decision (below).** Renumbered from DEC-128 → DEC-129 on Shayne's instruction (2026-11-03).
+
+### DEC-128 — Real-clip parity: plausibility bounds, honest stage reporting, lane-card data honesty
+**Decision (Shayne, 2026-11-03):** From a device test (uploads 80ae104f / 6ecfcfee / 82eb0b4f) where the iPhone
+engine showed physically-impossible "measured" numbers, emitted no stage rows, and the lane card drew a path with
+no measurements, four honesty rules are now binding on the on-device path:
+1. **Plausibility bounds on BOTH engines.** A metric outside its physical band is reported `unavailable` +
+   `reason_code = IMPLAUSIBLE_VALUE`, never "measured": boards on the 39-board lane (1–39), ball speed 8–30 mph,
+   rev 100–700 rpm. Shared helper `failures.implausible_reason()`; enforced in `cv/pipeline.py`, the on-device
+   engine (`OnDeviceShadow`), and `app._apply_status_policy` (a backstop so even a stale app build can't score an
+   impossible value). The near-lane boards ride one homography, so if any is off-lane the whole near-lane read +
+   the path are dropped (the wrong-lane case).
+2. **A real stage report for EVERY on-device attempt.** `POST /shots/metrics` forwards `stage_report` +
+   `reason_code` + `failed_stage`, so `analysis_stage_outcome` gets `platform=ios` rows for success and failure
+   alike (previously only the dev `/analysis/shadow` path wrote them). Every unavailable metric carries the real
+   stage reason, never a blanket `METRIC_UNAVAILABLE`.
+3. **The lane card shows only what the shown engine measured.** No baked-in fallback path — the ball path is drawn
+   ONLY from measured points; markers/callouts are status-gated; the target line shows only when a target exists
+   ("No target set" otherwise, e.g. uploads). The far-lane path still stops at the cut (DEC-065).
+4. **Parity is validated on real clips, not just the 7-clip set.** A harness runs the iPhone engine on retained
+   live/upload clips and compares per-metric with the server outcome rows; the gate is: on every clip where the
+   server measures a metric, the iPhone measures it within tolerance or returns `unavailable` with a reason, and
+   zero implausible values. (`ops/parity_fetch.py` + `ops/parity_report.py` + `OnDeviceGateTests`.)
+**Why:** an impossible number drives wrong coaching and destroys trust faster than an honest "not read". Bounding
+both engines + honest stage reporting + measured-only rendering keeps the on-device-first result (DEC-127)
+trustworthy; real-clip parity keeps the two engines from silently diverging in the field.
+**Date:** 2026-11-03 · **Status:** ACCEPTED.
+**Amends/extends:** DEC-127 (same on-device-first path; adds the bounds + stage-report + card-honesty rules);
+DEC-122 (on-device attempts now write stage + metric outcome rows for real use); DEC-086 honesty vocabulary gains
+`IMPLAUSIBLE_VALUE`; DEC-065 far-lane gating unchanged.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

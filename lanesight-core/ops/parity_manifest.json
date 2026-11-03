@@ -1,0 +1,1593 @@
+{
+  "4f9b78ef.mov": {
+    "shot_id": "4f9b78ef-97d2-43c8-92c1-f313f5bdfdc6",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "a565a7cca6334c7988b7b8edd33e8455.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {}
+  },
+  "1d7609a3.mov": {
+    "shot_id": "1d7609a3-5c82-419f-b0d5-5dac0e2345da",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "ef80e2df15284819b817cfd601d902bf.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      }
+    },
+    "iphone_db": {}
+  },
+  "fcd81fca.mov": {
+    "shot_id": "fcd81fca-dc08-45a7-ab8d-ef2bd4aa9495",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "726c886d01134fad9ecc8070f4c7f900.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {}
+  },
+  "dcbd83e7.mov": {
+    "shot_id": "dcbd83e7-95e9-4aea-b5b3-56830bf6ef9b",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "53aee5ef26504e91a088bd476c5e8856.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      }
+    },
+    "iphone_db": {}
+  },
+  "3e76c245.mov": {
+    "shot_id": "3e76c245-2eb2-435a-92a0-70d7ce36753b",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "d50885967c66401dbff064ed786802bc.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      }
+    },
+    "iphone_db": {}
+  },
+  "c075b636.mov": {
+    "shot_id": "c075b636-df87-4cb7-9104-bbe649d8637f",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "8d993a37d5f94a669e5ce55c9ecdce96.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      }
+    },
+    "iphone_db": {}
+  },
+  "30d3622d.mov": {
+    "shot_id": "30d3622d-d219-4ebb-996e-27051afac7b9",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "611a8d7f53474cfda1cba011c88b0c06.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      }
+    }
+  },
+  "76d859aa.mov": {
+    "shot_id": "76d859aa-8ac7-41be-b153-dfd4d6c1eb6a",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "47bc69809bb34b69b370e8efd0558db6.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      }
+    }
+  },
+  "9ca7e2d9.mov": {
+    "shot_id": "9ca7e2d9-bc87-491f-bd49-b09d859cf6d2",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "b45e3b415287454290a3382dfba5bcb0.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {}
+  },
+  "894f05f6.mov": {
+    "shot_id": "894f05f6-5e11-443f-9e65-a44d19c5e75b",
+    "user": "4806c8bc",
+    "source": "upload",
+    "clip_object": "8fa283368c1544098dae57217182f20f.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      }
+    }
+  },
+  "7936cc3f.mov": {
+    "shot_id": "7936cc3f-2cd7-4b83-b080-01d0481fc705",
+    "user": "4806c8bc",
+    "source": "live",
+    "clip_object": "6c121eac8c654528ad04aa74a12be5f8.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "best_effort",
+        "value": 17.503,
+        "reason_code": null
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "best_effort",
+        "value": 17.996,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "measured",
+        "value": 0.856,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "measured",
+        "value": 13.266,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "measured",
+        "value": 9.473,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "measured",
+        "value": 6.393,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "low_confidence",
+        "value": 2.542,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": null
+      },
+      "rev_rate": {
+        "status": "calibrated_estimate",
+        "value": 390.034,
+        "reason_code": null
+      }
+    },
+    "iphone_db": {}
+  },
+  "6043d8f3.mov": {
+    "shot_id": "6043d8f3-3ae0-4a87-807c-07d8fddcfed8",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "2c690fb1ca6f49c39a50161632dec344.mov",
+    "matched_by": "hash",
+    "server": {},
+    "iphone_db": {}
+  },
+  "80ae104f.mov": {
+    "shot_id": "80ae104f-51b6-49a2-9233-80db638c1880",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "49f66f3e655d4ee1b822d4e40d770137.mov",
+    "matched_by": "time",
+    "server": {
+      "ball_speed": {
+        "status": "best_effort",
+        "value": 17.648,
+        "reason_code": null
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "best_effort",
+        "value": 17.804,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "measured",
+        "value": 1.294,
+        "reason_code": null
+      },
+      "laydown_board": {
+        "status": "measured",
+        "value": 15.686,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "measured",
+        "value": 15.08,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "measured",
+        "value": 14.46,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "low_confidence",
+        "value": 0.438,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "calibrated_estimate",
+        "value": 369.689,
+        "reason_code": null
+      }
+    },
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      }
+    }
+  },
+  "6ecfcfee.mov": {
+    "shot_id": "6ecfcfee-df16-4f52-8d99-6bd8394e2119",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "8cf96594439648b38d599466e36cbab6.mov",
+    "matched_by": "time",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      }
+    },
+    "iphone_db": {
+      "ball_speed": {
+        "status": "best_effort",
+        "value": 9.979571342468262,
+        "reason_code": null
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "best_effort",
+        "value": 10.053194046020508,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "board_at_7ft": {
+        "status": "measured",
+        "value": 50.57651447216857,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "measured",
+        "value": 37.146207841218576,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      }
+    }
+  },
+  "251bc42d.mov": {
+    "shot_id": "251bc42d-8809-4d59-87ad-f2d12a4a3d31",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "dca906f658a640aaa1e4879a7c4e24f5.mov",
+    "matched_by": "time",
+    "server": {
+      "ball_speed": {
+        "status": "low_confidence",
+        "value": 17.935,
+        "reason_code": null
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      }
+    },
+    "iphone_db": {
+      "ball_speed": {
+        "status": "best_effort",
+        "value": 16.602645874023438,
+        "reason_code": null
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "best_effort",
+        "value": 16.91448211669922,
+        "reason_code": null
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "measured",
+        "value": 11.88659594000049,
+        "reason_code": null
+      },
+      "board_at_7ft": {
+        "status": "measured",
+        "value": 9.573161835353748,
+        "reason_code": null
+      },
+      "arrows_board": {
+        "status": "measured",
+        "value": 7.759895141397261,
+        "reason_code": null
+      },
+      "launch_angle": {
+        "status": "measured",
+        "value": 1.5301921679425887,
+        "reason_code": null
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "calibrated_estimate",
+        "value": 321.2374572753906,
+        "reason_code": null
+      }
+    }
+  },
+  "2d77544c.mov": {
+    "shot_id": "2d77544c-1998-49d2-adb4-e55ae046e943",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "5771a1cc461e4ee19ec02479a48864d5.mov",
+    "matched_by": "time",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED_NO_WOOD"
+      }
+    },
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      }
+    }
+  },
+  "4f684271.mov": {
+    "shot_id": "4f684271-896a-474b-91f7-21470433b2dc",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "b52598e0837943daae12ac9474d401d9.mov",
+    "matched_by": "time",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      }
+    },
+    "iphone_db": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FAR_LANE_UNVALIDATED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "METRIC_UNAVAILABLE"
+      }
+    }
+  },
+  "7ed68dae.mov": {
+    "shot_id": "7ed68dae-fc44-46ea-94d8-858cb89bb802",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "e5f4763858a8488392157c0cb397dd40.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      }
+    },
+    "iphone_db": {}
+  },
+  "29a5f799.mov": {
+    "shot_id": "29a5f799-60bd-4f20-aa97-ced456f708f7",
+    "user": "551bc775",
+    "source": "live",
+    "clip_object": "699ea78dc76a44099b80c6b814176fa3.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      }
+    },
+    "iphone_db": {}
+  },
+  "020f3c11.mov": {
+    "shot_id": "020f3c11-ffbb-4a0d-bbc8-0d693dbb5112",
+    "user": "551bc775",
+    "source": "live",
+    "clip_object": "601f5aa6ed644ad5b8fc730012155775.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_NOT_DETECTED"
+      }
+    },
+    "iphone_db": {}
+  },
+  "87a1fbb6.mov": {
+    "shot_id": "87a1fbb6-d801-464b-b96e-132250179182",
+    "user": "551bc775",
+    "source": "live",
+    "clip_object": "4c787c47695f4d2b893d2c333d0d4cbe.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      }
+    },
+    "iphone_db": {}
+  },
+  "ce30c8fa.mov": {
+    "shot_id": "ce30c8fa-9eb6-4340-8af3-5c4490801546",
+    "user": "551bc775",
+    "source": "upload",
+    "clip_object": "887c3f0016ce4aee92f45c5eaecf71f4.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "PIN_IMPACT_NOT_DETECTED"
+      }
+    },
+    "iphone_db": {}
+  },
+  "57c1aa3c.mov": {
+    "shot_id": "57c1aa3c-7e8f-4fe6-a3c6-3aaae6c72aa1",
+    "user": "551bc775",
+    "source": "live",
+    "clip_object": "d43318716467423283f19294d214fe84.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "FOUL_LINE_NOT_IN_VIEW"
+      }
+    },
+    "iphone_db": {}
+  },
+  "b156a830.mov": {
+    "shot_id": "b156a830-7f83-4cd1-9f79-d896aaa21a3e",
+    "user": "551bc775",
+    "source": "live",
+    "clip_object": "e920822a14bb4b91a3ab6f0c30ecdf36.mov",
+    "matched_by": "hash",
+    "server": {
+      "ball_speed": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "speed_avg_foul_to_pins": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "loft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "laydown_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "board_at_7ft": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "arrows_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "launch_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "breakpoint_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "entry_board": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "entry_angle": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      },
+      "rev_rate": {
+        "status": "unavailable",
+        "value": null,
+        "reason_code": "LANE_GEOMETRY_UNUSABLE"
+      }
+    },
+    "iphone_db": {}
+  }
+}

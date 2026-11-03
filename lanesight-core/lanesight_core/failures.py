@@ -128,4 +128,42 @@ FAILURE_COPY: dict[str, dict] = {
         'user_message': "This one's on us — please try again.",
         'tip': None,
     },
+    # DEC-128: a metric came out physically off the lane / out of range (wrong-lane pick or a mis-track). It is
+    # NEVER shown as a measurement — reported unavailable with this reason on both engines.
+    'IMPLAUSIBLE_VALUE': {
+        'user_title': "That read didn't look right",
+        'user_message': "One of the measurements came out off the lane, so we left it out rather than show a wrong number.",
+        'tip': "Set the camera behind your lane, square to it, with the foul line and pins in frame.",
+    },
 }
+
+# DEC-128 plausibility bounds (shared by cv/pipeline.py and the on-device-submission backstop in the API). A value
+# outside its band is physically impossible (39-board lane; a bowling ball is 8–30 mph; a thrown ball is 100–700
+# rpm) and must be reported `unavailable` with reason_code IMPLAUSIBLE_VALUE — never surfaced as a measurement.
+IMPLAUSIBLE_VALUE = 'IMPLAUSIBLE_VALUE'
+_BOARD_METRICS = ('laydown_board', 'board_at_0ft', 'board_at_7ft', 'arrows_board', 'board_at_15ft',
+                  'breakpoint_board', 'entry_board')
+_SPEED_METRICS_PLAUS = ('ball_speed', 'speed_release', 'speed_early', 'speed_late', 'speed_avg_foul_to_pins')
+BOARD_BAND = (1.0, 39.0)
+SPEED_BAND = (8.0, 30.0)
+REV_BAND = (100.0, 700.0)
+
+
+def implausible_reason(metric_key: str, value) -> str | None:
+    """Return a short human reason if `value` is out of the physical band for `metric_key`, else None. Used to
+    stamp status='unavailable' + reason_code IMPLAUSIBLE_VALUE on both engines (parity)."""
+    if value is None:
+        return None
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    if v != v or v in (float('inf'), float('-inf')):   # NaN / inf
+        return f"came out non-finite ({value})"
+    if metric_key in _BOARD_METRICS and not (BOARD_BAND[0] <= v <= BOARD_BAND[1]):
+        return f"measured board {v:.1f} is off the 39-board lane"
+    if metric_key in _SPEED_METRICS_PLAUS and not (SPEED_BAND[0] <= v <= SPEED_BAND[1]):
+        return f"measured {v:.0f} mph is not physically possible for a bowling ball"
+    if metric_key == 'rev_rate' and not (REV_BAND[0] <= v <= REV_BAND[1]):
+        return f"measured {v:.0f} rpm is out of range"
+    return None

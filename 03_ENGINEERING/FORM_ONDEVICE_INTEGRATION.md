@@ -74,24 +74,20 @@ for shots, add the form branch:
 4. **Background:** reuse `backgroundUploadAndShadow` (Wi-Fi only by default) and call `shadowVideo` for the form
    server shadow.
 
-### C. AppModel capture-pipeline reconciliation (Session 1 + Shayne)
-`feat/form-ondevice` (HEAD) and `origin/feat/ios-lane-parity` have **architecturally different** capture→analyze
-pipelines; the merge kept **HEAD's** `AppModel.swift`:
-- **HEAD (kept):** DEC-119 durable background-upload (`enqueueAndStart` → `startUpload` → `runAnalyze`) + the
-  active-session/resume lifecycle + ff-feedback (DEC-124/125 `submitGeneralFeedback`/`recordFFConsent`/`appPhase`).
-  These are referenced by `LaneSightApp`, `HomeView`, `SessionView`, `GeneralFeedbackSheet`, `FFConsentView`,
-  `SettingsView`, `CaptureView` (all kept/auto-merged), and the `PipelineState` enum is a superset of theirs.
-- **theirs (DEC-127, merged in as additive types/methods):** on-device-first `runPipeline` →
-  `measureOnDevicePrimary` → `/shots/metrics` → render → `backgroundUploadAndShadow`; `OnDeviceMeasurement`,
-  `buildResultFromCard`, `offlineResult`, `enqueueMetricsCall`, `flushMetricsQueue`, `onDevicePrimary`. **No file
-  references these AppModel members**, so they merged in without breaking the HEAD pipeline, but they are NOT wired
-  into `processShot` (HEAD's `enqueueAndStart` still drives capture).
-- **To do:** compose the two — on-device-first measurement (DEC-127) FIRST, then the durable background upload +
-  resume (DEC-119), for BOTH shot and form. This is the one design decision that needs a compiler; it is why the
-  iOS on-device-first path (B) is specified here rather than committed as speculative code.
+### C. AppModel capture-pipeline reconciliation — DONE by Session 1 (f638c02)
+Session 1 reconciled the two capture pipelines on `feat/ios-lane-parity` (commit f638c02 "Merge dev-build-v0 into
+feat/ios-lane-parity (DEC-119 durability + PR #6 F&F/feedback + DEC-127/128)"). Its `AppModel.swift` now carries
+**all** of: the DEC-127 on-device-first path (`runPipeline`/`measureOnDevicePrimary`/`/shots/metrics`/
+`backgroundUploadAndShadow`), the DEC-119 durable-upload + active-session/resume lifecycle, and the DEC-124/125
+ff-feedback members. The re-merge (2026-11-03) **took that reconciled `AppModel.swift` (`--theirs`)** — so the
+on-device-first scaffolding now exists on `feat/form-ondevice` and all kept files resolve against it. The only
+remaining AppModel work is **B** below (add the FORM branch to the on-device-first path) — no longer a pipeline
+design decision, just the additive form wiring. It is left as this spec (not committed) because it is
+unverifiable without an Xcode/device build and `AppModel.swift` is Session 1's actively-changing file; applying B
+with a compiler is a few-minute change.
 
 ## Verification status
-- **Verified (this session):** 447 pytest pass incl. the form metrics-endpoint tests; the Python parity golden ran
+- **Verified (this session):** 463 pytest pass incl. the form metrics-endpoint tests; the Python parity golden ran
   on all 7 labeled clips; the IMG_8751–54 CV regression passes (no CV touched).
 - **Unverified (needs Shayne's Xcode + iPhone):** the iOS build after the MediaPipe dependency is added; the
   on-device parity gate (`OnDeviceFormGateTests`) on real MediaPipe landmarks; per-clip runtime <30 s on device;

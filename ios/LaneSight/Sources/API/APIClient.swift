@@ -464,6 +464,7 @@ struct APIClient {
     func scoreFromMetrics(metricsDetailed: [String: Any], trajectory: [String: Any]?, keyPoints: [String: Any]?,
                           sessionId: String?, metadata: ShotMetadata, devicePerf: [String: Any]?,
                           algorithmVersion: String, appVersion: String?,
+                          stageReport: [String: Any]? = nil, reasonCode: String? = nil, failedStage: String? = nil,
                           timeoutS: Double = 10) async throws -> MetricsResultResponse {
         var req = makeRequest("shots/metrics", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -477,6 +478,11 @@ struct APIClient {
         if let keyPoints { body["key_points"] = keyPoints }
         if let devicePerf { body["device_perf"] = devicePerf }
         if let appVersion { body["app_version"] = appVersion }
+        // DEC-128: forward the per-stage report + attempt-level cause so the server writes platform=ios stage rows
+        // (analysis_stage_outcome) for every on-device-first attempt, not just the dev /analysis/shadow path.
+        if let stageReport { body["stage_report"] = stageReport }
+        if let reasonCode { body["reason_code"] = reasonCode }
+        if let failedStage { body["failed_stage"] = failedStage }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(req, as: MetricsResultResponse.self)
     }
