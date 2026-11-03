@@ -475,6 +475,17 @@ struct APIClient {
     /// DEC-127: flush a QUEUED metrics call (offline → back online). The body is the exact /shots/metrics JSON
     /// captured when the shot was taken; re-posting it creates the server shot with score + coaching, which then
     /// shows in history. A generous timeout since this runs in the background.
+    /// DEC-127: kick the background VIDEO shadow — the server analyzes the uploaded clip for validation only and
+    /// logs a platform='server' attempt + outcome rows for the SAME shot, never changing what was shown. Runs the
+    /// analysis inline server-side (generous timeout); the app calls this detached in the background.
+    func shadowVideo(shotId: String, storagePath: String) async throws {
+        var req = makeRequest("shots/\(shotId)/shadow_video", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 600
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["storage_path": storagePath])
+        try await sendRaw(req)
+    }
+
     @discardableResult
     func postMetricsRaw(_ body: Data) async throws -> MetricsResultResponse {
         var req = makeRequest("shots/metrics", method: "POST")

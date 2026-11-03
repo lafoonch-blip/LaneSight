@@ -107,12 +107,18 @@ enum OnDeviceShadow {
             if let cn { d["note"] = cn }
             return d
         }
+        // DEC-127 parity: mirror cv/pipeline.py's per-metric status EXACTLY (so a metric is never 'measured' on
+        // one engine and best_effort/unavailable on the other). ball_speed + segment speeds = best_effort;
+        // rev_rate = calibrated_estimate; foul→pins = best_effort (approximated impact, DEC-112); the FAR-LANE
+        // metrics are GATED to unavailable until DEC-065 validation; near-lane boards stay measured ('ok').
+        let farLane: Set<String> = ["entry_board", "entry_angle", "entry_angle_52_55",
+                                    "breakpoint_board", "breakpoint_distance", "speed_late"]
         var detailed: [String: Any] = [
-            // headline + rev are measured when present; the foul→pins average is best_effort by method (DEC-112).
-            "ball_speed": cell(mph.map(Double.init), "mph", note: mph == nil ? note : nil),
+            "ball_speed": cell(mph.map(Double.init), "mph", status: "best_effort", note: mph == nil ? note : nil),
             "speed_avg_foul_to_pins": cell(avgFoulToPins.map(Double.init), "mph", status: "best_effort",
                                            note: "full-lane average; impact frame approximated (DEC-112)"),
-            "rev_rate": cell(revRpm.map(Double.init), "rpm", note: revRpm == nil ? revNote : nil),
+            "rev_rate": cell(revRpm.map(Double.init), "rpm", status: "calibrated_estimate",
+                             note: revRpm == nil ? revNote : nil),
         ]
         if let rs = revSigma { if var r = detailed["rev_rate"] as? [String: Any] { r["uncertainty"] = Double(rs); detailed["rev_rate"] = r } }
         var trajectory: [String: Any] = [:]
@@ -120,8 +126,15 @@ enum OnDeviceShadow {
             for (key, bc) in b.metricPairs() {
                 let unit = key.hasSuffix("angle") || key == "launch_angle" ? "deg"
                          : (key == "breakpoint_distance" ? "ft" : "board")
-                detailed[key] = cell(bc.value, unit, status: bc.status == "ok" ? "ok" : "unavailable", note: bc.note)
-                if bc.status == "ok", let v = bc.value { metrics[key] = v }   // measured scalar for the dev tool too
+                if farLane.contains(key) {
+                    // gated (DEC-065) — unavailable with the gate reason even when the engine computed a value
+                    detailed[key] = ["status": "unavailable", "unit": unit,
+                                     "note": "Back-lane metric gated until Phase-2 validation (DEC-065).",
+                                     "reason_code": "FAR_LANE_UNVALIDATED"]
+                } else {
+                    detailed[key] = cell(bc.value, unit, status: bc.status == "ok" ? "ok" : "unavailable", note: bc.note)
+                    if bc.status == "ok", let v = bc.value { metrics[key] = v }   // measured scalar for the dev tool
+                }
             }
             // DEC-127: the ball path for the shot-card lane view. The server builds path_fit from `smoothed`.
             if !b.curveZBoard.isEmpty {

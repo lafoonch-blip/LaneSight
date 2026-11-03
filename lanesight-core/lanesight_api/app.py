@@ -1691,6 +1691,45 @@ def _far_lane_read(metrics: dict) -> str | None:
     return None if ok else 'not_read'
 
 
+# DEC-127 parity: on-device metrics must get the SAME per-metric status the server VIDEO pipeline (cv/pipeline.py)
+# assigns, so no metric is 'measured' on one engine and best_effort/unavailable on the other. The far-lane gate is
+# imported from the pipeline (single source) so the two can't drift. A value the phone already marked 'unavailable'
+# (it genuinely couldn't measure it) always wins.
+from lanesight_core.cv.pipeline import _FAR_LANE_METRICS as _PIPE_FAR, FAR_LANE_VALIDATED as _PIPE_FAR_OK
+_ONDEVICE_CANON_STATUS = {'ball_speed': 'best_effort', 'speed_release': 'best_effort', 'speed_early': 'best_effort',
+                          'speed_late': 'best_effort', 'speed_avg_foul_to_pins': 'best_effort',
+                          'rev_rate': 'calibrated_estimate'}
+
+
+def _apply_status_policy(metrics: dict) -> dict:
+    """Stamp the canonical per-metric status on the on-device record (parity with cv/pipeline.py), gate the
+    far-lane metrics (DEC-065, until FAR_LANE_VALIDATED), and return the capture_quality.far_lane verdict. Mutates
+    `metrics` in place. ball_speed/segment speeds → best_effort; rev_rate → calibrated_estimate; entry/breakpoint/
+    back-half → unavailable (gated); near-lane boards (laydown/7ft/arrows), launch, loft keep their measured status."""
+    far_gated = False
+    for key, cell in (metrics or {}).items():
+        if not isinstance(cell, dict):
+            continue
+        if cell.get('status') == 'unavailable' or cell.get('value') is None:
+            continue                                   # phone couldn't measure it — keep unavailable + its reason
+        if key in _PIPE_FAR and not _PIPE_FAR_OK:      # DEC-065 far-lane gate (same as the video path)
+            cell['value'] = None
+            cell['status'] = 'unavailable'
+            cell['reason_code'] = 'FAR_LANE_UNVALIDATED'
+            cell['failed_stage'] = 'compute'
+            cell['note'] = 'Back-lane metric gated until Phase-2 validation (DEC-065).'
+            far_gated = True
+        elif key in _ONDEVICE_CANON_STATUS:
+            cell['status'] = _ONDEVICE_CANON_STATUS[key]
+        # else: near-lane boards / launch / loft keep the measured status the phone assigned
+    limited = far_gated or not _PIPE_FAR_OK
+    cq = {'far_lane': 'limited' if limited else 'ok'}
+    if limited:
+        cq['reason'] = ("Back-lane metrics (entry point & angle, breakpoint, back-half speed) aren't validated "
+                        "from phone video yet, so they're not shown. Everything up to the arrows is measured.")
+    return cq
+
+
 @app.post('/shots/metrics')
 def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     """DEC-127: the on-device-first path. The phone computes ALL the video metrics locally and posts them here as
@@ -1719,9 +1758,13 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     metrics = _metrics_record_from_body(b.get('metrics') or {}, algo)
     if not metrics:
         raise HTTPException(422, 'no metrics in body')
+    # key_points from the RAW values (the lane view draws the entry/breakpoint dots even though the far-lane
+    # METRICS are gated), then stamp the canonical per-metric status + far-lane gate for engine parity.
+    key_points = b.get('key_points') or _key_points_from_metrics(metrics)
+    cq = _apply_status_policy(metrics)
     rec = {'shot_id': b.get('shot_id'), 'metrics': metrics, 'handed': handed,
-           'key_points': b.get('key_points') or _key_points_from_metrics(metrics),
-           'capture_quality': {'far_lane': _far_lane_read(metrics), 'source': 'ios-ondevice'},
+           'key_points': key_points,
+           'capture_quality': {**cq, 'source': 'ios-ondevice'},
            'engine': 'iphone', 'algorithm_version': algo}
     # DEC-127: the on-device ball path (trajectory.smoothed = [{z_ft, board}]). _shot_card_enrich builds path_fit
     # from it, so the shot-card lane view draws the same path + four labels as the server video path.
@@ -1775,6 +1818,67 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
         print(f'metrics ball/oil name resolve skipped ({e})')
     return {'shot_id': shot['id'], 'source': 'upload' if is_upload else 'live',
             'shot': sh, 'score': (store.latest_score(user) if not is_upload else None), 'footer': footer}
+
+
+@app.post('/shots/{shot_id}/shadow_video')
+def shadow_video(shot_id: str, body: dict = Body(...), user=Depends(current_user)):
+    """DEC-127: the background VIDEO shadow. On-device already produced the AUTHORITATIVE shot via /shots/metrics;
+    this analyzes the uploaded clip for VALIDATION only — it logs a platform='server' analysis_attempt + server
+    outcome rows correlated to the SAME shot_id (so ops.engine_metric_agreement fills from real use, not only the
+    dev benchmark), and NEVER creates or overwrites the shot record or the Score. Body: {storage_path}. Runs the
+    analysis inline (the app calls this in the background), so a live shot ends with BOTH an 'ios' and a 'server'
+    attempt + outcome rows for the one shot."""
+    store = get_store()
+    sh = store.get_shot(user, shot_id)
+    if not sh:
+        raise HTTPException(404, 'shot not found')
+    storage_path = body.get('storage_path')
+    if not storage_path or not storage_path.startswith(f'{user}/'):
+        raise HTTPException(403, 'storage_path missing or not owned by the user')
+    mode = sh.get('capture_mode') or 'shot'
+    if mode == 'form':
+        return {'logged': False, 'reason': 'form video shadow not supported'}
+    data = store.storage_download('shot-clips', storage_path)
+    dest = DATA_ROOT / 'shadow'
+    dest.mkdir(parents=True, exist_ok=True)
+    local = dest / f'{shot_id}.mov'
+    with open(local, 'wb') as f:
+        f.write(data)
+    t0 = time.monotonic()
+    attempt = {'user_id': user, 'shot_id': shot_id, 'session_id': sh.get('session_id'),
+               'source': sh.get('source') or 'live', 'capture_mode': mode,
+               'algorithm_version': ALGO_VERSION, 'api_revision': os.environ.get('K_REVISION'),
+               'platform': 'server',           # the VIDEO shadow vs the on-device 'ios' attempt (same shot_id)
+               'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+               'clip': _probe_clip(str(local))}
+    try:
+        from lanesight_runner.core import analyze_clip
+        out_prefix = str(DATA_ROOT / 'out' / f'{shot_id}_shadow')
+        os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
+        rec, _probe, _t = analyze_clip(str(local), out_prefix, handed=sh.get('handed'), timings={})
+        enriched = _clip_info(_probe)
+        if enriched:
+            attempt['clip'] = {**attempt['clip'], **enriched}
+        logged = store.log_analysis_attempt({**attempt, 'status': 'analyzed',
+                                             'duration_ms': int((time.monotonic() - t0) * 1000),
+                                             'diagnostics': _quality(rec)})
+        _log_outcomes(store, (logged or {}).get('id'), mode, rec, None, clip=attempt.get('clip'))
+        result = {'logged': True, 'platform': 'server', 'status': 'analyzed'}
+    except Exception as e:
+        from lanesight_core.failures import AnalysisFailure
+        fail = e if isinstance(e, AnalysisFailure) else \
+            AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:300], stage='internal')
+        logged = store.log_analysis_attempt({**attempt, 'status': 'failed',
+                                             'duration_ms': int((time.monotonic() - t0) * 1000),
+                                             'failure_code': fail.code, 'failure_stage': fail.stage})
+        _log_outcomes(store, (logged or {}).get('id'), mode, None, fail, clip=attempt.get('clip'))
+        result = {'logged': True, 'platform': 'server', 'status': 'failed', 'failure_code': fail.code}
+    finally:
+        try:
+            os.remove(local)
+        except OSError:
+            pass
+    return result
 
 
 @app.post('/shots/analyze')

@@ -846,7 +846,7 @@ final class AppModel: ObservableObject {
     /// setting allows cellular). Retention only here; the result is never changed by this. On cellular without
     /// permission the upload is skipped (the clip stays local for this run).
     private func backgroundUploadAndShadow(uploadURL: URL, originalURL: URL, metadata: ShotMetadata,
-                                           sessionId: String?, ct: [String: Double]) {
+                                           sessionId: String?, shadowForShotId: String?, ct: [String: Double]) {
         let allowCellular = defaults.bool(forKey: "ls.cellular_upload")
         guard let client = try? makeClient() else { return }        // build on the main actor
         Task.detached {
@@ -858,8 +858,12 @@ final class AppModel: ObservableObject {
             do {
                 let target = try await client.signedUploadURL()
                 try await client.putClipToStorage(uploadURL: target.upload_url, fileURL: uploadURL) { _ in }
-                // The clip is retained server-side for the diagnostic window; a server-side video SHADOW that
-                // re-analyses it for the board-delta comparison is a follow-up (never changes what was shown).
+                // DEC-127: fire the server VIDEO shadow — it analyzes the clip for validation (a platform='server'
+                // attempt + outcome rows for the SAME shot, so ops.engine_metric_agreement fills from real use)
+                // and NEVER changes the shown result. Only when the online metrics call created a server shot.
+                if let sid = shadowForShotId {
+                    try? await client.shadowVideo(shotId: sid, storagePath: target.path)
+                }
             } catch { /* best-effort; the result already landed */ }
             try? FileManager.default.removeItem(at: originalURL)
             if uploadURL != originalURL { try? FileManager.default.removeItem(at: uploadURL) }
@@ -965,6 +969,7 @@ final class AppModel: ObservableObject {
                 let detailed = m.detailedJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                 let traj = m.trajectoryJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
                 var built: ShotResult
+                var serverShotId: String? = nil        // set only when the online metrics call created a server shot
                 if let detailed {
                     pipeline = .analyzing(state: "coaching", timings: [:])     // "Generating coaching"
                     do {
@@ -974,6 +979,7 @@ final class AppModel: ObservableObject {
                             devicePerf: ["latency_s": m.latencyS], algorithmVersion: OnDeviceShadow.engineVersion,
                             appVersion: appVersion, timeoutS: 10)
                         built = Self.buildResultFromCard(resp, isUpload: source != "live")   // Complete Analysis
+                        serverShotId = resp.shot_id
                         track("ondevice_metrics_complete",
                               props: ["ondevice_s": ct["ondevice_s"] ?? 0, "basis": m.basis, "engine": "iphone"])
                     } catch {
@@ -990,8 +996,11 @@ final class AppModel: ObservableObject {
                 pipeline = .done
                 showResult = true
                 clearPendingAnalysis()
+                // Background: upload the clip (Wi-Fi only by default) + fire the server VIDEO shadow for the
+                // server-side comparison (platform='server' rows for the SAME shot). Shadow only when online.
                 backgroundUploadAndShadow(uploadURL: uploadURL, originalURL: fileURL, metadata: metadata,
-                                          sessionId: (source == "upload" ? nil : sid), ct: ct)
+                                          sessionId: (source == "upload" ? nil : sid),
+                                          shadowForShotId: serverShotId, ct: ct)
                 return
             }
 

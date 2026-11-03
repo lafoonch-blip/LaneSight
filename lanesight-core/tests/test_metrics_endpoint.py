@@ -58,16 +58,23 @@ def test_metrics_endpoint_returns_card_and_coaching():
     j = r.json()
     assert j['source'] == 'live' and j['shot_id']
     rec = j['shot']['record']
-    # the on-device metrics are stored, MEASURED -> status 'ok' (counts for the Score)
-    assert rec['metrics']['entry_board']['status'] == 'ok'
-    assert rec['metrics']['entry_board']['value'] == 17.5
-    assert rec['metrics']['entry_board']['source'] == 'ios-ondevice'
-    # the method-approximated foul->pins average keeps its best_effort label verbatim
-    assert rec['metrics']['speed_avg_foul_to_pins']['status'] == 'best_effort'
+    M = rec['metrics']
+    # DEC-127 PARITY with cv/pipeline.py — on-device metrics get the SAME per-metric status as the server video
+    # path, so no metric is 'measured' on one engine and best_effort/unavailable on the other:
+    assert M['ball_speed']['status'] == 'best_effort'                 # pipeline.py:592
+    assert M['rev_rate']['status'] == 'calibrated_estimate'           # pipeline.py:127
+    assert M['speed_avg_foul_to_pins']['status'] == 'best_effort'     # method-approximated impact (DEC-112)
+    assert M['arrows_board']['status'] == 'ok'                        # near-lane board is measured
+    assert M['arrows_board']['source'] == 'ios-ondevice'
+    # far-lane metrics are GATED to unavailable until DEC-065 validation — exactly as the server video path
+    assert M['entry_board']['status'] == 'unavailable' and M['entry_board']['value'] is None
+    assert M['breakpoint_board']['status'] == 'unavailable'
+    assert rec['capture_quality']['far_lane'] == 'limited'
+    # key_points keep the raw entry value for the lane view even though the metric is gated
+    assert (rec.get('key_points') or {}).get('entry', {}).get('board') == 17.5
     # coaching was computed from the metrics record (coach matrix + lane read), no video involved
     ins = rec['insights']
     assert ins.get('coach') and ins.get('lane')
-    # a score snapshot came back in the same response (components, even if overall stays 'building')
     assert j['score'] is not None and 'eligible' in j['score']
 
 
@@ -80,12 +87,15 @@ def test_measured_ondevice_metrics_feed_the_score_components():
     # Performance uses entry_board (in the pocket range) + entry_angle (in range); with 5 on-device MEASURED
     # shots it must be a real number, proving on-device metrics feed the Score exactly like server metrics.
     assert snap is not None
-    # every component must be a real number — proving on-device MEASURED metrics feed the Score exactly like
-    # server metrics across Performance (board+angle), Accuracy (vs intent), Consistency (spread), Power.
-    for part in ('s_perf', 'a_acc', 'c_cons', 'p_power'):
-        assert snap[part] is not None, f'{part} should be computed from on-device metrics: {snap}'
-    # with all four parts populated past the 5-shot floor the Score unlocks (eligible) from on-device metrics alone
-    assert snap['eligible'] is True and snap['score'] is not None
+    # The NON-gated measured on-device metrics feed the Score exactly like server metrics: Accuracy comes from the
+    # near-lane arrows board vs intent, Consistency from arrows + rev (calibrated_estimate counts).
+    assert snap['a_acc'] is not None, f'accuracy should come from the on-device arrows board: {snap}'
+    assert snap['c_cons'] is not None, f'consistency should come from on-device arrows + rev: {snap}'
+    # PARITY: Performance needs entry board + angle, which the DEC-065 far-lane gate makes unavailable on BOTH
+    # engines — so it stays 'building' and the overall Score is not eligible. Exactly the server's behavior; the
+    # on-device path never fabricates a far-lane read the server wouldn't report.
+    assert snap['s_perf'] is None, f's_perf must stay building while far-lane is gated: {snap}'
+    assert not snap['eligible']
 
 
 def test_outcome_rows_written_measured_engine_iphone():
@@ -98,16 +108,17 @@ def test_outcome_rows_written_measured_engine_iphone():
     rows = [r for r in getattr(get_store(), 'metric_outcomes', []) if r.get('engine') == 'iphone']
     assert rows, 'on-device outcome rows must be written'
     by_metric = {r['metric_key']: r for r in rows}
-    # a genuinely measured on-device metric is 'measured' (counts for the Score)...
-    assert by_metric['entry_board']['status'] == 'measured'
-    assert by_metric['ball_speed']['status'] == 'measured'
-    # ...but the per-metric status rules still apply: the foul→pins average is best_effort by METHOD (approximated
-    # impact, DEC-112) on the phone exactly as on the server — never "measured" just because it came from the phone.
-    assert by_metric['speed_avg_foul_to_pins']['status'] == 'best_effort'
-    # every unavailable row carries a non-null reason_code + failed_stage (DEC-122 honesty invariant)
-    rev = by_metric['rev_rate']
-    assert rev['status'] == 'unavailable'
-    assert rev.get('reason_code') and rev.get('failed_stage')
+    # outcome-row statuses mirror the server video path per metric (no cross-engine disagreement):
+    assert by_metric['arrows_board']['status'] == 'measured'          # near-lane board
+    assert by_metric['ball_speed']['status'] == 'best_effort'         # pipeline.py:592
+    assert by_metric['speed_avg_foul_to_pins']['status'] == 'best_effort'   # approximated impact (DEC-112)
+    # entry board is far-lane GATED to unavailable with a non-null reason (DEC-065) — same as the server
+    eb = by_metric['entry_board']
+    assert eb['status'] == 'unavailable'
+    assert eb.get('reason_code') == 'FAR_LANE_UNVALIDATED' and eb.get('failed_stage')
+    # a metric the engine genuinely couldn't read is unavailable + its own reason (DEC-122 honesty invariant)
+    assert by_metric['rev_rate']['status'] == 'unavailable'
+    assert by_metric['rev_rate'].get('reason_code') and by_metric['rev_rate'].get('failed_stage')
 
 
 def test_trajectory_builds_path_fit_for_the_lane_view():
