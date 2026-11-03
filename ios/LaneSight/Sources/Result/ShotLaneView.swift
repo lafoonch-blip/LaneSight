@@ -175,13 +175,14 @@ struct ProjectedLabel: Identifiable, Equatable {
 private struct LaneGlassLabel: View {
     let label: ProjectedLabel
     var body: some View {
-        VStack(spacing: 1) {
-            Text(label.title).font(.system(size: 9, weight: .semibold)).foregroundStyle(label.color)
-            Text(label.value).font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-            Text(label.sub).font(.system(size: 8)).foregroundStyle(LS.textSecondary)
+        // Design spec (measured at the 344×360 pt card): title 11 / value 20 bold / sub 11 pt.
+        VStack(alignment: .leading, spacing: 0) {
+            Text(label.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(label.color)
+            Text(label.value).font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+            Text(label.sub).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
         }
-        .padding(.horizontal, 8).padding(.vertical, 5).frame(maxWidth: .infinity)
-        .background(Color(hex: 0x001018).opacity(0.78), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 10).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: 0x001018).opacity(0.82), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(label.color.opacity(0.8), lineWidth: 1))
     }
 }
