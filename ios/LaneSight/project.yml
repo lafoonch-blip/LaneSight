@@ -31,10 +31,39 @@ targets:
       - path: LaneRender
         type: folder
         buildPhase: resources
+      # DEC-129: on-device Form pose model (BlazePose heavy, ~30 MB). Local only / gitignored — never committed
+      # (pose.py note). Copy from ~/LaneSightData/models/pose_landmarker_heavy.task before building; absent →
+      # FormPoseLandmarker.resolveModelPath returns nil and the Form on-device path falls back to the server.
+      - path: Models/pose_landmarker_heavy.task
+        buildPhase: resources
+        optional: true
+    # DEC-129: MediaPipe Pose Landmarker for iOS (v1.0.0). Two STATIC xcframeworks fetched per-machine by
+    # Vendor/fetch_mediapipe.sh (gitignored): the Vision wrapper + the heavy Common (TFLite/XNNPACK) binary.
+    # Static → embed:false. They link libc++ + the Accelerate/AVFoundation/CoreMedia/… system frameworks.
+    # The Form engine also compiles without them via `#if canImport(MediaPipeTasksVision)`.
+    dependencies:
+      - framework: Vendor/MediaPipeTasksVision.xcframework
+        embed: false
+      - framework: Vendor/MediaPipeTasksCommon.xcframework
+        embed: false
+      - sdk: libc++.tbd
+      - sdk: Accelerate.framework
+      - sdk: AudioToolbox.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreImage.framework
+      - sdk: QuartzCore.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreVideo.framework
+      - sdk: CoreGraphics.framework
     settings:
       base:
         PRODUCT_NAME: LaneSight
         PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app
+        # DEC-129: MediaPipeTasksCommon's heavy graph libs (abseil/tflite/xnnpack/protobuf) are force-loaded
+        # from Vendor/graph_libraries (gitignored, fetched by fetch_mediapipe.sh) — mirrors the pod's
+        # user_target_xcconfig. -ObjC loads the static framework's Obj-C categories.
+        OTHER_LDFLAGS[sdk=iphoneos*]: "$(inherited) -ObjC -force_load $(SRCROOT)/Vendor/graph_libraries/libMediaPipeTasksCommon_device_graph.a"
+        OTHER_LDFLAGS[sdk=iphonesimulator*]: "$(inherited) -ObjC -force_load $(SRCROOT)/Vendor/graph_libraries/libMediaPipeTasksCommon_simulator_graph.a"
         # DEC-123: 0.9.0 (pre-1.0) for the first Friends & Family TestFlight build. Bump CURRENT_PROJECT_VERSION
         # on every upload to App Store Connect (each build number must be unique) — see TESTFLIGHT_FF.md.
         MARKETING_VERSION: "0.9.0"
@@ -62,6 +91,7 @@ targets:
         excludes:
           - GateClips        # videos go in via the explicit resources entry below (avoid double-inclusion)
           - ParityFixtures   # plates/masks/golden go in via the explicit resources entry below
+          - FormGateClips    # DEC-129 form clips go in via the explicit resources entry below
       # DEC-117 device-gate clips (local only; gitignored — never committed). Absent on other machines → the
       # gate test SKIPs. Comment this out if `xcodegen generate` can't find GateClips/.
       - path: Tests/GateClips
@@ -71,6 +101,18 @@ targets:
       # masks (.u8) and the committed golden JSON for IMG_8751-54. Absent on other machines → OnDeviceLaneParityTests
       # SKIPs. Regenerate with scratchpad/parity_gen.py.
       - path: Tests/ParityFixtures
+        buildPhase: resources
+        optional: true
+      # DEC-129 on-device Form parity gate: the labeled form clips (local only; gitignored → OnDeviceFormGateTests
+      # SKIPs when absent) + the committed labels/golden JSON (the parity target). Copy the clips into
+      # Tests/FormGateClips/ (8824/25/26 side, 8846/47/48 rear, 8980 held out) from ~/LaneSightData to run the gate.
+      - path: Tests/FormGateClips
+        buildPhase: resources
+        optional: true
+      - path: ../../lanesight-core/validation/form_labels.json
+        buildPhase: resources
+        optional: true
+      - path: ../../lanesight-core/validation/form_ondevice_golden.json
         buildPhase: resources
         optional: true
     dependencies:

@@ -1759,6 +1759,58 @@ def _apply_status_policy(metrics: dict) -> dict:
     return cq
 
 
+def _form_shot_from_metrics(store, user, b, meta, handed, algo, metrics, session_id, is_upload, cfg, ub):
+    """DEC-129: the on-device-first FORM path for POST /shots/metrics. The phone posts the form `metrics`
+    (step_count, swing_time, …) + `events` (E2..E8) + detected `view` + `measured_positions` from its MediaPipe
+    pose engine (the Swift port of form/pose.py). The server synthesises the same record `analyze_form_clip`
+    returns and runs `engines.after_form_analyzed` — the SAME pure fundamentals the server video path runs
+    (timing_checkpoints T1–T4, swing_timing vs baseline, measured-position enrichment, coaching cues, focus) —
+    with NO video. Writes DEC-122 outcome rows (mode='form', engine 'iphone'). Key-position stills are absent on
+    the metrics-only path (no video); the background video shadow fills them later. Returns the one-shot form card."""
+    shot = store.create_shot(user, session_id,
+                             {'intent': meta.get('intent'), 'capture_mode': 'form',
+                              'source': 'upload' if is_upload else meta.get('source', 'live'),
+                              'handed': handed, 'ball_configuration_id': cfg, 'user_ball_id': ub,
+                              'oil_pattern_id': meta.get('oil_pattern_id'),
+                              'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id')})
+    rec = {'shot_id': shot['id'], 'form_version': b.get('form_version') or 'form-0.0.0',
+           'view': b.get('view') or 'unknown', 'status': b.get('status') or 'ok',
+           'metrics': metrics, 'events': b.get('events') or {},
+           'measured_positions': b.get('measured_positions') or {},
+           'handed': handed, 'engine': 'iphone', 'algorithm_version': algo, 'key_frames': []}
+    if isinstance(b.get('view_info'), dict):
+        rec['view_info'] = b['view_info']
+    if isinstance(b.get('stage_report'), dict):
+        rec['stage_report'] = b['stage_report']
+    # after_form_analyzed must run BEFORE save_shot_result (it reads strictly-prior history) and mutates `rec`.
+    footer = engines.after_form_analyzed(store, user, session_id, rec, persist=not is_upload)
+    store.save_shot_result(shot['id'], rec, {'ok': True, 'engine': 'iphone', 'mode': 'form'}, algo_version=algo)
+    try:
+        attempt = store.log_analysis_attempt({
+            'user_id': user, 'shot_id': shot['id'], 'session_id': session_id,
+            'source': 'upload' if is_upload else 'live', 'capture_mode': 'form', 'status': 'analyzed',
+            'platform': 'ios', 'algorithm_version': algo,
+            'api_revision': (str(b.get('app_version'))[:60] if b.get('app_version') else None),
+            'duration_ms': int((b.get('device_perf') or {}).get('latency_s', 0) * 1000) or None,
+            'diagnostics': {'view': rec['view'], 'status': rec['status']},
+            'env': 'live' if os.environ.get('K_REVISION') else 'dev'})
+        from .store import outcome_rows_from_record
+        mrows, srows = outcome_rows_from_record((attempt or {}).get('id'), 'iphone', algo, 'form',
+                                                metrics, rec.get('stage_report'), scalar_status='measured')
+        store.log_outcomes(mrows, srows)
+    except Exception as e:
+        print(f'form metrics outcome log skipped ({e})')
+    sh = _shot_card_enrich(store, user, store.get_shot(user, shot['id']))   # form record passes through untouched
+    try:
+        ball_names, oil_names = store._ball_oil_names(user)
+        sh['ball_name'] = ball_names.get(sh.get('user_ball_id') or sh.get('ball_configuration_id'))
+        sh['oil_name'] = oil_names.get(sh.get('oil_pattern_id'))
+    except Exception as e:
+        print(f'form ball/oil name resolve skipped ({e})')
+    return {'shot_id': shot['id'], 'source': 'upload' if is_upload else 'live', 'mode': 'form',
+            'shot': sh, 'score': (store.latest_score(user) if not is_upload else None), 'footer': footer}
+
+
 @app.post('/shots/metrics')
 def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     """DEC-127: the on-device-first path. The phone computes ALL the video metrics locally and posts them here as
@@ -1787,6 +1839,12 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     metrics = _metrics_record_from_body(b.get('metrics') or {}, algo)
     if not metrics:
         raise HTTPException(422, 'no metrics in body')
+    # DEC-129: on-device FORM takes the same metrics-only path. The phone's MediaPipe pose engine already
+    # produced the events + metrics + view; the server runs the SAME pure form engine the video path uses
+    # (engines.after_form_analyzed) to add coaching/fundamentals, with no ball CV. Split out so the ball path
+    # below is untouched (DEC-127 shot behavior unchanged).
+    if mode == 'form':
+        return _form_shot_from_metrics(store, user, b, meta, handed, algo, metrics, session_id, is_upload, cfg, ub)
     # key_points from the RAW values (the lane view draws the entry/breakpoint dots even though the far-lane
     # METRICS are gated), then stamp the canonical per-metric status + far-lane gate for engine parity.
     key_points = b.get('key_points') or _key_points_from_metrics(metrics)
@@ -1871,8 +1929,6 @@ def shadow_video(shot_id: str, body: dict = Body(...), user=Depends(current_user
     if not storage_path or not storage_path.startswith(f'{user}/'):
         raise HTTPException(403, 'storage_path missing or not owned by the user')
     mode = sh.get('capture_mode') or 'shot'
-    if mode == 'form':
-        return {'logged': False, 'reason': 'form video shadow not supported'}
     data = store.storage_download('shot-clips', storage_path)
     dest = DATA_ROOT / 'shadow'
     dest.mkdir(parents=True, exist_ok=True)
@@ -1887,13 +1943,21 @@ def shadow_video(shot_id: str, body: dict = Body(...), user=Depends(current_user
                'env': 'live' if os.environ.get('K_REVISION') else 'dev',
                'clip': _probe_clip(str(local))}
     try:
-        from lanesight_runner.core import analyze_clip
         out_prefix = str(DATA_ROOT / 'out' / f'{shot_id}_shadow')
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
-        rec, _probe, _t = analyze_clip(str(local), out_prefix, handed=sh.get('handed'), timings={})
-        enriched = _clip_info(_probe)
-        if enriched:
-            attempt['clip'] = {**attempt['clip'], **enriched}
+        if mode == 'form':
+            # DEC-129: the server VIDEO form shadow — run the reference MediaPipe pose pipeline so ops can compare
+            # the on-device 'ios' form attempt to the server 'server' attempt for the SAME shot (never shown/scored).
+            from lanesight_core.form import analyze_form_clip
+            from lanesight_core.form.pose import pose_backend
+            rec = analyze_form_clip(str(local), out_prefix=out_prefix, handed=sh.get('handed'),
+                                    pose_backend=pose_backend)
+        else:
+            from lanesight_runner.core import analyze_clip
+            rec, _probe, _t = analyze_clip(str(local), out_prefix, handed=sh.get('handed'), timings={})
+            enriched = _clip_info(_probe)
+            if enriched:
+                attempt['clip'] = {**attempt['clip'], **enriched}
         logged = store.log_analysis_attempt({**attempt, 'status': 'analyzed',
                                              'duration_ms': int((time.monotonic() - t0) * 1000),
                                              'diagnostics': _quality(rec)})

@@ -1,0 +1,1651 @@
+{
+  "_source": "examples/form_ondevice_golden.py \u2014 Python form reference, the on-device parity target",
+  "backend_version": "form-pose-0.1.0",
+  "fundamentals_version": "form-fundamentals-0.1.0",
+  "gate": {
+    "events_frames": 2,
+    "per_plant_frames": 3,
+    "dec118_events": [
+      "E2",
+      "E4",
+      "E7",
+      "E8"
+    ],
+    "step_count": "exact",
+    "runtime_s": 30,
+    "held_out": [
+      "IMG_8980"
+    ]
+  },
+  "clips": {
+    "IMG_8824": {
+      "ok": true,
+      "view_label": "side",
+      "view_detected": "down_lane",
+      "status": "ok",
+      "fps": 59.8796,
+      "wall_s": 15.17,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 3.842,
+        "E5": 4.108,
+        "E6": 4.325,
+        "E7": 4.342,
+        "E8": 4.192,
+        "first_step": 2.772,
+        "slide_plant": 4.108,
+        "slide_stop": 4.192,
+        "hold_start": 5.327,
+        "hold_end": 6.63
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 2.6052,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 3.842,
+          "label_s": 3.8577,
+          "d_frames": -0.94
+        },
+        "E5": {
+          "det_s": 4.108,
+          "label_s": 3.8744,
+          "d_frames": 13.99
+        },
+        "E7": {
+          "det_s": 4.342,
+          "label_s": 4.2919,
+          "d_frames": 3.0
+        },
+        "E8": {
+          "det_s": 4.192,
+          "label_s": 4.2752,
+          "d_frames": -4.98
+        }
+      },
+      "strikes_s": [
+        2.772,
+        3.007,
+        3.323,
+        3.64,
+        4.108
+      ],
+      "step_intervals_s": [
+        0.235,
+        0.317,
+        0.317,
+        0.468
+      ],
+      "step_count": {
+        "value": 5.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        2.9893,
+        3.34,
+        3.6406,
+        4.2752
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.0,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.402,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.483,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.017,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 0.902,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 1.57,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 5.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 3.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 1.203,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Slows down"
+        },
+        "finish_hold": {
+          "value": 1.303,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": 0.757,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Above shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": 66.15,
+          "status": "best_effort",
+          "display": "66\u00b0"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": 0.39,
+          "status": "best_effort",
+          "display": "Up to ear"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 1.3,
+          "status": "best_effort",
+          "display": "1.3 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.48,
+          "status": "best_effort",
+          "display": "downswing 0.48 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 398
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8825": {
+      "ok": true,
+      "view_label": "side",
+      "view_detected": "down_lane",
+      "status": "ok",
+      "fps": 59.8805,
+      "wall_s": 47.03,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 18.42,
+        "E5": 18.937,
+        "E6": 18.787,
+        "E7": 18.82,
+        "E8": 18.837,
+        "first_step": 18.052,
+        "slide_plant": 18.937,
+        "slide_stop": 18.837,
+        "hold_start": 19.438,
+        "hold_end": 21.727
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 17.2176,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 18.42,
+          "label_s": 18.4534,
+          "d_frames": -2.0
+        },
+        "E5": {
+          "det_s": 18.937,
+          "label_s": 18.5703,
+          "d_frames": 21.96
+        },
+        "E7": {
+          "det_s": 18.82,
+          "label_s": 18.8375,
+          "d_frames": -1.05
+        },
+        "E8": {
+          "det_s": 18.837,
+          "label_s": 18.8542,
+          "d_frames": -1.03
+        }
+      },
+      "strikes_s": [
+        18.052,
+        18.353,
+        18.937
+      ],
+      "step_intervals_s": [
+        0.302,
+        0.583
+      ],
+      "step_count": {
+        "value": 3.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        17.2677,
+        17.6852,
+        18.0359,
+        18.3699,
+        18.9377
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.0,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.652,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.367,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.033,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.052,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 0.768,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 3.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 0.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.563,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 2.288,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": -0.197,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Below shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": 33.46,
+          "status": "best_effort",
+          "display": "33\u00b0"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": -0.02,
+          "status": "best_effort",
+          "display": "To shoulder"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 2.29,
+          "status": "best_effort",
+          "display": "2.3 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.37,
+          "status": "best_effort",
+          "display": "downswing 0.37 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 2005
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8826": {
+      "ok": true,
+      "view_label": "side",
+      "view_detected": "down_lane",
+      "status": "ok",
+      "fps": 59.8819,
+      "wall_s": 51.93,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": null,
+        "E5": 18.487,
+        "E6": null,
+        "E7": null,
+        "E8": 18.253,
+        "first_step": 16.467,
+        "slide_plant": 18.487,
+        "slide_stop": 18.253,
+        "hold_start": 19.055,
+        "hold_end": 19.705
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 15.9648,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": null,
+          "label_s": 17.1671,
+          "d_frames": null
+        },
+        "E5": {
+          "det_s": 18.487,
+          "label_s": 17.3174,
+          "d_frames": 70.04
+        },
+        "E7": {
+          "det_s": null,
+          "label_s": 17.5679,
+          "d_frames": null
+        },
+        "E8": {
+          "det_s": 18.253,
+          "label_s": 17.618,
+          "d_frames": 38.03
+        }
+      },
+      "strikes_s": [
+        16.467,
+        16.717,
+        17.1,
+        17.485,
+        17.852,
+        18.487
+      ],
+      "step_intervals_s": [
+        0.25,
+        0.383,
+        0.385,
+        0.367,
+        0.635
+      ],
+      "step_count": {
+        "value": 6.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        15.9481,
+        16.3655,
+        16.7663,
+        17.1504,
+        17.7349
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.667,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.318,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.117,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.017,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.118,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 2.02,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 6.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 3.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.366,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 0.65,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": -1.482,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Below shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 0.65,
+          "status": "best_effort",
+          "display": "0.7 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.12,
+          "status": "best_effort",
+          "display": "downswing 0.12 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 1876
+        },
+        "swing_events": {
+          "status": "failed",
+          "source": "wrist",
+          "reason_code": "FORM_DELIVERY_NOT_ISOLATED",
+          "reason": "every swing event failed the DEC-095 sanity gates",
+          "diagnostics": {
+            "E2": "release (18.49s) isn't near the slide stop (18.25s) \u2014 off by +0.23s, so the delivery couldn't be timed reliably on this clip.",
+            "E3": "release (18.49s) isn't near the slide stop (18.25s) \u2014 off by +0.23s, so the delivery couldn't be timed reliably on this clip.",
+            "E4": "release (18.49s) isn't near the slide stop (18.25s) \u2014 off by +0.23s, so the delivery couldn't be timed reliably on this clip.",
+            "E6": "release (18.49s) isn't near the slide stop (18.25s) \u2014 off by +0.23s, so the delivery couldn't be timed reliably on this clip.",
+            "E7": "release (18.49s) isn't near the slide stop (18.25s) \u2014 off by +0.23s, so the delivery couldn't be timed reliably on this clip."
+          }
+        },
+        "delivery_isolation": {
+          "status": "failed",
+          "reason_code": "FORM_DELIVERY_NOT_ISOLATED"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8846": {
+      "ok": true,
+      "view_label": "rear",
+      "view_detected": "rear",
+      "status": "ok",
+      "fps": 30.0,
+      "wall_s": 18.37,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 14.4,
+        "E5": 14.633,
+        "E6": 14.8,
+        "E7": 14.833,
+        "E8": 14.833,
+        "first_step": 13.5,
+        "slide_plant": 14.633,
+        "slide_stop": 14.833,
+        "hold_start": 15.567,
+        "hold_end": 16.3
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 13.3,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 14.4,
+          "label_s": 14.4333,
+          "d_frames": -1.0
+        },
+        "E5": {
+          "det_s": 14.633,
+          "label_s": 14.5667,
+          "d_frames": 1.99
+        },
+        "E7": {
+          "det_s": 14.833,
+          "label_s": 14.8,
+          "d_frames": 0.99
+        },
+        "E8": {
+          "det_s": 14.833,
+          "label_s": 14.8,
+          "d_frames": 0.99
+        }
+      },
+      "strikes_s": [
+        13.5,
+        14.033,
+        14.633
+      ],
+      "step_intervals_s": [
+        0.533,
+        0.6
+      ],
+      "step_count": {
+        "value": 3.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        12.8667,
+        13.6333,
+        14.0,
+        14.3667,
+        14.8333
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.0,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.767,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.4,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.033,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.2,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 1.333,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 3.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 1.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.522,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 0.733,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": -0.154,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Below shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": 76.73,
+          "status": "best_effort",
+          "display": "77\u00b0 out"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": 28.97,
+          "status": "best_effort",
+          "display": "29\u00b0 \u00b7 bowling lower"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": -0.18,
+          "status": "best_effort",
+          "display": "To shoulder"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 0.73,
+          "status": "best_effort",
+          "display": "0.7 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.4,
+          "status": "best_effort",
+          "display": "downswing 0.40 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 661
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8847": {
+      "ok": true,
+      "view_label": "rear",
+      "view_detected": "rear",
+      "status": "ok",
+      "fps": 59.9759,
+      "wall_s": 38.61,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 16.407,
+        "E5": 16.64,
+        "E6": 16.757,
+        "E7": 16.773,
+        "E8": 16.757,
+        "first_step": 15.523,
+        "slide_plant": 16.64,
+        "slide_stop": 16.757,
+        "hold_start": 17.457,
+        "hold_end": 18.875
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 15.2061,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 16.407,
+          "label_s": 16.4066,
+          "d_frames": 0.02
+        },
+        "E5": {
+          "det_s": 16.64,
+          "label_s": 16.5233,
+          "d_frames": 7.0
+        },
+        "E7": {
+          "det_s": 16.773,
+          "label_s": 16.7734,
+          "d_frames": -0.02
+        },
+        "E8": {
+          "det_s": 16.757,
+          "label_s": 16.7901,
+          "d_frames": -1.99
+        }
+      },
+      "strikes_s": [
+        15.523,
+        15.94,
+        16.273,
+        16.64
+      ],
+      "step_intervals_s": [
+        0.417,
+        0.333,
+        0.367
+      ],
+      "step_count": {
+        "value": 4.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        15.0894,
+        15.623,
+        16.0231,
+        16.3066,
+        16.8068
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.0,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.85,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.35,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.017,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.217,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 1.25,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 4.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 1.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.412,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 1.418,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": -0.071,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": 67.94,
+          "status": "best_effort",
+          "display": "68\u00b0 out"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": 30.82,
+          "status": "best_effort",
+          "display": "31\u00b0 \u00b7 bowling lower"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": -0.12,
+          "status": "best_effort",
+          "display": "To shoulder"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 1.42,
+          "status": "best_effort",
+          "display": "1.4 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.35,
+          "status": "best_effort",
+          "display": "downswing 0.35 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 1491
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8848": {
+      "ok": true,
+      "view_label": "rear",
+      "view_detected": "rear",
+      "status": "ok",
+      "fps": 59.9729,
+      "wall_s": 34.06,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 14.307,
+        "E5": 14.54,
+        "E6": 14.673,
+        "E7": 14.69,
+        "E8": 14.673,
+        "first_step": 12.105,
+        "slide_plant": 14.54,
+        "slide_stop": 14.673,
+        "hold_start": 15.607,
+        "hold_end": 16.507
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 13.1393,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 14.307,
+          "label_s": 14.3398,
+          "d_frames": -1.97
+        },
+        "E5": {
+          "det_s": 14.54,
+          "label_s": 14.4232,
+          "d_frames": 7.0
+        },
+        "E7": {
+          "det_s": 14.69,
+          "label_s": 14.6733,
+          "d_frames": 1.0
+        },
+        "E8": {
+          "det_s": 14.673,
+          "label_s": 14.6733,
+          "d_frames": -0.02
+        }
+      },
+      "strikes_s": [
+        12.105,
+        12.755,
+        13.405,
+        13.855,
+        14.19,
+        14.54
+      ],
+      "step_intervals_s": [
+        0.65,
+        0.65,
+        0.45,
+        0.335,
+        0.35
+      ],
+      "step_count": {
+        "value": 6.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        12.8892,
+        13.4728,
+        13.8729,
+        14.2231,
+        14.69
+      ],
+      "slowmo": {
+        "is_slowmo": false,
+        "factor": 1
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 0.0,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.835,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.367,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.017,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.218,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 2.585,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 6.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 3.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.439,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 0.9,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": 0.035,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": 65.32,
+          "status": "best_effort",
+          "display": "65\u00b0 out"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": 25.84,
+          "status": "best_effort",
+          "display": "26\u00b0 \u00b7 bowling lower"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": -0.08,
+          "status": "best_effort",
+          "display": "To shoulder"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 0.9,
+          "status": "best_effort",
+          "display": "0.9 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.37,
+          "status": "best_effort",
+          "display": "downswing 0.37 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 1327
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": false,
+          "uncorrected": false
+        }
+      }
+    },
+    "IMG_8980": {
+      "ok": true,
+      "view_label": "side",
+      "view_detected": "down_lane",
+      "status": "ok",
+      "fps": 59.914,
+      "wall_s": 42.29,
+      "swing_source": "wrist",
+      "events": {
+        "E2": null,
+        "E3": null,
+        "E4": 22.015,
+        "E5": 22.098,
+        "E6": 22.182,
+        "E7": 22.198,
+        "E8": 22.082,
+        "first_step": 15.138,
+        "slide_plant": 22.098,
+        "slide_stop": 22.082,
+        "hold_start": 22.065,
+        "hold_end": 23.25
+      },
+      "event_frame_error": {
+        "E2": {
+          "det_s": null,
+          "label_s": 15.4722,
+          "d_frames": null
+        },
+        "E4": {
+          "det_s": 22.015,
+          "label_s": 16.5404,
+          "d_frames": 328.01
+        },
+        "E5": {
+          "det_s": 22.098,
+          "label_s": 16.6739,
+          "d_frames": 324.98
+        },
+        "E7": {
+          "det_s": 22.198,
+          "label_s": 16.9576,
+          "d_frames": 313.97
+        },
+        "E8": {
+          "det_s": 22.082,
+          "label_s": 16.9576,
+          "d_frames": 307.02
+        }
+      },
+      "strikes_s": [
+        15.138,
+        15.488,
+        15.99,
+        16.24,
+        16.523,
+        16.842,
+        17.292,
+        18.06,
+        18.86,
+        19.695,
+        20.347,
+        20.98,
+        21.532,
+        22.098
+      ],
+      "step_intervals_s": [
+        0.07,
+        0.1,
+        0.05,
+        0.057,
+        0.064,
+        0.09,
+        0.154,
+        0.16,
+        0.167,
+        0.13,
+        0.127,
+        0.11,
+        0.113
+      ],
+      "step_count": {
+        "value": 14.0,
+        "status": "best_effort",
+        "label": 5
+      },
+      "step_labels_s": [
+        16.2066,
+        16.5237,
+        16.9576
+      ],
+      "slowmo": {
+        "is_slowmo": true,
+        "factor": 5
+      },
+      "metrics": {
+        "pushaway_time": {
+          "value": 1.032,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "backswing_time": {
+          "value": 0.053,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "downswing_time": {
+          "value": 0.033,
+          "status": "best_effort",
+          "confidence": 0.65,
+          "display": null
+        },
+        "release_time": {
+          "value": 0.003,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "swing_time": {
+          "value": 1.122,
+          "status": "best_effort",
+          "confidence": 0.55,
+          "display": null
+        },
+        "approach_time": {
+          "value": 1.412,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "step_count": {
+          "value": 14.0,
+          "status": "best_effort",
+          "confidence": 0.4,
+          "display": null
+        },
+        "ball_start_step": {
+          "value": 5.0,
+          "status": "low_confidence",
+          "confidence": 0.4,
+          "display": null
+        },
+        "rhythm_ratio": {
+          "value": 0.625,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Speeds up"
+        },
+        "finish_hold": {
+          "value": 0.237,
+          "status": "best_effort",
+          "confidence": 0.6,
+          "display": null
+        },
+        "backswing_height_rel": {
+          "value": -2.463,
+          "status": "best_effort",
+          "confidence": 0.5,
+          "display": "Below shoulder"
+        },
+        "drift_boards": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "timing_at_slide": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        },
+        "slide_length": {
+          "value": null,
+          "status": "unavailable",
+          "confidence": 0.0,
+          "display": null
+        }
+      },
+      "measured_positions": {
+        "foul_line_distance": {
+          "id": "M1",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "spine_tilt": {
+          "id": "M2",
+          "value": 93.98,
+          "status": "best_effort",
+          "display": "94\u00b0"
+        },
+        "balance_arm": {
+          "id": "M3",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "shoulder_tilt": {
+          "id": "M4",
+          "value": null,
+          "status": "unavailable",
+          "display": "\u2014"
+        },
+        "follow_through": {
+          "id": "M5",
+          "value": 5.43,
+          "status": "best_effort",
+          "display": "Up to ear"
+        },
+        "finish_hold": {
+          "id": "M6",
+          "value": 0.24,
+          "status": "best_effort",
+          "display": "0.2 s"
+        },
+        "pendulum": {
+          "id": "M7",
+          "value": 0.03,
+          "status": "best_effort",
+          "display": "downswing 0.03 s"
+        }
+      },
+      "stage_report": {
+        "decode": {
+          "status": "ok"
+        },
+        "pose": {
+          "status": "ok",
+          "frames": 1394
+        },
+        "swing_events": {
+          "status": "ok",
+          "source": "wrist"
+        },
+        "delivery_isolation": {
+          "status": "ok"
+        },
+        "slowmo": {
+          "status": "ok",
+          "is_slowmo": true,
+          "uncorrected": false
+        }
+      }
+    }
+  }
+}
