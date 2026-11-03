@@ -19,7 +19,20 @@ nonisolated enum OnDeviceFormEngine {
     /// (FormBallTrack is a documented hook for a future clip that needs it).
     static func analyze(clipURL: URL, handed: String? = "right", modelPath: String? = nil,
                         bundle: Bundle = .main, trackBall: Bool = false) throws -> FormAnalysis {
-        let lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle)
+        // DEC-129 runtime + segmentation: find the dominant-motion delivery window with a cheap prescan and run
+        // pose ONLY there (+ margin). Widen to the full clip and retry if the delivery burst isn't inside it.
+        let window0 = FormPoseLandmarker.prescanWindow(clipURL: clipURL)
+        var lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: window0)
+        if window0 != nil {
+            let fr = lms.frames, tt = lms.t
+            let rs = FormSignal.speed(FormSignal.point(fr, LM.rFootPts, axis: 0),
+                                      FormSignal.point(fr, LM.rFootPts, axis: 1), tt)
+            let ls = FormSignal.speed(FormSignal.point(fr, LM.lFootPts, axis: 0),
+                                      FormSignal.point(fr, LM.lFootPts, axis: 1), tt)
+            if FormEngine.findDelivery(tt, fr, rs, ls) == nil {
+                lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: nil)
+            }
+        }
         let t = lms.t
         let frames = lms.frames
         let fps = lms.fps
