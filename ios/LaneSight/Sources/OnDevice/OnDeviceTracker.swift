@@ -36,6 +36,15 @@ struct BallTrack: Equatable {
     let candidateFrames: Int
     let seconds: Double
     var impactT: Double? = nil          // detected pin-deck arrival time (preferred t_impact)
+    // DEC-128 port-parity diagnostics (compared against the server dump to find where the Swift port diverges).
+    var thrEff: Int = 0
+    var bgLevel: Float = 0
+    var totalBlobs: Int = 0
+    var framesWithBlobs: Int = 0
+    var totalCandidates: Int = 0
+    var bgLumaMean: Float = 0           // mean of the working-res max-channel background plate (decode-level check)
+    var gateReject: String = ""         // per-gate rejection counts (which gate kills the ball candidates)
+    var selectedLane: ODDetectedLane? = nil   // DEC-128: the lane the ball was found on (boards must use THIS lane)
     nonisolated var spanFrac: Float { (points.first.map { p in (points.last!.frac - p.frac) }) ?? 0 }
 }
 
@@ -128,53 +137,112 @@ enum OnDeviceTracker {
                              avgFoulToPinsMph: avg, tFoulCross: tFoulCross)
     }
 
+    /// Per-lane run of the blob→candidate→link chain + its ball score.
+    private struct LaneRun { var lane: ODDetectedLane; var pts: [TrackPoint]; var perFrame: [[Cand]]
+                             var scanned: Int; var thrEff: Int; var bgLevel: Float
+                             var totalBlobs: Int; var framesWithBlobs: Int
+                             var rej: (Int, Int, Int, Int, Int); var score: Float }
+
+    /// Port of cv/pipeline.py `_lane_ball_score`: how much a lane's linked track looks like the lane the BALL
+    /// rolled down — many points, lateral position staying within the (padded) edges, travelling downlane. Empty
+    /// / wrong lanes score 0. This is the selection signal (never lanes.first) — DEC-128.
+    nonisolated private static func laneBallScore(_ pts: [TrackPoint], vpY: Float) -> Float {
+        if pts.count < 5 { return 0 }
+        let inLane = Float(pts.filter { $0.frac > -0.15 && $0.frac < 1.15 }.count) / Float(pts.count)
+        func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
+        let span = u(pts.last!.contactRow) - u(pts.first!.contactRow)   // pts sorted by t
+        if inLane < 0.5 || span <= 0 { return 0 }
+        return Float(pts.count) * inLane * span
+    }
+
     nonisolated static func track(url: URL, geo: ODLaneGeometry, diffThr: Int = 35,
                                   maxBgFrames: Int = 12, rot: ODRotation = .r0) -> BallTrack {
         let t0 = CFAbsoluteTimeGetCurrent()
-        guard let lane = geo.lanes.first, let vp = geo.vanishingPoint,
+        guard let vp = geo.vanishingPoint,
               let (sw, sh, stride, ts, bg) = buildBackground(url: url, maxFrames: maxBgFrames, rot: rot) else {
             return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
         }
-        // Pass 2: per-frame foreground → blobs (at working res) → scale up → diameter-gated candidates (full-res geo).
-        // Physical gates (match the roll, reject the bowler/approach + the ball return):
-        //   • ON the lane laterally: 0 ≤ frac ≤ 1 (+ small margin)
-        //   • up-lane from the foul: contactRow between the VP and the foul line (not behind the foul in the approach)
-        let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
         let vpY = vp.y
-        // brightness-relative threshold: scale diffThr by this clip's own background level over the lane strip
-        // (working coords) so a gain-scaled copy of the clip segments identically (DEC-117).
-        let bgLevel = laneBgLevel(bg: bg, sw: sw, sh: sh, lane: lane, stride: stride, vpY: vpY, foulY: foulY)
-        let thrEff = Int(min(THR_MAX, max(THR_MIN, Float(diffThr) * bgLevel / THR_L_NOMINAL)).rounded())
-        var perFrame: [[Cand]] = []
-        var scanned = 0
         let s = Float(stride)
-        forEachLuma(url: url, stride: stride, sw: sw, sh: sh, rot: rot) { i, luma in
-            scanned += 1
-            let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: thrEff)
-            var cs: [Cand] = []
-            for b in blobs {
-                let bx = Float(b.x) * s, by = Float(b.y) * s, bw = Float(b.w) * s, bh = Float(b.h) * s, ba = Float(b.area) * s * s
-                let ct = contactRow(lane, top: by)
-                let D = expDiam(lane, ct)
-                if D < 8 { continue }
-                if ct > foulY + 40 || ct < vpY + 10 { continue }   // on the lane surface (up-lane from the foul)
-                let ratio = bw / D
-                if ratio > 0.7 && ratio < 1.35 && bh < 3.2 * D && ba > 0.25 * D * D {
-                    let (xa, xb) = laneX(lane, ct)
-                    let cx = bx + bw / 2
-                    let frac = (cx - xa) / (xb - xa)
-                    if frac < -0.05 || frac > 1.05 { continue }    // on the lane laterally (rejects the ball return)
-                    cs.append(Cand(i: i, t: i < ts.count ? ts[i] : (ts.last ?? 0), cx: cx, ct: ct, frac: frac))
+        // Run the full blob→candidate→link chain for ONE lane (threshold + candidates are lane-dependent, so this
+        // decodes once per lane, like the server's per-lane extract_blobs).
+        func runLane(_ lane: ODDetectedLane, useMerge: Bool) -> LaneRun {
+            let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
+            let bgLevel = laneBgLevel(bg: bg, sw: sw, sh: sh, lane: lane, stride: stride, vpY: vpY, foulY: foulY)
+            let thrEff = Int(min(THR_MAX, max(THR_MIN, Float(diffThr) * bgLevel / THR_L_NOMINAL)).rounded())
+            var perFrame: [[Cand]] = []
+            var scanned = 0, totalBlobs = 0, framesWithBlobs = 0
+            var rejD = 0, rejVert = 0, rejShape = 0, rejFrac = 0, passed = 0
+            forEachLuma(url: url, stride: stride, sw: sw, sh: sh, rot: rot) { i, luma in
+                scanned += 1
+                let blobs = foregroundBlobs(luma: luma, bg: bg, w: sw, h: sh, thr: thrEff)
+                totalBlobs += blobs.count
+                if !blobs.isEmpty { framesWithBlobs += 1 }
+                let raw: [FBlob] = blobs.map { FBlob(x: Float($0.x) * s, y: Float($0.y) * s,
+                                                     w: Float($0.w) * s, h: Float($0.h) * s, a: Float($0.area) * s * s) }
+                var cs: [Cand] = []
+                // Gate raw blobs, PLUS merged fragment groups (ports cv/track.py candidates()) ONLY on the raw-lane
+                // fallback path: the ball fragments on a glare/low-contrast (pale) lane, and without the merge each
+                // fragment fails the width/area gate (the 80ae104f pale lane). The good-lane path keeps the exact
+                // original candidate set so the validated clips (IMG_8751-54) are byte-unchanged (DEC-128).
+                let cands = useMerge ? raw + ballFragmentGroups(raw, lane: lane) : raw
+                for b in cands {
+                    let bx = b.x, by = b.y, bw = b.w, bh = b.h, ba = b.a
+                    let ct = contactRow(lane, top: by)
+                    let D = expDiam(lane, ct)
+                    if D < 8 { rejD += 1; continue }
+                    if ct > foulY + 40 || ct < vpY + 10 { rejVert += 1; continue }
+                    let ratio = bw / D
+                    if ratio > 0.7 && ratio < 1.35 && bh < 3.2 * D && ba > 0.25 * D * D {
+                        let (xa, xb) = laneX(lane, ct)
+                        let cx = bx + bw / 2
+                        let frac = (cx - xa) / (xb - xa)
+                        if frac < -0.05 || frac > 1.05 { rejFrac += 1; continue }
+                        passed += 1
+                        cs.append(Cand(i: i, t: i < ts.count ? ts[i] : (ts.last ?? 0), cx: cx, ct: ct, frac: frac))
+                    } else { rejShape += 1 }
                 }
+                perFrame.append(cs)
             }
-            perFrame.append(cs)
+            let pts = ransacLink(perFrame, vpY: vpY)
+            return LaneRun(lane: lane, pts: pts, perFrame: perFrame, scanned: scanned, thrEff: thrEff,
+                           bgLevel: bgLevel, totalBlobs: totalBlobs, framesWithBlobs: framesWithBlobs,
+                           rej: (rejD, rejVert, rejShape, rejFrac, passed), score: laneBallScore(pts, vpY: vpY))
         }
-        let candFrames = perFrame.filter { !$0.isEmpty }.count
-        let pts = ransacLink(perFrame, vpY: vp.y)
-        var result = BallTrack(points: pts, framesScanned: scanned, candidateFrames: candFrames,
+        // DEC-128 lane selection: the server runs every detected lane and keeps the one the BALL rolled down
+        // (_lane_ball_score), never lanes.first. Try the VP-consistent (refined) good lanes first; if the ball is
+        // on none of them (a pale lane whose edges skewed the shared VP got dropped from `good`), fall back to the
+        // raw lanes — the real lane is still there and the ball scores highest on it.
+        func bestOver(_ list: [ODDetectedLane], useMerge: Bool) -> LaneRun? {
+            var best: LaneRun? = nil
+            for lane in list {
+                let r = runLane(lane, useMerge: useMerge)
+                if best == nil || r.score > best!.score { best = r }
+            }
+            return best
+        }
+        var best = bestOver(geo.lanes, useMerge: false)   // good lanes: exact original candidate set (golden-safe)
+        if (best?.score ?? 0) <= 0, !geo.rawLanes.isEmpty,            // ball on no good lane → pale-lane fallback:
+           let rawBest = bestOver(geo.rawLanes, useMerge: true),      // raw lanes + fragment merge to recover it
+           rawBest.score > (best?.score ?? 0) {
+            best = rawBest
+        }
+        guard let b = best else {
+            return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
+        }
+        let candFrames = b.perFrame.filter { !$0.isEmpty }.count
+        var result = BallTrack(points: b.pts, framesScanned: b.scanned, candidateFrames: candFrames,
                                seconds: CFAbsoluteTimeGetCurrent() - t0)
-        if let first = pts.first {
-            result.impactT = detectImpact(url: url, track: pts, lane: lane, vpY: vpY, afterT: first.t, rot: rot)
+        result.thrEff = b.thrEff
+        result.bgLevel = b.bgLevel
+        result.totalBlobs = b.totalBlobs
+        result.framesWithBlobs = b.framesWithBlobs
+        result.totalCandidates = b.perFrame.reduce(0) { $0 + $1.count }
+        if !bg.isEmpty { result.bgLumaMean = Float(bg.reduce(0) { $0 + Int($1) }) / Float(bg.count) }
+        result.gateReject = "D:\(b.rej.0) vert:\(b.rej.1) shape:\(b.rej.2) frac:\(b.rej.3) pass:\(b.rej.4)"
+        result.selectedLane = b.lane
+        if let first = b.pts.first {
+            result.impactT = detectImpact(url: url, track: b.pts, lane: b.lane, vpY: vpY, afterT: first.t, rot: rot)
         }
         return result
     }
@@ -203,6 +271,39 @@ enum OnDeviceTracker {
     // MARK: background = per-pixel median of up to maxFrames evenly-sampled luma frames
     private struct Blob { let x: Int; let y: Int; let w: Int; let h: Int; let area: Int }
     private struct Cand { let i: Int; let t: Double; let cx: Float; let ct: Float; let frac: Float }
+    // Full-res float blob (working-res Blob scaled up) — the frame the candidate geometry + fragment merge run in.
+    private struct FBlob { var x: Float; var y: Float; var w: Float; var h: Float; var a: Float }
+
+    /// Port of cv/track.py `_groups`: merge ball fragments (split by glare / low contrast) whose boxes are within
+    /// ~0.35 ball diameters, via union-find, and emit the merged bounding boxes. Exact server constants (0.35·D
+    /// gap, 1.6·D width cap, D<8 skip) — no new thresholds. Returns ONLY merged groups (size > 1).
+    nonisolated private static func ballFragmentGroups(_ bl: [FBlob], lane: ODDetectedLane) -> [FBlob] {
+        let n = bl.count
+        if n < 2 { return [] }
+        var par = Array(0..<n)
+        func find(_ x: Int) -> Int { var i = x; while par[i] != i { par[i] = par[par[i]]; i = par[i] }; return i }
+        for i in 0..<n {
+            let Di = expDiam(lane, contactRow(lane, top: bl[i].y))
+            if Di < 8 || bl[i].w > 1.6 * Di { continue }
+            let g = 0.35 * Di
+            for j in (i + 1)..<n {
+                let a = bl[i], b = bl[j]
+                if b.w > 1.6 * Di { continue }
+                if a.x - g < b.x + b.w && b.x - g < a.x + a.w && a.y - g < b.y + b.h && b.y - g < a.y + a.h {
+                    par[find(i)] = find(j)
+                }
+            }
+        }
+        var groups: [Int: [FBlob]] = [:]
+        for i in 0..<n { groups[find(i), default: []].append(bl[i]) }
+        var out: [FBlob] = []
+        for (_, g) in groups where g.count > 1 {
+            let x0 = g.map { $0.x }.min()!, y0 = g.map { $0.y }.min()!
+            let x1 = g.map { $0.x + $0.w }.max()!, y1 = g.map { $0.y + $0.h }.max()!
+            out.append(FBlob(x: x0, y: y0, w: x1 - x0, h: y1 - y0, a: g.reduce(0) { $0 + $1.a }))
+        }
+        return out
+    }
 
     /// ONE decode pass: collect all timestamps + reservoir-sample up to maxFrames DOWNSCALED luma frames for the
     /// median background. Never holds all frames (that OOM-killed the app). Downscales to ~540p working height

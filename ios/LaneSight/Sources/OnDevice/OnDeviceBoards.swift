@@ -63,7 +63,8 @@ enum OnDeviceBoards {
             out.breakpointDistanceFt = .na(why); out.launchAngleDeg = .na(why); return out
         }
         let pts = track.points.sorted { $0.t < $1.t }
-        guard pts.count >= 6, let foulY = geo.foulLineY, let vp = geo.vanishingPoint, let lane = geo.lanes.first,
+        guard pts.count >= 6, let foulY = geo.foulLineY, let vp = geo.vanishingPoint,
+              let lane = track.selectedLane ?? geo.lanes.first,
               let tImpact = sp.tImpact else {
             return allNA("need \u{2265}6 track points + lane geometry + an impact anchor to read boards")
         }
@@ -87,7 +88,10 @@ enum OnDeviceBoards {
         func laneX(_ y: Double) -> (Double, Double) {
             (Double(lane.left.a)*y + Double(lane.left.b), Double(lane.right.a)*y + Double(lane.right.b))
         }
-        let fY = Double(foulY)
+        // Anchor Z=0 at the SELECTED lane's own near row (not the global geo.foulLineY, which is the right/first
+        // lane's foul — using it for a ball on a different lane shifts the near-lane board scale). DEC-128.
+        _ = foulY
+        let fY = Double(lane.yNear)
         let (lf, rf) = laneX(fY), (li, ri) = laneX(impactRow)
         let img: [(Double, Double)] = [(lf, fY), (rf, fY), (ri, impactRow), (li, impactRow)]
         let world: [(Double, Double)] = [(0, 0), (B_LANE_IN, 0), (B_LANE_IN, B_Z_IMPACT), (0, B_Z_IMPACT)]
