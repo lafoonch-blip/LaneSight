@@ -305,6 +305,87 @@ def _foot_strikes(t, lms, win, Rs, Ls):
     return out
 
 
+def _setup_hold_end(t, Rs, Ls, burst_start, max_lookback=1.5, still_thr=FOOT_STILL_FINISH, min_still_s=0.25):
+    """Where the approach's FIRST step begins — the end of the setup stance. The bowler stands still (both feet
+    below `still_thr`) in the setup, then step 1 breaks that stillness; the motion-burst detector only fires a
+    step or two later, so a step window starting at the burst clips steps 1–2. Scanning back from `burst_start`,
+    return the end of the last sustained (>= `min_still_s`) both-feet-still run — i.e. the instant the approach
+    starts. Falls back to `burst_start - 0.4` if no clear setup hold is found (e.g. a rolling start)."""
+    both = _smooth(np.fmax(np.nan_to_num(Rs, nan=9.0), np.nan_to_num(Ls, nan=9.0)), 5)
+    still = both < still_thr
+    dt = float(np.median(np.diff(t))) or (1.0 / 30.0)
+    need = max(1, int(round(min_still_s / dt)))
+    lo = max(t[0], burst_start - max_lookback)
+    i = int(np.searchsorted(t, burst_start))
+    i = min(i, len(t) - 1)
+    # walk backwards from the burst; the first time we enter a long enough still run, its trailing edge is the
+    # setup-hold end (the next frame, where motion resumes = step 1).
+    while i > 0 and t[i] >= lo:
+        if still[i]:
+            j = i
+            while j > 0 and still[j]:
+                j -= 1
+            if (t[i] - t[j]) >= min_still_s * 0.8 or (i - j) >= need:
+                return float(t[min(i + 1, len(t) - 1)])
+            i = j
+        else:
+            i -= 1
+    return float(burst_start - 0.4)
+
+
+# slide stop (E8): the slide foot — the foot OPPOSITE the bowling hand (left for a right-hander) — glides to the
+# foul line and comes to rest. The trail leg is still swinging up into the follow-through, so the "both feet
+# still" posted finish (hold_start) lands 0.4–1.0 s LATER; comparing release to it produced the big false gap
+# that nulled every swing event. Slide stop is the slide foot's OWN motion settling, validated on the labeled
+# clips (form_labels.json): within ±1–4 frames vs the labeled E8 across rear and side views.
+SLIDE_STOP_SPEED = 0.12       # normalized foot-heights/s — below this (sustained) the slide foot is at rest
+SLIDE_STOP_HOLD_S = 0.10      # the low-speed run must persist this long (reject a momentary dip mid-slide)
+
+
+def _slide_foot(t, Rs, Ls, t0, t1, handed=None):
+    """Which foot is the slide foot. Primary cue: the foot that comes to REST over [t0, t1] (lower sustained
+    speed) — the slide foot plants at the line while the trail leg keeps swinging. Handedness (slide = opposite
+    the bowling hand) is used only to break a near-tie. Returns ('L'|'R', slide_foot_speed_array)."""
+    m = (t >= t0) & (t <= t1)
+    if not m.any():
+        m = np.ones(len(t), bool)
+    Rm = np.nan_to_num(Rs[m], nan=9.0)
+    Lm = np.nan_to_num(Ls[m], nan=9.0)
+    rmean, lmean = float(np.mean(Rm)), float(np.mean(Lm))
+    if abs(rmean - lmean) < 0.08 and handed:                 # near-tie -> trust handedness
+        foot = 'L' if str(handed).lower().startswith('r') else 'R'
+    else:
+        foot = 'L' if lmean <= rmean else 'R'
+    return foot, (Ls if foot == 'L' else Rs)
+
+
+def _slide_stop(t, slide_speed, anchor, t_to, thr=SLIDE_STOP_SPEED, hold_s=SLIDE_STOP_HOLD_S):
+    """Time the slide foot settles at the line. The slide foot is stationary in the setup, accelerates into the
+    final slide, then decelerates to rest — so the stop is the first sustained-low-speed frame AFTER the slide's
+    own speed PEAK, not merely the first slow frame (that would catch the setup). `anchor` is a reliable time
+    near the slide (the bottom of the swing arc, E6); the slide peak is searched in [anchor-0.6, t_to]. Returns a
+    float time or None."""
+    sp = _smooth(np.nan_to_num(slide_speed, nan=9.0), 3)
+    lo = anchor - 0.6
+    m = (t >= lo) & (t <= t_to)
+    idxs = np.where(m)[0]
+    if len(idxs) < 2:
+        return None
+    dt = float(np.median(np.diff(t))) or (1.0 / 30.0)
+    hold = max(1, int(round(hold_s / dt)))
+    peak = idxs[int(np.argmax(sp[idxs]))]        # the slide itself (fastest the slide foot moves)
+    for i in idxs:
+        if i <= peak:
+            continue
+        j = min(len(t), i + hold + 1)
+        # at rest = this frame is low AND the next hold-window is low on balance (a MEDIAN test tolerates a
+        # single-frame re-acceleration, e.g. a small post-slide foot shuffle, that a strict all-below test would
+        # skip past — which pushed the stop ~15 frames late on IMG_8825).
+        if sp[i] < thr and float(np.median(sp[i:j])) < thr:
+            return float(t[i])
+    return None
+
+
 # --------------------------------------------------------------------------- ball-colour swing track
 def _ball_track(path, t, lms, t0, t1, log=print):
     """Track the ball as a dark, moderately-saturated, round blob seeded near the bowling wrist across the
@@ -455,7 +536,10 @@ def _swing_events(t, lms, ball, win, torso):
                 E3 = float(tt[k])
                 break
     E7 = E6 + dt
-    # confirm/refine release with the on-lane ball: first clean monotone recede (ball rolling away) after E6
+    # Confirm release with the on-lane ball: first clean monotone recede (ball rolling away) after E6. The ball
+    # only CONFIRMS — release is the ball leaving the hand at the bottom of the arc, so accept the ball time only
+    # when it lands within a few frames of E6; a late/noisy recede pickup must not drag release past the bottom
+    # of the arc (that over-stated release by ~9 frames on IMG_8824 and broke the release-vs-slide gate).
     if ball:
         bt = np.array(sorted(ball))
         by = np.array([ball[k][1] for k in bt])
@@ -463,7 +547,8 @@ def _swing_events(t, lms, ball, win, torso):
         for k in after[:-3]:
             seg = by[k:k + 4]
             if len(seg) == 4 and np.all(np.diff(seg) < 0.0):     # ball receding up-lane (y decreasing)
-                E7 = max(E7, float(bt[k]))
+                if float(bt[k]) <= E6 + 3 * dt:
+                    E7 = max(E7, float(bt[k]))
                 break
     return dict(E2=E2, E3=E3, E4=E4, E6=E6, E7=E7, src='wrist',
                 quality='best_effort' if E3 == E2 else 'ok')
@@ -581,13 +666,12 @@ def gate_events(ev: dict) -> tuple[set, dict]:
     E2, E6, E7 = ev.get('E2'), ev.get('E6'), ev.get('E7')
     # 1. release must sit at the slide stop (you release as the slide foot posts). Release anchors the whole
     # delivery — if it's off, the window was mis-isolated, so NONE of the events can be trusted (form shot
-    # c9df6ca0). DEC-095 FIX (Shayne 2026-10-31): the "slide stop" is the slide-foot PLANT (E5), not E8=hold_start
-    # (the posted-finish start, ~1.2 s later) — comparing to E8 produced a ~0.7-0.9 s false gap that rejected
-    # EVERY real delivery (IMG_8824/8846). The spec-correct reference (E5) is behind LANESIGHT_FORM_GATE_FIX
-    # (SHADOW) until Shayne's event labels validate it + retune the bounds; default keeps the old E8 reference so
-    # production results are unchanged. T4 leverage (fundamentals E7−E8) legitimately still uses hold_start.
-    import os as _os
-    _stop = ev.get('E5') if _os.environ.get('LANESIGHT_FORM_GATE_FIX') == '1' else ev.get('E8')
+    # c9df6ca0). The reference is E8 = the slide-foot STOP (the foot settling at the line). This replaced the old
+    # E8 = hold_start (posted-finish start, ~0.4–1.0 s later), which produced a false gap that nulled EVERY real
+    # delivery (IMG_8824/8846). Validated on the labeled clips (form_labels.json): release sits within ±0.05 s of
+    # the labeled slide stop, and the slide-stop detector lands within ±1–4 frames of it. The DEC-095 shadow flag
+    # LANESIGHT_FORM_GATE_FIX is retired — E8 is correct by construction now.
+    _stop = ev.get('E8')
     if E7 is not None and _stop is not None and not (_stop + RELEASE_VS_STOP_LO <= E7 <= _stop + RELEASE_VS_STOP_HI):
         drop(list(disp), f"release ({E7:.2f}s) isn't near the slide stop ({_stop:.2f}s) — off by {E7 - _stop:+.2f}s, so "
                          f"the delivery couldn't be timed reliably on this clip.")
@@ -795,11 +879,14 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     ev = _swing_events(t, lms, ball, swing_win, torso)
     E2, E3, E4, E6, E7 = ev['E2'], ev['E3'], ev['E4'], ev['E6'], ev['E7']
 
-    # foot plants: combined-motion dips from just before the burst to release (the approach ends at release;
-    # post-release trail-leg / walk-off motion is not a step).
+    # foot plants: combined-motion dips from the SETUP-HOLD END (where step 1 breaks the stance) to release (the
+    # approach ends at release; post-release trail-leg / walk-off motion is not a step). The window used to start
+    # at b0-0.25 (0.15 s into the motion burst), which is AFTER ball start on every labeled clip, so steps 1–2
+    # could never be found — a structural clip, not a tuning choice. Anchoring on the setup-hold end fixes it.
     rel_bound = (E7 if E7 is not None else hold_start) + 0.12
-    strikes = _foot_strikes(t, lms, (b0 - 0.25, rel_bound + 0.1), Rs, Ls)
-    plants = [s for s in strikes if (b0 - 0.2) <= s[0] <= rel_bound]
+    step_start = _setup_hold_end(t, Rs, Ls, b0)
+    strikes = _foot_strikes(t, lms, (step_start, rel_bound + 0.1), Rs, Ls)
+    plants = [s for s in strikes if step_start <= s[0] <= rel_bound]
     if not plants:
         reason = 'delivery found but no foot plants detected in the approach window.'
         for k, u in (('pushaway_time', 's'), ('backswing_time', 's'), ('downswing_time', 's'),
@@ -825,6 +912,16 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     slide_plant = strike_t[-1]
     first_step = strike_t[0]
 
+    # Slide STOP (E8): the slide foot settles at the line. Anchor the search on the bottom of the swing arc (E6 ≈
+    # release) — more reliable than the last foot plant, which can land after the stop on a noisy slide. Falls
+    # back to hold_start only if the foot never clearly comes to rest (e.g. feet leave frame). This replaces the
+    # old E8=hold_start, which was the (much later) both-feet-still posted finish.
+    _sf_anchor = E6 if E6 is not None else slide_plant
+    slide_foot_lab, slide_speed = _slide_foot(t, Rs, Ls, _sf_anchor - 0.3, hold_end, handed)
+    slide_stop = _slide_stop(t, slide_speed, _sf_anchor, hold_end)
+    if slide_stop is None:
+        slide_stop = hold_start
+
     raw_first_to_release = (E7 - first_step) if (E7 is not None) else None
     is_slow, factor, slownote = detect_slowmo(raw_intervals, raw_first_to_release)
     slow_uncorrected = False
@@ -849,8 +946,8 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
 
     intervals = [v * scale for v in raw_intervals]
     step_count = len(strike_t)
-    # bowling side: RH slide = left foot last; report slide foot label from the sequence
-    slide_foot = seq[-1][1]
+    # slide foot = the foot that settles at the line (opposite the bowling hand); see _slide_foot.
+    slide_foot = slide_foot_lab
 
     # --- events / phase splits ---
     pushaway = dur(E2, E3)
@@ -882,9 +979,14 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                 else (' [slo-mo corrected %dx]' % factor) if is_slow else '')
     sw_src = ev['src']
 
-    out['step_count'] = _m('step_count', step_count, 'count',
-                           0.8 if 3 <= step_count <= 5 else 0.4, ok if 3 <= step_count <= 5 else be,
-                           note=f'{step_count} foot plants (slide foot: {slide_foot}){slow_tag}')
+    # Step count is APPROXIMATE, not yet validated to the exact-count MVP gate (DEC-121): on the labeled clips
+    # the foot-strike detector is ±1–2 off (combined- and per-foot models alike; crop-refining the feet lifted
+    # landmark confidence but not count/timing accuracy — the foot-contact instant isn't recoverable from phone
+    # pose on this footage). Reported best_effort with a reason so it is never shown as a confident exact count.
+    out['step_count'] = _m('step_count', step_count, 'count', 0.4, be,
+                           note=f'{step_count} foot plants (slide foot: {slide_foot}) — APPROXIMATE (±1–2 steps); '
+                                f'not yet validated to an exact count. Most reliable with both feet in frame for '
+                                f'the whole approach (DEC-121){slow_tag}')
     out['approach_time'] = _m('approach_time', approach_time, 's', 0.6, be,
                               note=f'first foot plant -> release (E1 true start not reliable in rear view){slow_tag}',
                               uncertainty=2 * unc)
@@ -910,7 +1012,8 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                              note='swing tempo = downswing / backswing (ref session mean 0.51)')
     out['rhythm_ratio']['display'] = _rhythm_display(tempo)   # "Speeds up" / "Even" / "Slows down"
     out['finish_hold'] = _m('finish_hold', finish_hold, 's', 0.6, be,
-                            note=f'both feet stationary after the slide (E8->E9){slow_tag}', uncertainty=unc)
+                            note=f'both feet stationary = the posted finish hold, after the slide stop{slow_tag}',
+                            uncertainty=unc)
     out['backswing_height_rel'] = _m('backswing_height_rel', bh_rel, 'ratio', 0.5 if bh_rel is not None else 0.0,
                                      be if bh_rel is not None else 'unavailable',
                                      note='bowling-wrist apex vs shoulder line, torso lengths (+above/-below; '
@@ -953,11 +1056,12 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                                           uncertainty=2 * unc)
     extras['tempo_ratio'] = _m('tempo_ratio', tempo, 'ratio', 0.5 if tempo else 0.0,
                                be if tempo else 'unavailable', note='downswing / backswing (ref 0.51)')
-    # E5 slide start = slide-foot plant; E8 slide stop = start of the posted finish hold (FORM_ANALYSIS_SPEC §3).
-    # These feed the T3 (E4−E5) and T4 (E7−E8) timing checkpoints (DEC-057).
+    # E5 slide start = slide-foot plant (best-effort proxy); E8 slide STOP = the slide foot settling at the line
+    # (FORM_ANALYSIS_SPEC §3) — NOT the later posted-finish start (hold_start), which is kept separately for the
+    # finish-hold metric. These feed the T3 (E4−E5) and T4 (E7−E8) timing checkpoints (DEC-057).
     extras['events'] = {k: (None if v is None else round(v, 3)) for k, v in
-                        dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=hold_start,
-                             first_step=first_step, slide_plant=slide_plant,
+                        dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=slide_stop,
+                             first_step=first_step, slide_plant=slide_plant, slide_stop=slide_stop,
                              hold_start=hold_start, hold_end=hold_end).items()}
     # Sanity-gate the display events: an implausible one (e.g. release not at the slide stop, or a too-short
     # ball-start→release) is nulled so it gets NO thumbnail, NO time and NO Early/Late call (form shot c9df6ca0).
@@ -983,8 +1087,8 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # untrustworthy event is not surfaced either — consistent with the thumbnails/timings.
     g = extras['events']
     pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_plant, E6=g.get('E6'),
-                      E7=g.get('E7'), E8=hold_start, first_step=first_step, slide_plant=slide_plant,
-                      hold_start=hold_start, hold_end=hold_end)
+                      E7=g.get('E7'), E8=slide_stop, first_step=first_step, slide_plant=slide_plant,
+                      slide_stop=slide_stop, hold_start=hold_start, hold_end=hold_end)
     extras['measured_positions'] = _fund.measured_positions(t, lms, pos_events, torso, handed, out)
     extras['strikes'] = [(round(x, 3), lab) for x, lab in seq]
     extras['slowmo'] = dict(is_slowmo=is_slow, factor=factor, note=slownote,

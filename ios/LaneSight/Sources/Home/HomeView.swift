@@ -11,6 +11,8 @@ struct HomeView: View {
     private var activity: Loadable<[ActivityItem]> { tabs.home.activity }
     private var focus: FocusResponse? { tabs.home.focus }
 
+    @State private var showFeedback = false      // DEC-124: Home Feedback button → general feedback sheet
+
     /// "Shot analyzed while you were away · View" (2026-10-30). Shown on Home instead of presenting a result
     /// sheet at launch. Tapping opens the result (or the friendly failure); the shot is also in Lab › Uploads /
     /// the session list regardless.
@@ -53,6 +55,12 @@ struct HomeView: View {
                         LSPageLoading()
                     } else {
                     VStack(alignment: .leading, spacing: 18) {
+                        // DEC-119: a session stays active until the user ends it → offer a way back in.
+                        if let s = model.activeSession {
+                            ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
+                                model.openActiveSessionRequest = true
+                            }
+                        }
                         if showWelcome { welcomeStartCard }
                         if let away = model.awayResult { awayBanner(away) }   // analyzed/failed while the app was closed
 
@@ -71,6 +79,7 @@ struct HomeView: View {
 
                         if hasSessions { recentSessions }
                         recentActivity
+                        feedbackCard
                         Spacer(minLength: 8)
                     }
                     .padding(16)
@@ -81,6 +90,14 @@ struct HomeView: View {
             .background(LSBackground())
             .navigationBarHidden(true)
             .task { await loadAll() }
+            .sheet(isPresented: $showFeedback) {
+                GeneralFeedbackSheet(currentScreen: "Home").environmentObject(model)
+            }
+            // DEC-119: "Continue" from the resume prompt / a banner tap pushes the Active Session here so the
+            // tab bar stays visible (amends DEC-099). RootTabs switches to Home first when the request fires.
+            .navigationDestination(isPresented: $model.openActiveSessionRequest) {
+                ActiveSessionScreen().environmentObject(model)
+            }
         }
     }
 
@@ -219,6 +236,30 @@ struct HomeView: View {
             // Shared Analyze cards → the Choose-source sheet (Live session vs Upload video), same as Lab.
             AnalyzeCards()
         }
+    }
+
+    // DEC-124: one obvious place to report a problem or idea. Opens the categorized general-feedback sheet;
+    // the row is tagged with the account's real app phase (dev / ff / beta / live).
+    private var feedbackCard: some View {
+        Button { showFeedback = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .foregroundStyle(LS.cyan)
+                    .frame(width: 32, height: 32)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Send feedback").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Found a bug, a wrong number, or have an idea? Tell us.")
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
+            }
+            .lsCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Send feedback")
     }
 
     private func loadAll() async {

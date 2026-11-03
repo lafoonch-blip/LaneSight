@@ -1,13 +1,14 @@
 {
   "title": "Form: swing events + steps",
-  "instructions": "For each clip, mark the moments below and enter the step count. These are the ground truth for the form timing checks (DEC-095).\n\nSide clips (8824–26) show release, slide and backswing best. Rear clips (8846–48) show steps, ball start and finish best. If a moment isn't clearly visible from this camera, press X (Not visible) rather than guessing.",
+  "instructions": "For each clip, mark the moments below and enter the step count. These are the ground truth for the form timing checks (DEC-095).\n\nSide clips (8824–26, 8980) show release, slide and backswing best. Rear clips (8846–48) show steps, ball start and finish best. If a moment isn't clearly visible from this camera, press X (Not visible) rather than guessing.",
   "clips": [
     {"id": "IMG_8824", "static": {"view": "side"}},
     {"id": "IMG_8825", "static": {"view": "side"}},
     {"id": "IMG_8826", "static": {"view": "side"}},
     {"id": "IMG_8846", "static": {"view": "rear"}},
     {"id": "IMG_8847", "static": {"view": "rear"}},
-    {"id": "IMG_8848", "static": {"view": "rear"}}
+    {"id": "IMG_8848", "static": {"view": "rear"}},
+    {"id": "IMG_8980", "static": {"view": "side"}}
   ],
   "events": [
     {"id": "ball_start", "label": "Ball start", "help": "The ball first moves out of your setup hold (pushaway begins).",

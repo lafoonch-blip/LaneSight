@@ -68,6 +68,21 @@ export interface StorageLatestRow {
   bucket: string; bytes: number | null; objects: number | null; aged_objects: number | null;
   db_bytes: number | null; captured_at: string | null;
 }
+// DEC-125 Feedback Insights: AI-consolidated proposals (from ops_rpc_feedback_insights) + the analyst-run
+// audit log (read directly from feedback_insight_run under owner-only RLS). Not env/day scoped.
+export interface InsightRow {
+  id: string; created_at: string; updated_at: string; approved_at: string | null;
+  title: string; type: string; summary: string; proposed_change: string | null;
+  affected_area: string | null; priority: string | null; effort: string | null;
+  related_decs: string[]; status: string; founder_notes: string | null; reject_reason: string | null;
+  merged_into: string | null; github_issue_number: number | null; pr_url: string | null;
+  feedback_count: number; bowler_count: number; phases: string[];
+}
+export interface InsightRunRow {
+  id: string; started_at: string; finished_at: string | null; rows_considered: number;
+  insights_created: number; insights_updated: number; model: string | null;
+  tokens_in: number; tokens_out: number; cost_usd: number; status: string; error: string | null;
+}
 
 function sinceDate(days: number): string {
   const d = new Date();
@@ -123,6 +138,27 @@ export const getFunnel = (s: Scope) =>
   callRpc<FunnelRow>("ops_rpc_funnel", { p_envs: s.envs }, "env");
 export const getStorageLatest = () =>
   callRpc<StorageLatestRow>("ops_rpc_storage_latest", {}, "bucket");
+
+// DEC-125: insights list via the owner-checked RPC. p_status=null returns every status.
+export const getInsights = (status: string | null) =>
+  callRpc<InsightRow>("ops_rpc_feedback_insights", { p_status: status });
+
+// Analyst-run audit log — read the table directly under owner-only RLS (no RPC needed). Newest first.
+export async function getInsightRuns(limit = 20): Promise<ViewResult<InsightRunRow>> {
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("feedback_insight_run")
+      .select("*")
+      .order("started_at", { ascending: false })
+      .limit(limit);
+    if (error) return { state: "NO_ACCESS", rows: [], error: `insight_runs: ${error.message}` };
+    const rows = (data ?? []) as InsightRunRow[];
+    return { state: rows.length ? "HEALTHY" : "NO_DATA", rows };
+  } catch (e) {
+    return { state: "NO_ACCESS", rows: [], error: `insight_runs failed: ${(e as Error).message}` };
+  }
+}
 
 // Sum a numeric column across rows; null (NO DATA) when there are no rows, never 0-as-fake.
 export function sumCol<T>(rows: T[], col: keyof T): number | null {

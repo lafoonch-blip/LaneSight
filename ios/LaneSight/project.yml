@@ -35,7 +35,9 @@ targets:
       base:
         PRODUCT_NAME: LaneSight
         PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app
-        MARKETING_VERSION: "0.1.0"
+        # DEC-123: 0.9.0 (pre-1.0) for the first Friends & Family TestFlight build. Bump CURRENT_PROJECT_VERSION
+        # on every upload to App Store Connect (each build number must be unique) — see TESTFLIGHT_FF.md.
+        MARKETING_VERSION: "0.9.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: Info.plist
         GENERATE_INFOPLIST_FILE: "NO"
@@ -45,6 +47,12 @@ targets:
         DEVELOPMENT_TEAM: GK3N928748   # personal team (lafoonch@gmail.com); pinned so xcodegen regen keeps signing
         ENABLE_PREVIEWS: "YES"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon   # brand app icon from Sources/Assets.xcassets (DEC-054 official logo)
+        # DEC-123 build phase, surfaced to the app via Info.plist LSAppPhase. Debug = dev (Shayne/dev tools);
+        # Release (the F&F TestFlight archive) = ff. Later App Store builds set this to beta/live here.
+        LS_APP_PHASE: dev
+      configs:
+        Release:
+          LS_APP_PHASE: ff
 
   LaneSightTests:
     type: bundle.unit-test

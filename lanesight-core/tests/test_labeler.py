@@ -116,3 +116,14 @@ def test_repo_task_files_are_valid():
         assert len(ids) == len(set(ids))
         for c in t['clips']:
             assert set(c['hints']) <= set(ids)
+
+
+def test_optional_events_dont_block_completion(tmp_path):
+    from lanesight_core.labeler.core import LabelStore
+    t = {'id': 'opt', 'clips': [{'id': 'C', 'hints': {}, 'static': {}}],
+         'events': [{'id': 's1', 'label': 's1'}, {'id': 's6', 'label': 's6', 'optional': True}],
+         'fields': [{'id': 'n', 'label': 'n', 'type': 'int', 'required': True}]}
+    st = LabelStore(str(tmp_path / 'labels'), str(tmp_path))
+    st.update(t, 'C', {'event': 's1', 'frame': 10, 'status': 'set'}, fps=30.0)
+    d = st.update(t, 'C', {'field': 'n', 'value': '5'})
+    assert d['clips']['C']['complete'] is True

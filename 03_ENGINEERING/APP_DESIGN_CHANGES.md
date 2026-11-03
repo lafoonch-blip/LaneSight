@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.5 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 1.6 · Last Updated: 2026-11-03 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -193,3 +193,15 @@ The SceneKit re-implementation didn't match the WebGL render (oversaturated wood
 
 ### Progress — 2026-11-03 · lane card color/exposure + overlay sizing, per Shayne
 Closed the two visual diffs Shayne flagged on `compare_farlane_vs_design.png`. **(1) Exposure/color:** the WebGL render was brighter than the design (neighbor lanes light-gray, wood bleached). Root cause was not exposure (ACES shoulder absorbed it) but reflections — cut the lane's `clearcoat` 0.8→0.08 and `envMapIntensity` 0.5→0.1, dropped `environmentIntensity` to 0.03, darkened the neighbor-lane color to `0x1b1b1b` and the wood lightness curve. Measured against `lane_render_far_lane_not_read@3x.png`: **center-lane −4.9%, neighbor +5.5%, background −2.5% mean luminance; wood hue 20° vs 21°** — within the ~5% acceptance bar. **(2) Overlay sizing:** glass callouts + top note were ~1.5× the design; set `LaneGlassLabel` to spec **title 11 / value 20 bold / sub 11 pt** at the 344×360 pt card, and made the far-lane note compact (one title + one subline, top-left, never over the pins). Sub-labels now resolved (closes 2026-11-02 (b) DIFFERS (b)): Laydown "board · N ft", Arrows "board · target N", Breakpoint "board · N ft", Entry "board · N°". Montages regenerated in `compare/`; Release rebuilt + installed on device (00008150…). **Remaining DIFFERS unchanged:** (a) honest DEC-065 far-lane copy; (c) below-card rings/coach reflect the staged preview account's data-state.
+
+## 2026-11-02-A · Home Feedback button + Feedback sheet (DEC-124)
+**Status:** BUILT (code). **NEEDS FIGMA COMPONENT** — there is no v3.7 Figma design for this yet; built to "01 - Design Standards" tokens, not a specific node. Add a Figma "Feedback button + Feedback sheet" component and reconcile.
+**Decisions:** DEC-124 (Home Feedback button), DEC-123 (F&F phase).
+**Figma:** none yet — DIFFERS below. (The v3.7 screen inventory lists a "feedback sheet" for the session-end flow; this general-feedback sheet is a new, distinct surface.)
+- **Home Feedback card** (`Sources/Home/HomeView.swift`): a `.lsCard` row below Recent activity — bubble icon, "Send feedback", one-line subtitle, chevron; 44pt hit area. Opens the sheet.
+- **General feedback sheet** (`Sources/Feedback/GeneralFeedbackSheet.swift`): title + intro; **category** (required, single-select chips: Bug · Wrong/missing numbers · Confusing · Idea · Other); **text** (required, ≤2000, live counter); optional **screenshot** (PhotosPicker); **Include diagnostics** toggle (default on); Submit (disabled until category + text); thank-you state then Done. Follows LS tokens (dark, Roboto Condensed, status-standard spacing).
+- **Data/API:** `POST /feedback` `source=general`, `tags=[category]`, `text`, `app_phase` (account cohort), `app_version`; diagnostics (device/iOS/screen/last-session) only when the toggle is on. Failed send keeps the text for retry (feedback never lost).
+**DIFFERS:**
+- **No Figma design** — built to design-standard tokens. A Figma component + PNG is still owed; reconcile the layout/copy when it lands.
+- **Screenshot** is attached as a bounded base64 JPEG inside `diagnostics` (no `feedback-shots` private bucket / signed-URL endpoint exists yet). DEC-124 wants a private-bucket upload with the path in diagnostics — do that once the bucket exists; drop the base64 path then.
+**Done when:** Figma component exists and the built sheet is reconciled against its node/PNG; screenshot moves to bucket upload.

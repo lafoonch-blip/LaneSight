@@ -1,6 +1,6 @@
 {
   "task": "form_events",
-  "updated_at": "2026-11-01T09:44:47-05:00",
+  "updated_at": "2026-11-01T20:59:12-05:00",
   "clips": {
     "IMG_8824": {
       "events": {
@@ -240,6 +240,46 @@
       },
       "done": false,
       "fps": 59.97288339861404,
+      "complete": true
+    },
+    "IMG_8980": {
+      "events": {
+        "ball_start": {
+          "frame": 927,
+          "t_s": 15.4722,
+          "status": "set"
+        },
+        "backswing_top": {
+          "frame": 991,
+          "t_s": 16.5404,
+          "status": "set"
+        },
+        "slide_start": {
+          "frame": 999,
+          "t_s": 16.6739,
+          "status": "set"
+        },
+        "release": {
+          "frame": 1016,
+          "t_s": 16.9576,
+          "status": "set"
+        },
+        "slide_stop": {
+          "frame": 1016,
+          "t_s": 16.9576,
+          "status": "set"
+        },
+        "finish_end": {
+          "frame": 1029,
+          "t_s": 17.1746,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.91404011461318,
       "complete": true
     }
   }

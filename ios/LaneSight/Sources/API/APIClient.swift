@@ -436,12 +436,21 @@ struct APIClient {
     func analyzeFromStorage(storagePath: String, sessionId: String?,
                             metadata: ShotMetadata,
                             clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
+        let metaObj = (try? JSONSerialization.jsonObject(with: Data(metadata.jsonString().utf8))) as? [String: Any] ?? [:]
+        return try await analyzeFromStorage(storagePath: storagePath, sessionId: sessionId,
+                                            metadataObject: metaObj, clientTimings: clientTimings)
+    }
+
+    /// DEC-119: analyze from a pre-serialized metadata object. Used when resuming a durable ShotUpload record
+    /// whose metadata was snapshotted (as JSON) at record time, so the ball/oil/target it was thrown with is
+    /// locked even across a relaunch.
+    func analyzeFromStorage(storagePath: String, sessionId: String?,
+                            metadataObject: [String: Any],
+                            clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
         var req = makeRequest("shots/analyze", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
-        let metaObj = (try? JSONSerialization.jsonObject(
-            with: Data(metadata.jsonString().utf8))) ?? [:]
-        var body: [String: Any] = ["storage_path": storagePath, "metadata": metaObj]
+        var body: [String: Any] = ["storage_path": storagePath, "metadata": metadataObject]
         if let sessionId { body["session_id"] = sessionId }
         if let clientTimings { body["client_timings"] = clientTimings }   // DEC-092 P0: phone-side stage times
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -716,11 +725,34 @@ struct APIClient {
         try await updateBall(id: id, patch: ["is_current": true])
     }
 
-    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool) async throws {
+    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool,
+                      appPhase: String? = nil) async throws {
         var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: Any] = ["rating": rating, "tags": tags, "diagnostics": diagnostics]
         if let text, !text.isEmpty { body["text"] = text }
+        if let appPhase { body["app_phase"] = appPhase }      // DEC-124: every feedback source carries the phase
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try await sendRaw(req)
+    }
+
+    /// DEC-124: build the POST /feedback body for a general (Home Feedback button) submission. Pure + internal
+    /// so it can be unit-tested without a network call. Category rides in tags[0]; app_phase is always present
+    /// (the server overrides it from the account cohort); diagnostics are attached only when provided.
+    static func generalFeedbackBody(category: String, text: String, appPhase: String, appVersion: String?,
+                                    diagnostics: [String: Any]?) -> [String: Any] {
+        var body: [String: Any] = ["source": "general", "tags": [category], "text": text, "app_phase": appPhase]
+        if let appVersion { body["app_version"] = appVersion }
+        if let diagnostics { body["diagnostics"] = diagnostics }
+        return body
+    }
+
+    func submitGeneralFeedback(category: String, text: String, appPhase: String, appVersion: String?,
+                               diagnostics: [String: Any]?) async throws {
+        var req = makeRequest("feedback", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = Self.generalFeedbackBody(category: category, text: text, appPhase: appPhase,
+                                            appVersion: appVersion, diagnostics: diagnostics)
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         try await sendRaw(req)
     }

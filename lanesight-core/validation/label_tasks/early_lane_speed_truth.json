@@ -25,7 +25,7 @@
      "export_key": "shadow_at_arrows_frame", "export_unit": "frame"}
   ],
   "export": {
-    "path": "validation/labels/early_lane_speed_truth.json",
+    "path": "lanesight-core/validation/early_lane_speed_truth.json",
     "add_fps": true
   }
 }

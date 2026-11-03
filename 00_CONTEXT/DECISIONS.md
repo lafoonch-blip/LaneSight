@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.78  
-Last Updated: 2026-11-02  
+Version: 1.83  
+Last Updated: 2026-11-03  
 Owner: Shayne  
-Supersedes: v1.77
+Supersedes: v1.82 (merge of feat/ios-lane-parity DEC-127/128 lane-card + plausibility/stage work into dev-build-v0 v1.82; both sides kept)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1268,6 +1268,63 @@ The headline `ball_speed` is the **early-lane / release speed** — a regression
 
 **Why:** Speed and revs are the core stats. Failing the whole shot because the pin moment wasn't seen discarded a valid rev reading. Both live shots on 2026-10-29 (18:43 and 18:56 ET) failed this way.
 **Date:** 2026-10-29 · **Status:** ACCEPTED — merged to `dev-build-v0` and deployed (rev `lanesight-api-dec109`, 2026-10-30; superseded same day by `lanesight-api-durjobs` which carries it) · **Supersedes:** the shot-level `PIN_IMPACT_NOT_DETECTED` failure from DEC-086 (code kept for the nothing-measured case).
+
+### DEC-125 — Feedback Insights: AI-consolidated actions, founder approval, approved work queue (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- A **Feedback Insights** page in the owner-only ops dashboard (DEC-098) turns all feedback (every source and phase in the DEC-059 store, plus analysis-failure reason codes as supporting evidence) into a short list of **proposed actions**.
+- A scheduled **Claude feedback analyst** job (daily + "Analyze now") groups new feedback into proposals: title, type (Bug · Analysis accuracy · UX/design · Feature idea · Content/copy), plain-English summary, proposed change, affected area, priority, rough effort, related DECs, and evidence (linked feedback rows, count, distinct bowlers, phases, example quotes). New feedback merges into an existing open proposal instead of duplicating it.
+- Founder actions per proposal: **Approve**, **Edit then approve**, **Defer**, **Reject** (reason), **Merge**. Nothing is built without approval.
+- **Approve → work queue:** creates a GitHub issue in lafoonch-blip/LaneSight (label `lanesight-queue`) containing the founder-approved spec, linked to the proposal and its feedback. The dashboard mirrors status: proposed → approved → queued → in progress → PR open → shipped. Shipping marks the linked feedback rows `actioned`.
+- **Build:** a Claude Code scheduled task picks up queued issues, works each on its own new branch and opens a PR. It never merges, never touches branches it didn't create, and never pushes to main. Shayne reviews and merges. UI changes go through Figma/APP_DESIGN_CHANGES first (DEC-091); metric/algorithm changes go through the validation gates (no unvalidated correction factors).
+- **Guardrails:** feedback text is untrusted user input. It is de-identified before the LLM sees it, and the build agent works only from the founder-approved spec, never raw feedback (prompt-injection defense). LLM cost for the analyst job is capped (≤$10/month) inside the DEC-043 cap. DEC-059 "no live effect" holds: approval is the only path from feedback to a change.
+**Why:** feedback is only useful if it turns into decisions; one review-and-approve surface keeps Shayne in control while removing the manual work of reading, grouping and writing up every comment.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-098, DEC-124. Implements the "action queue" idea in AI_OPERATIONS_INTELLIGENCE_AGENTS_CONTEXT for the feedback source. Spec/handoff: `03_ENGINEERING/HANDOFF_2026-11-02_FEEDBACK_INSIGHTS.md`.
+
+### DEC-124 — In-app Feedback button on Home (general feedback, categorized) (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- Home gets a **Feedback** button. Tapping it opens a small sheet: **category** (required, one of: Bug · Wrong/missing numbers · Confusing · Idea · Other), **text** (required), optional **screenshot**, and an "include diagnostics" toggle (default on). Submit shows a short thank-you and returns to Home.
+- It writes to the one retained `feedback` store (DEC-059) as `source = 'general'` via the existing `POST /feedback`, with the category in `tags[0]` and auto-attached context: app version/build, device model, iOS version, current screen, last session/shot id when present.
+- **Every row carries the real app phase**: `dev` (Shayne), `ff` (Friends & Family, DEC-123), `beta`, `live`. `ff` is added to the phase enum. Today the iOS app sends no phase and the server defaults to `dev`; that is fixed as part of this.
+- Same button and flow serve F&F, Beta and live, so F&F is the first real test of the feedback system. Session-end feedback, shot notes and advice ratings stay as they are.
+- Owner reads and triages all rows (new / reviewed / actioned / dismissed) through the ops dashboard / CSV export; feedback never changes the app live (DEC-059).
+- Design: the button and sheet follow "01 - Design Standards"; added to APP_DESIGN_CHANGES and needs a Figma component (Feedback button + Feedback sheet).
+**Why:** testers need one obvious place to report problems and ideas while they bowl, and the feedback store needs real use before Beta.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-059, DEC-123. Fills FEEDBACK_STORE_SPEC §2 `general` ("Settings › Send feedback", reserved) — the entry point is Home, not Settings.
+
+### DEC-123 — Friends & Family test phase via TestFlight (pre-Beta, not gated by DEC-118) (2026-11-02)
+**Decision (Shayne, 2026-11-02):**
+- Add a **Friends & Family (F&F) test phase** between Shayne-only MVP testing and the friends Beta. A handful of close friends and family get the app, sign up, use it when they bowl, and send feedback. Purpose: **more real-world videos and feedback for analysis**, not a Beta.
+- **Not gated by DEC-118.** The app does not need to be Beta-ready; the DEC-118 accuracy, coverage and <30 s gates still apply to the friends **Beta** only. DEC-047 (Beta is Shayne's call) is unchanged.
+- **Distribution: TestFlight external testing**, private invite link (iPhone only), bundle `com.lanesight.app`. Extends DEC "Xcode, then TestFlight internal" to an external F&F group.
+- **Minimum for F&F:** normal in-app sign-up (13+ gate, existing account deletion); testers told plainly it is an early test build whose numbers may be wrong or missing; a short plain-English consent covering recording, 7-day server clip retention (DEC-099/104) and use of their clips/feedback to improve analysis; their data marked as F&F (cohort/app phase) so it is separable in Stats, the ops dashboard and the feedback store (DEC-059) and never mixes with Shayne's real or staged test data (DEC-076 staged accounts); owner/dev-only screens hidden from testers; a demo login for Apple's beta review.
+- **Not required for F&F:** attorney-reviewed terms, entity/trademark work, the DEC-118 metric gates, performance SLOs. Those stay Beta/launch items (LEGAL_IP_LAUNCH_STRATEGY).
+- Server-fallback cost stays inside the DEC-043 $100/month private cap; a few testers are well within it.
+**Why:** the bottleneck right now is labeled real-world clips and observations from more bowlers, houses and phones; waiting for Beta readiness delays the data that gets LaneSight there.
+**Date:** 2026-11-02 · **Status:** ACCEPTED · **Builds on:** DEC-047, DEC-059, DEC-099/104, DEC-118 (Beta gates unchanged).
+
+### DEC-121 — Form metric tolerances + step-count honesty + Form capture defaults (amends DEC-118) (2026-11-02)
+**Decision (Shayne, 2026-11-02):** per-plant form-step labels landed (`form_steps` task → `validation/form_steps_labels.json`; all approaches are 5 steps, no 6-step data; some early plants off-frame so visible-plant counts are 8824:4, others 5, IMG_8980:3). Amends DEC-118's Form gates with explicit tolerances and records an honest status for step count.
+- **Form metric gates (amends DEC-118 "events within ±2 frames"):**
+  - **Step COUNT — exact** (it is the MVP Form metric the user sees).
+  - **Swing events** (ball start, top of backswing, release, slide stop) — **±2 frames**.
+  - **Per-plant foot-strike timing — ±3 frames** (this only feeds approach duration / tempo, not a headline number, so a looser tolerance is acceptable).
+- **Step count is NOT yet a validated metric — shipped `best_effort`, not `ok` (DEC-026/094 honesty).** On the labeled clips the foot-strike detector is ±1–2 off on count and within-±3f on only ~2–3/5 plants; exact count on 2/6. Root cause investigated: combined-`max(Rs,Ls)` minima are the double-support moments *between* plants (fixed the model to per-foot stance), and the dominant *structural* bug — the step window starting after ball start — was fixed (DEC-120, made 8824 exact). But the remaining error is a **signal floor**: the foot-contact instant isn't recoverable from phone-pose foot landmarks on this footage. **Crop-refine tried (option 1):** re-running pose on an upscaled person-bbox crop lifted foot-landmark confidence on every clip (e.g. side 8825 0.72→0.82, 8824 0.77→0.86, held-out 8980 0.46→0.61) **but did NOT improve count or ±3f timing** → confidence was not the bottleneck, so crop-refine is not shipped (runtime cost, no metric gain). Experiment + numbers: `examples/foot_refine.py`, `02_RESEARCH/FORM_EVENT_BASELINE_2026-11-01.md`.
+- **Supported views / coverage:** step count is best_effort on both rear and side today; neither view meets the exact gate yet. Not promised as exact for Beta until it passes on independently-captured, well-framed clips. **IMG_8980 is held out** (never used for tuning) and re-scored separately; future recorded clips stay held out too.
+- **Form capture defaults (iOS):** Form recording floors at **60 fps** and takes **120 fps when the device supports it at ≥1080p** (`CaptureView` passes `max(60, preferredFPS)` for form; `bestFormat` already prefers the highest fps at ≥1080p). Added an on-screen Form framing tip — "keep both feet in frame through your whole approach" — because step count + swing timing need every plant visible. iOS change needs an Xcode build + device verification.
+- **Path to a real exact step count:** a dedicated foot-contact signal (not whole-frame pose landmarks) or better capture (fps + framing), validated per-plant held-out. Until then step count stays best_effort.
+
+**Why:** the per-plant labels proved higher landmark confidence alone can't make step-count exact from phone pose on this footage, so shipping it as a confident `ok` metric would be a false number (DEC-026/094). Make the tolerances explicit, mark step count honestly, and fix capture so a future attempt has the frame rate and framing it needs.
+**Date:** 2026-11-02 · **Status:** ACCEPTED — step_count→best_effort + capture defaults on `feat/form-baseline`; crop-refine kept as a documented experiment, not shipped. **Amends:** DEC-118 (Form gates). **Builds on:** DEC-120 (slide-stop + step-window fix), DEC-094 (labeled dataset).
+
+### DEC-120 — Form event baseline on the labeled clips; slide-stop detector fixes the swing-event gate (2026-11-01)
+**Decision (2026-11-01):** Shayne's form event labels landed (LaneSight Labeler task `form_events` → `validation/form_labels.json`, 6 clips: IMG_8824–26 side, IMG_8846–48 rear; IMG_8980 added to the task, pending labels). These are the DEC-094/095/118 ground truth for form timing. A baseline harness (`examples/form_baseline.py`) scores the Python form engine against them in FRAMES.
+- **Baseline (production engine, before fix):** every swing event (E2 ball-start, E4 backswing-top, E7 release) was **nulled on all 6 clips**, and E8 "slide stop" was **23–86 frames late** (median 56). Root cause: E8 was reported as `hold_start` — the *posted-finish* start (both feet still ≥0.45 s), which lands 0.4–1.0 s AFTER the real slide stop because the trail leg is still swinging up. The event gate then compared release to that late E8, found a ~0.7–1.4 s false gap, and dropped the whole delivery. Step count was exact on **0/6** (systematic under-count; approach window misses early steps).
+- **Fix (shipped in `lanesight_core/form/pose.py`):** (1) a **slide-stop detector** — E8 = the slide foot (opposite the bowling hand) settling at the line: its own speed falls and stays low after the slide's speed peak, anchored on the bottom of the swing arc (E6 ≈ release), ignoring the still-swinging trail leg; (2) release (E7) clamped so the on-lane ball only *confirms* the bottom of the arc, never drags it late; (3) the event gate anchors release on the corrected E8; the DEC-095 shadow flag `LANESIGHT_FORM_GATE_FIX` is **retired** (E8 is correct by construction now).
+- **After fix, vs labels (±2 frames = pass):** swing events now **surface on 5/6** (was 0/6). Rear view (8846/47/48): E4, E7, E8 all **within ±2 frames**. Side (8824/8825): E4/E7/E8 surface, mostly ±1–5 f. Per event across all 6: E8 slide-stop median **2 f** (was 56), within ±2 f on **4/6**; E7 release median **1 f**, 4/5; E4 median **1 f**, 5/5 scored. IMG_8826 (side) is still fully mis-segmented (6 steps, window wrong).
+- **Remaining gaps (honest, not fixed):** (a) **E2 ball-start null on all 6** — the bowling-wrist landmark does NOT move at the labeled pushaway onset (flat for 9–21 frames past it), so the wrist-Y method cannot time it; a real fix needs a ball-blob / off-hand onset cue, validated on more clips. (b) **Step count 0/6** — the approach foot-strike detector under-counts (misses early steps). Both block the Friends-Beta Form gates (steps exact ≥95%, events ±2 f) and are the next form CV work.
+
+**Why:** the Form MVP gate (DEC-118) needs events within ±2 frames and exact step count against independent ground truth. The slide-stop error was the single biggest and most systematic, and it cascaded into nulling every swing event; fixing it is validated and un-nulls the back-half events on the supported views. E2 and step count are characterized, not papered over (DEC-026/094 honesty).
+**Date:** 2026-11-01 · **Status:** ACCEPTED — slide-stop + gate fix merged on `feat/form-baseline` (403 tests pass); numbers from `examples/form_baseline.py` on the 6 labeled clips. Not yet on device (DEC-103 port). **Builds on:** DEC-094 (labeled dataset + gates), DEC-095 (form event gates), DEC-118 (Form MVP metrics + Beta gates), DEC-057 (fundamentals E1–E9).
 
 ### DEC-119 — An active session lasts until the user ends it
 **Decision (Shayne, 2026-11-01):**

@@ -328,12 +328,13 @@ class LabelStore:
 
 
 def clip_complete(task, c):
-    """A clip is complete when every event is set or marked not visible and every required field has a value
-    (or the labeler explicitly marked the clip done)."""
+    """A clip is complete when every non-optional event is set or marked not visible and every required field has a
+    value (or the labeler explicitly marked the clip done). Optional events (e.g. a 6th step on a 5-step approach)
+    can be left unmarked; they export as null."""
     if c.get('done'):
         return True
     evs = c.get('events') or {}
-    if any(e['id'] not in evs for e in task['events']):
+    if any(e['id'] not in evs for e in task['events'] if not e.get('optional')):
         return False
     flds = c.get('fields') or {}
     return all(x['id'] in flds for x in task['fields'] if x.get('required'))

@@ -1277,6 +1277,17 @@ def submit_feedback(body: dict, user=Depends(current_user)):
         raise HTTPException(404, 'session not found')
     return store.add_feedback(user, data)
 
+
+@app.post('/ops/insights/analyze')
+def ops_insights_analyze(user=Depends(current_user)):
+    """DEC-125 "Analyze now": run the feedback analyst once. Owner-only (the Cloud Scheduler path runs the
+    same `run_analyst` as the Cloud Run job). The LLM cost is capped at $10/month inside the run."""
+    from lanesight_core.owner import OWNER_USER_ID
+    if user != OWNER_USER_ID:
+        raise HTTPException(403, 'owner only')
+    from .feedback_analyst import run_analyst
+    return run_analyst(get_store())
+
 @app.post('/events')
 def post_events(body: dict = Body(...), user=Depends(current_user)):
     """DEC-098 §2 (M3): ingest consent-aware product events. Body: {"events": [{event_name, occurred_at,
