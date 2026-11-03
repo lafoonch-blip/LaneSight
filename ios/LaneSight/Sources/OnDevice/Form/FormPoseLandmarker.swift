@@ -90,7 +90,7 @@ nonisolated enum FormPoseLandmarker {
     /// robust: a pre-shot shuffle / walk-off can't be mistaken for the delivery (the IMG_8825 divergence), with no
     /// per-clip tuning. Deterministic (pure arithmetic over decoded luma).
     static func prescanWindow(clipURL: URL, stride: Int = 3,
-                              leadMargin: Double = 2.6, tailMargin: Double = 2.0) -> (Double, Double)? {
+                              leadMargin: Double = 1.6, tailMargin: Double = 0.9) -> (Double, Double)? {
         let asset = AVURLAsset(url: clipURL)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -121,24 +121,32 @@ nonisolated enum FormPoseLandmarker {
         guard n >= 8 else { return nil }
         let dur = times[n - 1] - times[0]
         if dur < 8.0 { return nil }     // short clips: pose the whole thing, no windowing needed
-        // threshold = low + 0.35*(hi-low) over a robust range (10th..90th pct), find runs above it, pick the best.
+        // Pick the DOMINANT motion burst (the one with the highest duration × mean energy), bridging short dips
+        // (≤0.5 s) so a brief mid-approach slowdown doesn't split it. Isolating the delivery burst from a pre-shot
+        // shuffle / setup fidget is what lets findDelivery segment the hard clips (IMG_8825) correctly — the full
+        // clip (or a first-to-last-motion window) re-includes that motion and mis-segments. Generous margins
+        // (lead for the setup-hold, tail for the finish-hold) keep the approach + finish inside the window.
         let sorted = energy.sorted()
         let lo = sorted[Int(0.10 * Double(n))], hi = sorted[Int(0.90 * Double(n))]
         let thr = lo + 0.35 * (hi - lo)
-        var best: (Double, Double, Double)? = nil     // (startT, endT, score=dur*meanEnergy)
+        // Pick the single STRICTLY-contiguous run of above-threshold motion with the highest duration×mean energy
+        // — NO gap-bridging (bridging merges a pre-shot shuffle into the delivery run and re-breaks IMG_8825's
+        // isolation). This tight burst is what lets findDelivery segment the hard side clips correctly on device.
+        var best: (Double, Double, Double)? = nil     // (startT, endT, score)
         var k = 0
         while k < n {
             if energy[k] > thr {
                 var j = k, sum = 0.0
                 while j < n && energy[j] > thr { sum += energy[j]; j += 1 }
-                let t0 = times[k], t1 = times[min(j - 1, n - 1)]
-                let score = (t1 - t0 + 1e-3) * (sum / Double(max(1, j - k)))
+                let t0 = times[k], t1 = times[Swift.min(j - 1, n - 1)]
+                let score = (t1 - t0 + 1e-3) * (sum / Double(Swift.max(1, j - k)))
                 if best == nil || score > best!.2 { best = (t0, t1, score) }
                 k = j
             } else { k += 1 }
         }
         guard let b = best else { return nil }
-        let w0 = Swift.max(times[0], b.0 - leadMargin), w1 = Swift.min(times[n - 1], b.1 + tailMargin)
+        let w0 = Swift.max(times[0], b.0 - leadMargin)
+        let w1 = Swift.min(times[n - 1], b.1 + tailMargin)
         // If the generous window already covers most of the clip, windowing saves little and risks clipping the
         // delivery — pose the whole thing instead (correctness over a marginal speedup).
         if (w1 - w0) > 0.75 * dur { return nil }
