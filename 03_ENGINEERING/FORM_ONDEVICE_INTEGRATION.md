@@ -15,15 +15,17 @@ the capture pipeline routes `capture_mode=form` through the on-device-first path
 default OFF — ships dark). `APIClient.scoreFromMetrics` gained additive form params (events/view/measured_positions/
 form_version). It all compiles + links for device Release.
 
-**Device-pending (the iPhone was unavailable/locked this session — I could not unlock it):**
-- **The gate run** (`OnDeviceFormGateTests` on the iPhone) — the harness, clips, model + 10× determinism are ready
-  and the build installs, but the **simulator cannot decode the iPhone .mov clips** (`Fig err -12900`), so the gate
-  must run on the device. Command: `xcodebuild test -project ios/LaneSight/LaneSight.xcodeproj -scheme LaneSight
-  -destination 'platform=iOS,id=<iphone-udid>' -only-testing:LaneSightTests/OnDeviceFormGateTests` and read the
-  `ONDEV_FORM_GATE_ROW` lines (events vs labels, parity vs golden, determinism X/10, wall_s).
-- **End-to-end form upload** — flip `ls.ondevice_primary` on (Dev Panel), record/upload a form clip, confirm the
-  on-device metrics → `/shots/metrics` form branch → one Complete/Offline form result. Needs the device + a server
-  reachable for the metrics call.
+**The gate RAN on device (2026-11-03) and does NOT pass yet (7 failures)** — full per-clip table + analysis in
+`02_RESEARCH/FORM_ONDEVICE_DEVICE_GATE_2026-11-03.md`. Headline: determinism 10/10 on all clips; the port is
+faithful (reproduces the server reference tightly where the two MediaPipe runtimes agree); E7/E8 parity-match
+within ~0–2 f; the gaps are the iOS-vs-Python MediaPipe landmark difference (step count + the 8825 window) and
+runtime >30 s on long untrimmed 60 fps clips. The Release build is installed on the iPhone.
+
+**Still device-pending:** one **end-to-end form upload** — flip `ls.ondevice_primary` on (Dev Panel), record a
+Form delivery (a short live clip stays under the 30 s cap), confirm on-device metrics → `/shots/metrics` form
+branch → one Complete/Offline form result. The **Complete (coaching) path needs the `/shots/metrics` form branch
+deployed to the live API** (server deploy = Shayne's call); until then the metrics call hits the old server and
+the card shows the Offline (measured-only) state.
 
 This is the hand-off for wiring the on-device Form **engine** (built, parts 1–3 below) into the **app flow**
 (part 4). The engine, the Python parity golden, the gate test, and the **server** form branches are done and
