@@ -223,6 +223,28 @@ enum OnDeviceShadow {
                 stageReport["metrics"] = stageRow("ok", nil, metricsMs)
             }
         }
+        // DEC-128 item 2: EVERY unavailable metric cell carries a reason_code (not just the attempt body / stage
+        // report), so each unavailable metric shows WHY — matching the server's per-metric outcome rows. When a
+        // stage failed, downstream metrics inherit that cause; a metric unmeasured on a successful attempt gets a
+        // metric-specific reason. (Far-lane-gated + implausible cells already carry their reason and are skipped.)
+        let stageFailReason: String? = (failStage == "plate" || failStage == "lane") ? "LANE_NOT_DETECTED"
+                                     : (failStage == "track") ? "BALL_TRACK_NOT_FOUND"
+                                     : (failStage == "speed") ? "TRACK_TOO_SPARSE_FOR_SPEED" : nil
+        // On-device doesn't compute loft → report it explicitly unavailable, never silently absent.
+        if detailed["loft"] == nil {
+            detailed["loft"] = ["status": "unavailable", "unit": "ft", "reason_code": "NOT_MEASURED_FROM_VIDEO",
+                                "note": "Loft isn't measured on device."]
+        }
+        for (key, cell) in detailed {
+            guard var c = cell as? [String: Any], (c["status"] as? String) == "unavailable", c["reason_code"] == nil else { continue }
+            if let stageFailReason {
+                c["reason_code"] = stageFailReason
+                c["failed_stage"] = failedStage ?? "compute"
+            } else {
+                c["reason_code"] = (key == "rev_rate") ? "SPIN_NOT_RESOLVED" : "NOT_MEASURED_FROM_VIDEO"
+            }
+            detailed[key] = c
+        }
         var body: [String: Any] = [
             "shot_id": shotId, "source": source, "capture_mode": captureMode,
             "basis": basis, "note": note, "metrics": metrics, "metrics_detailed": detailed,
