@@ -241,6 +241,9 @@ struct ShotLaneWebView: UIViewRepresentable {
         private func poll(_ wv: WKWebView, _ n: Int) {
             wv.evaluateJavaScript("window.__done===true") { done, _ in
                 if (done as? Bool) == true {
+                    wv.evaluateJavaScript("window.__t||0") { t, _ in
+                        if let ms = t as? Int { NSLog("LANE_RENDER_MS %d", ms) }   // time to first frame (DEC-127)
+                    }
                     wv.evaluateJavaScript("JSON.stringify(window.__pts||{})") { v, _ in
                         guard let s = v as? String, let d = s.data(using: .utf8),
                               let obj = try? JSONSerialization.jsonObject(with: d) as? [String: [Double]] else { return }
