@@ -51,10 +51,12 @@ struct ShotLaneView: View {
         var out: [ProjectedLabel] = []
         func add(_ key: String, _ title: String, _ board: Double?, _ sub: String, _ color: Color) {
             guard let board, let pt = pts[key] else { return }
-            out.append(.init(id: key, title: title, value: "\(Int(board.rounded()))", sub: sub, color: color, point: pt))
+            out.append(.init(id: key, title: title, value: String(format: "%.1f", board), sub: sub, color: color, point: pt))
         }
-        add("laydown", "Laydown", kp["laydown"]?.board ?? m("laydown_board"), "board", .white)
-        let tgtArrows = result.recommendation?.move_target   // intent at the arrows, if any
+        let layZ = kp["laydown"]?.z_ft ?? 0
+        add("laydown", "Laydown", kp["laydown"]?.board ?? m("laydown_board"),
+            layZ > 0.5 ? "board · \(Int(layZ.rounded())) ft" : "board", .white)
+        let tgtArrows = result.suggestedTarget?.arrows_board ?? result.recommendation?.move_target   // intended line
         add("arrows", "Arrows", kp["arrows"]?.board ?? m("arrows_board"),
             tgtArrows.map { "board · target \(Int($0.rounded()))" } ?? "board", Color(hex: 0x00EB92))
         if !farLaneNotRead {
@@ -136,8 +138,11 @@ struct ShotLaneView: View {
         // dense measured path (to the last measured distance; `cut` trims it in-scene)
         var act: [[Double]] = []
         for p in (r.pathFit?.points ?? []) { if let z = p.z_ft, let b = p.board { act.append([z, b]) } }
+        // Camera that reproduces the design renders (lane_render_*@3x.png) pixel-for-pixel: 30 ft behind the foul,
+        // 10 ft up, look 15.5 ft down the lane, 16° vertical FOV. (shots.json's 14.5°/22 ft is stale — it renders
+        // the pins ~2× too big; verified by the compare/ overlays.)
         var data: [String: Any] = [
-            "cam": [0, 9.5, -22], "look": [0, 0, 33], "fov": 14.5,
+            "cam": [0, 10, -30], "look": [0, 0, 15.5], "fov": 16,
             "act": [[0, 20, 0], [30, 14, 0], [60, 17.5, "e", 4.0]],   // fallback anchors if no dense path
             "marks": [] as [[String: Any]],
         ]
