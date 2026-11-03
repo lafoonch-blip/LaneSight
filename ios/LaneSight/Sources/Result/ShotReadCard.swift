@@ -73,8 +73,11 @@ struct ShotReadCard: View {
     /// that would be confident advice with no lane read behind it.
     private var fallbackCoachText: String {
         switch result.insightsState {
-        case "no_reliable_data": return "We couldn't read the lane from this camera spot — no move. Reposition and try again."
-        default: return laneRead ? "Keep repeating your line." : "Keep the same line. Move the tripod so your next shot gets a full read."
+        case "no_reliable_data": return "We couldn't read the lane from this clip — no move. Try again with the lane in full view."
+        // DEC-127: far-lane is gated by policy (DEC-065), not a camera problem — don't tell the bowler to move the
+        // tripod. Coaching comes from what was measured (speed, rev, laydown, arrows).
+        default: return laneRead ? "Keep repeating your line."
+                                 : "Keep the same line — coaching uses what we measured; entry and breakpoint aren't read yet."
         }
     }
 

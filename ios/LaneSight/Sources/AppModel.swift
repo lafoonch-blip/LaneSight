@@ -807,6 +807,33 @@ final class AppModel: ObservableObject {
                            isForm: false, formView: nil, formStatus: nil, formVersion: nil)
         r.engine = "iphone"
         r.coachingPendingOffline = true
+        // DEC-127: draw the lane + callouts offline too — build path_fit from the on-device trajectory and the
+        // key points from the measured boards (the server does this online). Far-lane boards are gated on device,
+        // so entry/breakpoint come out nil → only the measured near-lane callouts (laydown, arrows) show.
+        func mv(_ k: String) -> Double? { dict[k]?.value }
+        if let tj = m.trajectoryJSON, let traj = (try? JSONSerialization.jsonObject(with: tj)) as? [String: Any],
+           let sm = traj["smoothed"] as? [[String: Any]] {
+            let pts = sm.compactMap { d -> PathPoint? in
+                guard let z = d["z_ft"] as? Double, let b = d["board"] as? Double else { return nil }
+                return PathPoint(z_ft: z, board: b)
+            }
+            if pts.count >= 2 {
+                let zs = pts.compactMap { $0.z_ft }
+                r.pathFit = PathFit(points: pts, measured_extent_ft: zs.isEmpty ? nil : [zs.min()!, zs.max()!])
+            }
+        }
+        var kps: [String: ShotKeyPoint] = [:]
+        if let v = mv("laydown_board") { kps["laydown"] = ShotKeyPoint(z_ft: 0, board: v, angle_deg: nil) }
+        if let v = mv("arrows_board") { kps["arrows"] = ShotKeyPoint(z_ft: 15, board: v, angle_deg: nil) }
+        if let v = mv("breakpoint_board") { kps["breakpoint"] = ShotKeyPoint(z_ft: mv("breakpoint_distance"), board: v, angle_deg: nil) }
+        if let v = mv("entry_board") { kps["entry"] = ShotKeyPoint(z_ft: 59.44, board: v, angle_deg: mv("entry_angle")) }
+        r.keyPoints = kps
+        // far-lane gated on device (mirrors the server DEC-065 policy) → entry/breakpoint not read
+        r.coachLane = CoachLane(status: "not_read", explanation: nil, side: nil,
+                                entry_board: mv("entry_board"), entry_angle: mv("entry_angle"))
+        r.captureReason = m.note.isEmpty
+            ? "Entry point and breakpoint aren't measured from phone video yet. Coaching comes from what was measured."
+            : m.note
         return r
     }
 

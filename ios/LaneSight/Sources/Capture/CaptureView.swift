@@ -332,16 +332,23 @@ struct ProcessingCover: View {
                 .padding(32)
 
             default:
-                // DEC-127 on-device-first: a three-step progress (Analyzing → Generating coaching → Your
-                // results) that advances as each step actually completes. The server-primary path keeps the
-                // trim/upload/analyze checklist.
-                if case .analyzing(let s, _) = model.pipeline, s == "ondevice" || s == "coaching" {
-                    deviceProgress(coaching: s == "coaching")
+                // DEC-127 on-device-first: ONLY the three-step progress (Analyzing → Generating coaching → Your
+                // results) — the old Trimmed/Uploaded/Analyzing checklist is never shown on this path. It advances
+                // as each step completes. The server-primary path (kill switch off) keeps the upload checklist.
+                if onDevicePrimary && model.captureMode != "form" {
+                    deviceProgress(coaching: isCoachingStep)
                 } else {
                     processing
                 }
             }
         }
+    }
+
+    /// DEC-127: on-device-primary is on (its result renders once; the old upload checklist must not flash).
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimary = false
+    private var isCoachingStep: Bool {
+        if case .analyzing(let s, _) = model.pipeline { return s == "coaching" }
+        return false
     }
 
     /// DEC-127 three-step progress for the on-device-first path. No artificial waits — each step flips to done

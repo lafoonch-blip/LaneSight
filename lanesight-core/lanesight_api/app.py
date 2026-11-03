@@ -1699,6 +1699,15 @@ from lanesight_core.cv.pipeline import _FAR_LANE_METRICS as _PIPE_FAR, FAR_LANE_
 _ONDEVICE_CANON_STATUS = {'ball_speed': 'best_effort', 'speed_release': 'best_effort', 'speed_early': 'best_effort',
                           'speed_late': 'best_effort', 'speed_avg_foul_to_pins': 'best_effort',
                           'rev_rate': 'calibrated_estimate'}
+# User-facing reason text for the engine's hard failures (mirrors the server's AnalysisFailure codes).
+_FAILURE_REASON_TEXT = {
+    'LANE_NOT_DETECTED': "We couldn't find the lane in this clip, so nothing could be measured. Set the camera "
+                         "behind the lane, square to it, with the foul line and pins in frame.",
+    'BALL_TRACK_NOT_FOUND': "We couldn't track the ball down the lane, so the shot couldn't be measured. Keep the "
+                            "ball in view from release to the pins.",
+    'TRACK_TOO_SPARSE_FOR_SPEED': "The ball was tracked too briefly to measure the shot. Keep it in view all the "
+                                  "way to the pins.",
+}
 
 
 def _apply_status_policy(metrics: dict) -> dict:
@@ -1762,6 +1771,11 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     # METRICS are gated), then stamp the canonical per-metric status + far-lane gate for engine parity.
     key_points = b.get('key_points') or _key_points_from_metrics(metrics)
     cq = _apply_status_policy(metrics)
+    # DEC-127: a REAL engine-stage failure (lane/track/speed) — reflect it on capture_quality so the card shows the
+    # true reason (not the DEC-065 policy note), and so every unavailable metric row gets this reason_code/stage.
+    if b.get('reason_code'):
+        cq = {**cq, 'far_lane': 'not_read', 'reason_code': b['reason_code'],
+              'failed_stage': b.get('failed_stage'), 'reason': _FAILURE_REASON_TEXT.get(b['reason_code'])}
     rec = {'shot_id': b.get('shot_id'), 'metrics': metrics, 'handed': handed,
            'key_points': key_points,
            'capture_quality': {**cq, 'source': 'ios-ondevice'},
@@ -1803,7 +1817,8 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
             'diagnostics': _quality(rec), 'env': 'live' if os.environ.get('K_REVISION') else 'dev'})
         from .store import outcome_rows_from_record
         mrows, srows = outcome_rows_from_record((attempt or {}).get('id'), 'iphone', algo, mode,
-                                                metrics, rec.get('stage_report'), scalar_status='measured')
+                                                metrics, rec.get('stage_report'), scalar_status='measured',
+                                                reason_code=b.get('reason_code'), failed_stage=b.get('failed_stage'))
         store.log_outcomes(mrows, srows)
     except Exception as e:
         print(f'metrics outcome log skipped ({e})')

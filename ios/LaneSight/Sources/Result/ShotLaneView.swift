@@ -28,17 +28,22 @@ struct ShotLaneView: View {
 
     // Right-side callout column (2026-10-29-A B1): labels sit in a tidy stack on the right with a leader line
     // to the dot on the path, instead of floating over the centerline where the top (Entry) label was clipped.
-    private static let calloutW: CGFloat = 96, calloutH: CGFloat = 32, viewW: CGFloat = 344, viewH: CGFloat = 360
+    private static let calloutW: CGFloat = 104, calloutH: CGFloat = 48, viewW: CGFloat = 344, viewH: CGFloat = 360
 
     private var placed: [PlacedLabel] {
-        let cx = Self.viewW - Self.calloutW / 2 - 8           // callout center x, right-aligned
-        let topMin = Self.calloutH / 2 + 30                    // clear of the result chip
+        let cx = Self.viewW - Self.calloutW / 2 - 8            // callout center x, right-aligned
+        let topMin = Self.calloutH / 2 + 52                    // clear of the chip + top note
         let botMax = Self.viewH - Self.calloutH / 2 - 36       // clear of the legend
-        let spacing = Self.calloutH + 6
-        var cursor = topMin
-        return labels.sorted { $0.point.y < $1.point.y }.map { lab -> PlacedLabel in
-            let y = min(max(lab.point.y, cursor), botMax)
-            cursor = y + spacing
+        let sorted = labels.sorted { $0.point.y < $1.point.y }
+        let n = sorted.count
+        guard n > 0 else { return [] }
+        // Evenly distribute the cards in the available band (in path order) so they NEVER overlap; each leader
+        // line still points to its true projected dot. Centered as a group between topMin and botMax.
+        let span = max(0, botMax - topMin)
+        let step = n > 1 ? min(Self.calloutH + 8, span / CGFloat(n - 1)) : 0
+        let start = topMin + (span - step * CGFloat(n - 1)) / 2
+        return sorted.enumerated().map { i, lab -> PlacedLabel in
+            let y = start + step * CGFloat(i)
             return PlacedLabel(label: lab, center: CGPoint(x: cx, y: y),
                                anchor: CGPoint(x: cx - Self.calloutW / 2, y: y))   // leader attaches to left edge
         }
@@ -64,7 +69,11 @@ struct ShotLaneView: View {
             }
             resultChip.padding(8)
             VStack { Spacer(); legend.padding(8) }
-            if farLaneNotRead { farLaneNote }
+            // DEC-127: the far-lane note sits at the TOP of the lane view (below the result chip), never over the
+            // middle where it would hide the measured callouts (matches shot_card_state_far_lane_not_read.png).
+            if farLaneNotRead {
+                VStack(spacing: 0) { farLaneNote.padding(.top, 38).padding(.horizontal, 10); Spacer() }
+            }
         }
         .frame(width: Self.viewW, height: Self.viewH)
         .clipShape(RoundedRectangle(cornerRadius: 20))
@@ -104,16 +113,18 @@ struct ShotLaneView: View {
         // Prefer the server's honest reason: the far lane is withheld because it isn't validated yet (DEC-065),
         // which is NOT the same as a camera-position problem — the "move your camera" copy only applies when
         // that's actually why. Fall back to the camera-spot copy when no reason was given.
-        let reason = result.captureReason
-        return VStack(spacing: 2) {
-            Text("Back lane not shown yet").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-            Text(reason ?? "Breakpoint, entry and pins need the full lane")
+        // Concise, honest copy — entry/breakpoint are gated by policy (DEC-065), not a camera problem. The full
+        // reason lives on the outcome row; the card shows a one-liner so it doesn't dominate the lane view.
+        return VStack(alignment: .leading, spacing: 2) {
+            Text("Back lane not measured yet").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+            Text("Entry, breakpoint and pins aren't read yet — coaching uses what was measured.")
                 .font(.system(size: 10)).foregroundStyle(LS.textSecondary)
-                .multilineTextAlignment(.center).lineLimit(3)
+                .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(10).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 240)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11).padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LS.border, lineWidth: 1))
     }
 }
 
@@ -156,6 +167,30 @@ private struct Lane3DRepresentable: UIViewRepresentable {
     let rightHanded: Bool
     @Binding var labels: [ProjectedLabel]
 
+    /// Procedural lane wood: 39 warm-brown board stripes (deterministic per-board jitter) + seams + faint grain,
+    /// mapped across the lane width so the boards read as vertical lanes down the view (matches lane3d.html wood).
+    static let woodTexture: UIImage = {
+        let W = 256, H = 1024, boards = 39
+        let fmt = UIGraphicsImageRendererFormat.default(); fmt.scale = 1
+        return UIGraphicsImageRenderer(size: CGSize(width: W, height: H), format: fmt).image { c in
+            let ctx = c.cgContext
+            let bw = CGFloat(W) / CGFloat(boards)
+            for b in 0..<boards {
+                let j = CGFloat(b * 53 % 13) / 13.0 - 0.5                   // -0.5…0.5, deterministic
+                ctx.setFillColor(UIColor(red: 0.60 + j * 0.10, green: 0.40 + j * 0.07,
+                                         blue: 0.22 + j * 0.05, alpha: 1).cgColor)
+                ctx.fill(CGRect(x: CGFloat(b) * bw, y: 0, width: bw + 1, height: CGFloat(H)))
+                ctx.setFillColor(UIColor(red: 0.18, green: 0.10, blue: 0.035, alpha: 0.5).cgColor)
+                ctx.fill(CGRect(x: CGFloat(b) * bw, y: 0, width: 0.8, height: CGFloat(H)))   // board seam
+            }
+            ctx.setStrokeColor(UIColor(red: 0.43, green: 0.24, blue: 0.10, alpha: 0.06).cgColor)
+            ctx.setLineWidth(1)
+            var y: CGFloat = 0
+            while y < CGFloat(H) { ctx.move(to: CGPoint(x: 0, y: y)); ctx.addLine(to: CGPoint(x: CGFloat(W), y: y)); y += 7 }
+            ctx.strokePath()
+        }
+    }()
+
     func makeUIView(context: Context) -> SCNView {
         let v = SCNView(frame: CGRect(x: 0, y: 0, width: 344, height: 360))
         v.backgroundColor = UIColor(red: 0.02, green: 0.07, blue: 0.11, alpha: 1)
@@ -175,29 +210,37 @@ private struct Lane3DRepresentable: UIViewRepresentable {
 
     private func buildScene() -> SCNScene {
         let scene = SCNScene()
+        scene.background.contents = UIColor(red: 0.008, green: 0.039, blue: 0.078, alpha: 1)   // 0x020a14
         scene.rootNode.addChildNode(laneNode(center: true))
-        // Neighbor lanes, dimmed.
+        // Neighbor lanes, dimmed (0x3a3a3a). Pitch = lane + 2 gutters + cap ≈ 5.0 ft.
+        let pitchFt = 41.5 / 12.0 + 2 * 0.77 + 0.42
         for s in [-1.0, 1.0] {
-            let n = laneNode(center: false); n.position.x = Float(s * 41.5 / 12.0 * 1.06); scene.rootNode.addChildNode(n)
+            let n = laneNode(center: false); n.position.x = Float(s * pitchFt); scene.rootNode.addChildNode(n)
         }
+        gutterNodes().forEach(scene.rootNode.addChildNode)
         scene.rootNode.addChildNode(foulLineNode())
         arrowsNode().forEach(scene.rootNode.addChildNode)
         approachDotsNode().forEach(scene.rootNode.addChildNode)
         pinsNode().forEach(scene.rootNode.addChildNode)
         if let tl = targetLineNode() { scene.rootNode.addChildNode(tl) }
-        if let bp = ballPathNode() { scene.rootNode.addChildNode(bp) }
+        ballPathNodes().forEach(scene.rootNode.addChildNode)
 
-        // Camera: 30 ft behind the foul line, 10 ft up, looking 15.5 ft down the lane, 16° vertical FOV.
-        let cam = SCNCamera(); cam.fieldOfView = 16; cam.projectionDirection = .vertical; cam.zFar = 400
+        // Camera matches the design render (lane3d.html / shots.json): 22 ft behind the foul, 9.5 ft up, looking
+        // 33 ft down the lane, 14.5° vertical FOV (our z is negated vs the HTML: pins are at −60).
+        let cam = SCNCamera(); cam.fieldOfView = 15; cam.projectionDirection = .vertical; cam.zFar = 400
+        cam.wantsHDR = true; cam.bloomIntensity = 0.5; cam.bloomBlurRadius = 4; cam.bloomThreshold = 0.75
         let camNode = SCNNode(); camNode.camera = cam
-        camNode.position = SCNVector3(0, 10, 30)
-        camNode.look(at: SCNVector3(0, 0, -15.5))
+        camNode.position = SCNVector3(0, 11, 26)
+        camNode.look(at: SCNVector3(0, 0, -34))
         scene.rootNode.addChildNode(camNode)
 
         let amb = SCNNode(); amb.light = SCNLight(); amb.light!.type = .ambient
-        amb.light!.intensity = 700; scene.rootNode.addChildNode(amb)
-        let key = SCNNode(); key.light = SCNLight(); key.light!.type = .directional
-        key.light!.intensity = 600; key.position = SCNVector3(0, 20, 20); key.look(at: SCNVector3(0, 0, -30))
+        amb.light!.intensity = 650; amb.light!.color = UIColor(red: 0.66, green: 0.77, blue: 1, alpha: 1)
+        scene.rootNode.addChildNode(amb)
+        let key = SCNNode(); key.light = SCNLight(); key.light!.type = .spot
+        key.light!.intensity = 1500; key.light!.color = UIColor(red: 1, green: 0.95, blue: 0.86, alpha: 1)
+        key.light!.spotInnerAngle = 30; key.light!.spotOuterAngle = 80
+        key.position = SCNVector3(0, 22, 6); key.look(at: SCNVector3(0, 0, -28))
         scene.rootNode.addChildNode(key)
         return scene
     }
@@ -206,82 +249,122 @@ private struct Lane3DRepresentable: UIViewRepresentable {
         let w = CGFloat(41.5 / 12.0), l = CGFloat(66)
         let plane = SCNBox(width: w, height: 0.02, length: l, chamferRadius: 0)
         let m = SCNMaterial()
-        m.diffuse.contents = center ? UIColor(red: 0.78, green: 0.62, blue: 0.38, alpha: 1)
-                                     : UIColor(red: 0.20, green: 0.24, blue: 0.30, alpha: 1)
+        if center {
+            m.diffuse.contents = Self.woodTexture   // procedural 39-board wood (grain + seams), matches the render
+            m.diffuse.wrapT = .clamp; m.diffuse.wrapS = .clamp
+            m.roughness.contents = 0.3; m.metalness.contents = 0.0
+        } else {
+            m.diffuse.contents = UIColor(white: 0.227, alpha: 1)   // 0x3a3a3a dimmed neighbor bed
+        }
         plane.firstMaterial = m
-        let n = SCNNode(geometry: plane); n.position = SCNVector3(0, 0, -30); n.opacity = center ? 1 : 0.35
+        let n = SCNNode(geometry: plane); n.position = SCNVector3(0, 0, -30); n.opacity = center ? 1 : 0.55
         return n
     }
 
+    /// Dark gutter channels either side of the center lane (half-round approximated by a dark box).
+    private func gutterNodes() -> [SCNNode] {
+        let laneHalf = CGFloat(41.5 / 12.0) / 2, gut = CGFloat(0.77)
+        return [-1.0, 1.0].map { s in
+            let box = SCNBox(width: gut, height: 0.14, length: 62, chamferRadius: 0.05)
+            box.firstMaterial?.diffuse.contents = UIColor(red: 0.043, green: 0.067, blue: 0.098, alpha: 1)  // 0x0b1119
+            let n = SCNNode(geometry: box)
+            n.position = SCNVector3(Float(Double(s) * Double(laneHalf + gut / 2)), -0.05, -31); return n
+        }
+    }
+
     private func foulLineNode() -> SCNNode {
-        let box = SCNBox(width: CGFloat(41.5 / 12.0), height: 0.03, length: 0.2, chamferRadius: 0)
-        box.firstMaterial?.diffuse.contents = UIColor(red: 1, green: 0.3, blue: 0.36, alpha: 1)
-        let n = SCNNode(geometry: box); n.position = SCNVector3(0, 0.01, 0); return n
+        let box = SCNBox(width: CGFloat(41.5 / 12.0 + 2 * 0.77), height: 0.03, length: 0.12, chamferRadius: 0)
+        box.firstMaterial?.diffuse.contents = UIColor(red: 0.102, green: 0.039, blue: 0.024, alpha: 1)   // 0x1a0a06
+        let n = SCNNode(geometry: box); n.position = SCNVector3(0, 0.012, 0); return n
     }
 
     private func arrowsNode() -> [SCNNode] {
+        // Seven arrows on boards 5..35, staggered in z (center arrow deepest), dark on the wood — like the render.
         [5.0, 10, 15, 20, 25, 30, 35].map { b in
-            let p = SCNPyramid(width: 0.18, height: 0.02, length: 0.5)
-            p.firstMaterial?.diffuse.contents = UIColor(white: 0.9, alpha: 0.9)
+            let p = SCNPyramid(width: 0.16, height: 0.015, length: 0.55)
+            p.firstMaterial?.diffuse.contents = UIColor(red: 0.165, green: 0.086, blue: 0.031, alpha: 1)  // 0x2a1608
+            p.firstMaterial?.lightingModel = .constant
             let n = SCNNode(geometry: p)
-            n.position = SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.02, -15)
+            let zStag = 13.0 + (4.0 - abs(b - 20.0) / 5.0) * 0.8
+            n.position = SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.015, Float(-zStag))
             return n
         }
     }
 
     private func approachDotsNode() -> [SCNNode] {
-        [10.0, 15, 20, 25, 30].map { b in
-            let s = SCNSphere(radius: 0.05); s.firstMaterial?.diffuse.contents = UIColor(white: 0.85, alpha: 0.8)
+        [3.0, 5, 8, 11, 14, 26, 29, 32, 35, 37].map { b in
+            let s = SCNCylinder(radius: 0.05, height: 0.012)
+            s.firstMaterial?.diffuse.contents = UIColor(red: 0.165, green: 0.086, blue: 0.031, alpha: 1)  // 0x2a1608
+            s.firstMaterial?.lightingModel = .constant
             let n = SCNNode(geometry: s)
-            n.position = SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.02, 2.5)
+            n.position = SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.012, 7)   // 7 ft dots
             return n
         }
     }
 
     private func pinsNode() -> [SCNNode] {
-        // Standard 10-pin triangle, head pin at board 20, 12 in spacing, rows 1 ft apart toward the pit.
-        let spacing = 12.0 / 12.0
+        // Standard 10-pin triangle, head pin at lane center, 1 ft spacing, rows 0.866 ft apart toward the pit.
+        // True-scale pin ≈ 1.25 ft tall; a white body + a red band approximates the pin silhouette.
         let layout: [(row: Int, col: Double)] = [(0, 0), (1, -0.5), (1, 0.5), (2, -1), (2, 0), (2, 1),
                                                  (3, -1.5), (3, -0.5), (3, 0.5), (3, 1.5)]
-        return layout.map { r in
-            let cyl = SCNCylinder(radius: 0.08, height: 0.5)
-            cyl.firstMaterial?.diffuse.contents = UIColor.white
-            let n = SCNNode(geometry: cyl)
-            let x = r.col * spacing
-            n.position = SCNVector3(Float(rightHanded ? x : -x), 0.25, Float(-60.0 - Double(r.row) * spacing))
-            return n
+        var out: [SCNNode] = []
+        for r in layout {
+            let x = Float(rightHanded ? r.col : -r.col)
+            let z = Float(-60.0 - Double(r.row) * 0.866)
+            let body = SCNCapsule(capRadius: 0.085, height: 1.15)
+            body.firstMaterial?.diffuse.contents = UIColor(red: 0.969, green: 0.973, blue: 0.984, alpha: 1)  // 0xf7f8fb
+            let bn = SCNNode(geometry: body); bn.position = SCNVector3(x, 0.575, z); out.append(bn)
+            let band = SCNCylinder(radius: 0.088, height: 0.07)
+            band.firstMaterial?.diffuse.contents = UIColor(red: 0.816, green: 0.149, blue: 0.227, alpha: 1)  // 0xd0263a
+            let dn = SCNNode(geometry: band); dn.position = SCNVector3(x, 0.78, z); out.append(dn)
         }
+        return out
     }
 
-    /// The smoothed ball path (path_fit) as a thin green line. Drawn only to the last measured distance.
-    private func ballPathNode() -> SCNNode? {
-        guard let pts = result.pathFit?.points, pts.count >= 2 else { return nil }
+    /// The smoothed ball path (path_fit) as a GLOWING green tube: a thin bright core + a wider translucent glow,
+    /// built as a chain of oriented cylinders (SceneKit has no polyline tube). HDR bloom on the camera makes it glow.
+    private func ballPathNodes() -> [SCNNode] {
+        guard let pts = result.pathFit?.points, pts.count >= 2 else { return [] }
         let verts = pts.compactMap { p -> SCNVector3? in
             guard let z = p.z_ft, let b = p.board else { return nil }
-            return SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.04, Float(-z))
+            return SCNVector3(Float(ShotLaneView.xFt(b, rightHanded: rightHanded)), 0.06, Float(-z))
         }
-        return lineNode(verts, color: UIColor(red: 0, green: 0.92, blue: 0.57, alpha: 1))
+        guard verts.count >= 2 else { return [] }
+        return tube(verts, radius: 0.10, color: UIColor(red: 0, green: 0.92, blue: 0.57, alpha: 1), opacity: 0.28)
+             + tube(verts, radius: 0.035, color: UIColor(red: 0.49, green: 1, blue: 0.78, alpha: 1), opacity: 1)
     }
 
-    /// Target line: intended laydown → pocket (board 17.5 at the head pin). Blue.
+    /// Target line: intended laydown → pocket (board 17.5 at the head pin) as a bright-blue tube.
     private func targetLineNode() -> SCNNode? {
         let lay = result.keyPoints["laydown"]?.board ?? result.metrics.first(where: { $0.0 == "laydown_board" })?.1.value
         guard let lay else { return nil }
-        let a = SCNVector3(Float(ShotLaneView.xFt(lay, rightHanded: rightHanded)), 0.035, 0)
-        let b = SCNVector3(Float(ShotLaneView.xFt(17.5, rightHanded: rightHanded)), 0.035, -60)
-        return lineNode([a, b], color: UIColor(red: 0.12, green: 0.48, blue: 1, alpha: 1))
+        let a = SCNVector3(Float(ShotLaneView.xFt(lay, rightHanded: rightHanded)), 0.05, 0)
+        let b = SCNVector3(Float(ShotLaneView.xFt(17.5, rightHanded: rightHanded)), 0.05, -60)
+        let g = SCNNode()
+        tube([a, b], radius: 0.05, color: UIColor(red: 0.118, green: 0.565, blue: 1, alpha: 1), opacity: 0.95)  // 0x1e90ff
+            .forEach(g.addChildNode)
+        return g
     }
 
-    private func lineNode(_ verts: [SCNVector3], color: UIColor) -> SCNNode {
-        let src = SCNGeometrySource(vertices: verts)
-        var idx: [Int32] = []
-        for i in 0..<(verts.count - 1) { idx.append(Int32(i)); idx.append(Int32(i + 1)) }
-        let elem = SCNGeometryElement(indices: idx, primitiveType: .line)
-        let geo = SCNGeometry(sources: [src], elements: [elem])
-        let m = SCNMaterial(); m.diffuse.contents = color; m.lightingModel = .constant; m.isDoubleSided = true
-        geo.firstMaterial = m
-        let n = SCNNode(geometry: geo)
-        return n
+    /// A tube along a polyline = one oriented cylinder per segment (constant-shaded; emission via HDR bloom).
+    private func tube(_ verts: [SCNVector3], radius: CGFloat, color: UIColor, opacity: CGFloat) -> [SCNNode] {
+        var nodes: [SCNNode] = []
+        for i in 0..<(verts.count - 1) {
+            let a = verts[i], b = verts[i + 1]
+            let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
+            let len = CGFloat(sqrtf(dx * dx + dy * dy + dz * dz))
+            if len < 1e-4 { continue }
+            let cyl = SCNCylinder(radius: radius, height: len)
+            let m = SCNMaterial(); m.diffuse.contents = color; m.emission.contents = color
+            m.lightingModel = .constant; m.isDoubleSided = true
+            m.transparency = opacity; cyl.firstMaterial = m
+            let n = SCNNode(geometry: cyl)
+            n.position = SCNVector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
+            // orient the cylinder's +y axis along the segment
+            n.look(at: b, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 1, 0))
+            nodes.append(n)
+        }
+        return nodes
     }
 
     // MARK: project the 4 pinned labels to screen

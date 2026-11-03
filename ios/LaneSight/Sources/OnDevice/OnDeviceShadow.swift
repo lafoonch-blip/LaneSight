@@ -151,6 +151,26 @@ enum OnDeviceShadow {
         if battStart >= 0, battEnd >= 0 { perf["battery_delta"] = Double(battStart - battEnd) }
         if thermalStart != thermalEnd { perf["thermal_transitions"] = "\(thermalStart)→\(thermalEnd)" }
 
+        // DEC-127: propagate the REAL failing stage + a server-matching reason_code (not a blanket
+        // METRIC_UNAVAILABLE), so every unavailable metric shows WHY — the same codes the server raises.
+        let failStage = diag["first_failing_stage"] as? String
+        var reasonCode: String? = nil, failedStage: String? = nil
+        var stageReport: [String: Any] = [:]
+        switch failStage {
+        case "plate", "lane":
+            reasonCode = "LANE_NOT_DETECTED"; failedStage = "lane"
+            stageReport["lane"] = ["status": "failed", "reason_code": "LANE_NOT_DETECTED"]
+        case "track":
+            reasonCode = "BALL_TRACK_NOT_FOUND"; failedStage = "track"
+            stageReport["lane"] = ["status": "ok"]
+            stageReport["track"] = ["status": "failed", "reason_code": "BALL_TRACK_NOT_FOUND"]
+        case "speed":
+            reasonCode = "TRACK_TOO_SPARSE_FOR_SPEED"; failedStage = "metrics"
+            stageReport["lane"] = ["status": "ok"]; stageReport["track"] = ["status": "ok"]
+            stageReport["metrics"] = ["status": "failed", "reason_code": "TRACK_TOO_SPARSE_FOR_SPEED"]
+        default:
+            break
+        }
         var body: [String: Any] = [
             "shot_id": shotId, "source": source, "capture_mode": captureMode,
             "basis": basis, "note": note, "metrics": metrics, "metrics_detailed": detailed,
@@ -158,6 +178,9 @@ enum OnDeviceShadow {
             "algorithm_version": engineVersion, "app_version": appVersion,
         ]
         if !trajectory.isEmpty { body["trajectory"] = trajectory }
+        if let reasonCode { body["reason_code"] = reasonCode }
+        if let failedStage { body["failed_stage"] = failedStage }
+        if !stageReport.isEmpty { body["stage_report"] = stageReport }
         if let sid = sessionId { body["session_id"] = sid }
         return body
     }

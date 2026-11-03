@@ -84,7 +84,8 @@ def main():
     st, resp = http('POST', f'{api}/uploads/signed-url', jauth, b'{}')
     tgt = json.loads(resp)
     with open(CLIP, 'rb') as f:
-        up_st, _ = http('PUT', tgt['upload_url'], {'Content-Type': 'video/quicktime'}, f.read())
+        up_st, _ = http('PUT', tgt['upload_url'],
+                        {'Content-Type': 'video/quicktime', 'x-upsert': 'true'}, f.read())
     if up_st not in (200, 201):
         raise SystemExit(f'storage upload failed ({up_st})')
     st, resp = http('POST', f'{api}/shots/{shot_id}/shadow_video', jauth,

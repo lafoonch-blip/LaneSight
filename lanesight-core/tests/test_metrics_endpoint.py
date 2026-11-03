@@ -137,6 +137,27 @@ def test_trajectory_builds_path_fit_for_the_lane_view():
     assert rec['path_fit'].get('measured_extent_ft') == [0.0, 57.0]
 
 
+def test_engine_failure_reason_propagates_to_every_metric():
+    """DEC-127: when the on-device engine failed a stage (e.g. no lane), every unavailable metric must carry the
+    REAL reason_code + failed_stage the engine reported (LANE_NOT_DETECTED), not a blanket METRIC_UNAVAILABLE."""
+    u = 'dec127f'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    # the engine measured nothing and reported a lane failure
+    body = {'metrics': {'ball_speed': {'value': None, 'status': 'unavailable'}},
+            'reason_code': 'LANE_NOT_DETECTED', 'failed_stage': 'lane',
+            'stage_report': {'lane': {'status': 'failed', 'reason_code': 'LANE_NOT_DETECTED'}},
+            'session_id': sid, 'capture_mode': 'shot', 'source': 'live',
+            'algorithm_version': 'ios-ondevice-test', 'metadata': {'handed': 'R'}}
+    r = client.post('/shots/metrics', json=body, headers=H(u))
+    assert r.status_code == 200, r.text
+    assert r.json()['shot']['record']['capture_quality'].get('reason_code') == 'LANE_NOT_DETECTED'
+    rows = [x for x in getattr(get_store(), 'metric_outcomes', []) if x.get('engine') == 'iphone']
+    # the just-created shot's rows: unavailable ball_speed carries the lane reason, not METRIC_UNAVAILABLE
+    bs = [x for x in rows if x['metric_key'] == 'ball_speed'][-1]
+    assert bs['status'] == 'unavailable'
+    assert bs['reason_code'] == 'LANE_NOT_DETECTED' and bs['failed_stage'] == 'lane'
+
+
 def test_upload_does_not_feed_score():
     u = 'dec127d'
     r = _post(u, None)                          # no session_id -> standalone upload
