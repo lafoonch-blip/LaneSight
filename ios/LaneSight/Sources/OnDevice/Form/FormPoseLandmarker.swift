@@ -6,7 +6,7 @@ import CoreGraphics
 import MediaPipeTasksVision
 #endif
 
-/// On-device Form pose backend (DEC-128) — the faithful port of `lanesight_core/form/pose.py::extract_landmarks`.
+/// On-device Form pose backend (DEC-129) — the faithful port of `lanesight_core/form/pose.py::extract_landmarks`.
 ///
 /// Runs **MediaPipe Pose Landmarker (heavy, VIDEO mode)** on every decoded frame — the SAME model family and the
 /// SAME 33-point BlazePose topology the server reference uses, so the swing/foot geometry is comparable for the
@@ -69,7 +69,7 @@ enum FormPoseLandmarker {
         }
     }
 
-    /// Default bundled model name (see project.yml; the .task is copied in, never committed — DEC-128/pose.py note).
+    /// Default bundled model name (see project.yml; the .task is copied in, never committed — DEC-129/pose.py note).
     static let modelResource = "pose_landmarker_heavy"
     static let modelExtension = "task"
 

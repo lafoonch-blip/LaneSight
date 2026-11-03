@@ -3,7 +3,7 @@ Status: CANONICAL
 Version: 1.84  
 Last Updated: 2026-11-03  
 Owner: Shayne  
-Supersedes: v1.82 (feat/ff-feedback DEC-123/124/125 + DEC-122) merged with feat/ios-lane-parity (DEC-126/127); + DEC-128 on-device Form
+Supersedes: v1.82 (feat/ff-feedback DEC-123/124/125 + DEC-122) merged with feat/ios-lane-parity (DEC-126/127); + DEC-129 on-device Form
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1558,7 +1558,7 @@ on the live path narrows to the metrics-only score/coaching call + video shadow 
 (the blocking "Analyzing" screen becomes the three-step progress screen above). Honesty rules DEC-086/DEC-122 and
 the score/tier definitions (DEC-036/DEC-038/DEC-090) are unchanged — only their **input** becomes a metrics record.
 
-### DEC-128 — Form analysis runs on-device (MediaPipe Pose), matching the DEC-126/127 shot architecture (2026-11-03)
+### DEC-129 — Form analysis runs on-device (MediaPipe Pose), matching the DEC-126/127 shot architecture (2026-11-03)
 **Decision (Shayne, 2026-11-03):** Form analysis moves on-device, the same way shots did in DEC-126/127. The
 iPhone measures the form events + metrics locally with **MediaPipe Pose Landmarker (heavy, VIDEO mode)** — the
 same model family + 33-point BlazePose topology the server reference uses (`lanesight_core/form/pose.py`), for
@@ -1596,6 +1596,10 @@ build session). **Builds on:** DEC-126/127 (shot on-device-first + metrics endpo
 Beta gates), DEC-120/121 (form event baseline + tolerances + step-count honesty), DEC-122 (partial results +
 outcome rows), DEC-057 (form fundamentals). **Supersedes:** the Apple-Vision `OnDeviceFormShadow` as the on-device
 form measurer.
+**Numbering note:** this on-device-**Form** decision is **DEC-129**. **DEC-128 is Session 1's** (reserved for its
+`feat/ios-lane-parity` SHOT-side on-device items — plausibility bounds, iOS stage report, lane-card data honesty,
+the real-clip parity harness — already used in its pushed commits). Renumbered from DEC-128 → DEC-129 on Shayne's
+instruction (2026-11-03) after confirming the highest written DEC across all remote branches was DEC-127.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

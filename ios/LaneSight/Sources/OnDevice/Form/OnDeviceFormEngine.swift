@@ -1,6 +1,6 @@
 import Foundation
 
-/// Top-level on-device Form analysis (DEC-128) — the Swift analogue of
+/// Top-level on-device Form analysis (DEC-129) — the Swift analogue of
 /// `lanesight_core.form.pose.analyze` + `analyze_form_clip`. Ties the MediaPipe pose pass, the event/metric
 /// engine, the ball-colour release confirmation and the fundamentals layer into one `FormAnalysis`.
 ///

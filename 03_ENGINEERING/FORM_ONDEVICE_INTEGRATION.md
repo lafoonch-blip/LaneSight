@@ -1,7 +1,7 @@
-# Form on-device integration (DEC-128)
+# Form on-device integration (DEC-129)
 
 Status: ACTIVE · Version: 1.0 · Last Updated: 2026-11-03 · Owner: Shayne
-Decision: DEC-128 (Form analysis runs on-device, matching the DEC-126/127 shot architecture).
+Decision: DEC-129 (Form analysis runs on-device, matching the DEC-126/127 shot architecture).
 
 This is the hand-off for wiring the on-device Form **engine** (built, parts 1–3 below) into the **app flow**
 (part 4). The engine, the Python parity golden, the gate test, and the **server** form branches are done and

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Ball-colour swing-track hook (DEC-128) — the analogue of `lanesight_core/form/pose.py::_ball_track`.
+/// Ball-colour swing-track hook (DEC-129) — the analogue of `lanesight_core/form/pose.py::_ball_track`.
 ///
 /// In the reference this tracks the ball as a dark, moderately-saturated round blob seeded near the bowling
 /// wrist and uses it ONLY to confirm release (E7): accept the ball time only within +3 frames of the bottom of

@@ -1751,7 +1751,7 @@ def _apply_status_policy(metrics: dict) -> dict:
 
 
 def _form_shot_from_metrics(store, user, b, meta, handed, algo, metrics, session_id, is_upload, cfg, ub):
-    """DEC-128: the on-device-first FORM path for POST /shots/metrics. The phone posts the form `metrics`
+    """DEC-129: the on-device-first FORM path for POST /shots/metrics. The phone posts the form `metrics`
     (step_count, swing_time, …) + `events` (E2..E8) + detected `view` + `measured_positions` from its MediaPipe
     pose engine (the Swift port of form/pose.py). The server synthesises the same record `analyze_form_clip`
     returns and runs `engines.after_form_analyzed` — the SAME pure fundamentals the server video path runs
@@ -1830,7 +1830,7 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     metrics = _metrics_record_from_body(b.get('metrics') or {}, algo)
     if not metrics:
         raise HTTPException(422, 'no metrics in body')
-    # DEC-128: on-device FORM takes the same metrics-only path. The phone's MediaPipe pose engine already
+    # DEC-129: on-device FORM takes the same metrics-only path. The phone's MediaPipe pose engine already
     # produced the events + metrics + view; the server runs the SAME pure form engine the video path uses
     # (engines.after_form_analyzed) to add coaching/fundamentals, with no ball CV. Split out so the ball path
     # below is untouched (DEC-127 shot behavior unchanged).
@@ -1937,7 +1937,7 @@ def shadow_video(shot_id: str, body: dict = Body(...), user=Depends(current_user
         out_prefix = str(DATA_ROOT / 'out' / f'{shot_id}_shadow')
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
         if mode == 'form':
-            # DEC-128: the server VIDEO form shadow — run the reference MediaPipe pose pipeline so ops can compare
+            # DEC-129: the server VIDEO form shadow — run the reference MediaPipe pose pipeline so ops can compare
             # the on-device 'ios' form attempt to the server 'server' attempt for the SAME shot (never shown/scored).
             from lanesight_core.form import analyze_form_clip
             from lanesight_core.form.pose import pose_backend

@@ -187,7 +187,7 @@ def _form_metrics():
 
 
 def test_form_metrics_endpoint_returns_form_card():
-    """DEC-128: POST /shots/metrics with capture_mode=form builds a form record from the device events+metrics
+    """DEC-129: POST /shots/metrics with capture_mode=form builds a form record from the device events+metrics
     and runs engines.after_form_analyzed (NOT the ball coach) — returns a form card with the fundamentals."""
     u = 'dec128form'
     sid = client.post('/sessions', json={}, headers=H(u)).json()['id']

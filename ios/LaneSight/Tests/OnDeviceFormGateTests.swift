@@ -2,13 +2,13 @@ import XCTest
 import Foundation
 @testable import LaneSight
 
-/// DEC-128 / DEC-121 on-device Form parity gate — the form analogue of `OnDeviceGateTests` (shots).
+/// DEC-129 / DEC-121 on-device Form parity gate — the form analogue of `OnDeviceGateTests` (shots).
 ///
 /// Runs the on-device MediaPipe Form engine (`OnDeviceFormEngine.analyze`) on the labeled form clips and checks:
 ///   1. **Determinism** — two runs on the same clip return byte-identical events + metrics (DEC-126 P0 rule).
 ///   2. **Engine parity vs the Python server reference** — each event the reference surfaces
 ///      (validation/form_ondevice_golden.json) is within ±2 frames on device, and step count matches the
-///      reference exactly. This is "metrics within tolerance of the server's on the same clips" (DEC-128 §3).
+///      reference exactly. This is "metrics within tolerance of the server's on the same clips" (DEC-129 §3).
 ///   3. **Ground-truth deltas vs form_labels.json** — printed per clip (the DEC-121 ±2-frame swing-event /
 ///      exact step-count readout, the same numbers `examples/form_baseline.py` reports). IMG_8980 is HELD OUT.
 ///   4. **Runtime** — printed per clip (<30 s per clip is the DEC-118 Beta gate; measured on device by Shayne).
