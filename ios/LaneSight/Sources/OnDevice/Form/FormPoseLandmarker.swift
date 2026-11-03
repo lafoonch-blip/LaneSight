@@ -90,7 +90,7 @@ nonisolated enum FormPoseLandmarker {
     /// robust: a pre-shot shuffle / walk-off can't be mistaken for the delivery (the IMG_8825 divergence), with no
     /// per-clip tuning. Deterministic (pure arithmetic over decoded luma).
     static func prescanWindow(clipURL: URL, stride: Int = 3,
-                              leadMargin: Double = 1.6, tailMargin: Double = 0.9) -> (Double, Double)? {
+                              leadMargin: Double = 2.6, tailMargin: Double = 2.0) -> (Double, Double)? {
         let asset = AVURLAsset(url: clipURL)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -138,7 +138,11 @@ nonisolated enum FormPoseLandmarker {
             } else { k += 1 }
         }
         guard let b = best else { return nil }
-        return (Swift.max(times[0], b.0 - leadMargin), Swift.min(times[n - 1], b.1 + tailMargin))
+        let w0 = Swift.max(times[0], b.0 - leadMargin), w1 = Swift.min(times[n - 1], b.1 + tailMargin)
+        // If the generous window already covers most of the clip, windowing saves little and risks clipping the
+        // delivery — pose the whole thing instead (correctness over a marginal speedup).
+        if (w1 - w0) > 0.75 * dur { return nil }
+        return (w0, w1)
     }
 
     /// Coarse luma grid (32×24) sampled from a BGRA pixel buffer — cheap, rotation-agnostic (motion is motion).
