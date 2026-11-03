@@ -154,8 +154,10 @@ enum OnDeviceShadow {
                                      "note": "Back-lane metric gated until Phase-2 validation (DEC-065).",
                                      "reason_code": "FAR_LANE_UNVALIDATED"]
                 } else {
-                    detailed[key] = cell(bc.value, unit, status: bc.status == "ok" ? "ok" : "unavailable", note: bc.note)
-                    if bc.status == "ok", let v = bc.value { metrics[key] = v }   // measured scalar for the dev tool
+                    // pass the cell's status through (ok / best_effort / unavailable) — a board read off the
+                    // pale-lane fallback is best_effort, not measured (DEC-128); cell() maps a nil value to unavailable.
+                    detailed[key] = cell(bc.value, unit, status: bc.status, note: bc.note)
+                    if bc.status != "unavailable", let v = bc.value { metrics[key] = v }   // measured/best-effort scalar
                 }
             }
             // DEC-127: the ball path for the shot-card lane view. The server builds path_fit from `smoothed`.

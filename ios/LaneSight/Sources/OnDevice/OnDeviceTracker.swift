@@ -45,6 +45,8 @@ struct BallTrack: Equatable {
     var bgLumaMean: Float = 0           // mean of the working-res max-channel background plate (decode-level check)
     var gateReject: String = ""         // per-gate rejection counts (which gate kills the ball candidates)
     var selectedLane: ODDetectedLane? = nil   // DEC-128: the lane the ball was found on (boards must use THIS lane)
+    var laneFromFallback: Bool = false  // DEC-128: ball found on a raw/pale-lane fallback (not a VP-validated lane)
+                                        // → its unrefined geometry makes every board read off it best_effort
     nonisolated var spanFrac: Float { (points.first.map { p in (points.last!.frac - p.frac) }) ?? 0 }
 }
 
@@ -222,10 +224,11 @@ enum OnDeviceTracker {
             return best
         }
         var best = bestOver(geo.lanes, useMerge: false)   // good lanes: exact original candidate set (golden-safe)
+        var fromFallback = false
         if (best?.score ?? 0) <= 0, !geo.rawLanes.isEmpty,            // ball on no good lane → pale-lane fallback:
            let rawBest = bestOver(geo.rawLanes, useMerge: true),      // raw lanes + fragment merge to recover it
            rawBest.score > (best?.score ?? 0) {
-            best = rawBest
+            best = rawBest; fromFallback = true                        // boards read off this lane are best_effort
         }
         guard let b = best else {
             return BallTrack(points: [], framesScanned: 0, candidateFrames: 0, seconds: CFAbsoluteTimeGetCurrent() - t0)
@@ -241,6 +244,7 @@ enum OnDeviceTracker {
         if !bg.isEmpty { result.bgLumaMean = Float(bg.reduce(0) { $0 + Int($1) }) / Float(bg.count) }
         result.gateReject = "D:\(b.rej.0) vert:\(b.rej.1) shape:\(b.rej.2) frac:\(b.rej.3) pass:\(b.rej.4)"
         result.selectedLane = b.lane
+        result.laneFromFallback = fromFallback
         if let first = b.pts.first {
             result.impactT = detectImpact(url: url, track: b.pts, lane: b.lane, vpY: vpY, afterT: first.t, rot: rot)
         }

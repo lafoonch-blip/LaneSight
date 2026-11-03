@@ -23,6 +23,12 @@ nonisolated struct BoardCell: Equatable {
     let note: String?
     static func ok(_ v: Double) -> BoardCell { BoardCell(value: v, status: "ok", note: nil) }
     static func na(_ why: String) -> BoardCell { BoardCell(value: nil, status: "unavailable", note: why) }
+    /// Downgrade a measured ('ok') cell to best_effort with a reason (leaves unavailable cells as-is). DEC-128:
+    /// boards read off the pale-lane fallback are less precise than a VP-validated lane.
+    func asBestEffort(_ why: String) -> BoardCell {
+        status == "ok" ? BoardCell(value: value, status: "best_effort",
+                                   note: note.map { "\($0) \(why)" } ?? why) : self
+    }
 }
 
 nonisolated struct BoardMetrics: Equatable {
@@ -175,6 +181,17 @@ enum OnDeviceBoards {
         // the ball path the shot-card lane view draws: the LOESS curve + the raw samples, both ABSOLUTE boards.
         out.curveZBoard = (0..<zc.count).compactMap { i in toAbs(bb[i]).map { [zc[i], $0] } }
         out.seriesZBoard = (0..<ZArr.count).compactMap { i in toAbs(board[i]).map { [ZArr[i], $0] } }
+        // DEC-128: when the ball's lane came from the pale-lane FALLBACK (its edges weren't VP-validated/refined),
+        // every board read off it is best_effort, not measured — laydown drives the coach move, so it must not
+        // claim a precision the fallback geometry can't back.
+        if track.laneFromFallback {
+            let why = "(read off the pale-lane fallback — edges not VP-validated, so best-effort)"
+            out.entryBoard = out.entryBoard.asBestEffort(why); out.entryAngleDeg = out.entryAngleDeg.asBestEffort(why)
+            out.arrowsBoard = out.arrowsBoard.asBestEffort(why); out.laydownBoard = out.laydownBoard.asBestEffort(why)
+            out.boardAt7ft = out.boardAt7ft.asBestEffort(why); out.breakpointBoard = out.breakpointBoard.asBestEffort(why)
+            out.breakpointDistanceFt = out.breakpointDistanceFt.asBestEffort(why)
+            out.launchAngleDeg = out.launchAngleDeg.asBestEffort(why)
+        }
         return out
     }
 
