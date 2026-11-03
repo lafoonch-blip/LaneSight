@@ -34,6 +34,7 @@ nonisolated struct ODLaneDebug: Equatable {
     var rawVPx: Double = .nan     // raw (pre-refine) VP
     var rawVPy: Double = .nan
     var usedS: Int = 0
+    var rawLaneInfo: [[Double]] = []   // DEC-128: per raw lane [center_x@yNear, widthNear, dl, dr] vs the raw VP
 }
 nonisolated struct ODLaneGeometry: Equatable {
     let lanes: [ODDetectedLane]          // lanes agreeing with the VP (refined)
@@ -44,6 +45,10 @@ nonisolated struct ODLaneGeometry: Equatable {
     var foulLine: SIMD2<Double>? = nil        // first good lane's foul fit (c, d): y = c·x + d
     var foulCorners: [SIMD2<Double>]? = nil   // first good lane's foul × (left,right) edges — the golden anchor
     var debug: ODLaneDebug = ODLaneDebug()
+    // DEC-128: ALL raw lanes at the winning floor (before the VP-consistency "good" filter). The tracker scores
+    // every candidate lane by the ball track (_lane_ball_score) and picks the ball's — on a pale lane whose edges
+    // skew the shared VP, the real lane can be dropped from `lanes` but is still here for the ball to be found on.
+    var rawLanes: [ODDetectedLane] = []
 }
 
 // Mutable working lane during the port (Double; mirrors the `l` dict in lanes.py).
@@ -96,7 +101,16 @@ enum OnDeviceLaneDetector {
         var dbg = ODLaneDebug()
         dbg.maskPixels = strictWin.reduce(0) { $0 + Int($1) }
         dbg.nTracks = nTracks; dbg.nLanes = lanes.count; dbg.nGood = good.count; dbg.usedS = usedS
-        if let v = rawVP { dbg.rawVPx = Double(v.x); dbg.rawVPy = Double(v.y) }
+        if let v = rawVP {
+            dbg.rawVPx = Double(v.x); dbg.rawVPy = Double(v.y)
+            for l in lanes {
+                let yn = Double(l.yNear)
+                let lx = l.la * yn + l.lb, rx = l.ra * yn + l.rb
+                let dl = abs(Double(v.x) - (l.la * Double(v.y) + l.lb))
+                let dr = abs(Double(v.x) - (l.ra * Double(v.y) + l.rb))
+                dbg.rawLaneInfo.append([(lx + rx) / 2, rx - lx, dl, dr])
+            }
+        }
 
         if good.isEmpty {
             // No VP-consistent lane. (Pale-lane gutter fallback NOT ported — see header.) Honest empty geometry.
@@ -109,7 +123,7 @@ enum OnDeviceLaneDetector {
         morphologyOpenClose(&loose, w: w, h: h)
         dbg.loosePixels = loose.reduce(0) { $0 + Int($1) }
 
-        return finish(good: good, strict: strictWin, loose: loose, w: w, h: h, usedS: usedS, dbg: dbg)
+        return finish(good: good, raw: lanes, strict: strictWin, loose: loose, w: w, h: h, usedS: usedS, dbg: dbg)
     }
 
     /// Geometry-only entry for parity isolation: run the post-mask pipeline on PRE-COMPUTED 0/1 masks (the exact
@@ -126,11 +140,11 @@ enum OnDeviceLaneDetector {
             return ODLaneGeometry(lanes: d.lanes.map(Self.publicLane), vanishingPoint: nil,
                                   foulLineY: d.lanes.map { $0.yNear }.max(), satFloorUsed: usedS, imageSize: [w, h], debug: dbg)
         }
-        return finish(good: d.good, strict: strict, loose: loose, w: w, h: h, usedS: usedS, dbg: dbg)
+        return finish(good: d.good, raw: d.lanes, strict: strict, loose: loose, w: w, h: h, usedS: usedS, dbg: dbg)
     }
 
     // MARK: finish — foul fit + edge refine + VP re-solve (find_lanes tail, lines 130-143)
-    nonisolated private static func finish(good: [WorkLane], strict: [UInt8], loose: [UInt8],
+    nonisolated private static func finish(good: [WorkLane], raw: [WorkLane], strict: [UInt8], loose: [UInt8],
                                            w: Int, h: Int, usedS: Int, dbg dbgIn: ODLaneDebug) -> ODLaneGeometry {
         let dbg = dbgIn
         for l in good {
@@ -155,6 +169,10 @@ enum OnDeviceLaneDetector {
             geom.foulLine = SIMD2(g0.foulC, g0.foulD)
             geom.foulCorners = foulCorners(g0)
         }
+        // DEC-128: expose ALL raw lanes (good + VP-rejected) so the tracker can score each by the ball track and
+        // pick the ball's lane — a pale lane whose edges skew the shared VP gets dropped from `good` but the ball
+        // is still on it. `publicLane` just reads the (unrefined) edges, which is all the tracker geometry needs.
+        geom.rawLanes = raw.map(Self.publicLane)
         return geom
     }
 

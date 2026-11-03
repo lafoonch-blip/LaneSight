@@ -50,3 +50,34 @@ the exact levers that can regress the validated IMG_8751-54 golden clips, so it 
 validation loop (re-run `OnDeviceGateTests` on the golden set + 7936cc3f/6ecfcfee) and may not succeed if the ball
 is genuinely hard to segment on-device. Flagged as a follow-up rather than shipped speculative, per
 "accuracy beats coverage."
+
+## 80ae104f resolved — it was a LANE-SELECTION bug (not detector tuning)
+
+Per-frame intermediate dumps on both engines localised the divergence through every stage (decode matches to ~3
+of max-channel mean; stabilization irrelevant — the failing clip is static at 1.1 px while the *working* clip has
+22.8 px motion). The real cause: **the device tracked the wrong lane.**
+
+- The server and the device both detect the **same 3 raw lanes**. A spurious 3rd lane (center_x 554, edges that
+  miss the VP by ~830 px) skews the device's jointly-solved VP (637,881 vs the server's 612,844). With that
+  skewed VP, the **ball's pale left lane** (center_x ~405, server dl=14 → GOOD) misses the device VP by dl=180 →
+  dropped by the VP-consistency "good" filter. The device then tracked `geo.lanes.first` = the **empty right
+  lane** → 0 track points. The server iterates all lanes and keeps the one the ball rolled down (`_lane_ball_score`).
+
+**Fix (DEC-128, `OnDeviceTracker`/`OnDeviceLaneDetector`/`OnDeviceBoards`):**
+- The tracker now scores **every** detected lane by the ball track (`_lane_ball_score`, ported from
+  `cv/pipeline.py`) and keeps the ball's — never `lanes.first`.
+- `OnDeviceLaneDetector` exposes `rawLanes` (all lanes before the VP "good" filter). When the ball is on no good
+  lane, the tracker falls back to the raw lanes — the real pale lane is still there and scores highest.
+- `cv/track.py`'s `_groups` fragment-merge is ported and applied **only on the raw-lane fallback** (the ball
+  fragments on a pale lane); the good-lane path keeps the exact original candidate set, so the validated clips are
+  unchanged.
+- `BallTrack.selectedLane` is carried into `OnDeviceBoards`, and the board homography anchors Z=0 at the selected
+  lane's near row — otherwise the boards are read on the wrong lane's scale.
+
+**Result (sim, trimmed like live):** 80ae104f now **tracks** (was 0 points): ball_speed 16.6 vs server 17.6
+(within ±1.5), arrows 14.5 vs 14.5 (exact), board_at_7ft 16.7 vs 15.1 (within ±2). laydown 19.7 vs 15.7 is ~2
+boards beyond tolerance — the near-lane board on the pale fallback lane (its unrefined edges + the horizontal
+foul-row approximation); a documented residual. Golden: `OnDeviceLaneParityTests` pass; IMG_8751/8752 pass vs
+truth; IMG_8753/8754 are untracked on the **original** device engine too (not a regression — the device never
+tracked them; only the server, with stabilization + full-res, does). Reverted as net-negative: the per-channel
+BGR diff and the bg-level ROI port (no benefit; the ROI/per-channel perturbed the golden f2p).

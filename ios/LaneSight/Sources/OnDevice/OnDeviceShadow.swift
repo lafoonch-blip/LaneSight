@@ -41,6 +41,20 @@ enum OnDeviceShadow {
             let geo = stage("detect") { OnDeviceLaneDetector.detect(pixelBuffer: plate) }
             diag["lane_found"] = geo.lanes.first != nil
             diag["lanes_detected"] = geo.lanes.count
+            // DEC-128 lane-detector parity: which saturation floor won + how many tracks/lanes/good lanes it found.
+            diag["lane_usedS"] = geo.debug.usedS
+            diag["lane_nTracks"] = geo.debug.nTracks
+            diag["lane_nLanes"] = geo.debug.nLanes
+            diag["lane_nGood"] = geo.debug.nGood
+            diag["lane_maskPixels"] = geo.debug.maskPixels
+            diag["lane_rawVP"] = [geo.debug.rawVPx, geo.debug.rawVPy]
+            diag["lane_rawLanes"] = geo.debug.rawLaneInfo   // [center_x, width, dl, dr] per raw lane
+            // every detected lane's center_x + width at the foul line (compare to the server's find_lanes)
+            diag["lane_centers"] = geo.lanes.map { l -> [String: Double] in
+                let fy = Double(geo.foulLineY ?? Int(l.yNear))
+                let lx = Double(l.left.a) * fy + Double(l.left.b), rx = Double(l.right.a) * fy + Double(l.right.b)
+                return ["center_x": (lx + rx) / 2, "width": rx - lx, "foul_y": fy]
+            }
             diag["foul_line_y"] = geo.foulLineY as Any
             if let vp = geo.vanishingPoint { diag["vp"] = [Double(vp.x), Double(vp.y)] }
             if let l = geo.lanes.first {
@@ -54,6 +68,14 @@ enum OnDeviceShadow {
             diag["candidate_frames"] = track.candidateFrames
             diag["track_points"] = track.points.count
             diag["span_frac"] = Double(track.spanFrac)
+            // DEC-128 port-parity: expose the per-stage intermediates to compare against the server dump.
+            diag["thr_eff"] = track.thrEff
+            diag["bg_level"] = Double(track.bgLevel)
+            diag["bg_luma_mean"] = Double(track.bgLumaMean)
+            diag["total_blobs"] = track.totalBlobs
+            diag["frames_with_blobs"] = track.framesWithBlobs
+            diag["total_candidates"] = track.totalCandidates
+            diag["gate_reject"] = track.gateReject
             if let it = track.impactT { diag["impact_t_detected"] = it }
             let sp = stage("speed") { OnDeviceTracker.speed(track: track, geo: geo) }
             mph = sp.mph; basis = sp.basis; note = sp.note
