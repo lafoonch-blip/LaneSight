@@ -115,6 +115,9 @@ targets:
       - path: ../../lanesight-core/validation/form_ondevice_golden.json
         buildPhase: resources
         optional: true
+      - path: ../../lanesight-core/validation/form_steps_labels.json
+        buildPhase: resources
+        optional: true
     dependencies:
       - target: LaneSight
     settings:

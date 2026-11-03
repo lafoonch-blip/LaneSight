@@ -36,9 +36,16 @@ final class OnDeviceFormGateTests: XCTestCase {
         let step_count: Int?
     }
     struct Labels: Decodable { let clips: [String: LabelClip] }
+    struct StepLabelClip: Decodable {
+        let step1_s: Double?; let step2_s: Double?; let step3_s: Double?
+        let step4_s: Double?; let step5_s: Double?; let step6_s: Double?; let fps: Double?
+        var visible: [Double] { [step1_s, step2_s, step3_s, step4_s, step5_s, step6_s].compactMap { $0 } }
+    }
+    struct StepLabels: Decodable { let clips: [String: StepLabelClip] }
 
     static let heldOut: Set<String> = ["IMG_8980"]
-    static let gateFrames = 2.0
+    static let gateFrames = 2.0        // DEC-121 swing events
+    static let plantFrames = 3.0       // DEC-121 per-plant foot-strike timing
 
     func testOnDeviceFormParityOnLabeledClips() async throws {
         // engine event key -> label key (matches form_baseline.EVENT_MAP); E2 is null in the reference (DEC-120).
@@ -55,6 +62,7 @@ final class OnDeviceFormGateTests: XCTestCase {
               let golden = loadJSON(Golden.self, "form_ondevice_golden", bundle) else {
             throw XCTSkip("form_labels.json / form_ondevice_golden.json not bundled — add them as test resources.")
         }
+        let stepLabels = loadJSON(StepLabels.self, "form_steps_labels", bundle)?.clips ?? [:]
         guard FormPoseLandmarker.resolveModelPath(bundle: bundle) != nil else {
             throw XCTSkip("pose_landmarker_heavy.task not in the test bundle (gitignored) — add it to run the gate.")
         }
@@ -90,20 +98,33 @@ final class OnDeviceFormGateTests: XCTestCase {
             }
             XCTAssertEqual(identical, 10, "\(clip) determinism \(identical)/10")
 
-            // 2. engine parity vs the server reference (golden) — NOT applied to the held-out clip.
-            if let gevents = gold?.events, !heldOut {
-                for key in ["E4", "E6", "E7", "E8"] {
-                    guard let g = gevents[key] ?? nil, let d = ev(a1, key) else { continue }
-                    let df = abs(d - g) * fps
+            // 2. THE GATE — vs the HUMAN LABELS (DEC-121), not the server's pose. Held-out IMG_8980 is not gated.
+            //    (a) each SURFACED DEC-118 swing event (E4 top, E7 release, E8 slide stop) within ±2 frames of the
+            //        label. A dropped/null event is reported (coverage), not asserted here. E2 ball-start is null on
+            //        all clips (DEC-120) — reported only.
+            //    (b) per-plant foot strikes within ±3 frames of the form_steps labels (visible plants, greedy
+            //        nearest match). Step count stays best_effort — REPORTED, never gated (DEC-121).
+            //    The server-golden comparison is kept as a reported shadow in the row (never asserted).
+            if !heldOut {
+                for (ekey, kp, name, dec118) in eventMap where dec118 {
+                    guard let det = ev(a1, ekey), let gt = lab?[keyPath: kp] else { continue }  // null → coverage, not gated
+                    let df = abs(det - gt) * fps
                     XCTAssertLessThanOrEqual(df, Self.gateFrames,
-                        "\(clip) \(key): on-device \(d)s vs server \(g)s = \(df) frames > ±\(Self.gateFrames) (engine parity)")
+                        "\(clip) \(ekey) \(name): \(df) frames vs label > ±\(Self.gateFrames)")
                 }
-                if let gsc = gold?.step_count?.value, let dsc = a1.metrics["step_count"]?.value {
-                    XCTAssertEqual(dsc, gsc, "\(clip): on-device step_count \(dsc) != server \(gsc) (engine parity)")
+                // per-plant ±3f vs labels
+                let visible = stepLabels[clip]?.visible ?? []
+                let sfps = stepLabels[clip]?.fps ?? fps
+                let strikes = a1.strikes.map { $0.t }
+                for lb in visible {
+                    guard let nearest = strikes.min(by: { abs($0 - lb) < abs($1 - lb) }) else { continue }
+                    let df = abs(nearest - lb) * sfps
+                    XCTAssertLessThanOrEqual(df, Self.plantFrames,
+                        "\(clip) plant@\(String(format: "%.2f", lb))s: nearest strike \(df) frames > ±\(Self.plantFrames)")
                 }
             }
 
-            // 3 + 4. report ground-truth deltas + runtime (one grep-able JSON row per clip)
+            // 3 + 4. report ground-truth deltas (vs labels), the server-golden shadow, step count + runtime.
             var evRows: [String: Any] = [:]
             for (ekey, kp, _, dec118) in eventMap {
                 let det = ev(a1, ekey)
@@ -111,8 +132,18 @@ final class OnDeviceFormGateTests: XCTestCase {
                 var r: [String: Any] = ["dec118": dec118]
                 r["det_s"] = det as Any
                 r["label_s"] = gt as Any
-                if let det, let gt { r["d_frames"] = (det - gt) * fps }
+                if let det, let gt { r["d_frames"] = (det - gt) * fps }                      // vs LABEL (the gate)
+                if let det, let gEvents = gold?.events, let gv = gEvents[ekey], let g = gv {   // vs server (shadow)
+                    r["d_frames_server"] = (det - g) * fps
+                }
                 evRows[ekey] = r
+            }
+            // per-plant report (vs labels): the frame delta of the nearest strike to each visible labeled plant.
+            let visible = stepLabels[clip]?.visible ?? []
+            let sfps = stepLabels[clip]?.fps ?? fps
+            let strikes = a1.strikes.map { $0.t }
+            let plantDf: [Double] = visible.compactMap { lb in
+                strikes.min(by: { abs($0 - lb) < abs($1 - lb) }).map { abs($0 - lb) * sfps }
             }
             let row: [String: Any] = [
                 "clip": clip, "held_out": heldOut, "view_label": lab?.view ?? "?",
@@ -120,6 +151,8 @@ final class OnDeviceFormGateTests: XCTestCase {
                 "determinism": "\(identical)/10",
                 "step_count": a1.metrics["step_count"]?.value as Any,
                 "step_count_label": lab?.step_count as Any,
+                "n_strikes": strikes.count, "plants_visible": visible.count,
+                "plant_df_vs_label": plantDf.map { ($0 * 10).rounded() / 10 },
                 "swing_source": a1.swingSource, "events": evRows,
             ]
             if let data = try? JSONSerialization.data(withJSONObject: row),

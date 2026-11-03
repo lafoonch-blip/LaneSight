@@ -12,6 +12,27 @@ nonisolated enum OnDeviceFormEngine {
     static let formVersion = "form-0.0.0"
     typealias LM = FormPoseLandmarker.LM
 
+    /// Does a windowed pose pass actually contain the delivery AND yield swing events? Mirrors analyze's own
+    /// delivery + swing-event logic so a too-tight prescan window (one that dropped the delivery) triggers the
+    /// widen-to-full retry (decision 2: "widen and retry if events aren't found").
+    private static func deliveryWithEventsFound(_ lms: FormPoseLandmarker.Landmarks, handed: String?) -> Bool {
+        let fr = lms.frames, tt = lms.t
+        let rs = FormSignal.speed(FormSignal.point(fr, LM.rFootPts, axis: 0),
+                                  FormSignal.point(fr, LM.rFootPts, axis: 1), tt)
+        let ls = FormSignal.speed(FormSignal.point(fr, LM.lFootPts, axis: 0),
+                                  FormSignal.point(fr, LM.lFootPts, axis: 1), tt)
+        let slow = FormEngine.looksSlowmo(tt, fr, rs, ls)
+        let delivery = slow
+            ? FormEngine.findDelivery(tt, fr, rs, ls, burstMotion: 0.11, burstMaxS: 9.0, stillThr: 0.06)
+            : FormEngine.findDelivery(tt, fr, rs, ls)
+        guard let d = delivery else { return false }
+        let torso = FormSignal.torso(fr)
+        let b0 = d.win.0 + 0.4
+        let swingWin = (Swift.max(tt[0], b0 - 0.8), Swift.min(d.hold.0 + 0.3, tt[tt.count - 1]))
+        let ev = FormEngine.swingEvents(tt, fr, ball: [:], win: swingWin, torso: torso)
+        return ev.E4 != nil || ev.E6 != nil || ev.E7 != nil
+    }
+
     /// Analyze a form clip end to end. `trackBall` runs the ball-colour release confirmation. It defaults OFF:
     /// on every labeled clip the reference's ball-confirm did NOT move E7 past the bottom of the arc (release_time
     /// stayed ~1 frame = E6+dt — see validation/form_ondevice_golden.json), so the wrist-arc release is
@@ -19,7 +40,15 @@ nonisolated enum OnDeviceFormEngine {
     /// (FormBallTrack is a documented hook for a future clip that needs it).
     static func analyze(clipURL: URL, handed: String? = "right", modelPath: String? = nil,
                         bundle: Bundle = .main, trackBall: Bool = false) throws -> FormAnalysis {
-        let lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle)
+        // DEC-129 runtime + segmentation: find the dominant-motion delivery window with a cheap prescan and run
+        // pose ONLY there (+ margin). Widen to the full clip and retry if the delivery burst isn't inside it.
+        let window0 = FormPoseLandmarker.prescanWindow(clipURL: clipURL)
+        var lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: window0)
+        if window0 != nil && !Self.deliveryWithEventsFound(lms, handed: handed) {
+            // The prescan window missed the delivery (no burst, or the swing events came back null) — widen to the
+            // full clip and retry (decision 2). Rare once margins are generous; the common case stays windowed+fast.
+            lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: nil)
+        }
         let t = lms.t
         let frames = lms.frames
         let fps = lms.fps

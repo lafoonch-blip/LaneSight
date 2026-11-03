@@ -83,10 +83,96 @@ nonisolated enum FormPoseLandmarker {
         return Bundle.main.url(forResource: modelResource, withExtension: modelExtension)?.path
     }
 
-    /// Run the heavy pose landmarker on every frame of `clipURL`. `modelPath` defaults to the bundled model.
-    /// Honours `Task.isCancelled` (the 30 s primary cap / a superseded delivery) like the shot engines.
+    /// DEC-129 runtime/segmentation prescan: a CHEAP strided motion-energy scan (no pose) that finds the dominant
+    /// delivery window — the longest sustained-motion span (the approach + swing), scored by duration × mean energy.
+    /// Returns [start − leadMargin, end + tailMargin] so the setup-hold lead-in + the finish hold are included, or
+    /// nil for a short clip (run pose on the whole thing). Picking the DOMINANT motion span also makes segmentation
+    /// robust: a pre-shot shuffle / walk-off can't be mistaken for the delivery (the IMG_8825 divergence), with no
+    /// per-clip tuning. Deterministic (pure arithmetic over decoded luma).
+    static func prescanWindow(clipURL: URL, stride: Int = 3,
+                              leadMargin: Double = 2.6, tailMargin: Double = 2.0) -> (Double, Double)? {
+        let asset = AVURLAsset(url: clipURL)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let rdOut = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        guard reader.canAdd(rdOut) else { return nil }
+        reader.add(rdOut); reader.startReading()
+
+        var times: [Double] = []
+        var energy: [Double] = []
+        var prev: [Double]? = nil
+        var i = 0
+        while reader.status == .reading, let sb = rdOut.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); break }
+            defer { i += 1 }
+            guard i % max(1, stride) == 0, let px = CMSampleBufferGetImageBuffer(sb) else { continue }
+            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+            guard let grid = coarseLuma(px) else { continue }
+            if let p = prev, p.count == grid.count {
+                var s = 0.0
+                for k in 0..<grid.count { s += abs(grid[k] - p[k]) }
+                times.append(t); energy.append(s / Double(grid.count))
+            }
+            prev = grid
+        }
+        reader.cancelReading()
+        let n = energy.count
+        guard n >= 8 else { return nil }
+        let dur = times[n - 1] - times[0]
+        if dur < 8.0 { return nil }     // short clips: pose the whole thing, no windowing needed
+        // threshold = low + 0.35*(hi-low) over a robust range (10th..90th pct), find runs above it, pick the best.
+        let sorted = energy.sorted()
+        let lo = sorted[Int(0.10 * Double(n))], hi = sorted[Int(0.90 * Double(n))]
+        let thr = lo + 0.35 * (hi - lo)
+        var best: (Double, Double, Double)? = nil     // (startT, endT, score=dur*meanEnergy)
+        var k = 0
+        while k < n {
+            if energy[k] > thr {
+                var j = k, sum = 0.0
+                while j < n && energy[j] > thr { sum += energy[j]; j += 1 }
+                let t0 = times[k], t1 = times[min(j - 1, n - 1)]
+                let score = (t1 - t0 + 1e-3) * (sum / Double(max(1, j - k)))
+                if best == nil || score > best!.2 { best = (t0, t1, score) }
+                k = j
+            } else { k += 1 }
+        }
+        guard let b = best else { return nil }
+        let w0 = Swift.max(times[0], b.0 - leadMargin), w1 = Swift.min(times[n - 1], b.1 + tailMargin)
+        // If the generous window already covers most of the clip, windowing saves little and risks clipping the
+        // delivery — pose the whole thing instead (correctness over a marginal speedup).
+        if (w1 - w0) > 0.75 * dur { return nil }
+        return (w0, w1)
+    }
+
+    /// Coarse luma grid (32×24) sampled from a BGRA pixel buffer — cheap, rotation-agnostic (motion is motion).
+    private static func coarseLuma(_ px: CVPixelBuffer, cols: Int = 32, rows: Int = 24) -> [Double]? {
+        guard CVPixelBufferGetPixelFormatType(px) == kCVPixelFormatType_32BGRA else { return nil }
+        CVPixelBufferLockBaseAddress(px, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(px) else { return nil }
+        let w = CVPixelBufferGetWidth(px), h = CVPixelBufferGetHeight(px)
+        let bpr = CVPixelBufferGetBytesPerRow(px)
+        let p = base.assumingMemoryBound(to: UInt8.self)
+        var out = [Double](repeating: 0, count: cols * rows)
+        for ry in 0..<rows {
+            let y = min(h - 1, (ry * h) / rows)
+            for cx in 0..<cols {
+                let x = min(w - 1, (cx * w) / cols)
+                let o = y * bpr + x * 4
+                // BGRA → luma (Rec.601 on B,G,R)
+                out[ry * cols + cx] = 0.114 * Double(p[o]) + 0.587 * Double(p[o + 1]) + 0.299 * Double(p[o + 2])
+            }
+        }
+        return out
+    }
+
+    /// Run the heavy pose landmarker on `clipURL`. `modelPath` defaults to the bundled model. When `window` is
+    /// set, pose is run ONLY on frames inside [t0, t1] (others become NaN rows) — the DEC-129 runtime fix: a cheap
+    /// motion prescan finds the delivery window and we skip the expensive rotate+detect outside it. Decode still
+    /// walks every frame (timestamps stay authoritative). Honours `Task.isCancelled` (the 30 s cap / superseded).
     static func extract(clipURL: URL, modelPath: String? = nil,
-                        bundle: Bundle = .main) throws -> Landmarks {
+                        bundle: Bundle = .main, window: (Double, Double)? = nil) throws -> Landmarks {
         #if canImport(MediaPipeTasksVision)
         guard let model = resolveModelPath(bundle: bundle, override: modelPath) else {
             throw PoseError.modelMissing(modelPath ?? "\(modelResource).\(modelExtension) (not in bundle)")
@@ -122,11 +208,13 @@ nonisolated enum FormPoseLandmarker {
             if Task.isCancelled { reader.cancelReading(); break }
             guard let raw = CMSampleBufferGetImageBuffer(sb) else { continue }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
-            guard let px = OnDeviceDecode.rotated(raw, rot) else { continue }
-            let tsMs = Int((t * 1000.0).rounded())
             var row = nanRow
-            if let image = try? MPImage(pixelBuffer: px),
-               let res = try? landmarker.detect(videoFrame: image, timestampInMilliseconds: max(0, tsMs)),
+            let inWindow = window == nil || (t >= window!.0 && t <= window!.1)
+            // Skip the (expensive) rotate + pose on frames outside the delivery window — they stay NaN, which the
+            // engine treats as "not visible", exactly as if the bowler weren't detected there.
+            if inWindow, let px = OnDeviceDecode.rotated(raw, rot),
+               let image = try? MPImage(pixelBuffer: px),
+               let res = try? landmarker.detect(videoFrame: image, timestampInMilliseconds: max(0, Int((t * 1000.0).rounded()))),
                let first = res.landmarks.first {
                 for (k, p) in first.enumerated() where k < 33 {
                     row[k] = [p.x, p.y, p.z,
