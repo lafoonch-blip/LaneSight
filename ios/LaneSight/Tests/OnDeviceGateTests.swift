@@ -34,6 +34,12 @@ final class OnDeviceGateTests: XCTestCase {
         for u in urls.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             if seen.insert(u.lastPathComponent).inserted { clips.append(u) }
         }
+        // Optional allowlist (comma-separated clip base names, no extension) so a focused parity run can target a
+        // few clips without re-bundling. Pass via `env TEST_RUNNER_LS_GATE_CLIPS=80ae104f,7936cc3f xcodebuild test`.
+        if let allow = ProcessInfo.processInfo.environment["LS_GATE_CLIPS"], !allow.isEmpty {
+            let want = Set(allow.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+            clips = clips.filter { want.contains($0.deletingPathExtension().lastPathComponent) }
+        }
         print("ONDEV_GATE_BEGIN")
         var found = 0
         for url in clips {
@@ -41,7 +47,9 @@ final class OnDeviceGateTests: XCTestCase {
             found += 1
             // Faithful to the live on-device-first path: trim to the 5 s shot window (measureOnDevicePrimary does
             // the same) before running the engine, so the gate reproduces what the user sees — and runs fast.
-            let trimmed = await VideoTrimmer.trimToShotWindow(url, tail: 5.0)
+            // LS_GATE_NOTRIM=1 runs the FULL clip (diagnostic: isolate the trim from the detector).
+            let noTrim = (ProcessInfo.processInfo.environment["LS_GATE_NOTRIM"] == "1")
+            let trimmed = noTrim ? url : await VideoTrimmer.trimToShotWindow(url, tail: 5.0)
             defer { if trimmed != url { try? FileManager.default.removeItem(at: trimmed) } }
             let body = await OnDeviceShadow.run(clipURL: trimmed, shotId: "gate-\(name)", source: "upload",
                                                 sessionId: nil, captureMode: "shot", appVersion: "gate")
