@@ -202,6 +202,12 @@ struct PreviewHarness: View {
                         NavigationStack { if r.isForm { FormCardView(result: r) } else { ShotCardView(result: r) } }
                     }
                     else { Text("no shot result (set LS_PREVIEW_ID)").foregroundStyle(LS.textPrimary) }
+                case "lanescene":
+                    // DEC-127 objective diff: render ONLY the WebGL lane scene with the exact JSON from
+                    // LS_PREVIEW_DATA (shots.json verbatim), 344×360 at the screen top-left, so a 3× screenshot
+                    // crops to 1032×1080 and diffs against lane_render_*@3x.png.
+                    LaneScenePreview(dataJSON: ProcessInfo.processInfo.environment["LS_PREVIEW_DATA"] ?? "{}")
+                        .statusBarHidden(true)
                 case "activesession":
                     if let id = ProcessInfo.processInfo.environment["LS_PREVIEW_ID"] {
                         NavigationStack { SessionView(reviewSessionId: id, readOnly: false) }
@@ -303,6 +309,23 @@ struct PreviewHarness: View {
             ? #"{"id":"s","kind":"achievement_popup","priority":1,"payload":{"category":"streak","name":"Line Locked","description":"10 shots in a row within 1 board of your target at the arrows","value":"SHOTS 32–41"}}"#
             : #"{"id":"s","kind":"tier_celebration","priority":1,"payload":{"to_tier":"platinum","score":706,"next_tier":"onyx","points":144}}"#
         return try? JSONDecoder().decode(AppNotification.self, from: Data(json.utf8))
+    }
+}
+
+/// DEC-127 objective diff harness: the bare WebGL lane scene at the screen's top-left (344×360 pt), black
+/// background, from the given JSON — for a 3× screenshot → 1032×1080 pixel-diff vs lane_render_*@3x.png.
+struct LaneScenePreview: View {
+    let dataJSON: String
+    @State private var pts: [String: CGPoint] = [:]
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            ShotLaneWebView(dataJSON: dataJSON, w: 344, h: 360, pts: $pts)
+                .frame(width: 344, height: 360)
+                .padding(.top, 70)     // clear the dynamic island so the 3× crop (y≥210px) is clean
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .ignoresSafeArea()
     }
 }
 #endif

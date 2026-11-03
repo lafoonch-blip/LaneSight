@@ -348,9 +348,45 @@ struct ProcessingCover: View {
                 .padding(32)
 
             default:
-                processing
+                // DEC-127 on-device-first: ONLY the three-step progress (Analyzing → Generating coaching → Your
+                // results) — the old Trimmed/Uploaded/Analyzing checklist is never shown on this path. It advances
+                // as each step completes. The server-primary path (kill switch off) keeps the upload checklist.
+                if onDevicePrimary && model.captureMode != "form" {
+                    deviceProgress(coaching: isCoachingStep)
+                } else {
+                    processing
+                }
             }
         }
+    }
+
+    /// DEC-127: on-device-primary is on (its result renders once; the old upload checklist must not flash).
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimary = false
+    private var isCoachingStep: Bool {
+        if case .analyzing(let s, _) = model.pipeline { return s == "coaching" }
+        return false
+    }
+
+    /// DEC-127 three-step progress for the on-device-first path. No artificial waits — each step flips to done
+    /// the moment the pipeline advances, and the result shows the instant everything is ready.
+    private func deviceProgress(coaching: Bool) -> some View {
+        VStack(spacing: 14) {
+            ProgressView().tint(LS.action).scaleEffect(1.2).padding(.top, 4)
+            Text(coaching ? "Generating coaching" : "Analyzing your shot")
+                .font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 12) {
+                stepRow("Analyzing your shot", coaching ? .done : .active)
+                stepRow("Generating coaching", coaching ? .active : .pending)
+                stepRow("Your results", .pending)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+            ProgressView(value: coaching ? 0.7 : 0.35).tint(LS.action)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+        .padding(.horizontal, 28)
     }
 
     /// v3.7 Analyzing modal (Figma 412:3784): one card with a Trimmed / Uploaded / Analyzing checklist

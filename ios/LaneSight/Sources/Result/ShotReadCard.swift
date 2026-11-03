@@ -13,7 +13,9 @@ struct ShotReadCard: View {
             throwSection
             Divider().overlay(LS.border)
             laneSection
-            coachBox
+            // DEC-127: Offline Analysis state — the coaching SECTION is absent (no half-filled card), replaced by
+            // one line. The queued metrics call adds coaching to this shot in history when connectivity returns.
+            if result.coachingPendingOffline { offlineCoachLine } else { coachBox }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,9 +73,26 @@ struct ShotReadCard: View {
     /// that would be confident advice with no lane read behind it.
     private var fallbackCoachText: String {
         switch result.insightsState {
-        case "no_reliable_data": return "We couldn't read the lane from this camera spot — no move. Reposition and try again."
-        default: return laneRead ? "Keep repeating your line." : "Keep the same line. Move the tripod so your next shot gets a full read."
+        case "no_reliable_data": return "We couldn't read the lane from this clip — no move. Try again with the lane in full view."
+        // DEC-127: far-lane is gated by policy (DEC-065), not a camera problem — don't tell the bowler to move the
+        // tripod. Coaching comes from what was measured (speed, rev, laydown, arrows).
+        default: return laneRead ? "Keep repeating your line."
+                                 : "Keep the same line — coaching uses what we measured; entry and breakpoint aren't read yet."
         }
+    }
+
+    /// DEC-127 Offline Analysis: one concise line in place of the coaching section — never an empty/loading card.
+    private var offlineCoachLine: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.slash").font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+            Text("Offline — coaching is added when you're back online.")
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(LS.raised, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.border, lineWidth: 1))
     }
 
     private var coachBox: some View {

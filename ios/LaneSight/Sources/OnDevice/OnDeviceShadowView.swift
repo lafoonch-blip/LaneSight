@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UIKit
+import AVFoundation
 
 // DEC-102/103 — Phase 3 shadow runner (dev-only). Runs the on-device stabilization stage on a picked clip and
 // reports timing + registration quality so it can be compared to the server (parity gate). SHADOW: nothing
@@ -34,6 +35,11 @@ struct OnDeviceShadowView: View {
                     Task { await runTrack() }
                 } label: {
                     HStack { Text("Run ball tracking (stage 3)"); if running { Spacer(); ProgressView() } }
+                }.disabled(running || clipURL == nil)
+                Button {
+                    Task { await runFull() }
+                } label: {
+                    HStack { Text("Run FULL engine — DEC-126 latency"); if running { Spacer(); ProgressView() } }
                 }.disabled(running || clipURL == nil)
                 if let error { Text(error).font(.footnote).foregroundStyle(.red).textSelection(.enabled) }
             } header: { Text("On-device analysis — Stage 1 (shadow)") } footer: {
@@ -80,6 +86,46 @@ struct OnDeviceShadowView: View {
             in the parity gate. Transforms are the stage-1 input for tracking (not yet ported).
             """
         } catch { self.error = "stabilize failed: \(error.localizedDescription)" }
+        running = false
+    }
+
+    /// DEC-126: run the FULL on-device engine (plate → detect → track → speed → rev) and report the latency the
+    /// 30 s primary guardrail is measured against, plus the measured speed/rev and basis. The exact call the
+    /// live-shot primary path makes.
+    private func runFull() async {
+        guard let url = clipURL else { return }
+        running = true; error = nil; report = ""
+        // Mirror the live primary path EXACTLY: trim to the shot window first (the primary path never runs the
+        // engine on the full recording), then run the engine on the trimmed window.
+        let t0 = Date()
+        let clip = await VideoTrimmer.trimToShotWindow(url, tail: 5.0)
+        let trimS = Date().timeIntervalSince(t0)
+        let origDur = CMTimeGetSeconds(AVURLAsset(url: url).duration)
+        let trimDur = CMTimeGetSeconds(AVURLAsset(url: clip).duration)
+        let body = await OnDeviceShadow.run(clipURL: clip, shotId: "devtest", source: "upload",
+                                            sessionId: nil, captureMode: "shot", appVersion: "dev")
+        if clip != url { try? FileManager.default.removeItem(at: clip) }
+        let perf = body["device_perf"] as? [String: Any] ?? [:]
+        let m = body["metrics"] as? [String: Any] ?? [:]
+        let engLat = perf["latency_s"] as? Double ?? -1
+        let total = trimS + engLat
+        func f(_ v: Double, _ n: Int = 2) -> String { String(format: "%.\(n)f", v) }
+        func val(_ k: String) -> String { (m[k] as? Double).map { f($0) } ?? "unavailable" }
+        report = """
+        FULL on-device engine — DEC-126 primary path (shot-window trimmed)
+        Device: \(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)
+        Clip: \(f(origDur, 1))s recording → trimmed to \(f(trimDur, 1))s window
+
+        trim: \(f(trimS))s   engine: \(f(engLat))s
+        TOTAL: \(f(total))s   \(total >= 0 && total <= 30 ? "✅ under 30 s (primary)" : "❌ over 30 s → falls back to server")
+        peak_mem: \(f((perf["peak_mem_mb"] as? Double) ?? 0)) MB   basis: \(body["basis"] as? String ?? "?")
+
+        ball_speed: \(val("ball_speed")) mph
+        speed_avg_foul_to_pins: \(val("speed_avg_foul_to_pins")) mph
+        rev_rate: \(val("rev_rate")) rpm
+
+        note: \(body["note"] as? String ?? "")
+        """
         running = false
     }
 

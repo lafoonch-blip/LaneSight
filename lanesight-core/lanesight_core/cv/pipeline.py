@@ -591,7 +591,12 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     meas = [
         m('ball_speed', M['ball_speed_mph'], 'mph', speed_c, 'early-lane (release) speed, front ~4–24 ft; best effort until the DEC-065 pose solver anchors the near-lane Z-scale (today it still rides the impact-anchored 2-point homography)', status='best_effort' if M.get('ball_speed_mph') is not None else None),
         m('speed_release', M.get('speed_release_mph'), 'mph', 0.6, 'release/skid front-half; robust when the back half is lost, reads ~9% low from a near-field scale residual (Specto)', status='best_effort' if M.get('speed_release_mph') is not None else None),
-        m('speed_early', M['speed_early_mph'], 'mph', 0.8), m('speed_late', M['speed_late_mph'], 'mph', 0.7),
+        # DEC-126/DEC-065: no ground truth exists for the early- or back-half segment speed (any position, rear-
+        # centered included), so they are best_effort, never a validated measurement.
+        m('speed_early', M['speed_early_mph'], 'mph', 0.8,
+          status='best_effort' if M.get('speed_early_mph') is not None else None),
+        m('speed_late', M['speed_late_mph'], 'mph', 0.7,
+          status='best_effort' if M.get('speed_late_mph') is not None else None),
         m('speed_avg_foul_to_pins', M.get('speed_avg_foul_to_pins_mph') if _foul_observed(M) else None, 'mph', 0.7,
           'full-lane average, foul_cross -> first head-pin contact (59.44 ft); DEC-064/DEC-112 TRUTH-comparable (matches Shayne\'s foul->pin labels). Needs the ball tracked to the pins.'
           if _foul_observed(M) else

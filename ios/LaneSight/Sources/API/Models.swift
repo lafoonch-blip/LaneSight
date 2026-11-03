@@ -133,6 +133,16 @@ struct ShotResponse: Codable {
     let oil_name: String?
 }
 
+/// DEC-127: the one-shot response from POST /shots/metrics — the full card (`shot`) + the Score snapshot +
+/// the analyze footer, computed from the on-device metrics record (no video). The app renders once from this.
+struct MetricsResultResponse: Codable {
+    let shot_id: String
+    let source: String?
+    let shot: ShotResponse
+    let score: ScoreResponse?
+    let footer: ShotFooter?
+}
+
 struct ShotRecord: Codable {
     let shot_id: String?
     let metrics: [String: Metric]?

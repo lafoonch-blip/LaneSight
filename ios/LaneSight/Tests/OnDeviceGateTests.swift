@@ -60,6 +60,10 @@ final class OnDeviceGateTests: XCTestCase {
                 "battery_delta": perf["battery_delta"] as? Double as Any,
                 "thermal": perf["thermal_state"] as? String as Any,
                 "diag": body["diag"] as? [String: Any] as Any,
+                // DEC-127 board benchmark: the structured boards (value + per-metric status) so ops/eval_boards_1101.py
+                // can diff on-device vs server boards. ball_speed/rev/boards 'ok', foul→pins 'best_effort', gated 'unavailable'.
+                "metrics_detailed": body["metrics_detailed"] as? [String: Any] as Any,
+                "trajectory": body["trajectory"] as? [String: Any] as Any,
             ]
             if let data = try? JSONSerialization.data(withJSONObject: row.compactMapValues { $0 is NSNull ? nil : $0 }),
                let s = String(data: data, encoding: .utf8) {

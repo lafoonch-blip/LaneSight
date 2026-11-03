@@ -457,6 +457,53 @@ struct APIClient {
         return try await send(req, as: CreateShotResponse.self)
     }
 
+    /// DEC-127: the on-device-first path. Posts the phone's computed metrics RECORD (no video) and gets back the
+    /// authoritative Score + coaching + full shot card in one KB-scale response, so the app renders once. A short
+    /// timeout (default 10 s) so the Offline state can take over when the network is slow/absent. `metricsDetailed`
+    /// is {name:{value,status,unit,note,...}}; `keyPoints` carries the entry/breakpoint anchors for the lane read.
+    func scoreFromMetrics(metricsDetailed: [String: Any], trajectory: [String: Any]?, keyPoints: [String: Any]?,
+                          sessionId: String?, metadata: ShotMetadata, devicePerf: [String: Any]?,
+                          algorithmVersion: String, appVersion: String?,
+                          timeoutS: Double = 10) async throws -> MetricsResultResponse {
+        var req = makeRequest("shots/metrics", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = timeoutS
+        let metaObj = (try? JSONSerialization.jsonObject(with: Data(metadata.jsonString().utf8))) ?? [:]
+        var body: [String: Any] = ["metrics": metricsDetailed, "metadata": metaObj,
+                                   "capture_mode": metadata.captureMode, "source": metadata.source,
+                                   "algorithm_version": algorithmVersion]
+        if let sessionId { body["session_id"] = sessionId }
+        if let trajectory { body["trajectory"] = trajectory }
+        if let keyPoints { body["key_points"] = keyPoints }
+        if let devicePerf { body["device_perf"] = devicePerf }
+        if let appVersion { body["app_version"] = appVersion }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return try await send(req, as: MetricsResultResponse.self)
+    }
+
+    /// DEC-127: flush a QUEUED metrics call (offline → back online). The body is the exact /shots/metrics JSON
+    /// captured when the shot was taken; re-posting it creates the server shot with score + coaching, which then
+    /// shows in history. A generous timeout since this runs in the background.
+    /// DEC-127: kick the background VIDEO shadow — the server analyzes the uploaded clip for validation only and
+    /// logs a platform='server' attempt + outcome rows for the SAME shot, never changing what was shown. Runs the
+    /// analysis inline server-side (generous timeout); the app calls this detached in the background.
+    func shadowVideo(shotId: String, storagePath: String) async throws {
+        var req = makeRequest("shots/\(shotId)/shadow_video", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 600
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["storage_path": storagePath])
+        try await sendRaw(req)
+    }
+
+    @discardableResult
+    func postMetricsRaw(_ body: Data) async throws -> MetricsResultResponse {
+        var req = makeRequest("shots/metrics", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 60
+        req.httpBody = body
+        return try await send(req, as: MetricsResultResponse.self)
+    }
+
     // MARK: shots
 
     /// Records the sensor answer for a shot (No / Yes + the user's sensor). PATCH /shots/{id}.
@@ -773,5 +820,27 @@ nonisolated final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate
                     totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
         guard totalBytesExpectedToSend > 0 else { return }
         onProgress(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
+    }
+}
+
+import Network
+
+/// DEC-127: minimal network-cost check for the background video upload (Wi-Fi only by default). `isExpensive`
+/// is true on cellular / personal-hotspot; the background upload defers then unless the user allows cellular.
+enum Reachability {
+    nonisolated private final class Box: @unchecked Sendable { var done = false; let lock = NSLock() }
+    static func isExpensive() async -> Bool {
+        let box = Box()
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            let monitor = NWPathMonitor()
+            monitor.pathUpdateHandler = { path in
+                box.lock.lock(); defer { box.lock.unlock() }
+                if box.done { return }
+                box.done = true
+                cont.resume(returning: path.isExpensive)
+                monitor.cancel()
+            }
+            monitor.start(queue: DispatchQueue(label: "ls.reachability"))
+        }
     }
 }

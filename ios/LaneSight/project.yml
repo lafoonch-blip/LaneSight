@@ -26,6 +26,11 @@ targets:
       - path: Resources/Fonts/RobotoCondensed-Regular.ttf
       - path: Resources/Fonts/RobotoCondensed-SemiBold.ttf
       - path: Resources/Fonts/OFL.txt
+      # DEC-127: the design lane scene (lane3d.html + three.js, bundled locally for offline render). A folder
+      # reference so the ES-module directory structure is preserved for the importmap (served via a custom scheme).
+      - path: LaneRender
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: LaneSight

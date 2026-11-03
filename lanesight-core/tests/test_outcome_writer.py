@@ -114,6 +114,16 @@ def test_unavailable_with_zero_placeholder_value_is_nulled():
     _honest(mrows)
 
 
+def test_ondevice_scalar_metrics_are_best_effort_not_measured():
+    # DEC-126: the on-device engine sends raw scalars with no status; they must record as best_effort (no ground
+    # truth), never measured — while the server's default stays measured.
+    srv, _ = outcome_rows_from_record('att-sv', 'server', 'v', 'shot', {'ball_speed': 18.5}, None)
+    ios, _ = outcome_rows_from_record('att-ph', 'iphone', 'v', 'shot', {'ball_speed': 18.5}, None,
+                                      scalar_status='best_effort')
+    assert next(r for r in srv if r['metric_key'] == 'ball_speed')['status'] == 'measured'
+    assert next(r for r in ios if r['metric_key'] == 'ball_speed')['status'] == 'best_effort'
+
+
 def test_non_numeric_value_is_treated_as_unavailable():
     mrows, _ = outcome_rows_from_record('att-3', 'server', 'v', 'shot',
                                         {'ball_speed': {'value': 'fast', 'status': 'ok'}}, None)

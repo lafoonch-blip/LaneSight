@@ -113,9 +113,18 @@ enum OnDeviceTracker {
         // (same interval the foul_cross→first_pin_contact labels measure), impact anchored to the ball at the pins.
         let Z_IMPACT = 59.44
         let dtAvg = tImpact - tFoulCross
+        // DEC-122 step 7b honesty gate (server parity, cv/pipeline.py _foul_observed): the foul→pins speed needs
+        // the ball tracked NEAR the foul line, not extrapolated from mid-lane. Distance from the foul to the FIRST
+        // tracked point = avg speed × (t_first − t_foul). If the ball was first seen > 6 ft downlane the foul
+        // crossing is extrapolated → withhold the speed (unavailable + reason), exactly like the server withholds
+        // IMG_8970 / IMG_8969. No fabricated number.
+        let firstObservedFt = (dtAvg > 0.1) ? Float(Z_IMPACT / dtAvg) * Float(pts[0].t - tFoulCross) : 999
+        guard firstObservedFt <= 6.0 else {
+            return fail("foul crossing extrapolated: the ball was first tracked \(String(format: "%.1f", firstObservedFt)) ft downlane (needs ≤ 6 ft) — speed unavailable (DEC-122 7b)")
+        }
         let avg: Float? = (dtAvg > 0.5 && dtAvg < 5) ? Float(Z_IMPACT / dtAvg * 3600.0 / 5280.0) : nil
         return SpeedEstimate(mph: mph, tRelease: release, tImpact: tImpact, entryFrac: pts.last!.frac, basis: "best_effort",
-                             note: "trajectory anchors: foul crossing + ball reaching the lane far extent (≈ pins)",
+                             note: "best_effort: trajectory anchors (foul crossing + ball at the lane far extent); foul observed \(String(format: "%.1f", firstObservedFt)) ft",
                              avgFoulToPinsMph: avg, tFoulCross: tFoulCross)
     }
 
@@ -401,7 +410,12 @@ enum OnDeviceTracker {
     // foul→pins, so u INCREASES (slope > 0); the roll is SHORT (≤ ~5 s); it covers real lane distance (u-range).
     // This rejects the ball return (u decreasing), the bowler (tiny motion), and whole-clip flat fits.
     nonisolated private static func ransacLink(_ perFrame: [[Cand]], vpY: Float, iters: Int = 6000) -> [TrackPoint] {
-        let flat = perFrame.flatMap { $0 }
+        // DETERMINISM (DEC-126 P0): pin the candidate order. Swift Dictionary/Set iteration uses a per-RUN random
+        // hash seed, so any upstream unordered structure (or an unstable sort downstream) made the RANSAC sample
+        // different (a,b) each run → a 1-frame-different track → the 8754 16.4↔17.4 non-determinism. Sorting flat by
+        // (t, i, cx) makes the whole linker reproducible regardless of upstream order.
+        let flat = perFrame.flatMap { $0 }.sorted {
+            ($0.t, Double($0.i), Double($0.cx)) < ($1.t, Double($1.i), Double($1.cx)) }
         guard flat.count >= 8 else { return [] }
         func u(_ c: Cand) -> Float { 1 / max(c.ct - vpY, 1) }
         let uRange = (flat.map { u($0) }.max() ?? 1) - (flat.map { u($0) }.min() ?? 0)
@@ -424,7 +438,7 @@ enum OnDeviceTracker {
                     else { chosen[c.i] = c }
                 }
             }
-            let inl = chosen.values.sorted { $0.t < $1.t }
+            let inl = chosen.values.sorted { ($0.t, Double($0.i)) < ($1.t, Double($1.i)) }
             guard inl.count >= 8, let f = inl.first, let l = inl.last else { continue }
             let span = l.t - f.t
             let du = u(l) - u(f)
@@ -432,7 +446,7 @@ enum OnDeviceTracker {
             guard span >= 0.5, span <= 5.0, du > 0.35 * uRange else { continue }
             if inl.count > best.count { best = inl }
         }
-        return best.sorted { $0.t < $1.t }
+        return best.sorted { ($0.t, Double($0.i)) < ($1.t, Double($1.i)) }
             .map { TrackPoint(i: $0.i, t: $0.t, cx: $0.cx, contactRow: $0.ct, frac: $0.frac) }
     }
 }

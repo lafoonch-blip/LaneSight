@@ -8,6 +8,13 @@ struct DevPanelView: View {
     @State private var health: HealthResponse?
     @State private var latencyMs: Int?
     @State private var errorText: String?
+    /// DEC-126: flip the on-device engine to PRIMARY for shots (live + upload here, for validation). When a shot's
+    /// on-device run clears the 30 s guardrail, its speed/rev come from the iPhone; otherwise it falls back to the
+    /// server. The "What worked" card shows "Measured on: iPhone/server".
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimaryFlag = false
+    /// DEC-127: allow the background clip upload on cellular (default OFF = Wi-Fi only). The result + coaching
+    /// already landed via the metrics-only call; this only gates the afterward video upload.
+    @AppStorage("ls.cellular_upload") private var cellularUpload = false
 
     /// True when the server is live but can't reach Supabase (or is degraded) — the app is NOT working.
     private var supabaseDown: Bool {
@@ -48,8 +55,14 @@ struct DevPanelView: View {
                 NavigationLink { OnDeviceShadowView() } label: {
                     Label("On-device analysis (shadow)", systemImage: "cpu")
                 }
+                Toggle(isOn: $onDevicePrimaryFlag) {
+                    Label("On-device PRIMARY for shots (DEC-126)", systemImage: "iphone.gen3")
+                }
+                Toggle(isOn: $cellularUpload) {
+                    Label("Upload clips on cellular (DEC-127)", systemImage: "antenna.radiowaves.left.and.right")
+                }
             } footer: {
-                Text("OD-01 measures device capability. The shadow runner ports the first real CV stage (stabilization) on-device to compare against the server (DEC-103 parity).")
+                Text("DEC-127: when on-device is PRIMARY, the phone computes every metric locally, a lightweight metrics-only call returns score + coaching, and the result renders once (Complete online / Offline if the call doesn't return in 10 s). The clip uploads afterward in the background — Wi-Fi only unless the cellular toggle is on.")
             }
 
             // Fail visibly: if the service can't reach the database, the app is not actually working.

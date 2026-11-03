@@ -1637,14 +1637,274 @@ def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
                 sr = {(row['failure_stage'] or 'track'): {'status': 'failed', 'reason_code': row['failure_code']}}
             ctx = {k: (perf.get(k) if k in perf else b.get(k)) for k in ('fps', 'thermal_state')
                    if (perf.get(k) is not None or b.get(k) is not None)} or None
+            # DEC-127: on-device metrics follow the SAME per-metric status rules as the server — the engine marks
+            # ball_speed/rev/boards 'ok', speed_avg_foul_to_pins 'best_effort' (approximated impact, DEC-112), and
+            # anything it couldn't read 'unavailable' + reason. Prefer the STRUCTURED `metrics_detailed` (carries
+            # that per-metric status) so a value is never "measured" just because it came from the phone; the flat
+            # scalars are a legacy fallback. `scalar_status` only fills a status-less scalar.
+            out_metrics = b.get('metrics_detailed') if isinstance(b.get('metrics_detailed'), dict) else m
             mrows, srows = outcome_rows_from_record(
-                aid, 'iphone', row['algorithm_version'], mode, m, sr, context=ctx,
+                aid, 'iphone', row['algorithm_version'], mode, out_metrics, sr, context=ctx,
                 reason_code=(None if measured else row['failure_code']),
-                failed_stage=(None if measured else row['failure_stage']))
+                failed_stage=(None if measured else row['failure_stage']),
+                scalar_status='measured')
             st.log_outcomes(mrows, srows)
     except Exception as e:
         print(f'shadow attempt log skipped ({e})')
     return {'logged': True, 'platform': 'ios', 'status': row['status']}
+
+
+def _metrics_record_from_body(m: dict, algo: str) -> dict:
+    """DEC-127: build a record's metrics dict ({name: Measurement}) from the phone's on-device metrics. A value
+    present without an explicit status is MEASURED -> status 'ok' (counts for the Score exactly like a server
+    metric — there is no 'best_effort because unvalidated'; validation-vs-truth is a dev gate, not runtime). The
+    phone may instead send status 'unavailable'/'best_effort'/'low_confidence' + a reason, carried verbatim. We
+    never fabricate: no value + no status -> unavailable."""
+    out = {}
+    for name, v in (m or {}).items():
+        if isinstance(v, dict):
+            val = v.get('value')
+            status = v.get('status') or ('ok' if val is not None else 'unavailable')
+            cell = {'metric': name, 'value': val, 'unit': v.get('unit'), 'status': status,
+                    'source': 'ios-ondevice', 'algorithm_version': algo, 'note': v.get('note'),
+                    'uncertainty': v.get('uncertainty'), 'confidence': v.get('confidence')}
+        else:
+            cell = {'metric': name, 'value': v, 'unit': None, 'source': 'ios-ondevice',
+                    'algorithm_version': algo, 'status': 'ok' if v is not None else 'unavailable'}
+        out[name] = {k: cv for k, cv in cell.items() if cv is not None or k in ('metric', 'value', 'status')}
+    return out
+
+
+def _key_points_from_metrics(metrics: dict) -> dict:
+    """Rebuild the key_points the coach/lane read consumes from the on-device board metrics (the video path gets
+    these from the trajectory). Only points the phone actually measured are included."""
+    def mv(k):
+        c = metrics.get(k)
+        return c.get('value') if isinstance(c, dict) else None
+    kp = {}
+    if mv('entry_board') is not None or mv('entry_angle') is not None:
+        kp['entry'] = {'board': mv('entry_board'), 'angle_deg': mv('entry_angle'), 'z_ft': 59.44}
+    if mv('breakpoint_board') is not None:
+        kp['breakpoint'] = {'board': mv('breakpoint_board'), 'z_ft': mv('breakpoint_distance')}
+    if mv('arrows_board') is not None:
+        kp['arrows'] = {'board': mv('arrows_board'), 'z_ft': 15.0}
+    if mv('laydown_board') is not None:
+        kp['laydown'] = {'board': mv('laydown_board'), 'z_ft': 0.0}
+    return kp
+
+
+def _far_lane_read(metrics: dict) -> str | None:
+    """The entry board/angle come from the far lane; if the phone couldn't measure them this shot's far lane
+    wasn't read (honest 'not_read' so the coach withholds the lane line, never invents it)."""
+    c = metrics.get('entry_board')
+    ok = isinstance(c, dict) and c.get('value') is not None and \
+        c.get('status') in ('ok', 'best_effort', 'low_confidence', 'calibrated_estimate')
+    return None if ok else 'not_read'
+
+
+# DEC-127 parity: on-device metrics must get the SAME per-metric status the server VIDEO pipeline (cv/pipeline.py)
+# assigns, so no metric is 'measured' on one engine and best_effort/unavailable on the other. The far-lane gate is
+# imported from the pipeline (single source) so the two can't drift. A value the phone already marked 'unavailable'
+# (it genuinely couldn't measure it) always wins.
+from lanesight_core.cv.pipeline import _FAR_LANE_METRICS as _PIPE_FAR, FAR_LANE_VALIDATED as _PIPE_FAR_OK
+_ONDEVICE_CANON_STATUS = {'ball_speed': 'best_effort', 'speed_release': 'best_effort', 'speed_early': 'best_effort',
+                          'speed_late': 'best_effort', 'speed_avg_foul_to_pins': 'best_effort',
+                          'rev_rate': 'calibrated_estimate'}
+# User-facing reason text for the engine's hard failures (mirrors the server's AnalysisFailure codes).
+_FAILURE_REASON_TEXT = {
+    'LANE_NOT_DETECTED': "We couldn't find the lane in this clip, so nothing could be measured. Set the camera "
+                         "behind the lane, square to it, with the foul line and pins in frame.",
+    'BALL_TRACK_NOT_FOUND': "We couldn't track the ball down the lane, so the shot couldn't be measured. Keep the "
+                            "ball in view from release to the pins.",
+    'TRACK_TOO_SPARSE_FOR_SPEED': "The ball was tracked too briefly to measure the shot. Keep it in view all the "
+                                  "way to the pins.",
+}
+
+
+def _apply_status_policy(metrics: dict) -> dict:
+    """Stamp the canonical per-metric status on the on-device record (parity with cv/pipeline.py), gate the
+    far-lane metrics (DEC-065, until FAR_LANE_VALIDATED), and return the capture_quality.far_lane verdict. Mutates
+    `metrics` in place. ball_speed/segment speeds → best_effort; rev_rate → calibrated_estimate; entry/breakpoint/
+    back-half → unavailable (gated); near-lane boards (laydown/7ft/arrows), launch, loft keep their measured status."""
+    far_gated = False
+    for key, cell in (metrics or {}).items():
+        if not isinstance(cell, dict):
+            continue
+        if cell.get('status') == 'unavailable' or cell.get('value') is None:
+            continue                                   # phone couldn't measure it — keep unavailable + its reason
+        if key in _PIPE_FAR and not _PIPE_FAR_OK:      # DEC-065 far-lane gate (same as the video path)
+            cell['value'] = None
+            cell['status'] = 'unavailable'
+            cell['reason_code'] = 'FAR_LANE_UNVALIDATED'
+            cell['failed_stage'] = 'compute'
+            cell['note'] = 'Back-lane metric gated until Phase-2 validation (DEC-065).'
+            far_gated = True
+        elif key in _ONDEVICE_CANON_STATUS:
+            cell['status'] = _ONDEVICE_CANON_STATUS[key]
+        # else: near-lane boards / launch / loft keep the measured status the phone assigned
+    limited = far_gated or not _PIPE_FAR_OK
+    cq = {'far_lane': 'limited' if limited else 'ok'}
+    if limited:
+        cq['reason'] = ("Back-lane metrics (entry point & angle, breakpoint, back-half speed) aren't validated "
+                        "from phone video yet, so they're not shown. Everything up to the arrows is measured.")
+    return cq
+
+
+@app.post('/shots/metrics')
+def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-127: the on-device-first path. The phone computes ALL the video metrics locally and posts them here as
+    a metrics RECORD (no video). The server computes the authoritative Score/tier + coaching from that record
+    using the SAME pure engines the video path uses, writes the DEC-122 outcome rows from the on-device metrics
+    (so tracking never waits for the video), and returns the full shot card + score in ONE KB-scale response so
+    the app can render once. Target < 2 s. The clip, if any, uploads later in the background and is analysed as a
+    SHADOW for validation only — it never overwrites this record.
+
+    Body: {metrics:{name:{value,status?,unit?,note?,uncertainty?,confidence?}}, key_points?, session_id?,
+           capture_mode?, source?, metadata?{intent,handed,ball_*,oil_pattern_id,...}, shot_id?, pins?,
+           device_perf?, algorithm_version?, app_version?, basis?, note?, stage_report?}. A session_id makes it a
+           live session shot (feeds Score/Stats); without one it's a standalone upload (never feeds Score, DEC-055)."""
+    store = get_store()
+    b = dict(body or {})
+    mode = b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else 'shot'
+    session_id = b.get('session_id')
+    if session_id is not None and not store.get_session(user, session_id):
+        raise HTTPException(404, 'session not found')
+    is_upload = session_id is None
+    meta = dict(b.get('metadata') or {})
+    handed = meta.get('handed') or b.get('handed') or 'R'
+    cfg, ub = _ball_link(store, user, meta)
+    algo = str(b.get('algorithm_version') or 'ios-ondevice')[:60]
+
+    metrics = _metrics_record_from_body(b.get('metrics') or {}, algo)
+    if not metrics:
+        raise HTTPException(422, 'no metrics in body')
+    # key_points from the RAW values (the lane view draws the entry/breakpoint dots even though the far-lane
+    # METRICS are gated), then stamp the canonical per-metric status + far-lane gate for engine parity.
+    key_points = b.get('key_points') or _key_points_from_metrics(metrics)
+    cq = _apply_status_policy(metrics)
+    # DEC-127: a REAL engine-stage failure (lane/track/speed) — reflect it on capture_quality so the card shows the
+    # true reason (not the DEC-065 policy note), and so every unavailable metric row gets this reason_code/stage.
+    if b.get('reason_code'):
+        cq = {**cq, 'far_lane': 'not_read', 'reason_code': b['reason_code'],
+              'failed_stage': b.get('failed_stage'), 'reason': _FAILURE_REASON_TEXT.get(b['reason_code'])}
+    rec = {'shot_id': b.get('shot_id'), 'metrics': metrics, 'handed': handed,
+           'key_points': key_points,
+           'capture_quality': {**cq, 'source': 'ios-ondevice'},
+           'engine': 'iphone', 'algorithm_version': algo}
+    # DEC-127: the on-device ball path (trajectory.smoothed = [{z_ft, board}]). _shot_card_enrich builds path_fit
+    # from it, so the shot-card lane view draws the same path + four labels as the server video path.
+    if isinstance(b.get('trajectory'), dict):
+        rec['trajectory'] = b['trajectory']
+    if isinstance(b.get('stage_report'), dict):
+        rec['stage_report'] = b['stage_report']
+
+    shot = store.create_shot(user, session_id,
+                             {'intent': meta.get('intent'), 'capture_mode': mode,
+                              'source': 'upload' if is_upload else meta.get('source', 'live'),
+                              'handed': handed, 'ball_configuration_id': cfg, 'user_ball_id': ub,
+                              'oil_pattern_id': meta.get('oil_pattern_id'),
+                              'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id')})
+    rec['shot_id'] = shot['id']
+
+    # Insights with the thrown intent + session history (same recompute the video path runs). Pins are unread on
+    # the device, so the leave is unknown unless the app forwarded a user-reported one.
+    pins = b.get('pins') or {}
+    standing = (set(pins.get('standing') or []) if pins.get('readable') else None)
+    _recompute_insights(store, user, shot, rec, standing, set(pins.get('uncertain') or []))
+    store.save_shot_result(shot['id'], rec, {'ok': True, 'engine': 'iphone'}, algo_version=algo)
+
+    footer = {}
+    if not is_upload:                                   # uploads never feed the Score (DEC-055)
+        footer = engines.after_shot_analyzed(store, user, session_id, rec)
+
+    # DEC-122 §6: per-metric + per-stage outcome rows from the on-device metrics (engine 'iphone'), measured.
+    try:
+        attempt = store.log_analysis_attempt({
+            'user_id': user, 'shot_id': shot['id'], 'session_id': session_id,
+            'source': 'upload' if is_upload else 'live', 'capture_mode': mode, 'status': 'analyzed',
+            'platform': 'ios', 'algorithm_version': algo,
+            'api_revision': (str(b.get('app_version'))[:60] if b.get('app_version') else None),
+            'duration_ms': int((b.get('device_perf') or {}).get('latency_s', 0) * 1000) or None,
+            'diagnostics': _quality(rec), 'env': 'live' if os.environ.get('K_REVISION') else 'dev'})
+        from .store import outcome_rows_from_record
+        mrows, srows = outcome_rows_from_record((attempt or {}).get('id'), 'iphone', algo, mode,
+                                                metrics, rec.get('stage_report'), scalar_status='measured',
+                                                reason_code=b.get('reason_code'), failed_stage=b.get('failed_stage'))
+        store.log_outcomes(mrows, srows)
+    except Exception as e:
+        print(f'metrics outcome log skipped ({e})')
+
+    # Return the same card payload GET /shots/{id} serves + the score snapshot, in one response → render once.
+    sh = _shot_card_enrich(store, user, store.get_shot(user, shot['id']))
+    try:
+        ball_names, oil_names = store._ball_oil_names(user)
+        sh['ball_name'] = ball_names.get(sh.get('user_ball_id') or sh.get('ball_configuration_id'))
+        sh['oil_name'] = oil_names.get(sh.get('oil_pattern_id'))
+    except Exception as e:
+        print(f'metrics ball/oil name resolve skipped ({e})')
+    return {'shot_id': shot['id'], 'source': 'upload' if is_upload else 'live',
+            'shot': sh, 'score': (store.latest_score(user) if not is_upload else None), 'footer': footer}
+
+
+@app.post('/shots/{shot_id}/shadow_video')
+def shadow_video(shot_id: str, body: dict = Body(...), user=Depends(current_user)):
+    """DEC-127: the background VIDEO shadow. On-device already produced the AUTHORITATIVE shot via /shots/metrics;
+    this analyzes the uploaded clip for VALIDATION only — it logs a platform='server' analysis_attempt + server
+    outcome rows correlated to the SAME shot_id (so ops.engine_metric_agreement fills from real use, not only the
+    dev benchmark), and NEVER creates or overwrites the shot record or the Score. Body: {storage_path}. Runs the
+    analysis inline (the app calls this in the background), so a live shot ends with BOTH an 'ios' and a 'server'
+    attempt + outcome rows for the one shot."""
+    store = get_store()
+    sh = store.get_shot(user, shot_id)
+    if not sh:
+        raise HTTPException(404, 'shot not found')
+    storage_path = body.get('storage_path')
+    if not storage_path or not storage_path.startswith(f'{user}/'):
+        raise HTTPException(403, 'storage_path missing or not owned by the user')
+    mode = sh.get('capture_mode') or 'shot'
+    if mode == 'form':
+        return {'logged': False, 'reason': 'form video shadow not supported'}
+    data = store.storage_download('shot-clips', storage_path)
+    dest = DATA_ROOT / 'shadow'
+    dest.mkdir(parents=True, exist_ok=True)
+    local = dest / f'{shot_id}.mov'
+    with open(local, 'wb') as f:
+        f.write(data)
+    t0 = time.monotonic()
+    attempt = {'user_id': user, 'shot_id': shot_id, 'session_id': sh.get('session_id'),
+               'source': sh.get('source') or 'live', 'capture_mode': mode,
+               'algorithm_version': ALGO_VERSION, 'api_revision': os.environ.get('K_REVISION'),
+               'platform': 'server',           # the VIDEO shadow vs the on-device 'ios' attempt (same shot_id)
+               'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+               'clip': _probe_clip(str(local))}
+    try:
+        from lanesight_runner.core import analyze_clip
+        out_prefix = str(DATA_ROOT / 'out' / f'{shot_id}_shadow')
+        os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
+        rec, _probe, _t = analyze_clip(str(local), out_prefix, handed=sh.get('handed'), timings={})
+        enriched = _clip_info(_probe)
+        if enriched:
+            attempt['clip'] = {**attempt['clip'], **enriched}
+        logged = store.log_analysis_attempt({**attempt, 'status': 'analyzed',
+                                             'duration_ms': int((time.monotonic() - t0) * 1000),
+                                             'diagnostics': _quality(rec)})
+        _log_outcomes(store, (logged or {}).get('id'), mode, rec, None, clip=attempt.get('clip'))
+        result = {'logged': True, 'platform': 'server', 'status': 'analyzed'}
+    except Exception as e:
+        from lanesight_core.failures import AnalysisFailure
+        fail = e if isinstance(e, AnalysisFailure) else \
+            AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:300], stage='internal')
+        logged = store.log_analysis_attempt({**attempt, 'status': 'failed',
+                                             'duration_ms': int((time.monotonic() - t0) * 1000),
+                                             'failure_code': fail.code, 'failure_stage': fail.stage})
+        _log_outcomes(store, (logged or {}).get('id'), mode, None, fail, clip=attempt.get('clip'))
+        result = {'logged': True, 'platform': 'server', 'status': 'failed', 'failure_code': fail.code}
+    finally:
+        try:
+            os.remove(local)
+        except OSError:
+            pass
+    return result
 
 
 @app.post('/shots/analyze')
