@@ -1558,6 +1558,45 @@ on the live path narrows to the metrics-only score/coaching call + video shadow 
 (the blocking "Analyzing" screen becomes the three-step progress screen above). Honesty rules DEC-086/DEC-122 and
 the score/tier definitions (DEC-036/DEC-038/DEC-090) are unchanged — only their **input** becomes a metrics record.
 
+### DEC-128 — Form analysis runs on-device (MediaPipe Pose), matching the DEC-126/127 shot architecture (2026-11-03)
+**Decision (Shayne, 2026-11-03):** Form analysis moves on-device, the same way shots did in DEC-126/127. The
+iPhone measures the form events + metrics locally with **MediaPipe Pose Landmarker (heavy, VIDEO mode)** — the
+same model family + 33-point BlazePose topology the server reference uses (`lanesight_core/form/pose.py`), for
+parity — **not** Apple Vision (Vision has no foot-index/heel landmarks, which the step count + approach timing
+depend on). Then a lightweight metrics-only call (`POST /shots/metrics`, `capture_mode=form`) returns the
+server-authoritative coaching + fundamentals + Score; the result renders once (Complete, or Offline when the
+call can't reach the server); the clip uploads in the background (Wi-Fi only by default) and is analysed as a
+server **shadow** for comparison; DEC-122 outcome rows are written from both engines.
+- **Engine:** `ios/LaneSight/Sources/OnDevice/Form/` is a faithful 1:1 port of `form/pose.py` + `fundamentals.py`
+  — events E1–E8 (ball start, pushaway, top of backswing, bottom of arc, release; slide plant E5, slide stop E8),
+  swing times, rhythm (downswing/backswing), drift (unavailable — no floor calibration), slide length
+  (unavailable), step count (**best_effort**, DEC-121), the DEC-095 honesty gates (release-vs-slide-stop,
+  ball-start→release, chronological order), partial results + per-stage report + reason codes (DEC-122), and the
+  slo-mo detect/correct path. Replaces the Apple-Vision `OnDeviceFormShadow`.
+- **Parity gate (DEC-121 tolerances):** `examples/form_ondevice_golden.py` freezes the Python reference's
+  per-clip events/metrics (`validation/form_ondevice_golden.json`) as the on-device target; `OnDeviceFormGateTests`
+  runs the engine on all labeled clips (8824/25/26 side, 8846/47/48 rear; **IMG_8980 held out**) and asserts
+  determinism (10 runs identical), on-device events within ±2 frames of the server reference (engine parity) +
+  step count exact vs the reference, and reports the ground-truth deltas + runtime (<30 s/clip Beta gate).
+  **The ground-truth ceiling is the reference itself** — on the labeled set the reference leaves E2 null on all
+  clips, mis-segments 8826/8980, and the step count is best_effort ±1–2 (DEC-120/121); on-device matching the
+  reference is the correct outcome, not exceeding it.
+- **App:** Form uses the same flow as shots (DEC-126/127): on-device metrics → `POST /shots/metrics`
+  (`capture_mode=form`) for coaching → one Complete/Offline result screen → background Wi-Fi-only upload →
+  server form video shadow (`POST /shots/{id}/shadow_video`, now enabled for form) → outcome rows from both
+  engines. `shot_from_metrics` gains a form branch that synthesises the form record from the device
+  events+metrics and runs `engines.after_form_analyzed` (the same pure fundamentals the video path uses:
+  timing_checkpoints T1–T4, swing_timing vs baseline, measured positions M1–M7, coaching cues, focus).
+**Why:** the same wins as DEC-117/126 for shots — instant offline feedback at ~$0/clip, no server CV latency, and
+the server stays authoritative for coaching/Score/tiers. One capture → one result screen for both products.
+**Date:** 2026-11-03 · **Status:** ACCEPTED — engine + parity golden + gate test + Python reference committed
+(447 pytest pass); app wiring + server form metrics/shadow branches on `feat/form-ondevice`. iOS build +
+MediaPipe pod/xcframework + the on-device parity-gate run on Shayne's iPhone are PENDING (no Xcode/device in the
+build session). **Builds on:** DEC-126/127 (shot on-device-first + metrics endpoint), DEC-118 (Form MVP metrics +
+Beta gates), DEC-120/121 (form event baseline + tolerances + step-count honesty), DEC-122 (partial results +
+outcome rows), DEC-057 (form fundamentals). **Supersedes:** the Apple-Vision `OnDeviceFormShadow` as the on-device
+form measurer.
+
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
 - DEC-092 — near-term optimize-server-first order and "metric math stays on the server" **stand**; only the **long-term scope** is amended by DEC-102 (on-device metric math becomes the target once the DEC-103 gates pass). DEC-092 P3's observation interface is realized as `MeasurementEvidence` (DEC-103).

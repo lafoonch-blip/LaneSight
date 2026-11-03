@@ -31,6 +31,20 @@ targets:
       - path: LaneRender
         type: folder
         buildPhase: resources
+      # DEC-128: on-device Form pose model (BlazePose heavy, ~30 MB). Local only / gitignored — never committed
+      # (pose.py note). Copy from ~/LaneSightData/models/pose_landmarker_heavy.task before building; absent →
+      # FormPoseLandmarker.resolveModelPath returns nil and the Form on-device path falls back to the server.
+      - path: Models/pose_landmarker_heavy.task
+        buildPhase: resources
+        optional: true
+    # DEC-128: MediaPipe Pose Landmarker for iOS. Ships as a binary xcframework (CocoaPods / vendored), NOT SPM.
+    # The Form engine compiles WITHOUT it (`#if canImport(MediaPipeTasksVision)` → throws .mediaPipeUnavailable),
+    # so this stays COMMENTED until Shayne vendors the framework, keeping `xcodegen generate` working today.
+    # To activate: download MediaPipeTasksVision.xcframework to ios/LaneSight/Vendor/ (git-ignore / LFS), then
+    # uncomment the dependencies block below and re-run `xcodegen generate`. See FORM_ONDEVICE_INTEGRATION.md §A.
+    #dependencies:
+    #  - framework: Vendor/MediaPipeTasksVision.xcframework
+    #    embed: true
     settings:
       base:
         PRODUCT_NAME: LaneSight
@@ -62,6 +76,7 @@ targets:
         excludes:
           - GateClips        # videos go in via the explicit resources entry below (avoid double-inclusion)
           - ParityFixtures   # plates/masks/golden go in via the explicit resources entry below
+          - FormGateClips    # DEC-128 form clips go in via the explicit resources entry below
       # DEC-117 device-gate clips (local only; gitignored — never committed). Absent on other machines → the
       # gate test SKIPs. Comment this out if `xcodegen generate` can't find GateClips/.
       - path: Tests/GateClips
@@ -71,6 +86,18 @@ targets:
       # masks (.u8) and the committed golden JSON for IMG_8751-54. Absent on other machines → OnDeviceLaneParityTests
       # SKIPs. Regenerate with scratchpad/parity_gen.py.
       - path: Tests/ParityFixtures
+        buildPhase: resources
+        optional: true
+      # DEC-128 on-device Form parity gate: the labeled form clips (local only; gitignored → OnDeviceFormGateTests
+      # SKIPs when absent) + the committed labels/golden JSON (the parity target). Copy the clips into
+      # Tests/FormGateClips/ (8824/25/26 side, 8846/47/48 rear, 8980 held out) from ~/LaneSightData to run the gate.
+      - path: Tests/FormGateClips
+        buildPhase: resources
+        optional: true
+      - path: ../../lanesight-core/validation/form_labels.json
+        buildPhase: resources
+        optional: true
+      - path: ../../lanesight-core/validation/form_ondevice_golden.json
         buildPhase: resources
         optional: true
     dependencies:
