@@ -1010,6 +1010,154 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         return r
     }
 
+    // MARK: - DEC-129 on-device-first FORM (mirrors the shot builders above)
+
+    /// Sendable carrier for the on-device Form result (JSON blobs cross the task boundary; no [String:Any] does).
+    struct OnDeviceFormMeasurement: Sendable {
+        let view: String
+        let status: String
+        let formVersion: String
+        let basis: String            // best_effort if any swing event surfaced, else unavailable
+        let latencyS: Double
+        var metricsJSON: Data? = nil           // FORM_P1 {name:{value,status,unit,note,...}}
+        var eventsJSON: Data? = nil            // {E2..E8, first_step, slide_plant, slide_stop, hold_*}
+        var measuredPositionsJSON: Data? = nil // M1–M7
+        var stageReportJSON: Data? = nil
+        var reasonCode: String? = nil          // FORM_DELIVERY_NOT_ISOLATED when all swing events dropped
+    }
+
+    /// DEC-129: run the MediaPipe Form engine as the PRIMARY measurement. Same 30 s cap + fall-back-to-server rule
+    /// as `measureOnDevicePrimary` (shots). Form keeps the FULL clip (no shot-window trim — DEC-101).
+    nonisolated private func measureOnDeviceFormPrimary(clipURL: URL, shotId: String, handed: String)
+        async -> OnDeviceFormMeasurement? {
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odf-\(shotId).mov")
+        try? FileManager.default.removeItem(at: copy)
+        guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
+        let result: OnDeviceFormMeasurement? = await withTaskGroup(of: OnDeviceFormMeasurement?.self) { group in
+            group.addTask {
+                let t0 = Date()
+                guard let a = try? OnDeviceFormEngine.analyze(clipURL: copy, handed: handed) else { return nil }
+                let lat = Date().timeIntervalSince(t0)
+                let isoOk = ["E2", "E3", "E4", "E6", "E7"].contains { (a.events[$0] ?? nil) != nil }
+                let mpos = a.measuredPositions.mapValues { $0.dict }
+                return OnDeviceFormMeasurement(
+                    view: a.view, status: a.status, formVersion: a.formVersion,
+                    basis: isoOk ? "best_effort" : "unavailable", latencyS: lat,
+                    metricsJSON: try? JSONSerialization.data(withJSONObject: a.metricsJSONObject),
+                    eventsJSON: try? JSONSerialization.data(withJSONObject: a.eventsJSONObject),
+                    measuredPositionsJSON: try? JSONSerialization.data(withJSONObject: mpos),
+                    stageReportJSON: try? JSONSerialization.data(withJSONObject: a.stageReportJSONObject),
+                    reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED")
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
+                return nil      // > 30 s -> fall back to the server form path
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        try? FileManager.default.removeItem(at: copy)
+        guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
+        return result
+    }
+
+    /// DEC-129 Complete FORM: build the form card from the metrics-endpoint response (server coaching/fundamentals).
+    private static func buildFormResultFromCard(_ resp: MetricsResultResponse, isUpload: Bool) -> ShotResult {
+        let record = resp.shot.record
+        let metrics = FormMetricDisplay.ordered(record?.metrics ?? [:])
+        let pending = ScoreResponse(eligible: false, score: nil, tier: nil, s_perf: nil, a_acc: nil, c_cons: nil,
+                                    p_power: nil, eligibility: nil, parts_delta_30d: nil, formula_version: nil, label: nil)
+        var built = ShotResult(shotId: resp.shot_id, metrics: metrics, score: resp.score ?? pending,
+                               footer: nil, suggestedTarget: nil, recommendation: nil, insightsState: nil,
+                               insightsConfidence: nil, insightsNote: nil, captureFarLaneLimited: false,
+                               captureReason: nil, isUpload: isUpload, isForm: true,
+                               formView: record?.view, formStatus: record?.status, formVersion: record?.form_version)
+        built.ballName = resp.shot.ball_name
+        built.stageReport = record?.stage_report ?? [:]
+        Self.attachFormFundamentals(&built, record)
+        built.engine = "iphone"
+        return built
+    }
+
+    /// DEC-129 Offline FORM: show the measured form metrics; coaching/fundamentals pending connectivity.
+    private static func offlineFormResult(_ m: OnDeviceFormMeasurement?, shotId: String, isUpload: Bool) -> ShotResult {
+        let dict = metricDictFromDetailed(m?.metricsJSON)
+        let metrics: [(String, Metric)] = dict.isEmpty
+            ? [("step_count", Metric(metric: "step_count", value: nil, unit: "count", status: "unavailable",
+                                     note: "not measured on device", confidence: nil, uncertainty: nil))]
+            : FormMetricDisplay.ordered(dict)
+        let pending = ScoreResponse(eligible: false, score: nil, tier: nil, s_perf: nil, a_acc: nil, c_cons: nil,
+                                    p_power: nil, eligibility: nil, parts_delta_30d: nil, formula_version: nil, label: nil)
+        var r = ShotResult(shotId: shotId, metrics: metrics, score: pending, footer: nil, suggestedTarget: nil,
+                           recommendation: nil, insightsState: nil, insightsConfidence: nil, insightsNote: nil,
+                           captureFarLaneLimited: false, captureReason: nil, isUpload: isUpload, isForm: true,
+                           formView: m?.view, formStatus: m?.status ?? "unavailable",
+                           formVersion: m?.formVersion ?? "form-0.0.0")
+        r.engine = "iphone"
+        r.coachingPendingOffline = true
+        return r
+    }
+
+    /// DEC-129: run the on-device Form engine on the durable clip and show the result ONCE (Complete online /
+    /// Offline otherwise) — the form analogue of `showOnDeviceFirstResult`. The DEC-119 background upload still runs.
+    private func showOnDeviceFirstFormResult(recId: String, clipPath: String, source: String,
+                                             metadata: ShotMetadata, ct: [String: Double]) async {
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        pipeline = .analyzing(state: "ondevice", timings: [:])
+        var ct = ct
+        let tOD = Date()
+        let od = await measureOnDeviceFormPrimary(clipURL: URL(fileURLWithPath: clipPath),
+                                                  shotId: UUID().uuidString, handed: metadata.handed)
+        ct["ondevice_s"] = Date().timeIntervalSince(tOD)
+        let newShotId = UUID().uuidString
+        var sid: String? = (source == "live" ? sessionId : nil)
+        if source == "live", sid == nil, let client = try? makeClient() {
+            sid = try? await client.createSession(mode: "practice").id
+            if let sid {
+                sessionId = sid
+                setActiveSession(id: sid, mode: metadata.captureMode, startedAt: Date().timeIntervalSince1970)
+                if var rec = ShotUploadStore.shared.load(recId) { rec.sessionId = sid; ShotUploadStore.shared.save(rec) }
+                track("session_started")
+            }
+        }
+        var built: ShotResult
+        if let od, let mj = od.metricsJSON,
+           let detailed = (try? JSONSerialization.jsonObject(with: mj)) as? [String: Any],
+           let client = try? makeClient() {
+            pipeline = .analyzing(state: "coaching", timings: [:])
+            let events = od.eventsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            let mpos = od.measuredPositionsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            let stage = od.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            do {
+                let resp = try await client.scoreFromMetrics(
+                    metricsDetailed: detailed, trajectory: nil, keyPoints: nil,
+                    sessionId: (source == "upload" ? nil : sid), metadata: metadata,
+                    devicePerf: ["latency_s": od.latencyS], algorithmVersion: OnDeviceFormEngine.backendVersion,
+                    appVersion: appVersion, stageReport: stage, reasonCode: od.reasonCode, failedStage: nil,
+                    events: events, view: od.view, measuredPositions: mpos, formVersion: od.formVersion, timeoutS: 10)
+                built = Self.buildFormResultFromCard(resp, isUpload: source != "live")   // Complete
+                onDeviceShadowTargets[recId] = resp.shot_id
+                track("ondevice_form_complete", props: ["ondevice_s": ct["ondevice_s"] ?? 0, "view": od.view])
+            } catch {
+                built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")   // Offline
+                enqueueMetricsCall(detailed: od.metricsJSON, sessionId: (source == "upload" ? nil : sid),
+                                   metadata: metadata, shotId: newShotId)
+                track("ondevice_form_offline_shown", props: ["ondevice_s": ct["ondevice_s"] ?? 0])
+            }
+        } else {
+            built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")       // engine couldn't measure
+        }
+        result = built
+        onDevicePrimaryRecords.insert(recId)
+        if source == "live" { shotCount += 1; if shotCount == 1 { track("first_shot_analyzed") }
+            if activeSession != nil { activeSession?.shotCount = shotCount; persistActiveSession() } }
+        pipeline = .done
+        showResult = true
+        clearPendingAnalysis()
+    }
+
     // MARK: - DEC-127 offline queue + background video upload
 
     /// Queue a metrics call that couldn't reach the server (offline). Stored as the exact /shots/metrics body;
@@ -1125,6 +1273,14 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             await showOnDeviceFirstResult(recId: id, clipPath: rec.clipPath, source: source, metadata: metadata, ct: ct)
             foregroundUploadId = nil        // result is shown; the durable upload + server shadow run in the background
             await startUpload(id: id)       // DEC-119 durable upload → runAnalyze fires the shadow (never re-shows)
+            return
+        }
+        // DEC-129: FORM on-device-first — same flow as shots (MediaPipe pose → metrics-only /shots/metrics form
+        // branch → one Complete/Offline result), then the DEC-119 background upload + server form video shadow.
+        if Self.onDevicePrimary && capturedMode == "form" {
+            await showOnDeviceFirstFormResult(recId: id, clipPath: rec.clipPath, source: source, metadata: metadata, ct: ct)
+            foregroundUploadId = nil
+            await startUpload(id: id)
             return
         }
 

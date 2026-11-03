@@ -214,6 +214,7 @@ screen; Offline shows the measured form metrics with coaching pending. **BUILT:*
 (`Sources/OnDevice/Form/`, a 1:1 port of `form/pose.py`), the server form branch (`/shots/metrics` +
 `shadow_video`), the Python parity golden + the gate test. **DIFFERS / pending:** the iOS app wiring that routes a
 form capture through the on-device-first path (measure → metrics post → render form Complete/Offline) is specified
-in `FORM_ONDEVICE_INTEGRATION.md` §B and is NOT yet wired into `AppModel.processShot` — it is coupled to the
-DEC-119↔DEC-127 capture-pipeline reconciliation (§C), which needs a device build. The MediaPipe xcframework + pose
-model are not yet vendored (§A), so on device the Form path currently falls back to the server. No Figma change.
+in `FORM_ONDEVICE_INTEGRATION.md` §B is now WIRED into the capture pipeline (MediaPipe vendored, device Release
+builds, `capture_mode=form` routes through the on-device-first path, gated by `ls.ondevice_primary` default OFF).
+Pending a device run: the on-device parity gate + one end-to-end form upload (the iPhone was unavailable during the
+build session). No Figma change — the Form result reuses `FormCardView` + the DEC-127 Complete/Offline states.

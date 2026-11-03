@@ -2,12 +2,12 @@ import Foundation
 
 /// A single form metric measurement — the Swift analogue of `models.shot.Measurement` as used by the form
 /// pipeline. Values are already rounded to 3 dp (as `_m` does) so the on-device JSON matches the reference shape.
-struct FormMeasurement: Codable, Equatable {
+nonisolated struct FormMeasurement: Codable, Equatable {
     let metric: String
     let value: Double?
     let unit: String
-    let confidence: Double
-    let status: String                 // ok | best_effort | low_confidence | unavailable
+    var confidence: Double
+    var status: String                 // ok | best_effort | low_confidence | unavailable (mutable: slo-mo downgrade)
     var note: String?
     var display: String?               // "Speeds up" / "Above shoulder" / qualitative read-out
     var uncertainty: Double?
@@ -45,7 +45,7 @@ struct FormMeasurement: Codable, Equatable {
 }
 
 /// The per-stage report (DEC-122): decode / pose / swing_events / delivery_isolation / slowmo.
-struct FormStageOutcome: Codable {
+nonisolated struct FormStageOutcome: Codable {
     let status: String                 // ok | failed | skipped
     var reasonCode: String?
     var reason: String?
@@ -54,7 +54,7 @@ struct FormStageOutcome: Codable {
 
 /// The full on-device Form analysis — the Swift analogue of `analyze_form_clip`'s return. Everything the result
 /// screen + the metrics-only server call + the DEC-122 outcome rows need.
-struct FormAnalysis {
+nonisolated struct FormAnalysis {
     var formVersion: String
     var view: String                       // down_lane | bowler_facing | rear | unknown
     var viewInfo: (view: String, confidence: Double, reason: String)?

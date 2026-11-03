@@ -1,7 +1,29 @@
 # Form on-device integration (DEC-129)
 
-Status: ACTIVE · Version: 1.0 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 2.0 · Last Updated: 2026-11-03 · Owner: Shayne
 Decision: DEC-129 (Form analysis runs on-device, matching the DEC-126/127 shot architecture).
+
+## Update 2026-11-03 (device-build session) — what's now DONE vs device-pending
+Done on Shayne's Mac (Xcode 27.1): **§A** MediaPipe vendored via `Vendor/fetch_mediapipe.sh` (MediaPipeTasksVision +
+MediaPipeTasksCommon 1.0.0 xcframeworks + the force-loaded `graph_libraries/*.a` + the pose model → Models/); the
+`project.yml` dependency + sdk-conditional `-force_load`/`-ObjC` are live; **Release builds SUCCEED for device
+(generic/platform=iOS, signed)**, and MediaPipe loads + runs (the TFLite XNNPACK delegate initializes). The Swift
+form engine compiled clean after 3 small fixes (a `let`→`var status`, a no-op line, and marking the pure-compute
+types `nonisolated` so they run off the main actor). **§B is now WIRED (not just spec'd):** `AppModel` has
+`measureOnDeviceFormPrimary` + `showOnDeviceFirstFormResult` + `buildFormResultFromCard`/`offlineFormResult`, and
+the capture pipeline routes `capture_mode=form` through the on-device-first path (gated by `ls.ondevice_primary`,
+default OFF — ships dark). `APIClient.scoreFromMetrics` gained additive form params (events/view/measured_positions/
+form_version). It all compiles + links for device Release.
+
+**Device-pending (the iPhone was unavailable/locked this session — I could not unlock it):**
+- **The gate run** (`OnDeviceFormGateTests` on the iPhone) — the harness, clips, model + 10× determinism are ready
+  and the build installs, but the **simulator cannot decode the iPhone .mov clips** (`Fig err -12900`), so the gate
+  must run on the device. Command: `xcodebuild test -project ios/LaneSight/LaneSight.xcodeproj -scheme LaneSight
+  -destination 'platform=iOS,id=<iphone-udid>' -only-testing:LaneSightTests/OnDeviceFormGateTests` and read the
+  `ONDEV_FORM_GATE_ROW` lines (events vs labels, parity vs golden, determinism X/10, wall_s).
+- **End-to-end form upload** — flip `ls.ondevice_primary` on (Dev Panel), record/upload a form clip, confirm the
+  on-device metrics → `/shots/metrics` form branch → one Complete/Offline form result. Needs the device + a server
+  reachable for the metrics call.
 
 This is the hand-off for wiring the on-device Form **engine** (built, parts 1–3 below) into the **app flow**
 (part 4). The engine, the Python parity golden, the gate test, and the **server** form branches are done and

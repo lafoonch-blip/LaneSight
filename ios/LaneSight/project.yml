@@ -37,18 +37,33 @@ targets:
       - path: Models/pose_landmarker_heavy.task
         buildPhase: resources
         optional: true
-    # DEC-129: MediaPipe Pose Landmarker for iOS. Ships as a binary xcframework (CocoaPods / vendored), NOT SPM.
-    # The Form engine compiles WITHOUT it (`#if canImport(MediaPipeTasksVision)` → throws .mediaPipeUnavailable),
-    # so this stays COMMENTED until Shayne vendors the framework, keeping `xcodegen generate` working today.
-    # To activate: download MediaPipeTasksVision.xcframework to ios/LaneSight/Vendor/ (git-ignore / LFS), then
-    # uncomment the dependencies block below and re-run `xcodegen generate`. See FORM_ONDEVICE_INTEGRATION.md §A.
-    #dependencies:
-    #  - framework: Vendor/MediaPipeTasksVision.xcframework
-    #    embed: true
+    # DEC-129: MediaPipe Pose Landmarker for iOS (v1.0.0). Two STATIC xcframeworks fetched per-machine by
+    # Vendor/fetch_mediapipe.sh (gitignored): the Vision wrapper + the heavy Common (TFLite/XNNPACK) binary.
+    # Static → embed:false. They link libc++ + the Accelerate/AVFoundation/CoreMedia/… system frameworks.
+    # The Form engine also compiles without them via `#if canImport(MediaPipeTasksVision)`.
+    dependencies:
+      - framework: Vendor/MediaPipeTasksVision.xcframework
+        embed: false
+      - framework: Vendor/MediaPipeTasksCommon.xcframework
+        embed: false
+      - sdk: libc++.tbd
+      - sdk: Accelerate.framework
+      - sdk: AudioToolbox.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreImage.framework
+      - sdk: QuartzCore.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreVideo.framework
+      - sdk: CoreGraphics.framework
     settings:
       base:
         PRODUCT_NAME: LaneSight
         PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app
+        # DEC-129: MediaPipeTasksCommon's heavy graph libs (abseil/tflite/xnnpack/protobuf) are force-loaded
+        # from Vendor/graph_libraries (gitignored, fetched by fetch_mediapipe.sh) — mirrors the pod's
+        # user_target_xcconfig. -ObjC loads the static framework's Obj-C categories.
+        OTHER_LDFLAGS[sdk=iphoneos*]: "$(inherited) -ObjC -force_load $(SRCROOT)/Vendor/graph_libraries/libMediaPipeTasksCommon_device_graph.a"
+        OTHER_LDFLAGS[sdk=iphonesimulator*]: "$(inherited) -ObjC -force_load $(SRCROOT)/Vendor/graph_libraries/libMediaPipeTasksCommon_simulator_graph.a"
         # DEC-123: 0.9.0 (pre-1.0) for the first Friends & Family TestFlight build. Bump CURRENT_PROJECT_VERSION
         # on every upload to App Store Connect (each build number must be unique) — see TESTFLIGHT_FF.md.
         MARKETING_VERSION: "0.9.0"

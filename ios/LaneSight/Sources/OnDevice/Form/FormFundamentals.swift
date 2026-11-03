@@ -2,7 +2,7 @@ import Foundation
 
 /// Form fundamentals v1 (DEC-057) — the pure decision/geometry layer, ported from `lanesight_core/form/fundamentals.py`.
 /// measured_positions M1–M7, view gating, timing checkpoints T1–T4, swing-timing-vs-baseline, coaching cues.
-enum FormFundamentals {
+nonisolated enum FormFundamentals {
     typealias Frame = FormPoseLandmarker.Frame
     typealias LM = FormPoseLandmarker.LM
     static let version = "form-fundamentals-0.1.0"
@@ -102,10 +102,12 @@ enum FormFundamentals {
             let steady: Bool? = rise == nil ? nil : rise! <= 5.0
             var disp = "\(Int(tilt7.rounded()))°"
             if let s = steady { disp += s ? " · steady" : " · rising" }
-            var m = FormMeasurement("spine_tilt", tilt7, "deg", 0.5, "best_effort",
-                                    note: "torso angle from vertical at release (target 15–30°, steady). " + spineFwdNote,
+            var extra = ""
+            if let sd { extra += String(format: " consistency_sd=%.2f°", sd) }
+            if let rise { extra += String(format: " rise=%+.1f°", rise) }
+            let m = FormMeasurement("spine_tilt", tilt7, "deg", 0.5, "best_effort",
+                                    note: "torso angle from vertical at release (target 15–30°, steady)." + extra + " " + spineFwdNote,
                                     display: disp, id: "M2", viewRequired: "side")
-            m.note = m.note   // consistency_sd/rise surfaced in extra on the server; kept in note here
             out["spine_tilt"] = m
         } else {
             out["spine_tilt"] = unavailPos("M2", "spine_tilt", "deg", "torso landmarks not visible at release", "side")

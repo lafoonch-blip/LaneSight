@@ -7,7 +7,7 @@ import Foundation
 /// This replaces the Apple-Vision `OnDeviceFormShadow` as the REAL on-device form measurer (full BlazePose feet).
 /// It returns a completed record + per-stage report even when a stage can't produce its metric (DEC-122): swing
 /// events that fail the honesty gate are withheld, but step count / approach duration / tempo still return.
-enum OnDeviceFormEngine {
+nonisolated enum OnDeviceFormEngine {
     static let backendVersion = "ios-form-pose-0.1.0"   // mirrors pose.POSE_BACKEND_VERSION "form-pose-0.1.0"
     static let formVersion = "form-0.0.0"
     typealias LM = FormPoseLandmarker.LM

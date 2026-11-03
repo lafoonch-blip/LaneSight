@@ -10,3 +10,9 @@ Login screen mocks.png
 
 # Per-worktree Xcode DerivedData (feat/ff-feedback, parallel-session isolation)
 .build-dd/
+
+# DEC-129 on-device Form: large binaries fetched per-machine (ios/LaneSight/Vendor/fetch_mediapipe.sh), never committed
+ios/LaneSight/Vendor/*.xcframework/
+ios/LaneSight/Models/*.task
+ios/LaneSight/Tests/FormGateClips/
+ios/LaneSight/Vendor/graph_libraries/

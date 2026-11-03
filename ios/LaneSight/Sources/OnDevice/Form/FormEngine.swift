@@ -7,7 +7,7 @@ import Foundation
 /// Honesty rules (DEC-026/042/086): an unmeasurable metric is value=nil, status="unavailable", with the reason.
 /// Partial results (DEC-122): the analysis always returns a completed record + per-stage report; swing-event /
 /// delivery-isolation failure withholds the swing metrics but keeps step count / approach duration / tempo.
-enum FormEngine {
+nonisolated enum FormEngine {
     typealias Frame = FormPoseLandmarker.Frame
     typealias LM = FormPoseLandmarker.LM
 

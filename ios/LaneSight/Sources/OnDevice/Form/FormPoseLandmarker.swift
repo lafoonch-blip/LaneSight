@@ -18,7 +18,7 @@ import MediaPipeTasksVision
 /// container PTS — authoritative over nominal fps, DEC-028/092) and 33 landmarks each `(x, y, z, visibility,
 /// presence)` with x/y normalized 0..1 in DISPLAY orientation. A frame with no detection is all-NaN, exactly
 /// like the reference.
-enum FormPoseLandmarker {
+nonisolated enum FormPoseLandmarker {
     /// BlazePose 33-point landmark indices (identical to `pose.py`).
     enum LM {
         static let nose = 0
@@ -39,7 +39,7 @@ enum FormPoseLandmarker {
         let lm: [[Float]]
     }
 
-    struct Landmarks {
+    nonisolated struct Landmarks {
         let t: [Double]
         let frames: [Frame]
         /// Clip fps derived from the median PTS delta (matches `1/median(diff(t))` in `pose.analyze`).
@@ -73,12 +73,14 @@ enum FormPoseLandmarker {
     static let modelResource = "pose_landmarker_heavy"
     static let modelExtension = "task"
 
-    /// Resolve the model path: an explicit override wins, else the app/test bundle resource.
+    /// Resolve the model path: an explicit override wins, then the env var, then the given bundle, then the app
+    /// (main) bundle — the model ships as an app resource (Models/), so a test hosted in the app finds it there.
     static func resolveModelPath(bundle: Bundle = .main, override: String? = nil) -> String? {
         if let override, FileManager.default.fileExists(atPath: override) { return override }
         if let env = ProcessInfo.processInfo.environment["LANESIGHT_POSE_MODEL"],
            FileManager.default.fileExists(atPath: env) { return env }
-        return bundle.url(forResource: modelResource, withExtension: modelExtension)?.path
+        if let p = bundle.url(forResource: modelResource, withExtension: modelExtension)?.path { return p }
+        return Bundle.main.url(forResource: modelResource, withExtension: modelExtension)?.path
     }
 
     /// Run the heavy pose landmarker on every frame of `clipURL`. `modelPath` defaults to the bundled model.

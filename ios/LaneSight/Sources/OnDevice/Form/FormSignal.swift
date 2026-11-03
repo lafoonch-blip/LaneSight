@@ -3,7 +3,7 @@ import Foundation
 /// Numeric primitives ported 1:1 from the numpy usage in `lanesight_core/form/pose.py` so the on-device event
 /// detection reproduces the reference bit-for-bit given the same landmarks. Everything is Double; NaN carries the
 /// "not measured / not visible" meaning exactly as in the reference.
-enum FormSignal {
+nonisolated enum FormSignal {
     static let MIN_VIS = 0.3                 // landmark visibility floor (pose.MIN_VIS)
     static let POSE_SKELETON_VIS = 0.65
 

@@ -39,16 +39,17 @@ final class OnDeviceFormGateTests: XCTestCase {
 
     static let heldOut: Set<String> = ["IMG_8980"]
     static let gateFrames = 2.0
-    // engine event key -> label key (matches form_baseline.EVENT_MAP); E2 is null in the reference (DEC-120).
-    static let eventMap: [(String, KeyPath<LabelClip, Double?>, String, Bool)] = [
-        ("E2", \.E2_ball_start_s, "ball start", true),
-        ("E4", \.E4_backswing_top_s, "backswing top", true),
-        ("E5", \.E5_slide_start_s, "slide start", false),
-        ("E7", \.E7_release_s, "release", true),
-        ("E8", \.E8_slide_stop_s, "slide stop", true),
-    ]
 
     func testOnDeviceFormParityOnLabeledClips() async throws {
+        // engine event key -> label key (matches form_baseline.EVENT_MAP); E2 is null in the reference (DEC-120).
+        // Local (not a static) to satisfy Swift 6 strict-concurrency on the KeyPath tuple array.
+        let eventMap: [(String, KeyPath<LabelClip, Double?>, String, Bool)] = [
+            ("E2", \.E2_ball_start_s, "ball start", true),
+            ("E4", \.E4_backswing_top_s, "backswing top", true),
+            ("E5", \.E5_slide_start_s, "slide start", false),
+            ("E7", \.E7_release_s, "release", true),
+            ("E8", \.E8_slide_stop_s, "slide stop", true),
+        ]
         let bundle = Bundle(for: type(of: self))
         guard let labels = loadJSON(Labels.self, "form_labels", bundle),
               let golden = loadJSON(Golden.self, "form_ondevice_golden", bundle) else {
@@ -71,16 +72,23 @@ final class OnDeviceFormGateTests: XCTestCase {
 
             let t0 = Date()
             let a1 = try OnDeviceFormEngine.analyze(clipURL: url, handed: "right", bundle: bundle)
-            let wall = Date().timeIntervalSince(t0)
-            let a2 = try OnDeviceFormEngine.analyze(clipURL: url, handed: "right", bundle: bundle)
+            let wall = Date().timeIntervalSince(t0)   // single-run wall time (the <30 s Beta gate)
 
-            // 1. determinism (hard) — identical located events + the headline metrics
-            for k in ["E2", "E4", "E6", "E7", "E8"] {
-                XCTAssertEqual(ev(a1, k), ev(a2, k), "non-deterministic event \(k) on \(clip)")
+            // 1. determinism (hard) — DEC-126 P0 rule: run 10× total, assert every run is byte-identical on the
+            // located events + the headline metrics. Reports the match count (X/10) per clip.
+            let detKeys = ["E2", "E3", "E4", "E6", "E7", "E8"]
+            let metKeys = ["swing_time", "backswing_time", "downswing_time", "release_time", "step_count",
+                           "rhythm_ratio", "approach_time", "finish_hold"]
+            var identical = 1
+            for run in 2...10 {
+                let an = try OnDeviceFormEngine.analyze(clipURL: url, handed: "right", bundle: bundle)
+                var same = true
+                for k in detKeys where ev(a1, k) != ev(an, k) { same = false }
+                for k in metKeys where a1.metrics[k]?.value != an.metrics[k]?.value { same = false }
+                if same { identical += 1 }
+                else { XCTFail("\(clip): run \(run) diverged from run 1 (non-deterministic)") }
             }
-            for k in ["swing_time", "backswing_time", "downswing_time", "step_count", "rhythm_ratio"] {
-                XCTAssertEqual(a1.metrics[k]?.value, a2.metrics[k]?.value, "non-deterministic metric \(k) on \(clip)")
-            }
+            XCTAssertEqual(identical, 10, "\(clip) determinism \(identical)/10")
 
             // 2. engine parity vs the server reference (golden) — NOT applied to the held-out clip.
             if let gevents = gold?.events, !heldOut {
@@ -97,7 +105,7 @@ final class OnDeviceFormGateTests: XCTestCase {
 
             // 3 + 4. report ground-truth deltas + runtime (one grep-able JSON row per clip)
             var evRows: [String: Any] = [:]
-            for (ekey, kp, _, dec118) in Self.eventMap {
+            for (ekey, kp, _, dec118) in eventMap {
                 let det = ev(a1, ekey)
                 let gt = lab?[keyPath: kp]
                 var r: [String: Any] = ["dec118": dec118]
@@ -109,6 +117,7 @@ final class OnDeviceFormGateTests: XCTestCase {
             let row: [String: Any] = [
                 "clip": clip, "held_out": heldOut, "view_label": lab?.view ?? "?",
                 "view_detected": a1.view, "fps": fps, "wall_s": wall, "status": a1.status,
+                "determinism": "\(identical)/10",
                 "step_count": a1.metrics["step_count"]?.value as Any,
                 "step_count_label": lab?.step_count as Any,
                 "swing_source": a1.swingSource, "events": evRows,

@@ -14,7 +14,7 @@ import Foundation
 /// max-channel diff + HSV gate, morphological open/close, and seeded nearest-neighbour connected components;
 /// OpenCV's exact CC/morphology are not bit-reproducible in Accelerate, so it would be validated against the
 /// golden on device, like the lane parity fixtures).
-enum FormBallTrack {
+nonisolated enum FormBallTrack {
     /// Returns t -> (cx, cy, area) in normalized coords. Currently a no-op (see the type doc); the wrist arc is
     /// the release source on the labeled set. Kept so the engine's `trackBall:true` path has a real call site.
     static func track(clipURL: URL, t: [Double], frames: [FormPoseLandmarker.Frame],
