@@ -30,7 +30,8 @@ def main():
         ts = torch.jit.trace(model, ex)
     mlmodel = ct.convert(
         ts, inputs=[ct.TensorType(name='image', shape=(1, 3, inp, inp))],
-        outputs=[ct.TensorType(name='heatmap'), ct.TensorType(name='wh'), ct.TensorType(name='offset')],
+        outputs=[ct.TensorType(name='heatmap'), ct.TensorType(name='wh'), ct.TensorType(name='offset'),
+                 ct.TensorType(name='lane')],
         compute_precision=ct.precision.FLOAT16, compute_units=ct.ComputeUnit.ALL,
         convert_to='mlprogram', minimum_deployment_target=ct.target.iOS17)
     mlmodel.save(a.out)
@@ -48,7 +49,7 @@ def main():
 
     # parity: CoreML heatmap peak vs torch
     with torch.no_grad():
-        th, tw, tr = model(ex)
+        th, tw, tr, tl = model(ex)
     ch = out['heatmap'][0, 0]
     tp = np.unravel_index(th[0, 0].numpy().argmax(), th[0, 0].shape)
     cp = np.unravel_index(ch.argmax(), ch.shape)

@@ -36,10 +36,15 @@ def build_model():
             self.up1 = Up(960, 256); self.up2 = Up(256, 128); self.up3 = Up(128, 64)   # stride 32 -> 4
             self.hm = nn.Conv2d(64, 1, 1); self.wh = nn.Conv2d(64, 2, 1); self.reg = nn.Conv2d(64, 2, 1)
             self.hm.bias.data.fill_(-2.19)                # focal-loss prior
+            # DEC-130 lane-geometry head: global regression of 6 normalized lane params
+            # [foul_lx, foul_ly, foul_rx, foul_ry, vp_x, vp_y] (vp may be off-frame -> plain regression).
+            self.lane = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Flatten(),
+                                      nn.Linear(960, 256), nn.ReLU(inplace=True), nn.Linear(256, 6))
         def forward(self, x):
             f = self.features(x)
-            f = self.up3(self.up2(self.up1(f)))
-            return torch.sigmoid(self.hm(f)), self.wh(f), self.reg(f)
+            lane = self.lane(f)
+            u = self.up3(self.up2(self.up1(f)))
+            return torch.sigmoid(self.hm(u)), self.wh(u), self.reg(u), lane
     return BallNet()
 
 
@@ -105,9 +110,21 @@ class DS:
             wh[0, iy, ix] = bw * s / self.stride; wh[1, iy, ix] = bh * s / self.stride
             reg[0, iy, ix] = fx - ix; reg[1, iy, ix] = fy - iy
             mask[iy, ix] = 1.0
+        # lane-geometry target [foul_lx,foul_ly,foul_rx,foul_ry,vp_x,vp_y] normalized by input; mask 0 if absent
+        lane = np.zeros(6, np.float32); lane_m = np.float32(0.0)
+        lm = r.get('landmarks')
+        if lm and lm.get('foul') and lm.get('vp'):
+            (flx, fly), (frx, fry) = lm['foul'][0], lm['foul'][1]
+            vx, vy = lm['vp']
+            pts = np.array([[flx, fly], [frx, fry], [vx, vy]], np.float32) * s
+            if flip:
+                pts[:, 0] = self.input - 1 - pts[:, 0]
+                pts[[0, 1]] = pts[[1, 0]]                 # swap L/R endpoints under flip
+            lane = (pts.reshape(-1) / self.input).astype(np.float32)
+            lane_m = np.float32(1.0)
         x = canvas.astype(np.float32)[:, :, ::-1] / 255.0          # BGR->RGB
         x = (x - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
-        return (x.transpose(2, 0, 1).astype(np.float32), hm, wh, reg, mask)
+        return (x.transpose(2, 0, 1).astype(np.float32), hm, wh, reg, mask, lane, lane_m)
 
 
 def focal(pred, gt):
@@ -123,31 +140,32 @@ def focal(pred, gt):
 
 def collate(batch):
     import torch
-    xs, hms, whs, regs, masks = zip(*batch)
+    xs, hms, whs, regs, masks, lanes, lms = zip(*batch)
     return (torch.from_numpy(np.stack(xs)), torch.from_numpy(np.stack(hms)),
             torch.from_numpy(np.stack(whs)), torch.from_numpy(np.stack(regs)),
-            torch.from_numpy(np.stack(masks)))
+            torch.from_numpy(np.stack(masks)), torch.from_numpy(np.stack(lanes)),
+            torch.from_numpy(np.stack(lms)))
 
 
 def evaluate(model, dl, dev, stride, tol_frac=0.03):
     import torch
-    model.eval(); hit = tot = 0
+    model.eval(); hit = tot = 0; lane_err = [];
     with torch.no_grad():
-        for x, hm, wh, reg, mask in dl:
-            x = x.to(dev); ph, pw, pr = model(x)
+        for x, hm, wh, reg, mask, lane, lm in dl:
+            x = x.to(dev); ph, pw, pr, pl = model(x)
             B, _, O, _ = ph.shape
             for b in range(B):
                 gt = mask[b].numpy()
                 ys, xs = np.where(gt > 0)
-                if len(xs) == 0:
-                    continue
-                tot += 1
-                h = ph[b, 0].cpu().numpy()
-                py, px = np.unravel_index(h.argmax(), h.shape)
-                d = math.hypot(px - xs[0], py - ys[0])
-                if d <= tol_frac * O:
-                    hit += 1
-    return hit / max(tot, 1), tot
+                if len(xs):
+                    tot += 1
+                    h = ph[b, 0].cpu().numpy()
+                    py, px = np.unravel_index(h.argmax(), h.shape)
+                    if math.hypot(px - xs[0], py - ys[0]) <= tol_frac * O:
+                        hit += 1
+                if float(lm[b]) > 0:               # lane param MAE (normalized units) where GT present
+                    lane_err.append(float(torch.abs(pl[b].cpu() - lane[b]).mean()))
+    return hit / max(tot, 1), tot, (sum(lane_err) / len(lane_err) if lane_err else None)
 
 
 def main():
@@ -155,6 +173,7 @@ def main():
     ap.add_argument('--data', required=True); ap.add_argument('--out', required=True)
     ap.add_argument('--epochs', type=int, default=40); ap.add_argument('--input', type=int, default=512)
     ap.add_argument('--bs', type=int, default=16); ap.add_argument('--lr', type=float, default=2.5e-4)
+    ap.add_argument('--lane_w', type=float, default=1.0, help='weight on the lane-geometry regression loss')
     a = ap.parse_args()
     torch, nn, F, tv = _import_torch()
     from torch.utils.data import DataLoader
@@ -171,22 +190,28 @@ def main():
     best = 0.0
     for ep in range(a.epochs):
         model.train(); t0 = time.perf_counter(); tl = 0; nb = 0
-        for x, hm, wh, reg, mask in dltr:
+        for x, hm, wh, reg, mask, lane, lm in dltr:
             x, hm = x.to(dev), hm.to(dev); wh, reg, mask = wh.to(dev), reg.to(dev), mask.to(dev)
-            ph, pw, pr = model(x)
+            lane, lm = lane.to(dev), lm.to(dev)
+            ph, pw, pr, pl = model(x)
             lh = focal(ph[:, 0], hm)
             m = mask.unsqueeze(1)
             lw = (F.l1_loss(pw * m, wh * m, reduction='sum') / torch.clamp(m.sum(), min=1))
             lr_ = (F.l1_loss(pr * m, reg * m, reduction='sum') / torch.clamp(m.sum(), min=1))
-            loss = lh + 0.1 * lw + lr_
+            # lane loss only on frames that carry landmarks (auto-labels); masked by lm
+            ll = (F.l1_loss(pl * lm[:, None], lane * lm[:, None], reduction='sum') / torch.clamp(lm.sum() * 6, min=1))
+            loss = lh + 0.1 * lw + lr_ + a.lane_w * ll
             opt.zero_grad(); loss.backward(); opt.step()
             tl += float(loss); nb += 1
         sched.step()
-        rec, n = evaluate(model, dlva, dev, 4)
-        print(f"[train] ep {ep+1}/{a.epochs} loss {tl/max(nb,1):.3f} val_recall {rec:.3f} (n={n}) {time.perf_counter()-t0:.0f}s", flush=True)
-        if rec >= best:
-            best = rec
-            torch.save({'model': model.state_dict(), 'input': a.input, 'stride': 4, 'val_recall': rec}, os.path.join(a.out, 'ball_centernet.pt'))
+        rec, n, lane_mae = evaluate(model, dlva, dev, 4)
+        score = rec - (lane_mae or 0)        # select on recall minus lane error (both matter for geometry)
+        print(f"[train] ep {ep+1}/{a.epochs} loss {tl/max(nb,1):.3f} val_recall {rec:.3f} (n={n}) "
+              f"lane_mae {lane_mae if lane_mae is None else round(lane_mae,4)} {time.perf_counter()-t0:.0f}s", flush=True)
+        if score >= best:
+            best = score
+            torch.save({'model': model.state_dict(), 'input': a.input, 'stride': 4, 'val_recall': rec,
+                        'lane_mae': lane_mae}, os.path.join(a.out, 'ball_centernet.pt'))
     print(f"[train] DONE best_val_recall {best:.3f} -> {a.out}/ball_centernet.pt", flush=True)
 
 
