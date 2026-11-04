@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.84  
+Version: 1.85  
 Last Updated: 2026-11-03  
 Owner: Shayne  
-Supersedes: v1.83 (feat/ios-lane-parity DEC-126/127 + DEC-128 real-clip parity/plausibility/stage-report/lane-honesty) + ff-feedback DEC-123/124/125 + DEC-122; + DEC-129 on-device Form
+Supersedes: v1.84 (+ DEC-130 learned detection front-end so shot metrics work from any normal camera position)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1627,6 +1627,45 @@ trustworthy; real-clip parity keeps the two engines from silently diverging in t
 **Amends/extends:** DEC-127 (same on-device-first path; adds the bounds + stage-report + card-honesty rules);
 DEC-122 (on-device attempts now write stage + metric outcome rows for real use); DEC-086 honesty vocabulary gains
 `IMPLAUSIBLE_VALUE`; DEC-065 far-lane gating unchanged.
+
+### DEC-130 — Learned detection front-end so shot metrics work from any normal camera position
+**Decision (Shayne, 2026-11-03, autonomous mandate):** The classical HSV/blob front-end (`cv/lanes.py` +
+`cv/track.py`) only locks onto a narrow range of camera framings; from a normal phone position on many of Shayne's
+real clips it finds the wrong lane or no ball and the pipeline returns nothing. We replace the *detection* front-end
+(not the geometry or measurement) with a **learned detector**: video → model detections (the **ball** per frame;
+**lane landmarks** from whatever is visible — gutter/lane edges, foul line, arrows, pin deck — solved jointly with
+geometric/temporal consistency) → the EXISTING tracking, homography/geometry, measurement, and DEC-128 honesty/
+plausibility gates downstream. The measurement math and honesty rules do not change; only how we find the ball and
+the lane does.
+1. **Training data, no human labeling.** (a) **Auto-labels** harvested from clips where the current engine already
+   succeeds (its ball track + solved lane geometry become ground-truth boxes/landmarks). (b) **Zero-shot pre-labels**
+   on failing clips with open models (open-vocabulary detection for "bowling ball"/"pins", segmentation for the lane),
+   filtered by temporal + geometric consistency, then **self-audited** by rendering contact sheets and viewing them —
+   bad labels fixed or dropped, never shipped blind. (c) **Synthetic data** rendered from the true-scale
+   `lane3d.html` scene (lane, arrows, pins, gutters, neighbor lanes, ball return) over randomized camera pose/height/
+   angle, lighting, ball color, motion blur and occlusion, with exact labels.
+2. **Models must be commercially licensable and run both places.** No AGPL Ultralytics without a license; prefer
+   Apache/BSD (YOLOX, RT-DETR/RF-DETR, torchvision detectors) for the trainable model, OWLv2 (Apache) for zero-shot
+   boxes, SAM2 (Apache) for lane masks. The shipped detector must export to **Core ML** and run **<15 ms/frame** on
+   device, and the identical weights run on the server.
+3. **Evaluation is the only grade.** All of Shayne's videos (`~/LaneSightData`: `training_videos` incl. the 11/1 set,
+   the 2026-10-25 clips, storage `uploads`, IMG_8751–54). Truth = his foul-cross/pin-contact labels (speed) where
+   available. Split by recording session / camera setup; **hold out 6 labeled clips** until the detector is frozen.
+   **Done, per camera group:** metrics returned on the large majority of clips; speed within **0.5 mph** of truth on
+   labeled clips; **zero plausible-but-wrong** values; IMG_8751–54 **not worse**; deterministic; **<30 s** on device.
+4. **Rollout.** Integrate on iPhone (Core ML) + server (as the shadow/reference first, per DEC-102/127), deploy,
+   install Release, then one report with the coverage/accuracy table + screenshots of real results. Work is
+   autonomous: no questions to Shayne until solved; stop only to apply a live DB migration, merge to main, or on a
+   deploy that fails its gates.
+**Why:** a metric engine that only works from one framing isn't a product. Learning the detection front-end from
+Shayne's own clips + synthetic lanes lets the same validated geometry/measurement produce honest metrics from any
+normal camera position, while DEC-128's plausibility/honesty gates keep "works more often" from ever meaning
+"confidently wrong".
+**Date:** 2026-11-03 · **Status:** ACCEPTED (in progress).
+**Amends/extends:** DEC-102/DEC-127 (on-device-first; the learned detector becomes the measurement front-end on both
+engines, server stays reference/shadow first); DEC-128 (all four honesty/plausibility rules bind the learned path
+unchanged); DEC-062 production-CV freeze stays lifted for this shadow/validation track; DEC-001 fixed-camera
+assumption is the thing being removed.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
