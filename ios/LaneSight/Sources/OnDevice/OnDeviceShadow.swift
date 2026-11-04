@@ -47,7 +47,10 @@ enum OnDeviceShadow {
             diag["lane_nLanes"] = geo.debug.nLanes
             diag["lane_nGood"] = geo.debug.nGood
             diag["lane_maskPixels"] = geo.debug.maskPixels
-            diag["lane_rawVP"] = [geo.debug.rawVPx, geo.debug.rawVPy]
+            // Honest diagnostic: when the VP solve was degenerate (no good lanes), rawVPx/rawVPy are .nan.
+            // Emit null rather than NaN — NaN isn't valid JSON and "unsolvable" is the truthful value.
+            diag["lane_rawVP"] = (geo.debug.rawVPx.isFinite && geo.debug.rawVPy.isFinite)
+                ? [geo.debug.rawVPx, geo.debug.rawVPy] : NSNull()
             diag["lane_rawLanes"] = geo.debug.rawLaneInfo   // [center_x, width, dl, dr] per raw lane
             // every detected lane's center_x + width at the foul line (compare to the server's find_lanes)
             diag["lane_centers"] = geo.lanes.map { l -> [String: Double] in

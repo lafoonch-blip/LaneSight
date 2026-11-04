@@ -76,14 +76,45 @@ final class OnDeviceGateTests: XCTestCase {
                 "diag": body["diag"] as? [String: Any] as Any,
                 "trajectory": body["trajectory"] as? [String: Any] as Any,
             ]
-            if let data = try? JSONSerialization.data(withJSONObject: row.compactMapValues { $0 is NSNull ? nil : $0 }),
+            // JSONSerialization throws an *ObjC* NSException (uncatchable by `try?`) on any non-finite Double
+            // (NaN/Infinity) or invalid type, which would crash the whole gate and hide which clip/field is bad.
+            // Sanitize non-finite numbers to a visible marker, then guard with isValidJSONObject so a bad row
+            // is reported by name instead of killing the run.
+            let cleaned = Self.sanitizeForJSON(row.compactMapValues { $0 is NSNull ? nil : $0 })
+            if JSONSerialization.isValidJSONObject(cleaned),
+               let data = try? JSONSerialization.data(withJSONObject: cleaned),
                let s = String(data: data, encoding: .utf8) {
                 print("ONDEV_GATE_ROW \(s)")
+            } else {
+                print("ONDEV_GATE_ROW_UNSERIALIZABLE clip=\(name) — row had a non-JSON value after sanitize")
             }
         }
         print("ONDEV_GATE_END found=\(found)")
         if found == 0 {
             throw XCTSkip("no GateClips in the test bundle — add them via project.yml locally to run the gate")
+        }
+    }
+
+    /// Recursively replace non-finite Doubles (NaN/±Infinity) with a visible string marker so the parity row
+    /// is JSON-serializable and the offending clip/field is named in the output instead of crashing the gate.
+    /// A non-finite *user-facing metric* is itself a plausibility defect — this surfaces it rather than hiding it.
+    private static func sanitizeForJSON(_ v: Any) -> Any {
+        switch v {
+        case let d as Double:
+            return d.isFinite ? d : "non_finite(\(d))"
+        case let f as Float:
+            return f.isFinite ? Double(f) : "non_finite(\(f))"
+        case let dict as [String: Any]:
+            var out: [String: Any] = [:]
+            for (k, val) in dict where !(val is NSNull) { out[k] = sanitizeForJSON(val) }
+            return out
+        case let arr as [Any]:
+            return arr.compactMap { $0 is NSNull ? nil : sanitizeForJSON($0) }
+        case let n as NSNumber:
+            let dv = n.doubleValue
+            return dv.isFinite ? n : "non_finite(\(dv))"
+        default:
+            return v
         }
     }
 }
