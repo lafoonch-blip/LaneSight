@@ -291,7 +291,12 @@ def speed_withhold_reasons(speed_release, speed_late, breakpoint_ft,
 
 
 def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=None, history=None, context=None, log=print,
-            timing_video=None, core_end_s=None, timings=None):
+            timing_video=None, core_end_s=None, timings=None, detector=None):
+    # DEC-130: `detector`, when given, is a learned front-end that REPLACES find_lanes + blob extraction. It runs
+    # inference once over the stabilised frames and exposes .geometry(S) -> G={vp,lanes,mask} and
+    # .candidates(S, lane, vp) -> C (the candidates() structure). Everything downstream (link/extend/impact/refine/
+    # compute + the DEC-128 honesty/plausibility gates + record assembly) is UNCHANGED and reused. When
+    # detector is None (production default), behaviour is byte-identical — the IMG_8751-54 golden gate proves it.
     # timings: optional dict; sub-stage wall times (seconds) are recorded for profiling. No effect on results.
     _T = timings if timings is not None else {}
     # DEC-122 per-stage report: {stage_key: {status: ok|failed|skipped, duration_ms, [reason_code, reason,
@@ -323,7 +328,8 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     S['vp_y'] = None
     try:
         with _stage('find_lanes_s'):
-            G = find_lanes(S['bg'], log=log); vp = G['vp']; S['vp_y'] = vp[1]
+            G = detector.geometry(video, S) if detector else find_lanes(S['bg'], log=log)
+            vp = G['vp']; S['vp_y'] = vp[1]
     except AnalysisFailure as af:
         # DEC-122: lane/foul-line detection failed (NO_WOOD / NO_EDGES / FOUL_LINE_NOT_IN_VIEW /
         # LANE_GEOMETRY_UNUSABLE). No geometry ⇒ no ball track ⇒ nothing measurable — but this is a COMPLETED
@@ -348,7 +354,11 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
     for lane in G['lanes']:
         try:
             with _stage('extract_blobs_s'):
-                if os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
+                # DEC-130: detector mode provides candidates directly (no blob list); B stays empty — extend_back/
+                # touchdown no-op safely on B=[], and extend_forward/detect_impact/refine use C/track, not B.
+                if detector:
+                    B = []
+                elif os.path.exists(bcache) and len(G['lanes']) == 1: B = pickle.load(open(bcache, 'rb'))['B']
                 else: B = extract_blobs(video, S, lane, vp, log=log)
         except AnalysisFailure as af:
             # DEC-122 step 7b: a lane whose search region is degenerate (LANE_GEOMETRY_UNUSABLE from a far-off VP)
@@ -358,7 +368,7 @@ def analyze(video, out_prefix, handed=None, intent=None, pattern=None, sensor=No
             log(f'lane candidate skipped ({af.code}); trying the next detected lane')
             continue
         with _stage('link_s'):
-            C = candidates(B, lane, vp)
+            C = detector.candidates(S, lane, vp) if detector else candidates(B, lane, vp)
             T = link(C, vp)
         score = _lane_ball_score(T)        # 7b: pick the lane the BALL travels down, not just the longest span
         if best is None or score > best[0]: best = (score, lane, T, B)

@@ -19,8 +19,11 @@ from lanesight_core.cv import track as T
 
 def lane_from_params(p, img_w, img_h):
     """6 normalized params [foul_lx,foul_ly,foul_rx,foul_ry,vp_x,vp_y] -> a lane dict compatible with the engine:
-    left/right edges as x=a*y+b (each line foul_pt -> VP), foul line as y=c*x+d. Returns (lane, vp)."""
-    flx, fly, frx, fry, vx, vy = (p * np.array([img_w, img_h, img_w, img_h, img_w, img_h])).tolist()
+    left/right edges as x=a*y+b (each line foul_pt -> VP), foul line as y=c*x+d. Returns (lane, vp).
+    The params are normalized by max(H,W) (training letterboxes the frame into a square with uniform scale
+    s=input/max(H,W) and divides pixel coords by max(H,W)), so denormalize ALL by max(img_w,img_h)."""
+    scale = float(max(img_w, img_h))
+    flx, fly, frx, fry, vx, vy = (p * scale).tolist()
     def line_xy(x0, y0, x1, y1):            # x = a*y + b through (x0,y0),(x1,y1)
         if abs(y1 - y0) < 1e-6:
             y1 += 1e-3
@@ -31,7 +34,10 @@ def lane_from_params(p, img_w, img_h):
     if abs(frx - flx) < 1e-6:
         frx += 1e-3
     c = (fry - fly) / (frx - flx); d = fly - c * flx
-    lane = {'left': left, 'right': right, 'foul': [c, d], 'yNear': max(fly, fry), 'yFar': vy}
+    y_near = max(fly, fry); y_far = vy
+    # y_rng = the lane band's vertical extent (VP/top .. foul/bottom), for classify_capture_view (DEC-061).
+    lane = {'left': left, 'right': right, 'foul': [c, d], 'yNear': y_near, 'yFar': y_far,
+            'y_rng': [float(max(0.0, min(y_far, y_near))), float(y_near)]}
     vp = np.array([vx, vy], np.float64)
     return lane, vp
 
@@ -65,3 +71,91 @@ def ball_track_from_detector(dets, lane_params_per_frame, img_w, img_h, fps):
     C = candidates_from_detections(dets, lane, fps)
     track = T.link(C, vp)
     return track, lane, vp, C
+
+
+# ---------------- the learned front-end injected into pipeline.analyze (DEC-130) ----------------
+
+class LearnedDetector:
+    """A learned front-end for pipeline.analyze(detector=...). Runs the CenterNet (torch checkpoint OR Core ML)
+    over the STABILISED frames once, then serves .geometry(video, S) and .candidates(S, lane, vp). Replaces ONLY
+    find_lanes + blob extraction; everything downstream is the unchanged engine."""
+
+    def __init__(self, ckpt=None, mlpackage=None, input_sz=512, score_thr=0.30, stride_sample=1):
+        self.input = input_sz; self.thr = score_thr; self.stride_sample = stride_sample
+        self.backend = None; self._prepared = None
+        if mlpackage:
+            import coremltools as ct
+            self.ml = ct.models.MLModel(mlpackage); self.backend = 'coreml'
+            self.input = input_sz
+        elif ckpt:
+            import torch
+            from ops.train_detector import build_model
+            ck = torch.load(ckpt, map_location='cpu'); self.input = ck.get('input', input_sz)
+            self.net = build_model(); self.net.load_state_dict(ck['model']); self.net.eval()
+            self.torch = torch; self.backend = 'torch'
+        else:
+            raise ValueError('LearnedDetector needs ckpt or mlpackage')
+
+    def _infer(self, stab_bgr):
+        """One stabilised BGR frame -> (ball_box[x,y,w,h]|None, score, lane6). Letterbox to square input."""
+        import numpy as _np, cv2
+        H0, W0 = stab_bgr.shape[:2]; s = self.input / max(H0, W0)
+        nw, nh = int(round(W0 * s)), int(round(H0 * s))
+        canvas = _np.zeros((self.input, self.input, 3), _np.uint8)
+        canvas[:nh, :nw] = cv2.resize(stab_bgr, (nw, nh))
+        x = canvas.astype(_np.float32)[:, :, ::-1] / 255.0
+        x = (x - _np.array([0.485, 0.456, 0.406])) / _np.array([0.229, 0.224, 0.225])
+        x = x.transpose(2, 0, 1)[None].astype(_np.float32)
+        if self.backend == 'coreml':
+            o = self.ml.predict({'image': x})
+            hm, wh, reg, lane = o['heatmap'][0, 0], o['wh'][0], o['offset'][0], o['lane'][0]
+        else:
+            with self.torch.no_grad():
+                ph, pw, pr, pl = self.net(self.torch.from_numpy(x))
+            hm = ph[0, 0].numpy(); wh = pw[0].numpy(); reg = pr[0].numpy(); lane = pl[0].numpy()
+        O = hm.shape[0]; st = self.input // O
+        py, px = _np.unravel_index(hm.argmax(), hm.shape); score = float(hm.max())
+        box = None
+        if score >= self.thr:
+            ox, oy = reg[:, py, px]; bw, bh = wh[:, py, px]
+            cx = (px + ox) * st / s; cy = (py + oy) * st / s     # back to stabilised px (undo letterbox scale)
+            bw = bw * st / s; bh = bh * st / s
+            box = [cx - bw / 2, cy - bh / 2, bw, bh]
+        return box, score, lane.astype(_np.float32)             # lane is normalized to input square
+
+    def prepare(self, video, S):
+        if self._prepared is not None and self._prepared.get('video') == video:
+            return                                    # already inferred for THIS clip (eval reuses one detector)
+        import cv2, numpy as _np
+        Hs = S['Hs']; refH, refW = S['bg'].shape[:2]
+        fps = (S.get('fps') or (1.0 / _np.median(_np.diff(S['ts']))) if len(S.get('ts', [])) > 1 else 60.0)
+        cap = cv2.VideoCapture(video)
+        total = min(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or len(Hs), len(Hs))
+        dets = []; lane_params = []
+        for i in range(0, total, self.stride_sample):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+            ok, fr = cap.read()
+            if not ok or fr is None:
+                continue
+            stab = cv2.warpPerspective(fr, Hs[i].astype(_np.float64), (refW, refH))
+            box, score, lane6 = self._infer(stab)
+            lane_params.append(lane6)
+            if box is not None:
+                dets.append((i, box))
+        cap.release()
+        self._prepared = {'dets': dets, 'lane_params': lane_params, 'fps': float(fps),
+                          'img_w': refW, 'img_h': refH, 'video': video}
+
+    def geometry(self, video, S):
+        self.prepare(video, S)
+        p = self._prepared
+        if not p['lane_params']:
+            from lanesight_core.failures import AnalysisFailure
+            raise AnalysisFailure('LANE_GEOMETRY_UNUSABLE', 'detector produced no lane geometry', stage='lane')
+        lp = np.median(np.array(p['lane_params']), axis=0)
+        lane, vp = lane_from_params(lp, p['img_w'], p['img_h'])
+        return {'vp': vp, 'lanes': [lane], 'mask': None}
+
+    def candidates(self, S, lane, vp):
+        p = self._prepared
+        return candidates_from_detections(p['dets'], lane, p['fps'])

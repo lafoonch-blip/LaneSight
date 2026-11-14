@@ -105,8 +105,28 @@ def thin_camera_classes(manifest, min_per_class=6):
 
 # ---------------- engine run ----------------
 
+# DEC-130: when set (via --engine learned), the eval runs the LEARNED front-end through the SAME analyze_clip
+# (trim + HDR->SDR + stabilise), injecting the detector into pipeline.analyze. None = the production engine.
+ENGINE_DETECTOR = None
+
+
+def _learned_analyzer(video, out_prefix, handed=None, log=print, timing_video=None, core_end_s=None, cv_timings=None):
+    # Mirror default_analyzer EXACTLY (incl. rec.to_dict() + JSON round-trip), only adding the detector injection.
+    from lanesight_core.cv.pipeline import analyze, _json_default
+    import json as _json, numpy as _np
+    from lanesight_core.failures import AnalysisFailure
+    try:
+        rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video,
+                      core_end_s=core_end_s, timings=cv_timings, detector=ENGINE_DETECTOR)
+    except _np.linalg.LinAlgError as e:
+        raise AnalysisFailure('LANE_GEOMETRY_UNUSABLE', f'numerical geometry fit failed ({type(e).__name__}: {e})',
+                              stage='internal', diagnostics={'exception': type(e).__name__})
+    return _json.loads(_json.dumps(rec.to_dict(), default=_json_default))
+
+
 def _run_engine(path):
-    """Run the current production engine on one clip; capture metrics, trajectory, pins, failure, runtime."""
+    """Run the current production engine (or the learned front-end, if ENGINE_DETECTOR is set) on one clip;
+    capture metrics, trajectory, pins, failure, runtime."""
     from lanesight_runner.core import analyze_clip
     out = {'path': path}
     if not os.path.exists(path):
@@ -114,7 +134,10 @@ def _run_engine(path):
     cpu0, wall0 = time.process_time(), time.perf_counter()
     with tempfile.TemporaryDirectory() as td:
         try:
-            rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'))
+            if ENGINE_DETECTOR is not None:
+                rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'), analyzer=_learned_analyzer)
+            else:
+                rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'))
             m = rec.get('metrics') or {}
             mv = {k: (v.get('value') if isinstance(v, dict) else v) for k, v in m.items()}
             traj = (rec.get('trajectory') or {}).get('lane') or []
@@ -371,7 +394,15 @@ def main():
     ap.add_argument('--tolerances', default='validation/cv_eval/tolerances.json')
     ap.add_argument('--out', default=None)
     ap.add_argument('--clips', default=None, help='comma-separated shot ids (subset)')
+    ap.add_argument('--engine', choices=['production', 'learned'], default='production')
+    ap.add_argument('--ckpt', default=None, help='learned: torch checkpoint (ball_centernet.pt)')
+    ap.add_argument('--mlpackage', default=None, help='learned: Core ML .mlpackage')
     a = ap.parse_args()
+    if a.engine == 'learned':
+        global ENGINE_DETECTOR
+        from ops.detector_integrate import LearnedDetector
+        ENGINE_DETECTOR = LearnedDetector(ckpt=a.ckpt, mlpackage=a.mlpackage)
+        print(f"[cv_eval] LEARNED engine ({'coreml' if a.mlpackage else 'torch'})", flush=True)
 
     manifest = json.load(open(a.manifest))['clips']
     tolerances = json.load(open(a.tolerances))
