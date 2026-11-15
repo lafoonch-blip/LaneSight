@@ -135,7 +135,18 @@ def _run_engine(path):
     with tempfile.TemporaryDirectory() as td:
         try:
             if ENGINE_DETECTOR is not None:
-                rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'), analyzer=_learned_analyzer)
+                # DEC-130 classical-first, learned-fallback: run the production (classical) engine first — it is
+                # sub-pixel accurate where it succeeds, so clips it handles must NOT regress. Only when it yields
+                # no usable speed/rev (the clips DEC-130 is for) do we retry with the learned detector, which
+                # extends coverage to camera positions classical can't handle.
+                rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'))
+                _m = rec.get('metrics') or {}
+                def _v(k):
+                    x = _m.get(k)
+                    return (x.get('value') if isinstance(x, dict) else x)
+                if _v('speed_avg_foul_to_pins') is None and _v('ball_speed') is None and _v('rev_rate') is None:
+                    rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev2'), analyzer=_learned_analyzer)
+                    rec = dict(rec); rec['_engine'] = 'learned-fallback'
             else:
                 rec, _probe, _timings = analyze_clip(path, os.path.join(td, 'ev'))
             m = rec.get('metrics') or {}

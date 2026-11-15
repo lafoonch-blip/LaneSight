@@ -36,6 +36,34 @@ run is active.** Hold commits; batch them after training finishes. Integration c
 working tree meanwhile. Keep-awake = detached `caffeinate -dimsu` (survives session events; harness-tracked ones
 get killed at turn boundaries).
 
+## v1 end-to-end result (2026-11-14) — HONEST NEGATIVE, drove the hybrid fix
+Learned-only (detector lane + detector ball) on all 118 clips vs baseline vs foul->pins truth:
+- speed coverage 24/101 (baseline 50/101) — WORSE; speed MAE 3.75 mph (baseline 0.24); within ±0.5: 1/22 (baseline 8/22).
+- Diagnosis: detector tracks the ball well, but the lane-geometry regression head (~48px on foul/VP) corrupts the
+  depth scale -> speeds wrong (IMG_8752 28.4 vs 18.0) or withheld. Table: `~/LaneSightData/dec130/eval/DONE_BAR_TABLE.md`.
+- FIX (no retrain): HYBRID geometry — classical find_lanes (sub-pixel when it succeeds) for metric-grade depth +
+  learned ball detection to fill tracking gaps; learned lane only when classical lane fails. Implemented in
+  LearnedDetector.geometry. Re-eval in progress.
+
+## v2 result (2026-11-14) — event-timing reformulation (Shayne's redirect): still below bar, cleaner diagnosis
+Implemented `ops/learned_analyze.py`: headline speed = 59.44 ft / (t_pins - t_foul), time-based, NO depth.
+  t_foul = ball ground-contact row crosses the foul-line row (row-based, geometry-tolerant).
+  t_pins = detect_impact (ball-following) OR a brightness-located pin-deck motion box (fallback).
+  boards = lateral interpolation of the ball center between lane edges on the same row.
+**Grade on the 22 labeled clips:** coverage 5/22, within +/-0.5 mph **1/22**, MAE 2.44. Best: IMG_8968 -0.40 (HIT),
+IMG_8969 -0.54, IMG_8751 +0.79. Most: IMPLAUSIBLE (pin detector fires early -> Δt too small -> >30 mph),
+PIN_IMPACT_NOT_DETECTED, or FOUL/BALL not found.
+**Clean diagnosis (important):** the logs show classical find_lanes SUCCEEDS on the portrait clips (foul±1px), so
+geometry is NOT the blocker and the reformulation is correct in principle (it works when timing is clean). The sole
+remaining wall is **precise event-timing detection**: pin-contact (t_pins) to ~0.05 s on the detector's tracks, plus
+reliably tracking the ball THROUGH to the pins. detect_impact (tuned for the classical tracker) fires early/misses on
+the learned tracks; the brightness pin-deck fallback fires early.
+**NOT met:** Done bar. **NOT deployed** (fails the bar; accuracy beats coverage). **No regression** on classical-
+success clips (classical-first architecture; IMG_8754 learned==baseline).
+**Recommended next step:** a PIN-DECK / PINS detection class (Shayne's own suggestion) so t_pins comes from a
+precisely-located pin box + motion — the clean fix. Needs a retrain (ball+lane+pins). Alternatively more event-timing
+CV. Both are substantial; surfaced for a steer rather than spending hours speculatively.
+
 ## Done bar (per camera group)
 metrics on the large majority; speed within 0.5 mph of truth on labeled clips; zero plausible-but-wrong;
 IMG_8751-54 not worse; deterministic; <30 s on device.
