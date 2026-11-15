@@ -87,6 +87,28 @@ the deck) — drops the early crash; if no onset survives -> CONTACT_AMBIGUOUS (
 set in `CaptureView`), mic-permission priming, and `NSMicrophoneUsageDescription`. Form stays video-only. Server does
 the audio onset on the uploaded clip (shadow architecture); on-device onset is a later optimisation.
 
+**SHIPPING-CONFIG grade (classical-first, learned+audio fallback) on 22 labeled clips:**
+| group | within ±0.5 mph | coverage | MAE | plausible-but-wrong |
+|---|---|---|---|---|
+| ALL 22 | **10/22** | 13/22 | 0.516 | IMG_8963, 8968, 8975 |
+| Held-out 6 | **6/6** | 6/6 | 0.164 | none |
+| Landscape 1920×1080 | 2/2 | 2/2 | 0.047 | none |
+| Portrait 1080×1920 | 8/20 | 11/20 | 0.601 | 3 |
+
+Classical-first keeps classical's sub-pixel accuracy where it works; audio-fallback (analyze_learned) covers clips
+classical can't. Every remaining miss is foul/track CV, NOT t_pins: IMG_8963 foul-row geometry (+12f), IMG_8968
+classical foul −0.72, IMG_8975 false early-track selection. The 9 uncovered clips are far/small-ball track failures
+on portrait (5 BALL_TRACK_NOT_FOUND) + foul-not-detected (4). **Done bar: not fully met** (needs a large majority +
+zero-wrong); held-out 6/6 and landscape 2/2 are clean. **NOT deployed** (3 plausible-but-wrong remain).
+
+**Wiring note:** audio lives in `analyze_learned`; `cv_eval.py --engine learned` fallback calls `pipeline.analyze`
+(no audio). This grade routes classical→analyze_learned(audio) directly. Shipping audio in the real server path needs
+`analyze_learned`'s audio block wired into that fallback.
+
+**Next levers (ranked):** (1) foul-cross CV — foul-row geometry + reject false-track selection (fixes 8963/8975,
+tightens 8968); (2) far/small-ball tiled detection (DEC-130 #3) to recover the 5 no-track + unlock foul on the
+no-foul portrait clips; both raise coverage toward the large-majority bar.
+
 ## Done bar (per camera group)
 metrics on the large majority; speed within 0.5 mph of truth on labeled clips; zero plausible-but-wrong;
 IMG_8751-54 not worse; deterministic; <30 s on device.
