@@ -246,6 +246,17 @@ nonisolated enum OnDeviceFormEngine {
             }
         }
 
+        // DEC-131 plausibility backstop (runs LAST, overrides slo-mo too): a delivery timing/count outside its
+        // physiological band is a mis-segmented delivery, not a real measurement → unavailable + IMPLAUSIBLE_VALUE,
+        // never best_effort. Same bands as the server (failures._FORM_BANDS).
+        for (k, m) in metrics {
+            guard let v = m.value, let reason = FormEngine.implausibleReason(k, v) else { continue }
+            var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: "implausible: " + reason,
+                                     id: m.id, viewRequired: m.viewRequired)
+            mm.reasonCode = "IMPLAUSIBLE_VALUE"
+            metrics[k] = mm
+        }
+
         // stage report (DEC-122)
         let gk = ["E2", "E3", "E4", "E6", "E7"].map { events[$0] ?? nil }
         let isoOk = gk.contains { $0 != nil }

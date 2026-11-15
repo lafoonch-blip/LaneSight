@@ -31,6 +31,27 @@ nonisolated enum FormEngine {
     static let RELEASE_VS_STOP_LO = -0.10, RELEASE_VS_STOP_HI = 0.15
     static let BALL_START_TO_RELEASE_LO = 1.3, BALL_START_TO_RELEASE_HI = 2.5
 
+    // DEC-131 FORM plausibility bands (seconds; step_count is a count). Must match failures._FORM_BANDS on the
+    // server. A value outside its band is a mis-segmented delivery, not a real measurement → unavailable +
+    // IMPLAUSIBLE_VALUE, never best_effort.
+    static let formBands: [String: (Double, Double)] = [
+        "approach_time": (1.0, 3.5), "backswing_time": (0.25, 1.2), "downswing_time": (0.2, 0.8),
+        "swing_time": (0.7, 2.0), "step_count": (3.0, 7.0), "finish_hold": (0.0, 10.0), "rhythm_ratio": (0.2, 1.8),
+    ]
+    static func implausibleReason(_ metric: String, _ value: Double) -> String? {
+        if value.isNaN || value.isInfinite { return "came out non-finite" }
+        guard let b = formBands[metric], !(b.0 <= value && value <= b.1) else { return nil }
+        if metric == "step_count" {
+            return "\(Int(value)) steps isn't a real approach (3–7) — the delivery wasn't segmented correctly"
+        }
+        if metric == "rhythm_ratio" {
+            return "swing tempo \(String(format: "%.2f", value)) is out of a plausible range — the delivery wasn't timed correctly"
+        }
+        let label = metric.replacingOccurrences(of: "_time", with: "").replacingOccurrences(of: "_", with: " ")
+        return "\(label) \(String(format: "%.2f", value))s is outside a real delivery "
+            + "(\(fmtg(b.0))–\(fmtg(b.1))s) — the delivery wasn't timed correctly"
+    }
+
     static let calibReason = "needs floor-plane calibration — unresolved, see TRAINING_VIDEOS_CALIBRATED_METRICS addenda"
     static let validatingReason = "still being validated — ball-vs-slide timing / slide length need 120 fps "
         + "slide-and-release tracking that is not yet verified on this view (FORM_ANALYSIS_SPEC §9)"
@@ -66,6 +87,12 @@ nonisolated enum FormEngine {
                 i = j
             } else { i += 1 }
         }
+        // Delivery burst = the clearest-footed sustained motion. NOTE (DEC-131): the server engine
+        // (lanesight_core.form.pose._find_delivery) additionally weights the bowling-arm swing amplitude to reject
+        // pre-shot pacing on long clips. That selector is NOT ported here: with on-device MediaPipe landmarks (the
+        // iOS↔Python landmark gap) the foreshortened wrist arc is too noisy — it mis-picked the delivery on the
+        // device parity gate (IMG_8847 moved ~5 s / +337 f). On-device honesty on a mis-segmented clip is carried
+        // by the DEC-131 plausibility backstop + DEC-095 gates instead. Keep the committed footvis×duration pick.
         let good = bursts.filter { $0.2 >= FOOTVIS_MIN }
         let pick: (Double, Double, Double)?
         if !good.isEmpty {

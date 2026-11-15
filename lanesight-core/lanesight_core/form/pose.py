@@ -221,9 +221,30 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
             i = j
         else:
             i += 1
+    # The delivery's signature is the bowling-arm SWING — one large, contiguous wrist arc — not the feet, which on
+    # a long clip (lots of pre-shot pacing, practice swings, a 30 s capture) break into many short step-bursts that
+    # tie with that non-delivery motion under a footvis×duration score. Weight each candidate by the wrist-arc
+    # amplitude in a widened window around it (handedness-agnostic: whichever wrist swings more) so the real
+    # delivery wins even when its own foot-burst is short. With the wrists occluded (rear view) the swing term is
+    # 0 for every burst and this degrades to the original footvis×duration ranking. No per-clip tuning.
+    wy_l = _smooth(_point(lms, (L_WRIST,), 1), 5)
+    wy_r = _smooth(_point(lms, (R_WRIST,), 1), 5)
+
+    def _swing_amp(b):
+        m = (t >= b[0] - 1.5) & (t <= b[1] + 1.0)
+        amps = []
+        for wy in (wy_l, wy_r):
+            v = wy[m][~np.isnan(wy[m])]
+            if len(v) >= 4:
+                amps.append(float(np.max(v) - np.min(v)))
+        return max(amps) if amps else 0.0
+
+    def _score(b):
+        return b[2] * (0.15 * min(b[1] - b[0], 2.5) + _swing_amp(b))
+
     good = [b for b in bursts if b[2] >= FOOTVIS_MIN]
-    pick = (max(good, key=lambda b: b[2] * min(b[1] - b[0], 2.5)) if good
-            else (max(bursts, key=lambda b: b[2]) if bursts else None))
+    pick = (max(good, key=_score) if good
+            else (max(bursts, key=_score) if bursts else None))
     if pick is None:
         return None
     b0, b1, _ = pick
@@ -1125,6 +1146,21 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                 mm['status'] = 'low_confidence'
                 mm['confidence'] = min(mm.get('confidence', 0.0), 0.2)
                 mm['note'] = warn + (mm.get('note') or '')
+    # DEC-131 plausibility backstop: a delivery timing/count outside its physiological band is a mis-segmented
+    # delivery, not a real measurement — stamp it `unavailable` + IMPLAUSIBLE_VALUE (never best_effort/low_confidence),
+    # the same bands the on-device engine applies (parity). Runs LAST so it overrides the slo-mo downgrade too.
+    from ..failures import implausible_reason, IMPLAUSIBLE_VALUE
+    for k, mm in out.items():
+        if not isinstance(mm, dict) or mm.get('value') is None:
+            continue
+        reason = implausible_reason(k, mm.get('value'))
+        if reason:
+            mm['value'] = None
+            mm['status'] = 'unavailable'
+            mm['confidence'] = 0.0
+            mm['reason_code'] = IMPLAUSIBLE_VALUE
+            mm['note'] = f'implausible: {reason}'
+            mm['display'] = '—'
     out['_extras'] = extras
     return out
 

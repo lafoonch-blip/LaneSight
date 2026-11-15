@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.85  
-Last Updated: 2026-11-03  
+Version: 1.86  
+Last Updated: 2026-11-15  
 Owner: Shayne  
-Supersedes: v1.84 (+ DEC-130 learned detection front-end so shot metrics work from any normal camera position)
+Supersedes: v1.85 (+ DEC-131 form plausibility bounds on both engines + swing-anchored delivery selection)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1666,6 +1666,52 @@ normal camera position, while DEC-128's plausibility/honesty gates keep "works m
 engines, server stays reference/shadow first); DEC-128 (all four honesty/plausibility rules bind the learned path
 unchanged); DEC-062 production-CV freeze stays lifted for this shadow/validation track; DEC-001 fixed-camera
 assumption is the thing being removed.
+
+### DEC-131 — Form plausibility bounds (both engines) + swing-anchored delivery selection (2026-11-15)
+**Decision (2026-11-15):** Two fixes. Fix 1 (plausibility bounds) is applied identically on both engines so the
+honesty backstop stays in parity. Fix 2 (swing-anchored selection) is **server-only** — the iOS port was reverted
+after it regressed the device gate (see below); on-device honesty on a mis-segmented clip is carried by Fix 1.
+1. **Form plausibility bounds (the DEC-128 pattern, extended to form) — BOTH engines.** A form timing/count outside its
+   physiological band is a mis-segmented delivery, not a fast one — stamp it `unavailable` + reason_code
+   `IMPLAUSIBLE_VALUE` (never `best_effort`/`low_confidence`). Bands (shared helper
+   `lanesight_core.failures.implausible_reason`, mirrored in `FormEngine.implausibleReason`):
+   approach 1.0–3.5 s, backswing 0.25–1.2 s, downswing 0.2–0.8 s, swing 0.7–2.0 s, step_count 3–7,
+   finish_hold ≥ 0, rhythm 0.2–1.8. Enforced as a backstop after analysis on the server video path
+   (`form/pose.py`), the server device-metrics path (`POST /shots/metrics` form branch), and on-device
+   (`OnDeviceFormEngine`). Triggered by a real upload (2026-11-04 01:03 UTC) that returned impossible values on
+   **both** engines (iOS approach 0.49 s / backswing 0.04 s / step_count 2 / rhythm 2.0; server backswing 0.08 s /
+   swing 0.23 s) and presented them as measured.
+2. **Swing-anchored delivery selection — SERVER engine only (`lanesight_core.form.pose._find_delivery`).** Root
+   cause of that upload: on a long clip (30 s, lots of pre-shot pacing) `_find_delivery` picked an early
+   practice-motion burst by a `footvis × duration` score, anchoring every event 18 s early and tripping a false
+   slo-mo correction. Fix (general, no per-clip tuning): de-weight burst duration and weight each candidate by the
+   **bowling-arm swing amplitude** — the delivery's defining feature, one large contiguous wrist arc — in a widened
+   window around it (handedness-agnostic; whichever wrist swings more). With the wrists occluded (rear view) the
+   swing term is 0 for every burst and selection degrades to the original `footvis × duration` ranking. On the
+   01:03 clip the window moves from 1.5–6.4 s → 20.2–22.2 s (the real delivery region), the false slo-mo
+   disappears, and the remaining un-timeable swing phases come back honestly `unavailable` instead of as impossible
+   numbers.
+   **Why server-only:** the same selector was ported to iOS (`FormEngine.findDelivery`) for parity and **reverted**
+   — on the on-device parity gate it mis-picked the delivery (IMG_8847 moved ~5 s / +337 f vs its committed ±26 f).
+   The server is validated on the labeled clips with Python MediaPipe landmarks; on-device MediaPipe produces a
+   slightly different (foreshortened, noisier) wrist arc (the known iOS↔Python landmark gap, DEC-129), and the weak
+   swing signal is not robust to it. iOS keeps the committed `footvis × duration` pick; its DEC-131 plausibility
+   backstop + DEC-095 gates keep a mis-segmented on-device clip honest. A landmark-robust on-device selector is
+   future work.
+**Re-grade (labeled form clips, DEC-121 tolerances, before→after):** **no change** — all 7 clips segment
+identically (zero regression on the 6 already-correct clips). **IMG_8980 remains mis-segmented** (a
+*delivery-then-walk-back* clip where the post-delivery walk-back has higher foot-visibility **and** a larger
+measured wrist arc than the true delivery — a harder two-motion ambiguity, distinct from the pre-shot-motion class
+this fix targets, and already flagged as a reference-level mis-segmentation in DEC-129). The plausibility + DEC-095
+honesty gates keep 8980 from emitting impossible values.
+**Why:** honesty — a mis-segmented delivery must read `unavailable` with a reason, never a fabricated number; and
+the delivery's most reliable signature is the swing, not the longest foot burst. **Date:** 2026-11-15 ·
+**Status:** ACCEPTED — plausibility bounds on both engines; swing-anchored selection on the server only (iOS port
+reverted); 465 pytest pass (incl. new form-band + form-endpoint tests); iOS builds + the on-device Form parity
+gate is unchanged from its committed state (26 known landmark-gap residuals; the reverted change had added a 27th
+catastrophic one on 8847). **Builds on:** DEC-128 (plausibility/honesty
+pattern), DEC-129 (on-device form engine + parity gate), DEC-121 (form tolerances), DEC-095 (honesty gates),
+DEC-122 (reason codes). **Supersedes:** nothing — adds a backstop + a more robust delivery selector.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

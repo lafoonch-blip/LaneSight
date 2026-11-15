@@ -148,6 +148,20 @@ BOARD_BAND = (1.0, 39.0)
 SPEED_BAND = (8.0, 30.0)
 REV_BAND = (100.0, 700.0)
 
+# DEC-131 FORM plausibility bands (seconds unless noted). A delivery timing/count outside its physiological band
+# is not a real measurement — a mis-segmented delivery, not a fast one — so it is reported `unavailable` +
+# IMPLAUSIBLE_VALUE, never best_effort. Same bands on both engines (iOS OnDeviceFormEngine + server) for parity.
+# (step_count is a COUNT; finish_hold has only a lower bound of 0 — a tiny hold is possible, a negative one isn't.)
+_FORM_BANDS = {
+    'approach_time': (1.0, 3.5),
+    'backswing_time': (0.25, 1.2),
+    'downswing_time': (0.2, 0.8),
+    'swing_time': (0.7, 2.0),
+    'step_count': (3.0, 7.0),
+    'finish_hold': (0.0, 10.0),
+    'rhythm_ratio': (0.2, 1.8),
+}
+
 
 def implausible_reason(metric_key: str, value) -> str | None:
     """Return a short human reason if `value` is out of the physical band for `metric_key`, else None. Used to
@@ -166,4 +180,13 @@ def implausible_reason(metric_key: str, value) -> str | None:
         return f"measured {v:.0f} mph is not physically possible for a bowling ball"
     if metric_key == 'rev_rate' and not (REV_BAND[0] <= v <= REV_BAND[1]):
         return f"measured {v:.0f} rpm is out of range"
+    band = _FORM_BANDS.get(metric_key)
+    if band and not (band[0] <= v <= band[1]):
+        if metric_key == 'step_count':
+            return f"{v:.0f} steps isn't a real approach (3–7) — the delivery wasn't segmented correctly"
+        if metric_key == 'rhythm_ratio':
+            return f"swing tempo {v:.2f} is out of a plausible range — the delivery wasn't timed correctly"
+        label = metric_key.replace('_time', '').replace('_', ' ')
+        return (f"{label} {v:.2f}s is outside a real delivery ({band[0]:g}–{band[1]:g}s) — "
+                f"the delivery wasn't timed correctly")
     return None

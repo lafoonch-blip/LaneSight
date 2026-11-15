@@ -1773,6 +1773,17 @@ def _form_shot_from_metrics(store, user, b, meta, handed, algo, metrics, session
                               'handed': handed, 'ball_configuration_id': cfg, 'user_ball_id': ub,
                               'oil_pattern_id': meta.get('oil_pattern_id'),
                               'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id')})
+    # DEC-131 backstop: an out-of-band FORM timing/count from the device is a mis-segmented delivery — stamp it
+    # unavailable + IMPLAUSIBLE_VALUE before the Score/fundamentals see it (same bands as form/pose.py, so a stale
+    # app build can't surface an impossible value even if its on-device bound is missing).
+    for _mk, _cell in (metrics or {}).items():
+        if isinstance(_cell, dict) and _cell.get('value') is not None:
+            _r = _implausible_reason(_mk, _cell.get('value'))
+            if _r:
+                _cell['value'] = None
+                _cell['status'] = 'unavailable'
+                _cell['reason_code'] = _IMPLAUSIBLE_VALUE
+                _cell['note'] = f'implausible: {_r}'
     rec = {'shot_id': shot['id'], 'form_version': b.get('form_version') or 'form-0.0.0',
            'view': b.get('view') or 'unknown', 'status': b.get('status') or 'ok',
            'metrics': metrics, 'events': b.get('events') or {},

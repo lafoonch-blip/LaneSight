@@ -265,3 +265,29 @@ def test_form_metrics_outcome_rows_tagged_form_iphone():
             if row.get('engine') == 'iphone' and row.get('capture_mode') == 'form']
     # the memory store may not expose a reader; the endpoint returning 200 with mode=form is the contract.
     assert r.json()['mode'] == 'form'
+
+
+def test_form_metrics_implausible_values_are_unavailable():
+    """DEC-131: an out-of-band FORM metric from the device is stamped unavailable + IMPLAUSIBLE_VALUE by the
+    server backstop (the 2026-11-04 01:03 UTC bug: approach 0.49s, backswing 0.04s, step_count 2, rhythm 2.0)."""
+    u = 'dec131form'
+    sid = client.post('/sessions', json={}, headers=H(u)).json()['id']
+    bad = {
+        'approach_time': {'value': 0.49, 'unit': 's', 'status': 'best_effort'},
+        'backswing_time': {'value': 0.04, 'unit': 's', 'status': 'best_effort'},
+        'swing_time': {'value': 0.23, 'unit': 's', 'status': 'best_effort'},
+        'step_count': {'value': 2, 'unit': 'count', 'status': 'best_effort'},
+        'rhythm_ratio': {'value': 2.0, 'unit': 'ratio', 'status': 'best_effort'},
+        'downswing_time': {'value': 0.4, 'unit': 's', 'status': 'best_effort'},   # in-band → stays
+    }
+    body = {'metrics': bad, 'capture_mode': 'form', 'source': 'live', 'view': 'rear',
+            'events': {}, 'algorithm_version': 'ios-form-pose-test', 'session_id': sid,
+            'metadata': {'handed': 'R'}}
+    r = client.post('/shots/metrics', json=body, headers=H(u))
+    assert r.status_code == 200, r.text
+    M = r.json()['shot']['record']['metrics']
+    for k in ('approach_time', 'backswing_time', 'swing_time', 'step_count', 'rhythm_ratio'):
+        assert M[k]['status'] == 'unavailable', (k, M[k])
+        assert M[k].get('value') is None
+        assert M[k].get('reason_code') == 'IMPLAUSIBLE_VALUE', (k, M[k])
+    assert M['downswing_time']['status'] != 'unavailable'   # in-band survives
