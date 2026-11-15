@@ -20,11 +20,15 @@ def main():
     a = ap.parse_args()
     import torch
     import coremltools as ct
-    from ops.train_detector import build_model
-
     ck = torch.load(a.ckpt, map_location='cpu')
     inp = a.input or ck.get('input', 512)
-    model = build_model(); model.load_state_dict(ck['model']); model.eval()
+    if ck.get('num_classes', 1) > 1:                    # multi-class (ball+pins+arrows+dots)
+        from ops.train_multiclass import build_model_mc
+        model = build_model_mc()
+    else:
+        from ops.train_detector import build_model
+        model = build_model()
+    model.load_state_dict(ck['model']); model.eval()
     ex = torch.rand(1, 3, inp, inp)
     with torch.no_grad():
         ts = torch.jit.trace(model, ex)

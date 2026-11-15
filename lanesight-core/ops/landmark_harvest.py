@@ -47,7 +47,7 @@ def main():
             if not G.get('lanes'):
                 continue
             lane = G['lanes'][0]; vp = G['vp']
-            pins = detect_pins(S, lane, vp)
+            pins = detect_pins(S, lane, vp, use_owl=True)
             arrows = detect_arrows(S['bg'], lane, vp)
             dots = detect_foul_dots(S['bg'], lane, vp)
             rec = {'clip': cid, 'img_w': S['bg'].shape[1], 'img_h': S['bg'].shape[0],

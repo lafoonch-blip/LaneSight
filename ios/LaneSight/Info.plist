@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>LaneSight records your delivery to analyze your shot.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LaneSight records the sound of your shot so it can time the ball reaching the pins for an accurate speed.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>LaneSight saves a copy of your recordings to Photos when you turn on "Save recordings to my phone" in Settings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

@@ -23,13 +23,16 @@ import numpy as np
 
 from lanesight_core.cv.stabilize import stabilize
 from lanesight_core.cv import track as T
-from lanesight_core.cv.track import lane_x, contact_row
+from lanesight_core.cv.track import lane_x, contact_row, exp_diam
 from lanesight_core.failures import AnalysisFailure
 
 BOARDS = 39
 LANE_IN = 41.5
 Z_FOUL_PINS = 59.44          # ft, foul line -> head pin (DEC-064)
 SPEED_MIN, SPEED_MAX = 8.0, 30.0   # mph plausibility (DEC-128)
+AUDIO_AV_OFFSET_F = 1.16     # measured iPhone capture A/V sync offset (frames); audio_calib on 22 labeled clips
+AUDIO_GATE_F = 12.0          # audio t_pins must agree with the ball's geometric arrival within this (frames),
+#                              else CONTACT_AMBIGUOUS — guards against audio locking onto a neighbour-lane crash
 
 
 def _foul_row_at(lane, x):
@@ -184,20 +187,32 @@ def _front_end(clip, out_prefix, log=lambda *a, **k: None, return_t0=False):
     return (src, t0) if return_t0 else src
 
 
-def pin_motion_time(video, S, pins, track, fps, log=lambda *a, **k: None):
-    """Follow-up #1: t_pins = first frame of real motion INSIDE the detected pin boxes (ignoring the lane in front
-    of the deck, where the ball's reflection travels). Per-pin mask so the ball passing below doesn't trigger."""
+def pin_motion_time(video, S, pins, track, fps, lane=None, log=lambda *a, **k: None):
+    """Follow-up #1: t_pins = first frame of real motion in the target-lane DECK (ignoring the lane in front, where
+    the ball's reflection travels). The deck ROW comes from the detected pins (head_pin_row + pin heights); the
+    deck WIDTH comes from the LANE geometry at that row — so a single correctly-located pin still defines the full
+    target-lane deck, robust to low pin recall."""
     import cv2
     from lanesight_core.cv.stabilize import frames
-    boxes = pins['boxes']
+    boxes = pins['boxes']; head = pins['head_pin_row']
     h, w = S['bg'].shape[:2]
-    y0 = max(int(min(b[1] for b in boxes)), 0); y1 = min(int(max(b[1] + b[3] for b in boxes)), h)
-    x0 = max(int(min(b[0] for b in boxes)), 0); x1 = min(int(max(b[0] + b[2] for b in boxes)), w)
+    y0 = max(int(min(b[1] for b in boxes)), 0)
+    y1 = min(int(max(b[1] + b[3] for b in boxes)), h)
+    if lane is not None:
+        xl, xr = lane_x(lane, head); pad = 0.2 * (xr - xl)   # target-lane width at the deck + small pad
+        x0 = max(int(xl - pad), 0); x1 = min(int(xr + pad), w)
+    else:
+        x0 = max(int(min(b[0] for b in boxes)), 0); x1 = min(int(max(b[0] + b[2] for b in boxes)), w)
     if y1 - y0 < 6 or x1 - x0 < 6:
         return None
+    # Watch the whole target-lane DECK region, BODIES above the bases. The ball — and its mirror reflection —
+    # travel at LANE level across the pin BASES, so excluding the bottom ~40% (bases + lane in front) means only
+    # the pins SCATTERING registers, not the ball arriving. Using the deck bounding box (not the sparse individual
+    # boxes) makes it robust to low pin recall — a few correctly-located pins still define the deck extent.
+    deck_h = y1 - y0
+    body_bot = y0 + int(0.60 * deck_h)                 # bodies = upper 60% of the deck span
     mask = np.zeros((y1 - y0, x1 - x0), bool)
-    for (bx, by, bw, bh) in boxes:
-        mask[max(int(by) - y0, 0):max(int(by + bh) - y0, 0), max(int(bx) - x0, 0):max(int(bx + bw) - x0, 0)] = True
+    mask[0:max(body_bot - y0, 1), :] = True
     if mask.sum() < 20:
         return None
     head = pins['head_pin_row']
@@ -278,7 +293,8 @@ def extend_track_to_pins(video, S, lane, vp, track, head_pin_row, detector, log=
     H, W = S['bg'].shape[:2]; Hs = S['Hs']
     cap = cv2.VideoCapture(video)
     misses = 0; new = []; i = int(pts[-1]['i']) + 1
-    while i < len(Hs) and misses <= 3:
+    MAX_EXT = 60                                       # hard cap: never scan more than ~1 s of frames (perf guard)
+    while i < len(Hs) and misses <= 3 and len(new) + (i - int(pts[-1]['i'])) < MAX_EXT:
         t = S['ts'][i]
         pcx = float(np.polyval(px, t)); pct = float(np.polyval(pc, t))
         if pct <= head_pin_row:
@@ -312,7 +328,7 @@ def extend_track_to_pins(video, S, lane, vp, track, head_pin_row, detector, log=
     return track + new
 
 
-def analyze_learned(clip, detector, log=lambda *a, **k: None):
+def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None):
     """Run the learned detector + event-timing metrics on one clip. Returns a dict with 'metrics', 'status',
     'reason_code', 'camera_class'(caller fills), 'track_pts'."""
     with tempfile.TemporaryDirectory() as td:
@@ -342,36 +358,87 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None):
             out['reason_code'] = 'BALL_TRACK_NOT_FOUND'; return out
         # --- t_pins via the pins class, two independent ways, cross-checked (DEC-130 follow-ups #1 + #2) ---
         from ops.pin_detect import detect_pins
-        pins = detect_pins(S, lane, vp, log=log)
+        mc_boxes = mc_detector.pins_boxes(S['bg']) if mc_detector is not None else None   # trained pins class
+        pins = detect_pins(S, lane, vp, log=log, boxes=mc_boxes)
         t_motion = t_geom = None
         if pins is not None:
             out['head_pin_row'] = pins['head_pin_row']; out['n_pins'] = len(pins['boxes'])
-            # #3: extend the ball track to the pins with native-res crop detection so t_geom needs no extrapolation
-            Tk = extend_track_to_pins(video, S, lane, vp, Tk, pins['head_pin_row'], detector, log=log)
-            out['track_pts'] = len(Tk)
-            t_motion = pin_motion_time(video, S, pins, Tk, fps, log=log)
+            # #3 (crop track extension) is DISABLED by default — its per-frame VideoCapture seeks are very slow and
+            # it is not needed: pin_motion watches the deck directly and t_geom uses the existing track (which
+            # usually reaches the head-pin row). Set LS_CROP_EXTEND=1 to re-enable.
+            if os.environ.get('LS_CROP_EXTEND') == '1':
+                Tk = extend_track_to_pins(video, S, lane, vp, Tk, pins['head_pin_row'], detector, log=log)
+                out['track_pts'] = len(Tk)
+            t_motion = pin_motion_time(video, S, pins, Tk, fps, lane=lane, log=log)
             t_geom = geometric_contact_time(Tk, pins['head_pin_row'], fps)
         frame_s = 1.0 / max(fps, 1)
+        tf = t_foul_cross(Tk, lane)
+        # --- t_pins via AUDIO (DEC-130: the pin crash is a sharp broadband transient — frame-accurate, unlike
+        # position-based pin_geo which is perspective-limited near the deck). The search window is anchored on the
+        # visual arrival (t_geom/t_motion) when pins are detected, else on the foul-cross + a nominal travel time
+        # (reliable even when pins are not detected), and is wide enough to tolerate the anchor's error. ---
+        t_audio = None
+        t_vis = t_geom if t_geom is not None else t_motion
+        # anchor: visual arrival if available; else foul + ~2.4 s (17 mph nominal). The +/-50-frame window then spans
+        # roughly 12-23 mph, covering real shots without reaching far enough to grab an unrelated crash.
+        anchor = t_vis if t_vis is not None else ((tf + 2.4) if tf is not None else None)
+        if anchor is not None:
+            from ops.audio_contact import onset_peaks
+            lo = t0 + anchor - 50 * frame_s; hi = t0 + anchor + 50 * frame_s
+            try:
+                peaks = onset_peaks(clip, lo, hi, av_offset_s=AUDIO_AV_OFFSET_F * frame_s, log=log)
+            except Exception as e:
+                peaks = []; log(f'[audio] onset failed: {e}')
+            cand = [(p['t_contact_s'] - t0, p['strength']) for p in peaks]     # (analysis-time contact, strength)
+            if cand:
+                out['audio_peaks'] = [(round(tt, 4), round(st, 1)) for tt, st in cand]   # diagnostics
+                t_audio = max(cand, key=lambda c: c[1])[0]           # loudest in-window onset = the pin scatter
+                out['t_pins_audio'] = t_audio
+                # Neighbour-lane guard (multi-lane views): a single pin scatter rings as ONE contiguous group of
+                # onsets; two comparable, well-SEPARATED groups mean a second lane's crash is in the window and the
+                # loudest may be the wrong lane. Can't attribute by audio alone -> CONTACT_AMBIGUOUS (unavailable).
+                smax = max(st for _, st in cand)
+                strong = sorted([(tt, st) for tt, st in cand if st >= 0.55 * smax])
+                groups, cur = [], []
+                for tt, st in strong:
+                    if cur and (tt - cur[-1][0]) > 10 * frame_s:
+                        groups.append(cur); cur = []
+                    cur.append((tt, st))
+                if cur:
+                    groups.append(cur)
+                gpeaks = sorted([max(st for _, st in g) for g in groups], reverse=True)
+                if len(groups) >= 2 and gpeaks[1] >= 0.55 * smax:
+                    out['reason_code'] = 'CONTACT_AMBIGUOUS'; t_audio = None; out.pop('t_pins_audio', None)
         t_imp = None
-        if t_motion is not None and t_geom is not None:
+        if t_audio is not None:
+            t_imp = t_audio; out['t_pins_src'] = 'audio'             # frame-accurate (pin-impact onset)
+        elif out['reason_code'] == 'CONTACT_AMBIGUOUS':
+            pass
+        elif t_motion is not None and t_geom is not None:
             if abs(t_motion - t_geom) <= 2.0 * frame_s:
-                t_imp = max(t_motion, t_geom)          # never pick the faster one -> take the later (slower) t_pins
+                t_imp = max(t_motion, t_geom); out['t_pins_src'] = 'visual'
             else:
                 out['reason_code'] = 'CONTACT_AMBIGUOUS'
         elif t_motion is not None:
-            t_imp = t_motion
+            t_imp = t_motion; out['t_pins_src'] = 'visual'
         elif t_geom is not None:
-            t_imp = t_geom
-        if t_imp is None and out['reason_code'] is None:
-            # last resort: the engine's ball-following detect_impact (accurate when the ball reaches the pins)
+            t_imp = t_geom; out['t_pins_src'] = 'visual'
+        if t_imp is None and out['reason_code'] is None and os.environ.get('LS_IMPACT_FALLBACK') == '1':
+            # Opt-in last resort only: the engine's ball-following detect_impact is unreliable on these camera
+            # angles (it produced plausible-but-wrong speeds), so it no longer feeds the headline by default —
+            # without pins/audio the honest answer is PIN_IMPACT_NOT_DETECTED (unavailable).
             try:
                 t_imp, _ = T.detect_impact(video, S, lane, Tk, log=log)
             except Exception:
                 t_imp = None
-        tf = t_foul_cross(Tk, lane)
         out['t_foul'] = tf; out['t_pins_motion'] = t_motion; out['t_pins_geom'] = t_geom   # for per-event diagnosis
+        # Foul-confidence guard: if the foul crossing is extrapolated well BEFORE the first observed track point,
+        # we never saw the ball behind the foul and the crossing time is unreliable (it biases speed) -> withhold.
+        # A short extrapolation (<=5 frames, e.g. the ball first seen just past the line) stays trusted.
+        if tf is not None and Tk and tf < Tk[0]['t'] - 5 * frame_s:
+            out['reason_code'] = 'FOUL_CROSS_LOW_CONFIDENCE'
         # --- headline speed: time-based foul->pins ---
-        if out['reason_code'] == 'CONTACT_AMBIGUOUS':
+        if out['reason_code'] in ('CONTACT_AMBIGUOUS', 'FOUL_CROSS_LOW_CONFIDENCE'):
             pass
         elif t_imp is not None and tf is not None and t_imp > tf:
             mph = Z_FOUL_PINS / (t_imp - tf) * 3600 / 5280
@@ -383,10 +450,18 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None):
                 out['reason_code'] = 'IMPLAUSIBLE_VALUE'
         else:
             out['reason_code'] = 'PIN_IMPACT_NOT_DETECTED' if t_imp is None else 'FOUL_CROSS_NOT_DETECTED'
-        # --- boards: lateral only ---
+        # --- boards: LATERAL only, calibrated by the detected landmarks (known boards) where available ---
         foul_y = lane.get('yNear') or max(_foul_row_at(lane, Tk[0]['cx']), 1)
-        lay = lateral_board(Tk, lane, foul_y)
+        # landmark-calibrated laydown (foul-dots) + arrows board (arrows), falling back to lane-edge interpolation.
+        lay = arr_board = None
+        if mc_detector is not None:
+            from ops.landmark_calib import boards_from_landmarks
+            lay, arr_board = boards_from_landmarks(mc_detector, S, lane, vp, Tk, foul_y)
+        if lay is None:
+            lay = lateral_board(Tk, lane, foul_y)
         if lay is not None and 1 <= lay <= BOARDS:
             out['metrics']['laydown_board'] = round(float(lay), 1)
+        if arr_board is not None and 1 <= arr_board <= BOARDS:
+            out['metrics']['arrows_board'] = round(float(arr_board), 1)
         # rev rate is geometry-free (reuse the engine) — optional, best-effort
         return out

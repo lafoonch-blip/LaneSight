@@ -1,7 +1,7 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-14 (regeneration run after the v1 scratchpad was cleared from /tmp).
+**Last updated:** 2026-11-15 (audio t_pins — the speed metric is solved on the labeled set; see v4 below).
 
 ## Persistence rule (this run)
 Everything under `~/LaneSightData/dec130/` — NOT /tmp or scratchpad:
@@ -63,6 +63,29 @@ success clips (classical-first architecture; IMG_8754 learned==baseline).
 **Recommended next step:** a PIN-DECK / PINS detection class (Shayne's own suggestion) so t_pins comes from a
 precisely-located pin box + motion — the clean fix. Needs a retrain (ball+lane+pins). Alternatively more event-timing
 CV. Both are substantial; surfaced for a steer rather than spending hours speculatively.
+
+## v4 result (2026-11-15) — AUDIO t_pins: the metric is SOLVED on the labeled set
+Shayne's redirect: before building a temporal pin-motion classifier, try audio (cheap + physically frame-accurate).
+The pin impact is a sharp broadband transient; its onset times the contact far better than any position-based method
+(near the deck the ball barely moves in pixels, so pin_geo is perspective-limited to ~8-22 frames).
+
+Implemented `ops/audio_contact.py`: ffmpeg mono extract -> STFT spectral-flux onset envelope (HF-weighted) ->
+strongest onset in a window -> subtract sound travel (60 ft + camera-behind, at 1125 ft/s) -> apply the measured
+constant capture A/V offset. Integrated into `learned_analyze` speed block.
+
+**Audio calibration vs 22 frame-level labels:** after a constant **+1.16-frame** (iphone A/V) offset, **20/22 within
+±4 frames, MAD 0.71 frames** (sub-frame). Camera-distance assumption is negligible (0→25 ft shifts delay ~1.3 f,
+absorbed in the empirical offset).
+**Audio t_pins + labeled foul (isolates audio quality):** within ±0.5 mph **20/22**, MAE **0.28**, **held-out 6/6**
+(MAE 0.13). vs the pins-retrain visual path (0/22). This clears the speed bar on the labeled set.
+**The 2 misses** (8967, 8976, multi-lane views) = the loudest in-window onset is an earlier, LOUDER neighbour-lane
+crash. Guard: the contact cannot precede the ball's last detected frame (sound can't arrive before the ball reaches
+the deck) — drops the early crash; if no onset survives -> CONTACT_AMBIGUOUS (unavailable, never wrong). The unreliable
+`detect_impact` headline fallback is now opt-in (`LS_IMPACT_FALLBACK=1`) so no plausible-but-wrong speed leaks.
+
+**iOS (DEC-130):** shot clips were silent. Added the mic input gated to SHOT mode (`CameraController.includeAudio`,
+set in `CaptureView`), mic-permission priming, and `NSMicrophoneUsageDescription`. Form stays video-only. Server does
+the audio onset on the uploaded clip (shadow architecture); on-device onset is a later optimisation.
 
 ## Done bar (per camera group)
 metrics on the large majority; speed within 0.5 mph of truth on labeled clips; zero plausible-but-wrong;

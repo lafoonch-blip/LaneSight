@@ -27,7 +27,7 @@ def _owl_pins(bg_bgr, region, thr=0.08):
     return out
 
 
-def detect_pins(S, lane, vp, log=lambda *a, **k: None):
+def detect_pins(S, lane, vp, log=lambda *a, **k: None, use_owl=False, boxes=None):
     """Return dict: {boxes:[[x,y,w,h],...], head_pin_row: y, deck:(y0,y1,x0,x1)} in STABILISED coords, or None.
     The pins sit in the far region of the lane (below the VP). head_pin_row = the row of the pin CLOSEST to the
     bowler = the max-y (lowest-in-frame) pin bottom — the ball contacts the head pin first."""
@@ -42,9 +42,15 @@ def detect_pins(S, lane, vp, log=lambda *a, **k: None):
     if r1 - r0 < 10 or xb - xa < 10:
         return None
     region = (r0, r1, xa, xb)
-    boxes = _owl_pins(bg, region)
-    if len(boxes) < 2:
-        # brightness fallback: pins are bright compact blobs in the far region
+    # boxes: pre-detected pins from the TRAINED multi-class detector (preferred — reliable + fast). Else OWLv2
+    # (offline harvest only) or the brightness fallback.
+    from_mc = boxes is not None
+    if boxes is None:
+        boxes = _owl_pins(bg, region) if use_owl else []
+    else:
+        boxes = [list(b) + [1.0] for b in boxes]       # match the [x,y,w,h,score] shape used below
+    if not from_mc and len(boxes) < 2:
+        # brightness: pins are bright compact blobs in the far region (fast; the default live detector)
         gray = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY)[r0:r1, xa:xb]
         thr = max(float(np.percentile(gray, 93)), 150.0)
         m = (gray > thr).astype(np.uint8)
@@ -62,21 +68,28 @@ def detect_pins(S, lane, vp, log=lambda *a, **k: None):
     # Keep only TARGET-LANE pins: a pin's center x must lie within the lane edges at the pin's row (+ a small pad,
     # since the lane is narrow at the deck). This drops neighbour-lane pins that would dilute the motion signal and
     # corrupt the head-pin row.
+    # STRICT target-lane filter: in wide multi-lane views (e.g. 8 lanes) OWLv2/brightness find pins on EVERY lane;
+    # a neighbour's pins must not be kept — a neighbour bowler's scatter would trigger pin_motion at the wrong time.
+    # Keep only pins whose centre is within ~0.6x the (narrow, at the deck) lane width of the lane centre.
+    if not boxes:
+        return None
     kept = []
     for b in boxes:
         cx = b[0] + b[2] / 2.0; cy = b[1] + b[3] / 2.0
-        xl, xr = lane_x(lane, cy); half = 0.5 * (xr - xl); mid = 0.5 * (xl + xr)
-        if abs(cx - mid) <= half + 0.35 * (xr - xl):
+        xl, xr = lane_x(lane, cy); mid = 0.5 * (xl + xr); w = (xr - xl)
+        if w > 1 and abs(cx - mid) <= 0.6 * w:
             kept.append(b)
-    if len(kept) < 2:
+    if not kept:
         kept = boxes                                           # fall back rather than lose the deck entirely
     # The pins form a tight cluster at the far end; a single spurious low detection (a lane reflection of the pins,
-    # or a bright floor spot) must NOT be taken as the head pin. Keep only boxes within the DENSE cluster in y
-    # (around the median center-row), then the head pin = the lowest (nearest) box of that cluster.
-    cy = np.array([b[1] + b[3] / 2.0 for b in kept])
-    my = float(np.median(cy)); band = max(0.10 * span, 0.6 * float(np.median([b[3] for b in kept])) * 4)
-    cluster = [b for b, y in zip(kept, cy) if abs(y - my) <= band]
-    if len(cluster) < 2:
+    # or a bright floor spot) must NOT be taken as the head pin. With >=2 pins keep only the DENSE y-cluster, then
+    # the head pin = the lowest (nearest) box of that cluster. With a single (trained, correctly-located) pin, that
+    # pin + the lane geometry fully define the deck (pin_motion builds the deck width from lane_x at this row).
+    if len(kept) >= 2:
+        cy = np.array([b[1] + b[3] / 2.0 for b in kept])
+        my = float(np.median(cy)); band = max(0.10 * span, 0.6 * float(np.median([b[3] for b in kept])) * 4)
+        cluster = [b for b, y in zip(kept, cy) if abs(y - my) <= band] or kept
+    else:
         cluster = kept
     head = sorted(cluster, key=lambda b: -(b[1] + b[3]))[0]
     head_pin_row = head[1] + head[3]
