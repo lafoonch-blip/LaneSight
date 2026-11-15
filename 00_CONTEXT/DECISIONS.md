@@ -1699,10 +1699,12 @@ history line); this revision makes it landmark-robust and ports it to iOS.
    - **01:03 clip:** window moves 1.5–6.4 s → the real delivery region (server 20.6 s; on-device 28.0 s — both past
      the pre-shot pacing); false slo-mo gone; un-timeable phases come back honestly `unavailable`.
    - **IMG_8980** (delivery-then-walk-back): **fixed on the server** — window 22 s → 16.8 s (E5 +10 f, E8 +15 f vs
-     label; E4/E7 honestly null), was +328/+307 f. **Not fixed on-device**: iOS MediaPipe's noisier edge-on
-     shoulder-width defeats the normalization and it still picks the walk-back (~22 s). 8980 is held out of the
-     parity gate and honesty-gated; a robust on-device fix needs a better body-scale estimate, not a threshold
-     tweak. Documented with `XCTExpectFailure` in `testDeliveryWindowPicksRealDelivery`.
+     label; E4/E7 honestly null), was +328/+307 f. **Not fixed on-device**, and the CPU-delegate experiment below
+     pinned WHY: it is **not** the landmarks (they match the reference to ~1 px) — it is the delivery **prescan**
+     (`FormPoseLandmarker.prescanWindow`), which keeps only the highest-energy motion burst and on 8980 that is the
+     walk-back, so the real delivery is windowed out before `findDelivery` runs. 8980 stays honesty-gated and
+     excluded from the parity assertions; the real fix is a **swing-aware prescan**, tracked as follow-up.
+     Documented with `XCTExpectFailure` in `testDeliveryWindowPicksRealDelivery`.
 **Re-grade (labeled form clips, DEC-121 tolerances, before→after), server:** max swing-event error collapses —
 E4 328 f→2 f, E7 314 f→3 f, E5 325 f→70 f, E8 307 f→38 f (all the ≥300 f outliers were 8980). Zero regression on
 8824/8846/8847/8848; 8825/8826 residuals unchanged. **iOS device parity gate: 26 failures = the committed baseline
@@ -1712,6 +1714,26 @@ the delivery region (pass); 8980 is the documented gap.
    *(Dev-env note: `examples/form_baseline.py` run as a script imports `lanesight_core` via the venv's editable
    install, which maps to the sibling `LaneSight/` checkout — NOT this `LaneSight-form` one. Re-grade with
    `PYTHONPATH=…/LaneSight-form/lanesight-core` or the baseline silently tests the other tree.)*
+**CPU-delegate experiment (kept GPU):** tested running iOS MediaPipe on the **CPU (XNNPACK)** delegate to match the
+Python reference (which uses the default CPU delegate), same heavy model / VIDEO mode / 256² input. Measured the
+per-landmark gap with a new on-device dump (`OnDeviceFormGateTests.testDumpLandmarksForGapAnalysis`,
+`FORM_LM_DUMP=1`) parsed against the Python `lm_cache` by `examples/form_lm_gap.py`. Result: **the on-device
+landmarks already match Python to ~1 px** on the 60 fps clips (8825 ~1 px, 8980 ~1 px; 8846 ~24 px is a 30 fps
+temporal-alignment artifact on fast joints), and the **device gate was byte-identical to GPU** — same 26 residuals,
+same delivery windows (8980 22.2 s, 01:03 28.0 s). So **there was no landmark gap to close**; CPU ran ~1–5 % slower
+and shares the same over-budget clip (IMG_8847 widens to ~43 s on *both* delegates — a prescan miss, not a delegate
+cost). Decision: **keep the GPU default** (`FormPoseLandmarker.useCPUDelegate = false`); the dump test + gap tool +
+toggle stay as infrastructure. **This corrects the earlier "iOS↔Python landmark gap" framing** in DEC-131/DEC-129:
+the landmarks agree; the on-device segmentation misses (8980 walk-back, 8847 43 s) are the **delivery prescan**.
+**Holdout status (IMPORTANT):** **IMG_8980 is no longer a blind-test clip.** DEC-129 held it out of the parity
+gate as unseen; this fix was *developed on it* (the server selector + hold-bound were tuned against its
+delivery-then-walk-back failure), so it is now a **training clip** and cannot certify generalization. The selector
+constants are therefore **FROZEN as of this commit** — `swingₙ` weight 0.15 on duration, `SWING_SHW_FLOOR = 0.015`,
+`WALKBACK_DY = 0.08`, `WALKBACK_PENALTY = 4.0`, `HOLD_SEARCH_MAX_S = 1.5` — and must **not** be touched while
+grading the next blind set. **The blind test set going forward is the next batch of 60 fps form clips** (unseen by
+this tuning); grade the frozen selector against them before any further constant changes. 8980 stays excluded from
+the on-device parity assertions only because it still mis-segments on-device (a landmark-quality gap, not a tuning
+gap).
 **Why:** honesty — a mis-segmented delivery must read `unavailable`, never a fabricated number; the delivery's most
 reliable signature is the swing (measured scale-free), not the longest foot burst, and a walk-back is told apart by
 its direction of travel. **Date:** 2026-11-15 · **Status:** ACCEPTED — both fixes on both engines; 465 pytest pass

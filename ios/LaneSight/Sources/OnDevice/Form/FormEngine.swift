@@ -91,12 +91,14 @@ nonisolated enum FormEngine {
                 i = j
             } else { i += 1 }
         }
-        // DEC-131 landmark-robust delivery selector — parity with lanesight_core.form.pose._find_delivery. The
-        // swing amplitude is measured in the bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of
-        // wrist travel; a walk-back's arm-sway is a fraction), which cancels the apparent-scale + foreshortening
-        // gap between on-device and server MediaPipe landmarks — the earlier raw-amplitude port mis-picked 8847 by
-        // ~5 s. A burst whose body-center drops toward a rear/overhead camera (direction-of-travel) is a walk-back
-        // → penalized. Validated offline on every labeled clip + the 01:03 clip (examples/form_selector_sim.py).
+        // DEC-131 scale-free delivery selector — parity with lanesight_core.form.pose._find_delivery. The swing
+        // amplitude is measured in the bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of wrist
+        // travel; a walk-back's arm-sway is a fraction) — scale-free so the score is robust regardless of apparent
+        // size/foreshortening; the earlier RAW-pixel amplitude port mis-picked 8847 by ~5 s. (The on-device
+        // landmarks themselves match the Python reference to ~1 px — FORM_LM_DUMP/form_lm_gap.py — so the normalized
+        // score agrees with the server; residual on-device misses are the prescan window, not the landmarks.)
+        // A burst whose body-center drops toward a rear/overhead camera (direction-of-travel) is a walk-back →
+        // penalized. Validated offline on every labeled clip + the 01:03 clip (examples/form_selector_sim.py).
         let wyL = FormSignal.smooth(FormSignal.point(frames, [LM.lWrist], axis: 1), 5)
         let wyR = FormSignal.smooth(FormSignal.point(frames, [LM.rWrist], axis: 1), 5)
         let shLx = FormSignal.point(frames, [LM.lShoulder], axis: 0)

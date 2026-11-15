@@ -43,6 +43,10 @@ final class OnDeviceFormGateTests: XCTestCase {
     }
     struct StepLabels: Decodable { let clips: [String: StepLabelClip] }
 
+    // IMG_8980 is NO LONGER a blind holdout (DEC-131): the server delivery selector + hold-bound were developed on
+    // it, so it's a training clip now. It stays excluded from the on-device parity ASSERTIONS only because it still
+    // mis-segments on-device (a landmark-quality gap — see testDeliveryWindowPicksRealDelivery). The real blind set
+    // going forward is the next batch of 60 fps form clips, graded with the selector constants frozen.
     static let heldOut: Set<String> = ["IMG_8980"]
     static let gateFrames = 2.0        // DEC-121 swing events
     static let plantFrames = 3.0       // DEC-121 per-plant foot-strike timing
@@ -185,14 +189,41 @@ final class OnDeviceFormGateTests: XCTestCase {
         bundle.url(forResource: clip, withExtension: "mov") ?? bundle.url(forResource: clip, withExtension: "MOV")
     }
 
+    /// DEC-131 — dump full-clip landmarks so the iOS↔Python per-landmark gap can be measured offline (compare to
+    /// the Python lm_cache/*.npz). Opt-in via FORM_LM_DUMP=1 (expensive: full pose, no prescan window). Prints
+    /// normalized (x,y) for all 33 landmarks every 5th frame; `examples/form_lm_gap.py` parses + reports px.
+    func testDumpLandmarksForGapAnalysis() throws {
+        guard ProcessInfo.processInfo.environment["FORM_LM_DUMP"] != nil else {
+            throw XCTSkip("set FORM_LM_DUMP=1 to dump landmarks for the gap analysis")
+        }
+        let bundle = Bundle(for: type(of: self))
+        guard FormPoseLandmarker.resolveModelPath(bundle: bundle) != nil else { throw XCTSkip("pose model not bundled") }
+        print("LMDUMP_DELEGATE cpu=\(FormPoseLandmarker.useCPUDelegate)")
+        for clip in ["IMG_8846", "IMG_8825", "IMG_8980"] {
+            guard let url = clipURL(clip, bundle) else { continue }
+            let lms = try FormPoseLandmarker.extract(clipURL: url, bundle: bundle, window: nil)
+            print("LMDUMP_BEGIN \(clip) frames=\(lms.t.count)")
+            for i in stride(from: 0, to: lms.t.count, by: 5) {
+                var s = "LMROW \(clip) \(i) \(String(format: "%.4f", lms.t[i]))"
+                let f = lms.frames[i].lm
+                for k in 0..<33 { s += " \(String(format: "%.4f", f[k][0])),\(String(format: "%.4f", f[k][1]))" }
+                print(s)
+            }
+            print("LMDUMP_END \(clip)")
+        }
+    }
+
     /// DEC-131 — the landmark-robust delivery selector must pick the REAL delivery on-device, not a pre-shot burst
     /// (01:03: 30 s clip, lots of pre-shot pacing) or a post-delivery walk-back (8980: delivery-then-walk-back).
     /// This is the on-device half of the offline form_selector_sim.py validation. Clips are gitignored
     /// (FormGateClips/); the test skips when absent. The delivery anchor (slide plant / first step) must land in
     /// the real-delivery window, i.e. NOT in the pre-shot region. IMG_8980 is a KNOWN on-device gap: the server
-    /// selector picks it correctly (16.8 s) but on-device MediaPipe's noisier edge-on shoulder-width defeats the
-    /// normalization and it picks the walk-back (~22 s) — documented with XCTExpectFailure; honesty-gated and held
-    /// out of the parity gate. Fix there needs a better on-device body-scale estimate, not a threshold tweak.
+    /// selector picks it correctly (16.8 s) but on-device it picks the walk-back (~22 s). ROOT CAUSE (DEC-131, from
+    /// the FORM_LM_DUMP gap analysis): the on-device landmarks MATCH the Python reference to ~1 px, so this is not a
+    /// landmark/delegate difference — it is the delivery PRESCAN (`FormPoseLandmarker.prescanWindow`), which picks
+    /// the highest-energy motion burst and on 8980 that is the walk-back, so the real delivery is windowed out
+    /// before findDelivery ever sees it. Documented with XCTExpectFailure; honesty-gated; the real fix is a
+    /// swing-aware prescan, not a selector tweak.
     func testDeliveryWindowPicksRealDelivery() throws {
         let bundle = Bundle(for: type(of: self))
         guard FormPoseLandmarker.resolveModelPath(bundle: bundle) != nil else {
@@ -219,8 +250,9 @@ final class OnDeviceFormGateTests: XCTestCase {
 
         // 8980 (known on-device gap — see doc comment). Expect the walk-back mis-pick until the on-device body-scale
         // estimate improves; if this ever starts landing in [14, 18.5], XCTest flags the stale expectation to remove.
-        XCTExpectFailure("IMG_8980 delivery selection is not yet robust on-device (iOS↔Python landmark gap on an "
-                         + "edge-on side view); fixed on the server, honesty-gated on-device.")
+        XCTExpectFailure("IMG_8980: the delivery PRESCAN windows out the real delivery (picks the higher-energy "
+                         + "walk-back); on-device landmarks match Python ~1px, so this needs a swing-aware prescan, "
+                         + "not a selector/delegate change. Fixed on the server; honesty-gated on-device.")
         if let a8980 = try anchorFor("IMG_8980") {
             XCTAssert(a8980 >= 14.0 && a8980 <= 18.5,
                       "IMG_8980: delivery anchor \(a8980)s not in [14, 18.5] — walk-back picked on device")

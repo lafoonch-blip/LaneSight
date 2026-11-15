@@ -72,6 +72,13 @@ nonisolated enum FormPoseLandmarker {
     /// Default bundled model name (see project.yml; the .task is copied in, never committed — DEC-129/pose.py note).
     static let modelResource = "pose_landmarker_heavy"
     static let modelExtension = "task"
+    /// DEC-131 experiment result: kept FALSE (iOS default GPU/Metal delegate). Running the CPU (XNNPACK) delegate
+    /// to match the Python reference was measured (form_lm_gap.py over the LMDUMP): the on-device landmarks already
+    /// match the Python reference to ~1 px on the 60 fps clips (8825/8980) on BOTH delegates — the device-gate
+    /// residuals + delivery windows came out byte-identical, so there was no landmark gap to close, and CPU was
+    /// ~1-5 % slower. Flip to true + rebuild only to re-run that A/B. (The remaining on-device segmentation misses —
+    /// 8980's walk-back pick, 8847 widening to ~43 s — are the delivery PRESCAN, not the delegate or landmarks.)
+    static let useCPUDelegate = false
 
     /// Resolve the model path: an explicit override wins, then the env var, then the given bundle, then the app
     /// (main) bundle — the model ships as an app resource (Models/), so a test hosted in the app finds it there.
@@ -187,6 +194,10 @@ nonisolated enum FormPoseLandmarker {
         }
         let options = PoseLandmarkerOptions()
         options.baseOptions.modelAssetPath = model
+        // DEC-131 experiment: run on the CPU delegate (TFLite XNNPACK) to MATCH the Python reference, which uses the
+        // MediaPipe default CPU delegate. iOS otherwise defaults to the GPU (Metal) delegate, whose heavy-model
+        // output differs enough from XNNPACK to shift the delivery segmentation on edge-on clips (8825/8826/8980).
+        if Self.useCPUDelegate { options.baseOptions.delegate = .CPU }
         options.runningMode = .video
         options.numPoses = 1
         options.minPoseDetectionConfidence = 0.3
