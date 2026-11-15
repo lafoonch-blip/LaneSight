@@ -49,14 +49,45 @@ nonisolated enum OnDeviceFormEngine {
     /// the gate can pose ONCE then run the (pure, deterministic) engine many times instead of re-posing 10×.
     static func extractWindowed(clipURL: URL, modelPath: String? = nil, bundle: Bundle = .main,
                                 handed: String? = "right") throws -> FormPoseLandmarker.Landmarks {
-        let window0 = FormPoseLandmarker.prescanWindow(clipURL: clipURL)
-        var lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: window0)
-        if window0 != nil && !Self.deliveryWithEventsFound(lms, handed: handed) {
-            // The prescan window missed the delivery — widen to the FULL clip and retry (decision 2). This only
-            // fires for clips whose tight burst missed the delivery; the hard LONG clips (8825/8826) segment
-            // correctly inside the window so they never widen (staying <30 s), and the clips that DO miss here are
-            // short/30 fps, so a full-clip re-pose is still well under 30 s.
-            lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: nil)
+        func ex(_ window: (Double, Double)?, windows: [(Double, Double)]? = nil,
+                stride: Int = 1) throws -> FormPoseLandmarker.Landmarks {
+            try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle,
+                                           window: window, windows: windows, poseStride: stride)
+        }
+        let lead = 1.6, tail = 0.9
+        guard let bursts = FormPoseLandmarker.prescanBursts(clipURL: clipURL, top: 3), !bursts.isEmpty else {
+            return try ex(nil)        // short clip / scan failed → pose the whole clip (DEC-129)
+        }
+        let windows = bursts.map { (Swift.max(0, $0.0 - lead), $0.1 + tail) }
+        var winner = windows[0]       // default: the highest-energy burst (the old single-window prescan pick)
+        if windows.count > 1 {
+            // DEC-131 swing-aware prescan: coarse-pose (every 2nd frame) ALL top-N candidate windows in ONE pass,
+            // then run the frozen selector (findDelivery) ONCE over the concatenated coarse landmarks. Scoring every
+            // burst in a single pass makes the scores COMPARABLE across candidates (per-window scoring is NOT — a
+            // far/small pre-shot or walk-back window inflates the shoulder-normalized swing in isolation, which
+            // regressed 8847/8848), so a high-energy walk-back or pre-shot pacing can't out-rank the real delivery's
+            // swing just by moving more. Full-rate pose then runs only on the winning burst's window. This fixes
+            // IMG_8847 (was widening to the whole clip, ~43 s → now ~17 s window) and segments IMG_8825/8826/01:03
+            // to the real delivery, staying under 30 s. Out-of-window gaps are dropped so they can't form spurious
+            // bursts. Stride 2 (not 4): finer sampling is both affordable here and kinder to the thin-margin clips.
+            let coarse = try ex(nil, windows: windows, stride: 2)
+            let rs = FormSignal.speed(FormSignal.point(coarse.frames, LM.rFootPts, axis: 0),
+                                      FormSignal.point(coarse.frames, LM.rFootPts, axis: 1), coarse.t)
+            let ls = FormSignal.speed(FormSignal.point(coarse.frames, LM.lFootPts, axis: 0),
+                                      FormSignal.point(coarse.frames, LM.lFootPts, axis: 1), coarse.t)
+            if let d = FormEngine.findDelivery(coarse.t, coarse.frames, rs, ls) {
+                let b0 = d.win.0 + 0.4, b1 = d.win.1 - 0.6     // recover the burst from the approach window
+                winner = (Swift.max(0, b0 - lead), b1 + tail)
+            }
+            if ProcessInfo.processInfo.environment["FORM_PRESCAN_DBG"] != nil {
+                let ws = windows.map { "[\(String(format: "%.1f", $0.0)),\(String(format: "%.1f", $0.1))]" }.joined(separator: " ")
+                print("FORM_PRESCAN cands \(ws) -> winner [\(String(format: "%.1f", winner.0)),\(String(format: "%.1f", winner.1))]")
+            }
+        }
+        var lms = try ex(winner)      // full-rate pose on the winning window
+        if !Self.deliveryWithEventsFound(lms, handed: handed) {
+            // The winner still didn't yield the delivery — widen to the FULL clip and retry (last resort, DEC-129).
+            lms = try ex(nil)
         }
         return lms
     }

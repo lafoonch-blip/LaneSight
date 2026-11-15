@@ -90,14 +90,12 @@ nonisolated enum FormPoseLandmarker {
         return Bundle.main.url(forResource: modelResource, withExtension: modelExtension)?.path
     }
 
-    /// DEC-129 runtime/segmentation prescan: a CHEAP strided motion-energy scan (no pose) that finds the dominant
-    /// delivery window — the longest sustained-motion span (the approach + swing), scored by duration × mean energy.
-    /// Returns [start − leadMargin, end + tailMargin] so the setup-hold lead-in + the finish hold are included, or
-    /// nil for a short clip (run pose on the whole thing). Picking the DOMINANT motion span also makes segmentation
-    /// robust: a pre-shot shuffle / walk-off can't be mistaken for the delivery (the IMG_8825 divergence), with no
-    /// per-clip tuning. Deterministic (pure arithmetic over decoded luma).
-    static func prescanWindow(clipURL: URL, stride: Int = 3,
-                              leadMargin: Double = 1.6, tailMargin: Double = 0.9) -> (Double, Double)? {
+    /// DEC-129/131 motion scan: a CHEAP strided luma-diff pass (no pose) over the whole clip, returning the
+    /// above-threshold motion bursts sorted by duration × mean energy (desc) + the clip time span, or nil for a
+    /// clip too short to window. NO gap-bridging — a brief mid-approach dip splits a burst, which the swing-aware
+    /// selector then re-ranks; bridging would merge a pre-shot shuffle into the delivery (the IMG_8825 divergence).
+    /// Deterministic (pure arithmetic over decoded luma).
+    private static func motionBursts(clipURL: URL, stride: Int) -> (bursts: [(Double, Double)], t0: Double, t1: Double)? {
         let asset = AVURLAsset(url: clipURL)
         guard let track = asset.tracks(withMediaType: .video).first,
               let reader = try? AVAssetReader(asset: asset) else { return nil }
@@ -113,7 +111,7 @@ nonisolated enum FormPoseLandmarker {
         while reader.status == .reading, let sb = rdOut.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); break }
             defer { i += 1 }
-            guard i % max(1, stride) == 0, let px = CMSampleBufferGetImageBuffer(sb) else { continue }
+            guard i % Swift.max(1, stride) == 0, let px = CMSampleBufferGetImageBuffer(sb) else { continue }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
             guard let grid = coarseLuma(px) else { continue }
             if let p = prev, p.count == grid.count {
@@ -128,36 +126,42 @@ nonisolated enum FormPoseLandmarker {
         guard n >= 8 else { return nil }
         let dur = times[n - 1] - times[0]
         if dur < 8.0 { return nil }     // short clips: pose the whole thing, no windowing needed
-        // Pick the DOMINANT motion burst (the one with the highest duration × mean energy), bridging short dips
-        // (≤0.5 s) so a brief mid-approach slowdown doesn't split it. Isolating the delivery burst from a pre-shot
-        // shuffle / setup fidget is what lets findDelivery segment the hard clips (IMG_8825) correctly — the full
-        // clip (or a first-to-last-motion window) re-includes that motion and mis-segments. Generous margins
-        // (lead for the setup-hold, tail for the finish-hold) keep the approach + finish inside the window.
         let sorted = energy.sorted()
         let lo = sorted[Int(0.10 * Double(n))], hi = sorted[Int(0.90 * Double(n))]
         let thr = lo + 0.35 * (hi - lo)
-        // Pick the single STRICTLY-contiguous run of above-threshold motion with the highest duration×mean energy
-        // — NO gap-bridging (bridging merges a pre-shot shuffle into the delivery run and re-breaks IMG_8825's
-        // isolation). This tight burst is what lets findDelivery segment the hard side clips correctly on device.
-        var best: (Double, Double, Double)? = nil     // (startT, endT, score)
+        var all: [(Double, Double, Double)] = []     // (t0, t1, score = duration × mean energy)
         var k = 0
         while k < n {
             if energy[k] > thr {
                 var j = k, sum = 0.0
                 while j < n && energy[j] > thr { sum += energy[j]; j += 1 }
                 let t0 = times[k], t1 = times[Swift.min(j - 1, n - 1)]
-                let score = (t1 - t0 + 1e-3) * (sum / Double(Swift.max(1, j - k)))
-                if best == nil || score > best!.2 { best = (t0, t1, score) }
+                all.append((t0, t1, (t1 - t0 + 1e-3) * (sum / Double(Swift.max(1, j - k)))))
                 k = j
             } else { k += 1 }
         }
-        guard let b = best else { return nil }
-        let w0 = Swift.max(times[0], b.0 - leadMargin)
-        let w1 = Swift.min(times[n - 1], b.1 + tailMargin)
-        // If the generous window already covers most of the clip, windowing saves little and risks clipping the
-        // delivery — pose the whole thing instead (correctness over a marginal speedup).
-        if (w1 - w0) > 0.75 * dur { return nil }
+        guard !all.isEmpty else { return nil }
+        return (all.sorted { $0.2 > $1.2 }.map { ($0.0, $0.1) }, times[0], times[n - 1])
+    }
+
+    /// DEC-129 prescan: the single dominant-motion delivery window [start − lead, end + tail], or nil (short clip /
+    /// the window already covers most of the clip → pose the whole thing). Kept for callers that want one window.
+    static func prescanWindow(clipURL: URL, stride: Int = 3,
+                              leadMargin: Double = 1.6, tailMargin: Double = 0.9) -> (Double, Double)? {
+        guard let mb = motionBursts(clipURL: clipURL, stride: stride), let b = mb.bursts.first else { return nil }
+        let w0 = Swift.max(mb.t0, b.0 - leadMargin)
+        let w1 = Swift.min(mb.t1, b.1 + tailMargin)
+        if (w1 - w0) > 0.75 * (mb.t1 - mb.t0) { return nil }   // windowing saves little + risks clipping the delivery
         return (w0, w1)
+    }
+
+    /// DEC-131 swing-aware prescan: the top-`top` candidate delivery bursts (highest duration × mean energy first),
+    /// each as (t0, t1). The caller coarse-poses each candidate window, scores it with the frozen shoulder-
+    /// normalized selector, and full-rate-poses only the winner — so a high-energy walk-back (IMG_8980) can't be
+    /// mistaken for the delivery just because it moves more. nil for a clip too short to window (pose the whole thing).
+    static func prescanBursts(clipURL: URL, stride: Int = 3, top: Int = 3) -> [(Double, Double)]? {
+        guard let mb = motionBursts(clipURL: clipURL, stride: stride) else { return nil }
+        return Array(mb.bursts.prefix(Swift.max(1, top)))
     }
 
     /// Coarse luma grid (32×24) sampled from a BGRA pixel buffer — cheap, rotation-agnostic (motion is motion).
@@ -186,8 +190,13 @@ nonisolated enum FormPoseLandmarker {
     /// set, pose is run ONLY on frames inside [t0, t1] (others become NaN rows) — the DEC-129 runtime fix: a cheap
     /// motion prescan finds the delivery window and we skip the expensive rotate+detect outside it. Decode still
     /// walks every frame (timestamps stay authoritative). Honours `Task.isCancelled` (the 30 s cap / superseded).
+    /// `windows` (if set) poses frames inside ANY of several ranges (the swing-aware prescan's candidate set).
+    /// `poseStride` poses only every Nth in-window frame and, when > 1, KEEPS only those posed frames so the
+    /// coarse landmarks are contiguous (foot-speed + burst detection aren't broken by NaN gaps) — used to cheaply
+    /// SCORE candidate windows before the full-rate pose on the winner (DEC-131).
     static func extract(clipURL: URL, modelPath: String? = nil,
-                        bundle: Bundle = .main, window: (Double, Double)? = nil) throws -> Landmarks {
+                        bundle: Bundle = .main, window: (Double, Double)? = nil,
+                        windows: [(Double, Double)]? = nil, poseStride: Int = 1) throws -> Landmarks {
         #if canImport(MediaPipeTasksVision)
         guard let model = resolveModelPath(bundle: bundle, override: modelPath) else {
             throw PoseError.modelMissing(modelPath ?? "\(modelResource).\(modelExtension) (not in bundle)")
@@ -222,16 +231,28 @@ nonisolated enum FormPoseLandmarker {
         var frames: [Frame] = []
         var ts: [Double] = []
         let nanRow = [[Float]](repeating: [Float](repeating: Float.nan, count: 5), count: 33)
+        let stride = Swift.max(1, poseStride)
+        var inWinCount = 0
 
         while reader.status == .reading, let sb = rdOut.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); break }
             guard let raw = CMSampleBufferGetImageBuffer(sb) else { continue }
             let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+            let inWindow: Bool
+            if let windows { inWindow = windows.contains { t >= $0.0 && t <= $0.1 } }
+            else if let window { inWindow = (t >= window.0 && t <= window.1) }
+            else { inWindow = true }
+            let doPose = inWindow && (inWinCount % stride == 0)
+            if inWindow { inWinCount += 1 }
+            // Multi-window (`windows`) and/or coarse (stride > 1): keep ONLY the posed, in-window frames so the output
+            // is contiguous (NaN gaps between windows / strided frames would read as motion and break burst
+            // detection). A single `window` at full rate keeps every frame (NaN outside) — exactly as before, so the
+            // whole-clip and single-window paths are unchanged.
+            if (windows != nil || stride > 1) && !doPose { continue }
             var row = nanRow
-            let inWindow = window == nil || (t >= window!.0 && t <= window!.1)
             // Skip the (expensive) rotate + pose on frames outside the delivery window — they stay NaN, which the
             // engine treats as "not visible", exactly as if the bowler weren't detected there.
-            if inWindow, let px = OnDeviceDecode.rotated(raw, rot),
+            if doPose, let px = OnDeviceDecode.rotated(raw, rot),
                let image = try? MPImage(pixelBuffer: px),
                let res = try? landmarker.detect(videoFrame: image, timestampInMilliseconds: max(0, Int((t * 1000.0).rounded()))),
                let first = res.landmarks.first {

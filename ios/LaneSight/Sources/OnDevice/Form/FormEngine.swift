@@ -62,11 +62,19 @@ nonisolated enum FormEngine {
 
     // MARK: delivery segmentation
 
-    /// _find_delivery → (approachWin, (holdStart, holdEnd)) or nil.
-    static func findDelivery(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
-                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S,
-                             stillThr: Double = FOOT_STILL_FINISH) -> (win: (Double, Double), hold: (Double, Double))? {
+    /// Every motion burst scored by the frozen DEC-131 selector — parity with lanesight_core.form.pose
+    /// (`_find_delivery`'s scoring). score = footvis × (0.15·min(dur,2.5) + swingₙ) /
+    /// (1 + WALKBACK_PENALTY·max(0, bodyΔy − WALKBACK_DY)). swingₙ = the bowling-wrist arc amplitude measured in the
+    /// bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of wrist travel; a walk-back's arm-sway is
+    /// a fraction) — scale-free, so robust to apparent size/foreshortening (on-device landmarks match the Python
+    /// reference to ~1 px, FORM_LM_DUMP/form_lm_gap.py). A burst whose body-center drops toward a rear/overhead
+    /// camera (direction-of-travel) is a walk-back → penalized. Used by findDelivery (picks the max); the
+    /// swing-aware prescan runs findDelivery over the concatenated coarse candidate windows. Constants FROZEN (DEC-131).
+    static func scoredBursts(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
+                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S)
+                             -> [(t0: Double, t1: Double, footvis: Double, score: Double)] {
         let n = t.count
+        guard n > 0 else { return [] }
         // footvis = mean visibility of [L_ANKLE,R_ANKLE,L_FOOT,R_FOOT]
         var footvis = [Double](repeating: 0, count: n)
         for i in 0..<n {
@@ -91,14 +99,6 @@ nonisolated enum FormEngine {
                 i = j
             } else { i += 1 }
         }
-        // DEC-131 scale-free delivery selector — parity with lanesight_core.form.pose._find_delivery. The swing
-        // amplitude is measured in the bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of wrist
-        // travel; a walk-back's arm-sway is a fraction) — scale-free so the score is robust regardless of apparent
-        // size/foreshortening; the earlier RAW-pixel amplitude port mis-picked 8847 by ~5 s. (The on-device
-        // landmarks themselves match the Python reference to ~1 px — FORM_LM_DUMP/form_lm_gap.py — so the normalized
-        // score agrees with the server; residual on-device misses are the prescan window, not the landmarks.)
-        // A burst whose body-center drops toward a rear/overhead camera (direction-of-travel) is a walk-back →
-        // penalized. Validated offline on every labeled clip + the 01:03 clip (examples/form_selector_sim.py).
         let wyL = FormSignal.smooth(FormSignal.point(frames, [LM.lWrist], axis: 1), 5)
         let wyR = FormSignal.smooth(FormSignal.point(frames, [LM.rWrist], axis: 1), 5)
         let shLx = FormSignal.point(frames, [LM.lShoulder], axis: 0)
@@ -142,10 +142,19 @@ nonisolated enum FormEngine {
             let base = b.2 * (0.15 * Swift.min(b.1 - b.0, 2.5) + swingAmp(b.0, b.1))
             return base / (1.0 + WALKBACK_PENALTY * Swift.max(0.0, walkbackDy(b.0, b.1) - WALKBACK_DY))
         }
-        let good = bursts.filter { $0.2 >= FOOTVIS_MIN }
-        let pool = good.isEmpty ? bursts : good
-        let pick = pool.max { score($0) < score($1) }
-        guard let (b0, b1, _) = pick else { return nil }
+        return bursts.map { (t0: $0.0, t1: $0.1, footvis: $0.2, score: score($0)) }
+    }
+
+    /// _find_delivery → (approachWin, (holdStart, holdEnd)) or nil.
+    static func findDelivery(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
+                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S,
+                             stillThr: Double = FOOT_STILL_FINISH) -> (win: (Double, Double), hold: (Double, Double))? {
+        let n = t.count
+        let sb = scoredBursts(t, frames, Rs, Ls, burstMotion: burstMotion, burstMaxS: burstMaxS)
+        let good = sb.filter { $0.footvis >= FOOTVIS_MIN }
+        let pool = good.isEmpty ? sb : good
+        guard let pick = pool.max(by: { $0.score < $1.score }) else { return nil }
+        let b0 = pick.t0, b1 = pick.t1
         let approachWin = (Swift.max(t[0], b0 - 0.4), b1 + 0.6)
         // still = both feet below stillThr
         let Rf = FormSignal.nanToNum(Rs, nan: 9.0), Lf = FormSignal.nanToNum(Ls, nan: 9.0)

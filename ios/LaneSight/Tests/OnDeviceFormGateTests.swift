@@ -239,23 +239,33 @@ final class OnDeviceFormGateTests: XCTestCase {
             return anchor
         }
 
-        // 01:03 (hard): the 30 s production clip must pick a delivery-region burst (≥18 s), never the 0-6 s pre-shot
-        // pacing that was the original bug. This is the on-device confirmation for the DEC-131 selector.
-        if let a0103 = try anchorFor("IMG_0103") {
-            XCTAssert(a0103 >= 18.0 && a0103 <= 30.5,
-                      "IMG_0103: delivery anchor \(a0103)s not in the delivery region [18, 30.5] — pre-shot picked")
-        } else {
-            throw XCTSkip("IMG_0103 not bundled (FormGateClips/ gitignored).")
+        // DEC-131 swing-aware prescan: the top-3 motion-energy candidate windows are coarse-posed + scored with the
+        // frozen selector (findDelivery) in one pass, so the real delivery wins over a pre-shot burst (01:03) or a
+        // walk-back. These four are HARD asserts — the prescan now segments them correctly on device (8847 also no
+        // longer widens to ~43 s). (clip, lo, hi) — anchor = slide plant / first step.
+        let cases: [(String, Double, Double)] = [
+            ("IMG_0103", 18.0, 30.5),   // 30 s clip; real delivery ≥18 s, never the 0-6 s pre-shot pacing
+            ("IMG_8847", 14.0, 18.5),   // delivery ~16.7 s (used to widen to ~43 s)
+            ("IMG_8825", 16.0, 20.0),   // delivery ~18.8 s
+            ("IMG_8826", 15.0, 19.0),   // delivery ~17.6 s
+        ]
+        var checked = 0
+        for (clip, lo, hi) in cases {
+            guard let a = try anchorFor(clip) else { continue }
+            checked += 1
+            XCTAssert(a >= lo && a <= hi,
+                      "\(clip): delivery anchor \(a)s not in [\(lo), \(hi)] — wrong burst picked on device")
         }
+        if checked == 0 { throw XCTSkip("no window-check clips bundled (FormGateClips/ gitignored).") }
 
-        // 8980 (known on-device gap — see doc comment). Expect the walk-back mis-pick until the on-device body-scale
-        // estimate improves; if this ever starts landing in [14, 18.5], XCTest flags the stale expectation to remove.
-        XCTExpectFailure("IMG_8980: the delivery PRESCAN windows out the real delivery (picks the higher-energy "
-                         + "walk-back); on-device landmarks match Python ~1px, so this needs a swing-aware prescan, "
-                         + "not a selector/delegate change. Fixed on the server; honesty-gated on-device.")
-        if let a8980 = try anchorFor("IMG_8980") {
-            XCTAssert(a8980 >= 14.0 && a8980 <= 18.5,
-                      "IMG_8980: delivery anchor \(a8980)s not in [14, 18.5] — walk-back picked on device")
+        // IMG_8980 remains a device-landmark KNIFE-EDGE (DEC-131): its edge-on delivery IS now a prescan candidate
+        // and is scored, but the shoulder-normalized swing beats the walk-back by a margin thinner than the ~1 px
+        // on-device landmark noise (the shoulder-width is near the floor when edge-on), so findDelivery still ranks
+        // the ~22 s walk-back first. Fixed on the server; not resolvable on-device without changing the frozen
+        // selector. XCTExpectFailure keeps the suite honest and flags it if device landmarks ever improve enough.
+        XCTExpectFailure("IMG_8980: delivery-vs-walk-back is below the on-device landmark noise floor (frozen selector).")
+        if let a = try anchorFor("IMG_8980") {
+            XCTAssert(a >= 14.0 && a <= 18.5, "IMG_8980: anchor \(a)s not in [14, 18.5] — walk-back picked on device")
         }
     }
 }

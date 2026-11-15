@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.87  
+Version: 1.88  
 Last Updated: 2026-11-15  
 Owner: Shayne  
-Supersedes: v1.86 (DEC-131 revised: landmark-robust shoulder-width-normalized delivery selection + direction-of-travel + hold-search bound, now on BOTH engines)
+Supersedes: v1.87 (DEC-131 swing-aware on-device prescan: top-3 candidates, coarse-pose + frozen-selector pick, full-rate winner — fixes 8847 widen/8825/8826/01:03; 8980 remains a device-landmark limit)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1725,6 +1725,22 @@ and shares the same over-budget clip (IMG_8847 widens to ~43 s on *both* delegat
 cost). Decision: **keep the GPU default** (`FormPoseLandmarker.useCPUDelegate = false`); the dump test + gap tool +
 toggle stay as infrastructure. **This corrects the earlier "iOS↔Python landmark gap" framing** in DEC-131/DEC-129:
 the landmarks agree; the on-device segmentation misses (8980 walk-back, 8847 43 s) are the **delivery prescan**.
+**Swing-aware prescan (on-device, `extractWindowed` + `FormPoseLandmarker.prescanBursts`):** the committed prescan
+posed only the single highest-energy motion burst, which on IMG_8980 is the walk-back and on IMG_8847 missed the
+delivery entirely (forcing a whole-clip widen → ~43 s). New prescan: keep the **top-3** motion-energy candidate
+bursts, **coarse-pose (every 2nd frame) all three in one concatenated pass**, run the frozen selector
+(`findDelivery`) ONCE over the concatenated landmarks so every burst is scored comparably (per-candidate scoring in
+isolation inflates far/small pre-shot + walk-back windows — it regressed 8847/8848), then **full-rate pose only the
+winning window**. Out-of-window frames are dropped so the gaps can't form spurious bursts. **Results (device gate):**
+IMG_8847 segments to the delivery and no longer widens (**~43 s → <26 s**); IMG_8825/8826/01:03 now segment to the
+real delivery; **runtime <30 s on every clip** (worst ~25 s); parity residuals **26 → 24 with no per-clip
+regression** (8825 and 8847 each one better). **IMG_8980 still mis-segments on device**: its edge-on delivery IS now
+a scored candidate, but the shoulder-normalized swing beats its walk-back by a margin **below the ~1 px on-device
+landmark noise** (the shoulder-width sits on the floor when edge-on), so `findDelivery` ranks the walk-back first —
+identically across coarse and full-rate, so it's the frozen selector's resolution limit on this clip, not the
+prescan or stride. Fixed on the server (full-quality landmarks); on device it stays honesty-gated +
+`XCTExpectFailure` in `testDeliveryWindowPicksRealDelivery`. Offline validation harness:
+`examples/form_prescan_concat.py`.
 **Holdout status (IMPORTANT):** **IMG_8980 is no longer a blind-test clip.** DEC-129 held it out of the parity
 gate as unseen; this fix was *developed on it* (the server selector + hold-bound were tuned against its
 delivery-then-walk-back failure), so it is now a **training clip** and cannot certify generalization. The selector
