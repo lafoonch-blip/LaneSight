@@ -22,6 +22,10 @@ nonisolated enum FormEngine {
     static let BURST_MIN_S = 0.6
     static let BURST_MAX_S = 5.0
     static let FOOTVIS_MIN = 0.45
+    static let SWING_SHW_FLOOR = 0.015   // DEC-131: shoulder-width floor for the normalized swing (edge-on ~0.017)
+    static let WALKBACK_DY = 0.08        // body-center drop toward a rear/overhead camera above this = a walk-back …
+    static let WALKBACK_PENALTY = 4.0    // … divides that burst's score by (1 + gain·(dy − WALKBACK_DY))
+    static let HOLD_SEARCH_MAX_S = 1.5   // posted finish follows the slide within this; don't latch a later still run
     static let SLIDE_STOP_SPEED = 0.12
     static let SLIDE_STOP_HOLD_S = 0.10
     static let RHYTHM_SPEEDS_UP_MAX = 0.85
@@ -87,19 +91,58 @@ nonisolated enum FormEngine {
                 i = j
             } else { i += 1 }
         }
-        // Delivery burst = the clearest-footed sustained motion. NOTE (DEC-131): the server engine
-        // (lanesight_core.form.pose._find_delivery) additionally weights the bowling-arm swing amplitude to reject
-        // pre-shot pacing on long clips. That selector is NOT ported here: with on-device MediaPipe landmarks (the
-        // iOS↔Python landmark gap) the foreshortened wrist arc is too noisy — it mis-picked the delivery on the
-        // device parity gate (IMG_8847 moved ~5 s / +337 f). On-device honesty on a mis-segmented clip is carried
-        // by the DEC-131 plausibility backstop + DEC-095 gates instead. Keep the committed footvis×duration pick.
-        let good = bursts.filter { $0.2 >= FOOTVIS_MIN }
-        let pick: (Double, Double, Double)?
-        if !good.isEmpty {
-            pick = good.max { ($0.2 * Swift.min($0.1 - $0.0, 2.5)) < ($1.2 * Swift.min($1.1 - $1.0, 2.5)) }
-        } else {
-            pick = bursts.max { $0.2 < $1.2 }
+        // DEC-131 landmark-robust delivery selector — parity with lanesight_core.form.pose._find_delivery. The
+        // swing amplitude is measured in the bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of
+        // wrist travel; a walk-back's arm-sway is a fraction), which cancels the apparent-scale + foreshortening
+        // gap between on-device and server MediaPipe landmarks — the earlier raw-amplitude port mis-picked 8847 by
+        // ~5 s. A burst whose body-center drops toward a rear/overhead camera (direction-of-travel) is a walk-back
+        // → penalized. Validated offline on every labeled clip + the 01:03 clip (examples/form_selector_sim.py).
+        let wyL = FormSignal.smooth(FormSignal.point(frames, [LM.lWrist], axis: 1), 5)
+        let wyR = FormSignal.smooth(FormSignal.point(frames, [LM.rWrist], axis: 1), 5)
+        let shLx = FormSignal.point(frames, [LM.lShoulder], axis: 0)
+        let shRx = FormSignal.point(frames, [LM.rShoulder], axis: 0)
+        let shLy = FormSignal.point(frames, [LM.lShoulder], axis: 1)
+        let shRy = FormSignal.point(frames, [LM.rShoulder], axis: 1)
+        let hipLy = FormSignal.point(frames, [LM.lHip], axis: 1)
+        let hipRy = FormSignal.point(frames, [LM.rHip], axis: 1)
+        var shoulderW = [Double](repeating: Double.nan, count: n)
+        var bodyCy = [Double](repeating: Double.nan, count: n)
+        for k in 0..<n {
+            shoulderW[k] = abs(shLx[k] - shRx[k])
+            bodyCy[k] = (shLy[k] + shRy[k] + hipLy[k] + hipRy[k]) / 4.0
         }
+        func swingAmp(_ b0: Double, _ b1: Double) -> Double {
+            var raw = 0.0
+            for wy in [wyL, wyR] {
+                var vals: [Double] = []
+                for k in 0..<n where t[k] >= b0 - 1.5 && t[k] <= b1 + 1.0 && !wy[k].isNaN { vals.append(wy[k]) }
+                if vals.count >= 4 { raw = Swift.max(raw, vals.max()! - vals.min()!) }
+            }
+            var sw: [Double] = []
+            for k in 0..<n where t[k] >= b0 - 1.5 && t[k] <= b1 + 1.0 && !shoulderW[k].isNaN { sw.append(shoulderW[k]) }
+            let shw = sw.isEmpty ? SWING_SHW_FLOOR : FormSignal.median(sw)
+            return raw / Swift.max(shw, SWING_SHW_FLOOR)
+        }
+        func walkbackDy(_ b0: Double, _ b1: Double) -> Double {
+            var idx: [Int] = []
+            for k in 0..<n where t[k] >= b0 - 0.4 && t[k] <= b1 + 0.4 { idx.append(k) }
+            if idx.count < 4 { return 0.0 }
+            let kk = Swift.max(2, idx.count / 5)
+            func mean(_ sl: ArraySlice<Int>) -> Double {
+                var s = 0.0, c = 0
+                for i in sl where !bodyCy[i].isNaN { s += bodyCy[i]; c += 1 }
+                return c > 0 ? s / Double(c) : Double.nan
+            }
+            let y0 = mean(idx.prefix(kk)), y1 = mean(idx.suffix(kk))
+            return (y0.isNaN || y1.isNaN) ? 0.0 : (y1 - y0)
+        }
+        func score(_ b: (Double, Double, Double)) -> Double {
+            let base = b.2 * (0.15 * Swift.min(b.1 - b.0, 2.5) + swingAmp(b.0, b.1))
+            return base / (1.0 + WALKBACK_PENALTY * Swift.max(0.0, walkbackDy(b.0, b.1) - WALKBACK_DY))
+        }
+        let good = bursts.filter { $0.2 >= FOOTVIS_MIN }
+        let pool = good.isEmpty ? bursts : good
+        let pick = pool.max { score($0) < score($1) }
         guard let (b0, b1, _) = pick else { return nil }
         let approachWin = (Swift.max(t[0], b0 - 0.4), b1 + 0.6)
         // still = both feet below stillThr
@@ -108,7 +151,8 @@ nonisolated enum FormEngine {
         for k in 0..<n { still[k] = Rf[k] < stillThr && Lf[k] < stillThr }
         var hold: (Double, Double)? = nil
         var idx = FormSignal.searchsorted(t, b1 - 0.4)
-        while idx < n {
+        let holdDeadline = b1 + HOLD_SEARCH_MAX_S     // posted finish is right after the slide, not a later walk-back stop
+        while idx < n && t[idx] <= holdDeadline {
             if still[idx] {
                 var j = idx
                 while j < n && still[j] { j += 1 }

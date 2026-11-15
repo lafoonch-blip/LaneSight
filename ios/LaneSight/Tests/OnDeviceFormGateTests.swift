@@ -184,4 +184,46 @@ final class OnDeviceFormGateTests: XCTestCase {
     private func clipURL(_ clip: String, _ bundle: Bundle) -> URL? {
         bundle.url(forResource: clip, withExtension: "mov") ?? bundle.url(forResource: clip, withExtension: "MOV")
     }
+
+    /// DEC-131 — the landmark-robust delivery selector must pick the REAL delivery on-device, not a pre-shot burst
+    /// (01:03: 30 s clip, lots of pre-shot pacing) or a post-delivery walk-back (8980: delivery-then-walk-back).
+    /// This is the on-device half of the offline form_selector_sim.py validation. Clips are gitignored
+    /// (FormGateClips/); the test skips when absent. The delivery anchor (slide plant / first step) must land in
+    /// the real-delivery window, i.e. NOT in the pre-shot region. IMG_8980 is a KNOWN on-device gap: the server
+    /// selector picks it correctly (16.8 s) but on-device MediaPipe's noisier edge-on shoulder-width defeats the
+    /// normalization and it picks the walk-back (~22 s) — documented with XCTExpectFailure; honesty-gated and held
+    /// out of the parity gate. Fix there needs a better on-device body-scale estimate, not a threshold tweak.
+    func testDeliveryWindowPicksRealDelivery() throws {
+        let bundle = Bundle(for: type(of: self))
+        guard FormPoseLandmarker.resolveModelPath(bundle: bundle) != nil else {
+            throw XCTSkip("pose_landmarker_heavy.task not in the test bundle (gitignored).")
+        }
+
+        func anchorFor(_ clip: String) throws -> Double? {
+            guard let url = clipURL(clip, bundle) else { return nil }
+            let lms = try OnDeviceFormEngine.extractWindowed(clipURL: url, bundle: bundle)
+            let a = OnDeviceFormEngine.analyze(landmarks: lms, handed: "right")
+            let anchor = (a.events["slide_plant"] ?? nil) ?? (a.events["first_step"] ?? nil)
+            print("ONDEV_FORM_WINDOW \(clip) anchor=\(anchor.map { String($0) } ?? "nil")")
+            return anchor
+        }
+
+        // 01:03 (hard): the 30 s production clip must pick a delivery-region burst (≥18 s), never the 0-6 s pre-shot
+        // pacing that was the original bug. This is the on-device confirmation for the DEC-131 selector.
+        if let a0103 = try anchorFor("IMG_0103") {
+            XCTAssert(a0103 >= 18.0 && a0103 <= 30.5,
+                      "IMG_0103: delivery anchor \(a0103)s not in the delivery region [18, 30.5] — pre-shot picked")
+        } else {
+            throw XCTSkip("IMG_0103 not bundled (FormGateClips/ gitignored).")
+        }
+
+        // 8980 (known on-device gap — see doc comment). Expect the walk-back mis-pick until the on-device body-scale
+        // estimate improves; if this ever starts landing in [14, 18.5], XCTest flags the stale expectation to remove.
+        XCTExpectFailure("IMG_8980 delivery selection is not yet robust on-device (iOS↔Python landmark gap on an "
+                         + "edge-on side view); fixed on the server, honesty-gated on-device.")
+        if let a8980 = try anchorFor("IMG_8980") {
+            XCTAssert(a8980 >= 14.0 && a8980 <= 18.5,
+                      "IMG_8980: delivery anchor \(a8980)s not in [14, 18.5] — walk-back picked on device")
+        }
+    }
 }

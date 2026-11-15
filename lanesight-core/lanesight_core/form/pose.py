@@ -195,6 +195,15 @@ BURST_MOTION = 0.35       # combined foot speed (frame-heights/s) above this = t
 BURST_MIN_S = 0.6         # a real approach burst lasts at least this
 BURST_MAX_S = 5.0         # ... and (even stretched by slo-mo) no more than this
 FOOTVIS_MIN = 0.45        # the approach has the feet clearly in frame; bystander walk-backs do not
+# DEC-131 landmark-robust delivery selector (validated offline on all labeled clips + the 01:03 clip,
+# examples/form_selector_sim.py): the swing amplitude is measured in the bowler's own SHOULDER-WIDTHS (a real
+# bowling swing is many shoulder-widths of wrist travel; walking/pacing arm-sway is a small fraction), which cancels
+# the apparent-scale + foreshortening difference between iOS and server MediaPipe landmarks.
+SWING_SHW_FLOOR = 0.015   # shoulder-width floor (a legit edge-on side-view delivery reads ~0.017; guards shw→0)
+WALKBACK_DY = 0.08        # body-center drop (moving toward a rear/overhead camera) above this flags a walk-back …
+WALKBACK_PENALTY = 4.0    # … and divides that burst's score by (1 + gain·(dy − WALKBACK_DY)) — resolves 2-motion clips
+HOLD_SEARCH_MAX_S = 1.5   # the posted finish follows the slide within this; don't latch onto a later still run (a
+                          # walk-back's stop) — that would stretch the swing window onto the wrong motion (DEC-131)
 
 
 def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_MAX_S, still_thr=FOOT_STILL_FINISH):
@@ -224,11 +233,17 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
     # The delivery's signature is the bowling-arm SWING — one large, contiguous wrist arc — not the feet, which on
     # a long clip (lots of pre-shot pacing, practice swings, a 30 s capture) break into many short step-bursts that
     # tie with that non-delivery motion under a footvis×duration score. Weight each candidate by the wrist-arc
-    # amplitude in a widened window around it (handedness-agnostic: whichever wrist swings more) so the real
-    # delivery wins even when its own foot-burst is short. With the wrists occluded (rear view) the swing term is
-    # 0 for every burst and this degrades to the original footvis×duration ranking. No per-clip tuning.
+    # amplitude, MEASURED IN THE BOWLER'S OWN SHOULDER-WIDTHS (handedness-agnostic: whichever wrist swings more).
+    # Normalizing by per-window shoulder width cancels the apparent-scale + foreshortening gap between iOS and
+    # server landmarks and separates a true swing (many shoulder-widths) from a walk-back's arm-sway (a fraction),
+    # even when the walk-back is closer / has more raw pixels. A burst whose body-center drops toward a rear/
+    # overhead camera (DEC-131 direction-of-travel) is a walk-back, not the delivery → penalized. With the wrists
+    # occluded this degrades toward the footvis×duration ranking. No per-clip tuning; see form_selector_sim.py.
     wy_l = _smooth(_point(lms, (L_WRIST,), 1), 5)
     wy_r = _smooth(_point(lms, (R_WRIST,), 1), 5)
+    shoulder_w = np.abs(_point(lms, (L_SHOULDER,), 0) - _point(lms, (R_SHOULDER,), 0))
+    body_cy = (_point(lms, (L_SHOULDER,), 1) + _point(lms, (R_SHOULDER,), 1)
+               + _point(lms, (L_HIP,), 1) + _point(lms, (R_HIP,), 1)) / 4.0
 
     def _swing_amp(b):
         m = (t >= b[0] - 1.5) & (t <= b[1] + 1.0)
@@ -237,10 +252,25 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
             v = wy[m][~np.isnan(wy[m])]
             if len(v) >= 4:
                 amps.append(float(np.max(v) - np.min(v)))
-        return max(amps) if amps else 0.0
+        raw = max(amps) if amps else 0.0
+        sw = shoulder_w[m][~np.isnan(shoulder_w[m])]
+        shw = float(np.median(sw)) if len(sw) else SWING_SHW_FLOOR
+        return raw / max(shw, SWING_SHW_FLOOR)
+
+    def _edge_mean(a, lo, hi):           # mean over the first/last ~20 % of a window (robust endpoint)
+        idx = np.where((t >= lo) & (t <= hi))[0]
+        if len(idx) < 4:
+            return np.nan, np.nan
+        k = max(2, len(idx) // 5)
+        return float(np.nanmean(a[idx[:k]])), float(np.nanmean(a[idx[-k:]]))
+
+    def _walkback_dy(b):                 # body-center drop toward a rear/overhead camera over the burst
+        y0, y1 = _edge_mean(body_cy, b[0] - 0.4, b[1] + 0.4)
+        return 0.0 if (np.isnan(y0) or np.isnan(y1)) else (y1 - y0)
 
     def _score(b):
-        return b[2] * (0.15 * min(b[1] - b[0], 2.5) + _swing_amp(b))
+        base = b[2] * (0.15 * min(b[1] - b[0], 2.5) + _swing_amp(b))
+        return base / (1.0 + WALKBACK_PENALTY * max(0.0, _walkback_dy(b) - WALKBACK_DY))
 
     good = [b for b in bursts if b[2] >= FOOTVIS_MIN]
     pick = (max(good, key=_score) if good
@@ -252,7 +282,8 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
     still = (np.nan_to_num(Rs, nan=9.0) < still_thr) & (np.nan_to_num(Ls, nan=9.0) < still_thr)
     hold = None
     i = int(np.searchsorted(t, b1 - 0.4))
-    while i < n:
+    hold_deadline = b1 + HOLD_SEARCH_MAX_S            # the posted finish is right after the slide, not 5 s later
+    while i < n and t[i] <= hold_deadline:
         if still[i]:
             j = i
             while j < n and still[j]:
