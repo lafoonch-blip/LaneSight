@@ -151,7 +151,18 @@ nonisolated enum OnDeviceFormEngine {
         // slide stop
         let sfAnchor = E6 ?? slidePlant
         let (slideFootLab, slideSpeedArr) = FormEngine.slideFoot(t, Rs, Ls, t0: sfAnchor - 0.3, t1: holdEnd, handed: handed)
-        var slideStop = FormEngine.slideStop(t, slideSpeed: slideSpeedArr, anchor: sfAnchor, tTo: holdEnd) ?? holdStart
+        // E8 robust to a wrong/late anchor: the slide stop is ~0.3 s after the slide plant, never > SLIDE_MAX_S. The
+        // bottom-of-arc E6 is fragile on a windowed on-device pose (DEC-131); when it's mis-detected late it pushes
+        // the stop onto the trail-leg follow-through ~1.5 s later (8825/8826). Clamp the anchor toward the slide
+        // plant + bound the search — a no-op on a clean clip (E6 ≈ plant + 0.3-0.4 s). Keep the foot/speed from the
+        // original window so the slide-foot ID is unchanged.
+        let stopAnchor = Swift.min(sfAnchor, slidePlant + 0.5)
+        let stopTo = Swift.min(holdEnd, slidePlant + FormEngine.SLIDE_MAX_S)
+        // When no clear rest is found (a mis-identified slide foot on a noisy on-device pose), the slide stop is
+        // ~0.3 s after the slide plant — use that, NOT the posted-finish holdStart (~1.5 s later, the big 8825 E8
+        // error). DEC-131.
+        var slideStop = FormEngine.slideStop(t, slideSpeed: slideSpeedArr, anchor: stopAnchor, tTo: stopTo)
+            ?? Swift.min(holdStart, slidePlant + 0.3)
 
         let rawFirstToRelease = E7.map { $0 - firstStep }
         var (isSlow, factor, slowNote) = FormEngine.detectSlowmo(stepIntervals: rawIntervals.map { Optional($0) },

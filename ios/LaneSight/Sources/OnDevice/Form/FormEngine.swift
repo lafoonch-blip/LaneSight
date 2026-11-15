@@ -28,6 +28,7 @@ nonisolated enum FormEngine {
     static let HOLD_SEARCH_MAX_S = 1.5   // posted finish follows the slide within this; don't latch a later still run
     static let SLIDE_STOP_SPEED = 0.12
     static let SLIDE_STOP_HOLD_S = 0.10
+    static let SLIDE_MAX_S = 0.7     // DEC-131: a real slide never exceeds this; bounds the E8 search vs a late anchor
     static let RHYTHM_SPEEDS_UP_MAX = 0.85
     static let RHYTHM_SLOWS_DOWN_MIN = 1.15
     static let BACKSWING_ABOVE_MIN = 0.15

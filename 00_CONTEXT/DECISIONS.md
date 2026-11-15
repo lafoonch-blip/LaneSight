@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.88  
+Version: 1.89  
 Last Updated: 2026-11-15  
 Owner: Shayne  
-Supersedes: v1.87 (DEC-131 swing-aware on-device prescan: top-3 candidates, coarse-pose + frozen-selector pick, full-rate winner — fixes 8847 widen/8825/8826/01:03; 8980 remains a device-landmark limit)
+Supersedes: v1.88 (DEC-131 E8 slide-stop robustness: clamp the search + plant-based nil fallback — device 8825 68f→12f, 8826 64f→10f, no-op on good landmarks)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1741,6 +1741,17 @@ identically across coarse and full-rate, so it's the frozen selector's resolutio
 prescan or stride. Fixed on the server (full-quality landmarks); on device it stays honesty-gated +
 `XCTExpectFailure` in `testDeliveryWindowPicksRealDelivery`. Offline validation harness:
 `examples/form_prescan_concat.py`.
+**E8 (slide-stop) robustness (both engines):** once the swing-aware prescan put 8825/8826 on the right delivery,
+their E8 error *grew* (device 8825 68 f, 8826 64 f). Diagnosed (examples/form_e8_method.py, frame dumps of the
+slide-foot speed vs the labelled E8): the engine is correct on full-quality landmarks, but on the tighter on-device
+pose the bottom-of-arc **E6 anchor is unreliable**, so `_slide_stop` either latched onto the trail-leg
+follow-through ~1.5 s late or found no rest and fell back to `hold_start` (the posted finish, ~1.5 s late). Two
+general fixes, no-ops on good landmarks (pytest 465 pass, cached E8 unchanged on every clip): (1) **clamp the stop
+search** — anchor `min(E6, slide_plant+0.5)`, upper bound `slide_plant + SLIDE_MAX_S (0.7 s)`, since a real slide is
+~0.25–0.40 s; (2) **nil-fallback = `min(hold_start, slide_plant + 0.3)`** instead of `hold_start`. Device E8:
+**8825 68 f → 12 f, 8826 64 f → 10 f.** Bonus: fixing E8 un-nulled E4/E7 on 8825 (the DEC-095 release-vs-E8 honesty
+gate had been nulling them off the bad E8) — now detected at ~2 f. The residual ~10–12 f is bounded by the device
+slide-plant (E5) landing ~13 f early — a separate plant-detection limit, not E8.
 **Holdout status (IMPORTANT):** **IMG_8980 is no longer a blind-test clip.** DEC-129 held it out of the parity
 gate as unseen; this fix was *developed on it* (the server selector + hold-bound were tuned against its
 delivery-then-walk-back failure), so it is now a **training clip** and cannot certify generalization. The selector

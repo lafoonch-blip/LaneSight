@@ -392,6 +392,8 @@ def _setup_hold_end(t, Rs, Ls, burst_start, max_lookback=1.5, still_thr=FOOT_STI
 # clips (form_labels.json): within ±1–4 frames vs the labeled E8 across rear and side views.
 SLIDE_STOP_SPEED = 0.12       # normalized foot-heights/s — below this (sustained) the slide foot is at rest
 SLIDE_STOP_HOLD_S = 0.10      # the low-speed run must persist this long (reject a momentary dip mid-slide)
+SLIDE_MAX_S = 0.7             # a real slide (plant → stop) never exceeds this; bounds the E8 search so a fragile /
+                              # mis-detected anchor can't put the stop on the trail-leg follow-through ~1.5 s later
 
 
 def _slide_foot(t, Rs, Ls, t0, t1, handed=None):
@@ -970,9 +972,18 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # old E8=hold_start, which was the (much later) both-feet-still posted finish.
     _sf_anchor = E6 if E6 is not None else slide_plant
     slide_foot_lab, slide_speed = _slide_foot(t, Rs, Ls, _sf_anchor - 0.3, hold_end, handed)
-    slide_stop = _slide_stop(t, slide_speed, _sf_anchor, hold_end)
+    # E8 is robust to a wrong/late anchor: the slide stop is ~0.3 s after the slide plant, never > SLIDE_MAX_S.
+    # The bottom-of-arc E6 anchor is fragile on a windowed on-device pose (DEC-131) — when it's mis-detected late it
+    # pushes the stop onto the trail-leg follow-through ~1.5 s later. Clamp the anchor toward the slide plant and
+    # bound the search; on a clean clip (E6 ≈ plant + 0.3–0.4 s) this is a no-op, so the server result is unchanged.
+    _stop_anchor = min(_sf_anchor, slide_plant + 0.5)
+    _stop_to = min(hold_end, slide_plant + SLIDE_MAX_S)
+    slide_stop = _slide_stop(t, slide_speed, _stop_anchor, _stop_to)
     if slide_stop is None:
-        slide_stop = hold_start
+        # The slide foot never clearly came to rest in the search window (e.g. a mis-identified slide foot on a
+        # noisy on-device pose). The slide stop is ~0.3 s after the slide plant — use that, NOT the posted finish
+        # hold_start (~1.5 s later, which produced the big 8825/8826 E8 errors). DEC-131.
+        slide_stop = min(hold_start, slide_plant + 0.3)
 
     raw_first_to_release = (E7 - first_step) if (E7 is not None) else None
     is_slow, factor, slownote = detect_slowmo(raw_intervals, raw_first_to_release)
