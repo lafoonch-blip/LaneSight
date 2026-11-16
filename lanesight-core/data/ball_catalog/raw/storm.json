@@ -2,6 +2,163 @@
  {
   "manufacturer": "Storm",
   "parent_company": "Storm Products",
+  "name": "!Q Tour 78/U",
+  "product_line": "Master",
+  "performance_tier": "upper_mid",
+  "release_date": "2023-12",
+  "colors": "Crimson",
+  "coverstock_name": "Controll 78 Urethane",
+  "cover_type": "urethane",
+  "core_name": "C3C",
+  "core_type": "symmetric",
+  "rg_15": 2.49,
+  "diff_15": 0.029,
+  "int_diff_15": null,
+  "factory_finish": "500 Grit",
+  "recommended_oil": "Heavy, Medium-Heavy",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": "1",
+   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
+   "backend": "1",
+   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
+   "reaction_shape": "Smooth"
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-iq-tour-78-u.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": null,
+   "length": null,
+   "length_scale": null,
+   "length_label": null,
+   "reaction_label": null
+  },
+  "reaction_description": "Urethane !Q Tour: smooth, early, very predictable roll for short or flat patterns.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVLL/BBMVLL.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-iq-tour-78u-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-iq-tour-78u-bowling-ball",
+   "https://www.bowling.com/products/storm-iq-tour-78-u.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings.hook",
+   "retailer_ratings.hook_potential_label",
+   "retailer_ratings.length_label"
+  ],
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium-Low. Page-default spec table shows the 12 lb ball (RG 2.65, diff 0.035); 15 lb values used here. Durometer 78. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "!Q Tour Edition",
+  "product_line": "Master",
+  "performance_tier": "upper_mid",
+  "release_date": "2012-07",
+  "colors": "Midnight Blue",
+  "coverstock_name": "R2S Solid",
+  "cover_type": "solid",
+  "core_name": "C3C",
+  "core_type": "symmetric",
+  "rg_15": 2.49,
+  "diff_15": 0.029,
+  "int_diff_15": null,
+  "factory_finish": "4000 Grit",
+  "recommended_oil": "Light-Medium, Medium, Medium-Heavy",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": "5-7",
+   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
+   "backend": "4",
+   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
+   "reaction_shape": "Smooth"
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-iq-tour.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": null,
+   "length": null,
+   "length_scale": null,
+   "length_label": null,
+   "reaction_label": null
+  },
+  "reaction_description": "Forgiving symmetric solid with a smooth, continuous benchmark motion across many conditions.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMTQT/BBMTQT.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-iq-tour-edition-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-iq-tour-edition-bowling-ball",
+   "https://www.bowling.com/products/storm-iq-tour.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings.hook",
+   "retailer_ratings.hook_potential_label",
+   "retailer_ratings.length_label"
+  ],
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium-High. Page-default spec table shows the 16 lb ball (diff 0.035); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "!Q Tour Sapphire",
+  "product_line": "Master",
+  "performance_tier": "upper_mid",
+  "release_date": "2026-08",
+  "colors": "Sapphire",
+  "coverstock_name": "R2S Pearl",
+  "cover_type": "pearl",
+  "core_name": "C3C",
+  "core_type": "symmetric",
+  "rg_15": 2.49,
+  "diff_15": 0.029,
+  "int_diff_15": null,
+  "factory_finish": "Power Edge",
+  "recommended_oil": "Light-Medium, Medium",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": "6-9",
+   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
+   "backend": "7-8",
+   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
+   "reaction_shape": "Angular"
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-iq-tour-sapphire.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": "Medium",
+   "length": null,
+   "length_scale": null,
+   "length_label": "Middle",
+   "reaction_label": null
+  },
+  "reaction_description": "Pearl !Q Tour: more length and a cleaner, angular backend than the solid, for lighter oil.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVQH/IQ_Sapphire_Small.png?v=b7051d5c",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-iq-tour-sapphire-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-iq-tour-sapphire-bowling-ball",
+   "https://www.bowling.com/products/storm-iq-tour-sapphire.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings.hook"
+  ],
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-Low. Page-default spec table shows the 16 lb ball (diff 0.035); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
   "name": "Alpha Crux",
   "product_line": "Premier",
   "performance_tier": "high",
@@ -46,7 +203,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Powerful Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (diff 0.052, PSA 0.017); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Powerful Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (diff 0.052, PSA 0.017); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -96,7 +254,64 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Strong Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Strong Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "CLEAR STORM PINK PWBA",
+  "product_line": "Ice",
+  "performance_tier": "spare",
+  "release_date": "2026-11",
+  "colors": "Clear/Pink",
+  "coverstock_name": "Clear Polyester",
+  "cover_type": "polyester",
+  "core_name": "Cube",
+  "core_type": "symmetric",
+  "rg_15": 2.66,
+  "diff_15": 0.018,
+  "int_diff_15": null,
+  "factory_finish": "3500-grit Polished",
+  "recommended_oil": null,
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": null,
+   "length_scale": null,
+   "backend": null,
+   "backend_scale": null,
+   "reaction_shape": null
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-clear-storm-pink-pwba.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": "Low",
+   "length": null,
+   "length_scale": null,
+   "length_label": "Long",
+   "reaction_label": null
+  },
+  "reaction_description": "Clear polyester spare ball that goes nearly straight, taking oil out of play when shooting spares.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBPVPB/BBPVPB@1.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-clear-pink-pwba-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-clear-pink-pwba-bowling-ball",
+   "https://stormproducts.nyc3.cdn.digitaloceanspaces.com/product_pages/Balls/Storm/Clear_Storm_Pink_PWBA/Clear%20Storm%20Pink%20PWBA%20Tech%20Data%20Final.pdf",
+   "https://www.bowling.com/products/storm-clear-storm-pink-pwba.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "recommended_oil",
+   "mfr_ratings",
+   "retailer_ratings.hook_potential",
+   "retailer_ratings.length",
+   "retailer_ratings.reaction_label"
+  ],
+  "notes": "Name as on the Storm tech sheet ('Clear Storm Pink PWBA'). performance_tier from bowling.com category 'Plastic / Spare Balls'. Page-default spec table shows the 16 lb ball (RG 2.62, diff 0.018); 15 lb values (2.66 / .018) read from the Storm tech data sheet (image PDF) and match bowling.com. CONFLICT: Storm product page names the weight block 'Cube'; the tech sheet says 'Hex Core' - page value used (same as Clear Storm Teal). Colors: Storm page 'Clear/Pink', tech sheet 'Pink', bowling.com 'Pink/White'. Flare potential Low; durometer 82-84. bowling.com recommended lane condition: Any. Release date 11/13/26 per Storm page. Storm Hook Length / Ball Shape sliders load from the product search API, which this run could not access; the static product page and tech sheet publish no rating, so mfr_ratings is null.",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -147,7 +362,8 @@
    "recommended_oil",
    "mfr_ratings"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 12.00 lb ball (RG 2.8, diff 0.02); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 12.00 lb ball (RG 2.8, diff 0.02); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -197,7 +413,8 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "Storm filter tag reads 'SPI-Lab'. performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.59, diff 0.019); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Storm filter tag reads 'SPI-Lab'. performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.59, diff 0.019); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -246,7 +463,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.47, PSA 0.016); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.47, PSA 0.016); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -295,7 +513,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.47, PSA 0.016); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.47, PSA 0.016); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -347,7 +566,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. bowling.com lists RG 2.52 / diff .058 (matching Storm's 16 lb values); Storm 15 lb values used. Page-default spec table shows the 16 lb ball (RG 2.52, diff 0.058); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. bowling.com lists RG 2.52 / diff .058 (matching Storm's 16 lb values); Storm 15 lb values used. Page-default spec table shows the 16 lb ball (RG 2.52, diff 0.058); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -398,7 +618,8 @@
    "recommended_oil",
    "mfr_ratings"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 12.00 lb ball (RG 2.72, diff 0.005); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 12.00 lb ball (RG 2.72, diff 0.005); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -451,7 +672,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Any. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -503,56 +725,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "Identity B/C/P",
-  "product_line": "Premier",
-  "performance_tier": "high",
-  "release_date": "2025-07",
-  "colors": "Black/Cherry/Purple",
-  "coverstock_name": "REX Pearl",
-  "cover_type": "pearl",
-  "core_name": "ID AI",
-  "core_type": "asymmetric",
-  "rg_15": 2.51,
-  "diff_15": 0.055,
-  "int_diff_15": 0.011,
-  "factory_finish": "Power Edge",
-  "recommended_oil": "Medium",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": "9-10",
-   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
-   "backend": "10",
-   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
-   "reaction_shape": "Angular"
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/discontinued/storm-identity-black-cherry-purple-limited-edition.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": "High",
-   "length": null,
-   "length_scale": null,
-   "length_label": "Late",
-   "reaction_label": null
-  },
-  "reaction_description": "Belmonte asymmetric pearl colorway: easy length then a strong, angular backend on medium oil and transition.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVDB/BBMVDB.png",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-identity-bcp-bowling-ball",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-identity-bcp-bowling-ball",
-   "https://www.bowling.com/products/discontinued/storm-identity-black-cherry-purple-limited-edition.htm"
-  ],
-  "missing": [
-   "mfr_ratings.hook"
-  ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm flare potential: High. bowling.com files this page under discontinued; Storm still lists the ball. Page-default spec table shows the 16 lb ball (RG 2.5, PSA 0.009); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -601,7 +775,58 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "Storm spec table lists Line 'Premier'; Storm's site filter tags it 'Signature' (Belmonte signature ball). performance_tier from bowling.com category 'High-Performance Balls'. Storm flare potential: High. bowling.com files this page under discontinued; Storm still lists the ball. Page-default spec table shows the 16 lb ball (RG 2.5, PSA 0.009); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Storm spec table lists Line 'Premier'; Storm's site filter tags it 'Signature' (Belmonte signature ball). performance_tier from bowling.com category 'High-Performance Balls'. Storm flare potential: High. bowling.com files this page under discontinued; Storm still lists the ball. Page-default spec table shows the 16 lb ball (RG 2.5, PSA 0.009); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "Identity B/C/P",
+  "product_line": "Premier",
+  "performance_tier": "high",
+  "release_date": "2025-07",
+  "colors": "Black/Cherry/Purple",
+  "coverstock_name": "REX Pearl",
+  "cover_type": "pearl",
+  "core_name": "ID AI",
+  "core_type": "asymmetric",
+  "rg_15": 2.51,
+  "diff_15": 0.055,
+  "int_diff_15": 0.011,
+  "factory_finish": "Power Edge",
+  "recommended_oil": "Medium",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": "9-10",
+   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
+   "backend": "10",
+   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
+   "reaction_shape": "Angular"
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/discontinued/storm-identity-black-cherry-purple-limited-edition.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": "High",
+   "length": null,
+   "length_scale": null,
+   "length_label": "Late",
+   "reaction_label": null
+  },
+  "reaction_description": "Belmonte asymmetric pearl colorway: easy length then a strong, angular backend on medium oil and transition.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVDB/BBMVDB.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-identity-bcp-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-identity-bcp-bowling-ball",
+   "https://www.bowling.com/products/discontinued/storm-identity-black-cherry-purple-limited-edition.htm"
+  ],
+  "missing": [
+   "mfr_ratings.hook"
+  ],
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm flare potential: High. bowling.com files this page under discontinued; Storm still lists the ball. Page-default spec table shows the 16 lb ball (RG 2.5, PSA 0.009); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -650,7 +875,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Powerful Asymmetrical. Storm flare potential: High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Powerful Asymmetrical. Storm flare potential: High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -699,7 +925,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (diff 0.053, PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (diff 0.053, PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -748,7 +975,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "Storm lists release date 11/06/26; ball is listed on stormbowling.com ahead of release. performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Storm lists release date 11/06/26; ball is listed on stormbowling.com ahead of release. performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -798,161 +1026,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm buyers guide labels it 'MID PERFORMANCE'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "!Q Tour 78/U",
-  "product_line": "Master",
-  "performance_tier": "upper_mid",
-  "release_date": "2023-12",
-  "colors": "Crimson",
-  "coverstock_name": "Controll 78 Urethane",
-  "cover_type": "urethane",
-  "core_name": "C3C",
-  "core_type": "symmetric",
-  "rg_15": 2.49,
-  "diff_15": 0.029,
-  "int_diff_15": null,
-  "factory_finish": "500 Grit",
-  "recommended_oil": "Heavy, Medium-Heavy",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": "1",
-   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
-   "backend": "1",
-   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
-   "reaction_shape": "Smooth"
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-iq-tour-78-u.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": null,
-   "length": null,
-   "length_scale": null,
-   "length_label": null,
-   "reaction_label": null
-  },
-  "reaction_description": "Urethane !Q Tour: smooth, early, very predictable roll for short or flat patterns.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVLL/BBMVLL.png",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-iq-tour-78u-bowling-ball",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-iq-tour-78u-bowling-ball",
-   "https://www.bowling.com/products/storm-iq-tour-78-u.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings.hook",
-   "retailer_ratings.hook_potential_label",
-   "retailer_ratings.length_label"
-  ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium-Low. Page-default spec table shows the 12 lb ball (RG 2.65, diff 0.035); 15 lb values used here. Durometer 78. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "!Q Tour Edition",
-  "product_line": "Master",
-  "performance_tier": "upper_mid",
-  "release_date": "2012-07",
-  "colors": "Midnight Blue",
-  "coverstock_name": "R2S Solid",
-  "cover_type": "solid",
-  "core_name": "C3C",
-  "core_type": "symmetric",
-  "rg_15": 2.49,
-  "diff_15": 0.029,
-  "int_diff_15": null,
-  "factory_finish": "4000 Grit",
-  "recommended_oil": "Light-Medium, Medium, Medium-Heavy",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": "5-7",
-   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
-   "backend": "4",
-   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
-   "reaction_shape": "Smooth"
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-iq-tour.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": null,
-   "length": null,
-   "length_scale": null,
-   "length_label": null,
-   "reaction_label": null
-  },
-  "reaction_description": "Forgiving symmetric solid with a smooth, continuous benchmark motion across many conditions.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMTQT/BBMTQT.png",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-iq-tour-edition-bowling-ball",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-iq-tour-edition-bowling-ball",
-   "https://www.bowling.com/products/storm-iq-tour.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings.hook",
-   "retailer_ratings.hook_potential_label",
-   "retailer_ratings.length_label"
-  ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium-High. Page-default spec table shows the 16 lb ball (diff 0.035); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "!Q Tour Sapphire",
-  "product_line": "Master",
-  "performance_tier": "upper_mid",
-  "release_date": "2026-08",
-  "colors": "Sapphire",
-  "coverstock_name": "R2S Pearl",
-  "cover_type": "pearl",
-  "core_name": "C3C",
-  "core_type": "symmetric",
-  "rg_15": 2.49,
-  "diff_15": 0.029,
-  "int_diff_15": null,
-  "factory_finish": "Power Edge",
-  "recommended_oil": "Light-Medium, Medium",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": "6-9",
-   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
-   "backend": "7-8",
-   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
-   "reaction_shape": "Angular"
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-iq-tour-sapphire.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": "Medium",
-   "length": null,
-   "length_scale": null,
-   "length_label": "Middle",
-   "reaction_label": null
-  },
-  "reaction_description": "Pearl !Q Tour: more length and a cleaner, angular backend than the solid, for lighter oil.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVQH/IQ_Sapphire_Small.png?v=b7051d5c",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-iq-tour-sapphire-bowling-ball",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-iq-tour-sapphire-bowling-ball",
-   "https://www.bowling.com/products/storm-iq-tour-sapphire.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings.hook"
-  ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-Low. Page-default spec table shows the 16 lb ball (diff 0.035); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm buyers guide labels it 'MID PERFORMANCE'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (PSA 0.013); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1003,7 +1078,8 @@
    "recommended_oil",
    "mfr_ratings"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1054,7 +1130,8 @@
    "recommended_oil",
    "mfr_ratings"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1104,7 +1181,8 @@
    "int_diff_15",
    "mfr_ratings"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1155,7 +1233,8 @@
    "mfr_ratings",
    "recommended_oil"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Page-default spec table shows the 12 lb ball (RG 2.72, diff 0.005); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).; Storm publishes no oil condition; bowling.com says light oil (not used); earlier value removed on verification 2026-10-21"
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Page-default spec table shows the 12 lb ball (RG 2.72, diff 0.005); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).; Storm publishes no oil condition; bowling.com says light oil (not used); earlier value removed on verification 2026-10-21",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1205,7 +1284,8 @@
    "int_diff_15",
    "mfr_ratings"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1255,7 +1335,8 @@
    "int_diff_15",
    "mfr_ratings"
   ],
-  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1306,7 +1387,8 @@
    "recommended_oil",
    "mfr_ratings"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Storm also files this SKU under a 'Bowling Balls Archive' category, but it remains purchasable on the site. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Plastic / Spare Balls'. Storm flare potential: Low. bowling.com recommended lane condition: Light oil volume. Storm also files this SKU under a 'Bowling Balls Archive' category, but it remains purchasable on the site. Page-default spec table shows the 16 lb ball (RG 2.68); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1356,7 +1438,8 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "Storm lists PSA '0.2' for the 15 lb symmetric Monsoon; implausible value (likely data-entry error), so int_diff_15 left null. performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Storm lists PSA '0.2' for the 15 lb symmetric Monsoon; implausible value (likely data-entry error), so int_diff_15 left null. performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1405,7 +1488,8 @@
   "missing": [
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.54, diff 0.05, PSA 0.015); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'High-Performance Balls'. Storm ball profile: Responsive Asymmetrical. Storm flare potential: High. Page-default spec table shows the 16 lb ball (RG 2.54, diff 0.05, PSA 0.015); 15 lb values used here. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1455,7 +1539,8 @@
    "mfr_ratings.hook",
    "retailer_ratings"
   ],
-  "notes": "performance_tier: Storm describes it as an Ice-series polyester ball for spare shooting/beginners. Storm flare potential: Low. No bowling.com product page found. Page-default spec table shows the 12 lb ball (RG 2.8); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier: Storm describes it as an Ice-series polyester ball for spare shooting/beginners. Storm flare potential: Low. No bowling.com product page found. Page-default spec table shows the 12 lb ball (RG 2.8); 15 lb values used here. Durometer 82-84. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1506,7 +1591,8 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm buyers guide labels it 'MID PERFORMANCE'. Storm ball profile: Strong Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm buyers guide labels it 'MID PERFORMANCE'. Storm ball profile: Strong Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1556,7 +1642,8 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Upper Mid-Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1608,7 +1695,63 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (RG 2.56, diff 0.023); 15 lb values used here. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Smooth Symmetrical. Storm flare potential: Medium. Page-default spec table shows the 16 lb ball (RG 2.56, diff 0.023); 15 lb values used here. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "PITCH BLACK 78",
+  "product_line": "Thunder",
+  "performance_tier": "mid",
+  "release_date": "2026-12",
+  "colors": "Pitch Black",
+  "coverstock_name": "Stabilyze Solid Urethane",
+  "cover_type": "urethane",
+  "core_name": "Capacitor",
+  "core_type": "symmetric",
+  "rg_15": 2.57,
+  "diff_15": 0.022,
+  "int_diff_15": null,
+  "factory_finish": "1000-grit Abralon",
+  "recommended_oil": "Medium-to-Heavy",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": null,
+   "length_scale": null,
+   "backend": null,
+   "backend_scale": null,
+   "reaction_shape": null
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-pitch-black-78.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": "Low-to-Medium",
+   "length": null,
+   "length_scale": null,
+   "length_label": "Early",
+   "reaction_label": null
+  },
+  "reaction_description": "Solid urethane on a low-flare symmetric core; reads very early but lets the bowler shape it more than the original Pitch Black.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BBMVTL/BBMVTL.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-pitch-black-78-bowling-ball",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-pitch-black-78-bowling-ball",
+   "https://stormproducts.nyc3.cdn.digitaloceanspaces.com/product_pages/Balls/Storm/Pitch_Black_78/Pitch%20Black%2078%20Tech%20Data.pdf",
+   "https://www.bowling.com/products/storm-pitch-black-78.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings",
+   "retailer_ratings.hook_potential",
+   "retailer_ratings.length",
+   "retailer_ratings.reaction_label"
+  ],
+  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Page-default spec table shows the 16 lb ball (RG 2.56, diff 0.023); 15 lb values (2.57 / .022) from the Storm tech data sheet, matching bowling.com. Storm page lists PSA 0.013 for the 16 lb ball, but the Capacitor core is symmetric and the tech sheet publishes no 15 lb PSA, so int_diff_15 is null. recommended_oil is bowling.com's 'Recommended Lane Condition' (Storm states none). Flare potential Medium-Low; durometer 78. Release date 12/18/26 per Storm page. Storm Hook Length / Ball Shape sliders load from the product search API, which this run could not access; the static product page and tech sheet publish no rating, so mfr_ratings is null.",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1658,7 +1801,8 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. Page-default spec table shows the 16 lb ball (RG 2.52, diff 0.046); 15 lb values used here. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium-High. Page-default spec table shows the 16 lb ball (RG 2.52, diff 0.046); 15 lb values used here. Durometer 74-76. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1710,7 +1854,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "Storm product page publishes no spec table for this colorway; RG/diff (15 lb), cover, core, finish and color taken from bowling.com. Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'."
+  "notes": "Storm product page publishes no spec table for this colorway; RG/diff (15 lb), cover, core, finish and color taken from bowling.com. Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'.",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1763,7 +1908,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -1816,165 +1962,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Medium-Low. bowling.com files this page under discontinued; Storm still lists the ball. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "TROPICAL SURGE PINK-PURPLE",
-  "product_line": "Tropical",
-  "performance_tier": "entry",
-  "release_date": "2019-05",
-  "colors": "Pink/Purple",
-  "coverstock_name": "Reactor Pearl",
-  "cover_type": "pearl",
-  "core_name": "Surge Core",
-  "core_type": "symmetric",
-  "rg_15": 2.58,
-  "diff_15": 0.024,
-  "int_diff_15": null,
-  "factory_finish": "1500 Grit Polished",
-  "recommended_oil": "Light",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": null,
-   "length_scale": null,
-   "backend": null,
-   "backend_scale": null,
-   "reaction_shape": null
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-pink-purple.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": null,
-   "length": null,
-   "length_scale": null,
-   "length_label": null,
-   "reaction_label": null
-  },
-  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1TQI/Tropical_Surge_Pink-Purple.png",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-pink-purple",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-pink-purple",
-   "https://www.stormbowling.com/bowling-ball-buyers-guide",
-   "https://www.bowling.com/products/storm-tropical-surge-pearl-pink-purple.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings",
-   "retailer_ratings.hook_potential_label",
-   "retailer_ratings.length_label"
-  ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "TROPICAL SURGE SILVER-PURPLE",
-  "product_line": "Tropical",
-  "performance_tier": "entry",
-  "release_date": "2025-05",
-  "colors": "Silver/Purple",
-  "coverstock_name": "Reactor Pearl Coverstock",
-  "cover_type": "pearl",
-  "core_name": "Surge (12#-16#)",
-  "core_type": "symmetric",
-  "rg_15": 2.58,
-  "diff_15": 0.024,
-  "int_diff_15": null,
-  "factory_finish": "Reacta Gloss",
-  "recommended_oil": "Light",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": "10-11",
-   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
-   "backend": "6",
-   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
-   "reaction_shape": null
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-silver-purple.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": null,
-   "length": null,
-   "length_scale": null,
-   "length_label": null,
-   "reaction_label": null
-  },
-  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1VVU/Tropical_Surge_Silver-Purple.png",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-silver-purple",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-silver-purple",
-   "https://www.bowling.com/products/storm-tropical-surge-pearl-silver-purple.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings.hook",
-   "retailer_ratings.hook_potential_label",
-   "retailer_ratings.length_label"
-  ],
-  "notes": "Storm product page publishes no spec table for this colorway; RG/diff (15 lb), cover, core, finish and color taken from bowling.com. Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'."
- },
- {
-  "manufacturer": "Storm",
-  "parent_company": "Storm Products",
-  "name": "TROPICAL SURGE TEAL-BLUE",
-  "product_line": "Tropical",
-  "performance_tier": "entry",
-  "release_date": "2019-05",
-  "colors": "Teal/Blue",
-  "coverstock_name": "Reactor Pearl",
-  "cover_type": "pearl",
-  "core_name": "Surge Core",
-  "core_type": "symmetric",
-  "rg_15": 2.58,
-  "diff_15": 0.024,
-  "int_diff_15": null,
-  "factory_finish": "1500 Grit Polished",
-  "recommended_oil": "Light",
-  "mfr_ratings": {
-   "hook": null,
-   "hook_scale": null,
-   "length": null,
-   "length_scale": null,
-   "backend": null,
-   "backend_scale": null,
-   "reaction_shape": null
-  },
-  "retailer_ratings": {
-   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-teal-blue.htm",
-   "hook_potential": null,
-   "hook_potential_scale": null,
-   "hook_potential_label": null,
-   "length": null,
-   "length_scale": null,
-   "length_label": null,
-   "reaction_label": null
-  },
-  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
-  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1TQZ/3D_Ball_-_Teal_Blue_PNG.png?v=4bb2c98c",
-  "image_source": "manufacturer",
-  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-teal-blue",
-  "spec_source_urls": [
-   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-teal-blue",
-   "https://www.stormbowling.com/bowling-ball-buyers-guide",
-   "https://www.bowling.com/products/storm-tropical-surge-pearl-teal-blue.htm"
-  ],
-  "missing": [
-   "int_diff_15",
-   "mfr_ratings",
-   "retailer_ratings.hook_potential_label",
-   "retailer_ratings.length_label"
-  ],
-  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Medium-Low. bowling.com files this page under discontinued; Storm still lists the ball. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -2027,7 +2016,8 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm flare potential: Medium-Low. bowling.com recommended lane condition: Light to medium oil. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm flare potential: Medium-Low. bowling.com recommended lane condition: Light to medium oil. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -2080,7 +2070,169 @@
    "retailer_ratings.hook_potential_label",
    "retailer_ratings.length_label"
   ],
-  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm flare potential: Medium-Low. bowling.com recommended lane condition: Light to medium oil. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Entry Level Balls'. Storm flare potential: Medium-Low. bowling.com recommended lane condition: Light to medium oil. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "TROPICAL SURGE PINK-PURPLE",
+  "product_line": "Tropical",
+  "performance_tier": "entry",
+  "release_date": "2019-05",
+  "colors": "Pink/Purple",
+  "coverstock_name": "Reactor Pearl",
+  "cover_type": "pearl",
+  "core_name": "Surge Core",
+  "core_type": "symmetric",
+  "rg_15": 2.58,
+  "diff_15": 0.024,
+  "int_diff_15": null,
+  "factory_finish": "1500 Grit Polished",
+  "recommended_oil": "Light",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": null,
+   "length_scale": null,
+   "backend": null,
+   "backend_scale": null,
+   "reaction_shape": null
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-pink-purple.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": null,
+   "length": null,
+   "length_scale": null,
+   "length_label": null,
+   "reaction_label": null
+  },
+  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1TQI/Tropical_Surge_Pink-Purple.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-pink-purple",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-pink-purple",
+   "https://www.stormbowling.com/bowling-ball-buyers-guide",
+   "https://www.bowling.com/products/storm-tropical-surge-pearl-pink-purple.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings",
+   "retailer_ratings.hook_potential_label",
+   "retailer_ratings.length_label"
+  ],
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "TROPICAL SURGE SILVER-PURPLE",
+  "product_line": "Tropical",
+  "performance_tier": "entry",
+  "release_date": "2025-05",
+  "colors": "Silver/Purple",
+  "coverstock_name": "Reactor Pearl Coverstock",
+  "cover_type": "pearl",
+  "core_name": "Surge (12#-16#)",
+  "core_type": "symmetric",
+  "rg_15": 2.58,
+  "diff_15": 0.024,
+  "int_diff_15": null,
+  "factory_finish": "Reacta Gloss",
+  "recommended_oil": "Light",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": "10-11",
+   "length_scale": "Storm 'Hook Length' slider segment(s), 1-11 (1=Early, 11=Late)",
+   "backend": "6",
+   "backend_scale": "Storm 'Ball Shape' slider segment(s), 1-11 (1=Smooth, 11=Angular)",
+   "reaction_shape": null
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-silver-purple.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": null,
+   "length": null,
+   "length_scale": null,
+   "length_label": null,
+   "reaction_label": null
+  },
+  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1VVU/Tropical_Surge_Silver-Purple.png",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-silver-purple",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-silver-purple",
+   "https://www.bowling.com/products/storm-tropical-surge-pearl-silver-purple.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings.hook",
+   "retailer_ratings.hook_potential_label",
+   "retailer_ratings.length_label"
+  ],
+  "notes": "Storm product page publishes no spec table for this colorway; RG/diff (15 lb), cover, core, finish and color taken from bowling.com. Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'.",
+  "status": "current"
+ },
+ {
+  "manufacturer": "Storm",
+  "parent_company": "Storm Products",
+  "name": "TROPICAL SURGE TEAL-BLUE",
+  "product_line": "Tropical",
+  "performance_tier": "entry",
+  "release_date": "2019-05",
+  "colors": "Teal/Blue",
+  "coverstock_name": "Reactor Pearl",
+  "cover_type": "pearl",
+  "core_name": "Surge Core",
+  "core_type": "symmetric",
+  "rg_15": 2.58,
+  "diff_15": 0.024,
+  "int_diff_15": null,
+  "factory_finish": "1500 Grit Polished",
+  "recommended_oil": "Light",
+  "mfr_ratings": {
+   "hook": null,
+   "hook_scale": null,
+   "length": null,
+   "length_scale": null,
+   "backend": null,
+   "backend_scale": null,
+   "reaction_shape": null
+  },
+  "retailer_ratings": {
+   "source_url": "https://www.bowling.com/products/storm-tropical-surge-pearl-teal-blue.htm",
+   "hook_potential": null,
+   "hook_potential_scale": null,
+   "hook_potential_label": null,
+   "length": null,
+   "length_scale": null,
+   "length_label": null,
+   "reaction_label": null
+  },
+  "reaction_description": "Entry-level pearl Tropical Surge; modest hook with some backend on light oil.",
+  "image_url": "https://assets.1.commercebuild.com/d186dcd2044cf54d8e48876defef4907/contents/BT1TQZ/3D_Ball_-_Teal_Blue_PNG.png?v=4bb2c98c",
+  "image_source": "manufacturer",
+  "product_url": "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-teal-blue",
+  "spec_source_urls": [
+   "https://www.stormbowling.com/storm-tropical-surge-bowling-ball-teal-blue",
+   "https://www.stormbowling.com/bowling-ball-buyers-guide",
+   "https://www.bowling.com/products/storm-tropical-surge-pearl-teal-blue.htm"
+  ],
+  "missing": [
+   "int_diff_15",
+   "mfr_ratings",
+   "retailer_ratings.hook_potential_label",
+   "retailer_ratings.length_label"
+  ],
+  "notes": "Release date from bowling.com (Storm lists none). performance_tier from bowling.com category 'Entry Level Balls'. Storm buyers guide labels it 'ENTRY PERFORMANCE'. Storm flare potential: Low. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  },
  {
   "manufacturer": "Storm",
@@ -2130,6 +2282,7 @@
    "int_diff_15",
    "mfr_ratings.hook"
   ],
-  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API)."
+  "notes": "performance_tier from bowling.com category 'Mid Performance Balls'. Storm ball profile: Clean Symmetrical. Storm flare potential: Medium. Durometer 73-75. 15 lb specs read from the per-weight variant data on the Storm product page (Storm catalog API).",
+  "status": "current"
  }
 ]
