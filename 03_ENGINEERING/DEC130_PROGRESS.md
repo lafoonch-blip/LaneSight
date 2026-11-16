@@ -3,6 +3,30 @@
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
 **Last updated:** 2026-11-15 (DEC-131: audio REMOVED, no mic; building the visual pin-contact classifier — see v5).
 
+## v6 (2026-11-15) — DEC-131 visual pin-contact classifier BUILT + graded
+`ops/pin_contact.py`: `deck_motion_series` (foul-anchored window over the target-lane deck, bodies-above-bases,
+per-frame phase-correlation re-align) + `detect_contact` (changepoint = largest step into the sustained scatter →
+walk back to the rise start → subtract the one calibrated offset, ~3 frames) + NOISY/WEAK guards. `PinContactDetector`
+wired into `analyze_learned` (authoritative: when it withholds, speed is unavailable — never the perspective-limited
+motion/geom fallback that produced wrong values).
+
+**Pin-contact accuracy (harvested labeled decks):** fires 5/13, **median 1.9 frames, worst 2.6, all within ±4**
+(held-out 8751 +0.1, 8752 +2.1, 8754 +1.9). The other 8 are NOISY (handheld camera-motion residual) or WEAK (far/small
+decks) → unavailable. Signal quality, not model capacity, caps coverage (a CNN over the same jittery crops wouldn't
+help) — so the "classifier" is a deterministic frame-diff changepoint (one learned offset), not a CNN → the iOS port
+is a Swift/Accelerate algorithm, not a CoreML model.
+
+**Shipping-config grade (classical-first, classifier fallback, NO audio) on 22 labeled:**
+| group | within ±0.5 | coverage | MAE | plausible-but-wrong |
+|---|---|---|---|---|
+| ALL 22 | **10/22** | 11/22 | **0.198** | IMG_8968 only |
+| Held-out 6 | **6/6** | 6/6 | 0.164 | none |
+| Landscape | 2/2 | 2/2 | 0.047 | none |
+| Portrait | 8/20 | 9/20 | 0.232 | IMG_8968 |
+vs the audio config (10/22, MAE 0.52, 3 wrong): same hit count, MAE down to 0.198, **wrongs 3→1**. The one remaining
+(IMG_8968 −0.72) is CLASSICAL's own marginal miss (0.22 over the gate), not the classifier. 8966 (a classical miss) is
+now a frame-accurate classifier HIT. **Still NOT deployed** pending the iOS port + deploy sequence.
+
 ## v5 (2026-11-15) — DEC-131: no audio; visual pin-contact classifier
 Shayne's decision: no audio-based measurement, app must not request the mic. The audio work below (v4) proved pin
 contact is a frame-accurate event (20/22 within ±4 frames) but is **removed** (`ops/audio_contact.py`, the audio block

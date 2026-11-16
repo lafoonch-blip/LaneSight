@@ -375,12 +375,17 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None, 
         t_cls = None
         if pins is not None and pin_contact_detector is not None:
             try:
-                t_cls = pin_contact_detector.contact_time(video, S, pins, lane, vp, fps, anchor=t_geom, log=log)
+                t_cls = pin_contact_detector.contact_time(video, S, pins, lane, Tk, fps, t_foul=tf, log=log)
             except Exception as e:
                 log(f'[pin-cls] contact failed: {e}')
         t_imp = None
         if t_cls is not None:
             t_imp = t_cls; out['t_pins_src'] = 'classifier'          # frame-accurate (pins-start-moving classifier)
+        elif pin_contact_detector is not None and pins is not None:
+            # The classifier is the authority on pin contact. When it withholds (deck too noisy/weak to time), we do
+            # NOT fall back to the perspective-limited motion/geom estimate it replaces — that is the path that
+            # produced plausible-but-wrong speeds. Honest answer: unavailable.
+            out['reason_code'] = 'PIN_IMPACT_NOT_DETECTED'
         elif t_motion is not None and t_geom is not None:
             if abs(t_motion - t_geom) <= 2.0 * frame_s:
                 t_imp = max(t_motion, t_geom); out['t_pins_src'] = 'visual'
