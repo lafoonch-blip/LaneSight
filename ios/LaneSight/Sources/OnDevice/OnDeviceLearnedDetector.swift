@@ -2,6 +2,7 @@ import Foundation
 import CoreML
 import CoreVideo
 import Accelerate
+import AVFoundation
 
 // DEC-130/131: on-device LEARNED shot front-end. A Swift/CoreML parity port of ops/detector_integrate.py: run the
 // BallLaneDetector CenterNet on each (letterboxed) frame, decode the ball heat-map peak + the lane-geometry head.
@@ -76,5 +77,116 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         let m = Float(max(W, H))
         let lane6 = ODLaneParams(foulL: (lp[0] * m, lp[1] * m), foulR: (lp[2] * m, lp[3] * m), vp: (lp[4] * m, lp[5] * m))
         return (ball, lane6)
+    }
+
+    // --- lane helpers (match OnDeviceTracker) ---
+    private static let BALL_IN: Float = 8.5, LANE_IN: Float = 41.5
+    private func laneX(_ l: ODDetectedLane, _ y: Float) -> (Float, Float) { (l.left.a*y + l.left.b, l.right.a*y + l.right.b) }
+    private func expDiam(_ l: ODDetectedLane, _ y: Float) -> Float { let (a,b) = laneX(l,y); return Self.BALL_IN/Self.LANE_IN*(b-a) }
+    private func contactRow(_ l: ODDetectedLane, top: Float) -> Float {
+        let k = Self.BALL_IN/Self.LANE_IN
+        return (top + k*(l.right.b - l.left.b)) / (1 - k*(l.right.a - l.left.a))
+    }
+
+    /// Build a lane from the learned foul-corners + VP (left = foulL→vp, right = foulR→vp; x = a·y + b).
+    private func laneFrom(_ p: ODLaneParams) -> ODDetectedLane? {
+        func edge(_ p0: (Float, Float), _ p1: (Float, Float)) -> LaneEdge? {
+            guard abs(p1.1 - p0.1) > 1 else { return nil }
+            let a = (p1.0 - p0.0) / (p1.1 - p0.1); return LaneEdge(a: a, b: p0.0 - a*p0.1, resid: 0)
+        }
+        guard let le = edge(p.foulL, p.vp), let re = edge(p.foulR, p.vp) else { return nil }
+        let yNear = Int(max(p.foulL.1, p.foulR.1)), yFar = Int(p.vp.1)
+        guard yNear > yFar + 20 else { return nil }
+        let w = (re.a*Float(yNear)+re.b) - (le.a*Float(yNear)+le.b)
+        return ODDetectedLane(left: le, right: re, yNear: yNear, yFar: yFar, widthNearPx: abs(w))
+    }
+
+    /// LEARNED track fallback: run the detector on every frame, build a ball track + lane geometry, so the engine
+    /// recovers the hard camera positions the classical tracker drops. Reuses `baseGeo`'s lane/VP when the classical
+    /// lane solve succeeded (more accurate); else builds the lane from the detector's lane head. Returns nil if too
+    /// few ball detections link into a monotonic down-lane track.
+    func buildTrack(url: URL, rot: ODRotation, baseGeo: ODLaneGeometry) -> (BallTrack, ODLaneGeometry)? {
+        let asset = AVURLAsset(url: url)
+        guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
+        var raw: [(t: Double, cx: Float, cy: Float)] = []; var laneAcc: [ODLaneParams] = []; var idx = 0; var scanned = 0
+        let STRIDE = 3           // run the detector on every 3rd frame — enough points for the fit, and bounds the
+                                 // per-frame 3 MB MLMultiArray allocation (memory + latency) on long/120fps clips.
+        while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); return nil }
+            defer { idx += 1 }
+            if idx % STRIDE != 0 { continue }
+            autoreleasepool {
+                guard let raw0 = CMSampleBufferGetImageBuffer(sb) else { return }
+                let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)); scanned += 1
+                let (ball, lane) = detect(raw0, rot: rot)
+                if let l = lane { laneAcc.append(l) }
+                if let b = ball { raw.append((t, b.cx, b.cy)) }
+            }
+        }
+        guard raw.count >= 6 else { return nil }
+        // lane: prefer the classical solve; else the median learned lane
+        var lane = baseGeo.lanes.first ?? baseGeo.rawLanes.first
+        var vpY: Float
+        if let l = lane, let vp = baseGeo.vanishingPoint { vpY = vp.y; _ = l }
+        else if !laneAcc.isEmpty {
+            func med(_ f: (ODLaneParams) -> Float) -> Float { laneAcc.map(f).sorted()[laneAcc.count/2] }
+            let p = ODLaneParams(foulL: (med{$0.foulL.0}, med{$0.foulL.1}), foulR: (med{$0.foulR.0}, med{$0.foulR.1}),
+                                 vp: (med{$0.vp.0}, med{$0.vp.1}))
+            guard let ll = laneFrom(p) else { return nil }
+            lane = ll; vpY = p.vp.1
+        } else { return nil }
+        guard let L = lane else { return nil }
+        // points → contactRow/frac; robust monotonic-u fit (drop outliers once)
+        func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
+        var pts: [TrackPoint] = []
+        for (i, r) in raw.enumerated() {
+            let D = expDiam(L, r.cy); let ct = contactRow(L, top: r.cy - D/2)
+            let (xa, xb) = laneX(L, ct); guard xb - xa > 1 else { continue }
+            pts.append(TrackPoint(i: i, t: r.t, cx: r.cx, contactRow: ct, frac: (r.cx - xa)/(xb - xa)))
+        }
+        pts.sort { $0.t < $1.t }
+        guard pts.count >= 6 else { return nil }
+        // The detector fires on EVERY frame (pins, neighbour balls, non-shot frames too), so a plain fit over all
+        // points is garbage. RANSAC the ball's u(t)=1/(ct−vpY) line: the shot is the largest set of detections on a
+        // single straight, increasing-u (down-lane), positive-slope track. tol scales with the u range.
+        let U = pts.map { Double(u($0.contactRow)) }
+        let uSpan = max((U.max() ?? 0) - (U.min() ?? 0), 1e-4)
+        let tol = max(0.06 * uSpan, 0.0015)
+        var bestInl: [TrackPoint] = []
+        let N = pts.count
+        // cap the RANSAC SEED pairs to a uniform subsample (≤160) so it stays O(seeds²·N) on long clips; inliers are
+        // still counted over ALL points.
+        let cap = 160
+        let stride = max(1, N / cap)
+        var seeds: [Int] = []; var si = 0; while si < N { seeds.append(si); si += stride }
+        for a in 0..<seeds.count {
+            for b in (a+1)..<seeds.count {
+                let i = seeds[a], j = seeds[b]
+                let dt = pts[j].t - pts[i].t
+                guard dt > 0.1 else { continue }
+                let sl = (U[j] - U[i]) / dt; guard sl > 0 else { continue }
+                let ic = U[i] - sl * pts[i].t
+                var inl: [TrackPoint] = []
+                for k in 0..<N where abs(U[k] - (sl*pts[k].t + ic)) <= tol { inl.append(pts[k]) }
+                if inl.count > bestInl.count { bestInl = inl }
+            }
+        }
+        var inl = bestInl
+        guard inl.count >= 6 else { return nil }
+        // one least-squares refit + re-select on the inliers (polish the RANSAC seed)
+        var n=0.0,st=0.0,su=0.0,stt=0.0,stu=0.0
+        for p in inl { let t=p.t, uu=Double(u(p.contactRow)); n+=1; st+=t; su+=uu; stt+=t*t; stu+=t*uu }
+        let den=n*stt-st*st
+        if abs(den) > 1e-9 {
+            let sl=(n*stu-st*su)/den, ic=(su-sl*st)/n
+            if sl > 0 { inl = pts.filter { abs(Double(u($0.contactRow)) - (sl*$0.t+ic)) <= tol } }
+        }
+        guard inl.count >= 6 else { return nil }
+        let bt = BallTrack(points: inl, framesScanned: scanned, candidateFrames: raw.count, seconds: 0)
+        let geo = ODLaneGeometry(lanes: [L], vanishingPoint: SIMD2<Float>(0, vpY), foulLineY: L.yNear,
+                                 satFloorUsed: 0, imageSize: baseGeo.imageSize)
+        return (bt, geo)
     }
 }

@@ -481,6 +481,14 @@ enum OnDeviceTracker {
     /// without the ball's own motion false-triggering). The ball cannot strike before it arrives, so a hotness
     /// that fires BEFORE the ball entered the ROI (t_imp < t_enter) is an early reflection → defer to far.t;
     /// otherwise a sustained hotness IS the contact (do NOT drag it to a far point sitting past the pins).
+    /// Public wrapper: pin-contact time (changepoint, else 5σ) for a track built OUTSIDE track() — the DEC-131
+    /// learned fallback uses it so its track gets the same frame-accurate t_impact as the classical path.
+    nonisolated static func impactTime(url: URL, track: [TrackPoint], geo: ODLaneGeometry, rot: ODRotation) -> Double? {
+        guard let lane = geo.lanes.first, let vp = geo.vanishingPoint, let first = track.min(by: { $0.t < $1.t }) else { return nil }
+        let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
+        return detectImpact(url: url, track: track, lane: lane, vpY: vp.y, afterT: first.t, foulY: foulY, rot: rot)
+    }
+
     nonisolated private static func detectImpact(url: URL, track: [TrackPoint], lane: ODDetectedLane,
                                                  vpY: Float, afterT: Double, foulY: Float, rot: ODRotation = .r0) -> Double? {
         let pts = track.sorted { $0.t < $1.t }

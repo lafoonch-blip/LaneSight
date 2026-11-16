@@ -88,6 +88,36 @@ enum OnDeviceShadow {
             if let fc = sp.tFoulCross { diag["t_foul_cross"] = fc }
             if let a = sp.avgFoulToPinsMph { diag["speed_avg_foul_to_pins"] = Double(a) }
             if let tr = sp.tRelease, let ti = sp.tImpact { diag["foul_to_impact_s"] = ti - tr }
+            // DEC-131: LEARNED CoreML fallback + ENGINE_DISAGREE reconciliation (on-device parity with the server's
+            // production_engine). Run the learned track when it's available; reconcile its foul→pins speed with the
+            // classical one — agree → keep classical; disagree > 0.5 mph → withhold (never pick one); only learned
+            // (classical track/speed failed) → use learned. This recovers the hard portrait clips the classical
+            // tracker drops and catches the clips where classical alone is wrong.
+            // WIP (DEC-131): opt-in while the on-device learned ball-peak decode is debugged (the detector finds a
+            // near-constant peak instead of the moving ball → flat trajectory). Off by default so the shipping
+            // on-device engine stays the validated classical + changepoint path. Enable with LS_LEARNED_ONDEVICE=1.
+            if ProcessInfo.processInfo.environment["LS_LEARNED_ONDEVICE"] == "1", let det = OnDeviceLearnedDetector.shared {
+                let cAvg = sp.avgFoulToPinsMph
+                if let (ltrack, lgeo) = stage("learned") { () -> (BallTrack, ODLaneGeometry)? in
+                    guard var r = det.buildTrack(url: clipURL, rot: rot, baseGeo: geo) else { return nil }
+                    r.0.impactT = OnDeviceTracker.impactTime(url: clipURL, track: r.0.points, geo: r.1, rot: rot)
+                    return r
+                } {
+                    let lsp = OnDeviceTracker.speed(track: ltrack, geo: lgeo)
+                    if let la = lsp.avgFoulToPinsMph { diag["learned_avg"] = Double(la) }
+                    diag["learned_track_points"] = ltrack.points.count
+                    diag["learned_note"] = lsp.note
+                    if let c = cAvg, let l = lsp.avgFoulToPinsMph {
+                        if abs(c - l) > 0.5 {
+                            mph = nil; avgFoulToPins = nil; basis = "unavailable"
+                            note = "ENGINE_DISAGREE: classical \(String(format: "%.2f", c)) vs learned \(String(format: "%.2f", l)) mph"
+                        }
+                    } else if cAvg == nil, let l = lsp.avgFoulToPinsMph {
+                        mph = lsp.mph; avgFoulToPins = l; basis = lsp.basis
+                        note = "learned-fallback: " + lsp.note
+                    }
+                }
+            }
             diag["first_failing_stage"] = (geo.lanes.first == nil) ? "lane"
                 : (track.points.count < 6 ? "track"
                 : (sp.mph == nil ? "speed" : "none"))
