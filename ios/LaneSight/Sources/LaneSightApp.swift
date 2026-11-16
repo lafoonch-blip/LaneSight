@@ -1,8 +1,36 @@
 import SwiftUI
+import UIKit
+
+/// DEC-119: receives background `URLSession` events so a clip upload that completes while the app is suspended
+/// (or that relaunches the app in the background) is handled, and the system's completion handler is honored.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        _ = BackgroundUploadManager.shared     // attach the background session's delegate early (relaunch path)
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        if identifier == BackgroundUploadManager.sessionIdentifier {
+            BackgroundUploadManager.shared.backgroundCompletionHandler = completionHandler
+        } else {
+            completionHandler()
+        }
+    }
+}
 
 @main
 struct LaneSightApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
+    /// DEC-099: shared Home/Stats/Lab data (parallel loads, one publish per page, silent revalidation).
+    @StateObject private var tabData = TabDataStore()
+    /// OD-03 (DEC-102): non-blocking connectivity signal for the offline banner. Never gates navigation.
+    @StateObject private var connectivity = Connectivity.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var didFirstActivation = false   // first scenePhase→active == cold launch (2026-10-30)
 
     init() {
         LSAppearance.apply()
@@ -38,13 +66,104 @@ struct LaneSightApp: App {
                 if !isPreview, model.gate == .ready, model.hasSeenIntro, !model.homeLoaded {
                     LaunchSplash().transition(.opacity).zIndex(1)
                 }
+                // OD-03: non-blocking offline banner. Appears at the top when offline; never blocks navigation
+                // or capture. Analysis offline is saved as pending and syncs on reconnect (wiring: next step).
+                if !isPreview, model.gate == .ready, !connectivity.isOnline {
+                    VStack { OfflineBanner(); Spacer() }
+                        .zIndex(2).transition(.move(edge: .top)).animation(.easeInOut, value: connectivity.isOnline)
+                }
             }
+            .task { connectivity.start() }
+            #if DEBUG
+            // Diagnostic: run the on-device pipeline on a clip path at launch (sim repro). Stage-by-stage
+            // prints so a crash shows the last stage reached. Set LS_ONDEVICE_TEST=<path to a .mov>.
+            .task {
+                guard let p = ProcessInfo.processInfo.environment["LS_ONDEVICE_TEST"] else { return }
+                await Task.detached {
+                    let url = URL(fileURLWithPath: p)
+                    print("ONDEV: start \(p)")
+                    guard let px = OnDeviceLaneDetector.referenceFrame(url: url, at: 30) else { print("ONDEV: no reference frame"); return }
+                    print("ONDEV: got reference frame")
+                    let geo = OnDeviceLaneDetector.detect(pixelBuffer: px)
+                    print("ONDEV: lanes=\(geo.lanes.count) vp=\(String(describing: geo.vanishingPoint)) foul=\(String(describing: geo.foulLineY))")
+                    let tr = OnDeviceTracker.track(url: url, geo: geo)
+                    print("ONDEV: track pts=\(tr.points.count) scanned=\(tr.framesScanned) cand=\(tr.candidateFrames)")
+                    let sp = OnDeviceTracker.speed(track: tr, geo: geo)
+                    print("ONDEV: speed=\(String(describing: sp.mph)) basis=\(sp.basis) note=\(sp.note)")
+                    print("ONDEV: tRelease=\(String(describing: sp.tRelease)) tImpact=\(String(describing: sp.tImpact)) (server: 9.26 / 11.555)")
+                    if let f = tr.points.first, let l = tr.points.last {
+                        print("ONDEV: track t[\(String(format: "%.2f", f.t))→\(String(format: "%.2f", l.t))]  row[\(Int(f.contactRow))→\(Int(l.contactRow))]  frac[\(String(format: "%.2f", f.frac))→\(String(format: "%.2f", l.frac))]")
+                    }
+                    print("ONDEV: DONE")
+                }.value
+            }
+            #endif
             .environmentObject(model)
+            .environmentObject(tabData)
+            // Never show one account's data to the next: drop the tab cache on sign-in/out.
+            .onChange(of: model.isAuthenticated) { _, _ in tabData.reset() }
+            // §2 analytics (DEC-098 M3): one "app_opened" per launch (real app only, never previews).
+            .task { if !isPreview { model.trackAppOpenedOnce() } }
             .tint(LS.action)
             .lsAppFont()
             .preferredColorScheme(.dark)
             .installGlobalKeyboardDismiss()     // tap outside a field anywhere dismisses the keyboard
+            // DEC-086: an upload analysis blocks the whole app from the root so its result is never
+            // orphaned by navigating away from Lab › Upload mid-analysis. Screen stays awake throughout.
+            .fullScreenCover(isPresented: $model.uploadBusy) {
+                ProcessingCover(busy: $model.uploadBusy, failButtonLabel: "Close")
+                    .environmentObject(model)
+                    .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+                    .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+            }
+            // DEC-123: Friends & Family consent — shown once on an F&F build after sign-up, before the app.
+            // Dismisses itself when recordFFConsent() advances the accepted version.
+            .fullScreenCover(isPresented: Binding(get: { model.needsFFConsent }, set: { _ in })) {
+                FFConsentView().environmentObject(model)
+            }
+            // Recover analyses that finished while we were away. On WARM resume (app still alive, mid-analysis)
+            // present the recovered result as before. On COLD launch (first activation after process start) land
+            // on Home and surface it as a non-intrusive "away" banner instead — never a result sheet at launch.
+            // DEC-119: also reconcile the active-session mirror, resume durable uploads, and decide whether to
+            // show the Continue/End resume prompt (cold launch, or ≥30 min in the background).
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    let cold = !didFirstActivation; didFirstActivation = true
+                    Task {
+                        await model.refreshActiveSessionFromServer()
+                        model.evaluateResumeOnForeground(coldLaunch: cold)
+                        await model.resumePendingUploads()
+                        await model.reconcilePendingAnalysis(coldLaunch: cold)
+                    }
+                case .background:
+                    model.noteDidEnterBackground()
+                default:
+                    break
+                }
+            }
+            // DEC-119: when connectivity returns, resume any uploads parked offline (don't wait for a relaunch).
+            .onChange(of: connectivity.isOnline) { _, online in
+                if online { Task { await model.resumePendingUploads() } }
+            }
+            // DEC-119: "You have a session in progress" prompt on cold launch / long-background return.
+            .alert("Session in progress", isPresented: Binding(
+                get: { model.gate == .ready && model.resumePrompt != nil },
+                set: { if !$0 { model.resumePrompt = nil } })) {
+                Button("Continue") { model.resumePromptContinue() }
+                Button("End session", role: .destructive) { Task { await model.resumePromptEnd() } }
+            } message: {
+                if let s = model.resumePrompt?.session { Text(Self.resumeMessage(s)) }
+            }
         }
+    }
+
+    /// "You have a session in progress (started 2:14 PM, 5 shots)." — the resume-prompt body (DEC-119).
+    static func resumeMessage(_ s: PersistedSession) -> String {
+        let time = Date(timeIntervalSince1970: s.startedAt).formatted(date: .omitted, time: .shortened)
+        let n = s.shotCount
+        let shots = "\(n) shot\(n == 1 ? "" : "s")"
+        return "You have a session in progress (started \(time), \(shots)). Continue it, or end it and start fresh."
     }
 
     @ViewBuilder private var gateView: some View {
@@ -147,6 +266,7 @@ struct PreviewHarness: View {
                     else { Text("sample decode failed").foregroundStyle(LS.textPrimary) }
                 case "camprompt": CameraPermissionView(mode: .prompt)
                 case "camdenied": CameraPermissionView(mode: .denied)
+                case "coaching": CoachingView()
                 case "feedback": FeedbackView(onFinish: {})
                 case "scorepopup": ScoreUpdatePopup(sessionId: ProcessInfo.processInfo.environment["LS_PREVIEW_ID"])
                 default:      Text("unknown preview screen: \(screen)").foregroundStyle(LS.textPrimary)
@@ -187,28 +307,15 @@ struct PreviewHarness: View {
 }
 #endif
 
-/// Bottom tabs per HANDOFF §4/§5 + DEC-055: Home · Stats · Lab · Leagues · Tourneys.
-/// Capture is reached via Lab → Start Live Session → Setup.
-///
-/// Leagues/Tourneys are not built yet. Per DEC-055 they are shown disabled: dimmed, not tappable, with
-/// NO "Soon" / "Coming soon" label and no sheet. A system TabView tab can't be made un-tappable, so
-/// tapping either is intercepted — selection never moves to them (the current working tab stays
-/// selected) — and because they can never become selected they always render in the muted, unselected
-/// (dimmed) state. No navigation happens and nothing is presented.
+/// Bottom tabs (DEC-084): Home · Stats · Lab · Coaching. Capture is reached via Lab → Start Live Session →
+/// Setup. The old disabled Leagues/Tourneys tabs are gone — a dimmed tab reads as broken; Coaching is a real,
+/// tappable tab that opens a "coming soon" screen (sets expectations + measures interest).
 struct RootTabs: View {
     @EnvironmentObject var model: AppModel
     @State private var tab = 0
 
-    private var selection: Binding<Int> {
-        Binding(
-            get: { tab },
-            // Taps on the disabled Leagues (3) / Tourneys (4) tabs are a no-op: selection stays put.
-            set: { newValue in if newValue < 3 { tab = newValue } }
-        )
-    }
-
     var body: some View {
-        TabView(selection: selection) {
+        TabView(selection: $tab) {
             HomeView()
                 .tag(0)
                 .tabItem { Label("Home", systemImage: "house.fill") }
@@ -218,17 +325,27 @@ struct RootTabs: View {
             LabView()
                 .tag(2)
                 .tabItem { Label("Lab", systemImage: "flask.fill") }
-            // Disabled tabs (DEC-055): dimmed + not tappable, no label. Content is never shown because
-            // selection can never move here. No "Soon" badge, no coming-soon sheet.
-            Color.clear
+            CoachingView()
                 .tag(3)
-                .tabItem { Label("Leagues", systemImage: "person.3.fill") }
-            Color.clear
-                .tag(4)
-                .tabItem { Label("Tourneys", systemImage: "trophy.fill") }
+                .tabItem { Label("Coaching", systemImage: "graduationcap.fill") }
         }
         // Make the server the source of truth for the arsenal on authed load (also runs the one-time
         // migration of any locally-stored ball). Harmless in dev-user mode.
         .task { await model.syncArsenal() }
+        // DEC-119: reconcile the active-session mirror with the server (ended_at null) on authed load so the
+        // banner is right after a sign-in, and resume any durable uploads from a previous launch.
+        .task {
+            await model.refreshActiveSessionFromServer()
+            await model.resumePendingUploads()
+        }
+        // DEC-119: "Continue" / a banner tap routed from elsewhere lands on Home, whose stack pushes the Active
+        // Session (so the tab bar stays visible — amends DEC-099).
+        .onChange(of: model.openActiveSessionRequest) { _, open in if open { tab = 0 } }
+        // The Active Session push is transient: leaving its tab pops it, so returning to a tab shows that tab's
+        // own root (Home = Home) and you re-enter via the banner. Never pop the tab you're entering.
+        .onChange(of: tab) { _, newTab in
+            if newTab != 0 { model.openActiveSessionRequest = false }   // left Home → pop Home's Active Session
+            if newTab != 2 { model.openActiveSessionFromLab = false }   // left Lab  → pop Lab's Active Session
+        }
     }
 }

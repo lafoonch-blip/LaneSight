@@ -1,0 +1,78 @@
+{
+  "task": "pin_anchor_truth",
+  "updated_at": "2026-11-01T09:45:44-05:00",
+  "clips": {
+    "IMG_8751": {
+      "events": {
+        "foul_cross": {
+          "frame": 1601,
+          "t_s": 26.6948,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1737,
+          "t_s": 28.9624,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97423541199485,
+      "complete": true
+    },
+    "IMG_8752": {
+      "events": {
+        "foul_cross": {
+          "frame": 1114,
+          "t_s": 18.5755,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1249,
+          "t_s": 20.8266,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.971509971509974,
+      "complete": true
+    },
+    "IMG_8753": {
+      "events": {
+        "foul_cross": {
+          "frame": 559,
+          "t_s": 9.3209,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 692,
+          "t_s": 11.5385,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.972893607409084,
+      "complete": true
+    },
+    "IMG_8754": {
+      "events": {
+        "foul_cross": {
+          "frame": 1543,
+          "t_s": 25.7281,
+          "status": "set"
+        },
+        "first_pin_contact": {
+          "frame": 1683,
+          "t_s": 28.0624,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.9734369619755,
+      "complete": true
+    }
+  }
+}

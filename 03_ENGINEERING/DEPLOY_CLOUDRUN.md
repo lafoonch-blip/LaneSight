@@ -1,6 +1,6 @@
 # Deploy the LaneSight backend to Google Cloud Run (remove the Mac dependency)
-Version: 1.1
-Last Updated: 2026-10-26
+Version: 1.2
+Last Updated: 2026-10-27
 Status: DEPLOYED. Phase 1 synchronous service LIVE at `https://lanesight-api-665597641318.us-east1.run.app`
 (rev 00003, `--cpu 4 --memory 4Gi --timeout 600 --concurrency 1 --max-instances 1`, scale-to-zero). Storage
 upload path + iOS repoint done 2026-10-26. Phase 2 = Cloud Run Jobs (async, same OpenCV engine), later.
@@ -60,6 +60,13 @@ gcloud run deploy lanesight-api \
 ```
 Output is the service URL, e.g. `https://lanesight-api-xxxxx-uc.a.run.app`.
 
+### Env flags
+- `LANESIGHT_SYNC_JOBS=1` — run the CV inline in the request (required on Cloud Run; see Architecture).
+- `LANESIGHT_UPLOAD_DEDUPE` — **leave UNSET (default off, DEC-086).** When off, re-uploading the same clip
+  makes a **new** shot so a bowler can re-analyze while the engine is changing. Set to `1` only to restore
+  the old DEC-055 "same clip → same shot" short-circuit. Live-capture content-hash de-dup is independent and
+  always on. `GET /health` echoes the current value as `config.upload_dedupe`.
+
 ## Verify
 ```
 curl https://<service-url>/health          # status ok, mode live, supabase_reachable true
@@ -76,8 +83,9 @@ app --PUT clip bytes--> Supabase Storage (direct; no API size cap)
 app --POST /shots/analyze {storage_path, session_id?, metadata}--> API
       API downloads the clip, runs the SAME serial/sync analyze path, writes the shot, DELETES the clip.
 ```
-- `session_id` present → a shot in that live session; absent → standalone upload (DEC-055 content-hash dedupe
-  preserved — a re-sent duplicate returns the existing shot and the Storage object is deleted).
+- `session_id` present → a shot in that live session; absent → standalone upload. The upload content-hash
+  dedupe is now behind `LANESIGHT_UPLOAD_DEDUPE` (**default off, DEC-086**): off → a re-sent clip makes a new
+  shot; on → it returns the existing shot and deletes the Storage object (old DEC-055 behavior).
 - The clip is never retained server-side (download → analyze → delete, and deleted on dedupe hit).
 - **Verified end-to-end on Cloud Run (rev 00003):** full 43 MB IMG_8902 → signed URL → PUT (HTTP 200) →
   `/shots/analyze` (HTTP 200, 328 s synchronous) → 19 real metrics. The 32 MiB cap no longer applies.

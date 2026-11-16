@@ -6,6 +6,10 @@ import UniformTypeIdentifiers
 /// Shot card. One shot per clip. All results are live from the pipeline; nothing is simulated.
 struct UploadView: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// DEC-099: the analysis type is chosen BEFORE this screen (Lab › Shot/Form Analysis › Upload video), so
+    /// Upload never asks "Shot or Form" again. "shot" | "form".
+    let mode: String
     @State private var pickedURL: URL?
     @State private var pickedName: String?
     @State private var showPicker = false
@@ -23,15 +27,12 @@ struct UploadView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 clipCard
-                modeSection
-                intentSection
+                if mode == "shot" { intentSection }      // Form has no target line (DEC-081)
 
                 if let errorText {
                     Label(errorText, systemImage: "exclamationmark.triangle.fill")
                         .font(.lsCaption).foregroundStyle(LS.bestEffort)
                 }
-
-                if busy { pipelineCard }
 
                 Button {
                     Task { await analyze() }
@@ -49,20 +50,15 @@ struct UploadView: View {
             .padding(16)
         }
         .background(LSBackground())
-        .navigationTitle("Analyze a video")
+        .navigationTitle(mode == "form" ? "Upload · Form Analysis" : "Upload · Shot Analysis")
+        .onAppear { model.captureMode = mode }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .photosPicker(isPresented: $showPicker, selection: $pickerItem, matching: .videos)
         .onChange(of: pickerItem) { _, item in Task { await loadPicked(item) } }
-        .sheet(isPresented: $model.showResult) {
-            if let result = model.result {
-                if result.isForm {
-                    FormCardView(result: result).environmentObject(model)
-                } else {
-                    ShotCardView(result: result).environmentObject(model)
-                }
-            }
-        }
+        // The analyzing modal + the result + any failure are presented at the app root (DEC-086), so
+        // this screen owns none of them — leaving Upload mid-analysis can't orphan the result.
     }
 
     @State private var pickerItem: PhotosPickerItem?
@@ -86,31 +82,6 @@ struct UploadView: View {
                 Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
             }
             .lsCard(padding: 12)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var modeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("WHAT'S IN THIS CLIP?").lsEyebrow()
-            HStack(spacing: 10) {
-                modeButton("shot", "Shot", "Ball & lane")
-                modeButton("form", "Form", "Approach & swing")
-            }
-        }
-    }
-
-    private func modeButton(_ value: String, _ title: String, _ sub: String) -> some View {
-        let on = model.captureMode == value
-        return Button { model.captureMode = value } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                Text(sub).font(.lsCaption2).foregroundStyle(LS.textSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(on ? LS.blue.opacity(0.18) : LS.card, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(on ? LS.blue : LS.cardStroke, lineWidth: on ? 2 : 1))
         }
         .buttonStyle(.plain)
     }
@@ -140,28 +111,6 @@ struct UploadView: View {
         }
     }
 
-    private var pipelineCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            switch model.pipeline {
-            case .creatingSession: progressRow("Starting session…")
-            case .uploading(let frac):
-                Text("Uploading clip").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
-                ProgressView(value: frac).tint(LS.blue)
-                Text("\(Int(frac * 100))%").font(.lsCaption).foregroundStyle(LS.textSecondary)
-            case .analyzing(let state, _): progressRow("Analyzing on Mac — \(state)")
-            case .fetching: progressRow("Fetching results…")
-            case .failed(let msg):
-                Label(msg, systemImage: "exclamationmark.triangle.fill").font(.lsFootnote).foregroundStyle(LS.bestEffort)
-            default: EmptyView()
-            }
-        }
-        .lsCard()
-    }
-
-    private func progressRow(_ text: String) -> some View {
-        HStack(spacing: 10) { ProgressView().tint(LS.cyan); Text(text).font(.lsSubheadline).foregroundStyle(LS.textPrimary) }
-    }
-
     // MARK: actions
 
     private func loadPicked(_ item: PhotosPickerItem?) async {
@@ -187,7 +136,11 @@ struct UploadView: View {
     private func analyze() async {
         guard let url = pickedURL else { return }
         errorText = nil
+        // Pop this pushed screen FIRST so the root analyzing cover can present: a .fullScreenCover attached
+        // above the NavigationStack won't reliably appear while this navigationDestination is still active
+        // (the DEC-096 routing regression — the user saw only an inline busy state, no cover). After the pop
+        // the cover owns the whole screen from the root (DEC-086: never orphaned), and shows result/failure.
+        dismiss()
         await model.processUpload(fileURL: url)
-        if case .failed(let msg) = model.pipeline { errorText = msg }
     }
 }

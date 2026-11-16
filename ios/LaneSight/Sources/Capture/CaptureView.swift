@@ -31,6 +31,7 @@ struct CaptureView: View {
             if camera.isRunnable {
                 VStack(spacing: 0) {
                     topBar
+                    if model.captureMode == "form" { formFramingTip.padding(.top, 8) }
                     Spacer()
                     chipRow.padding(.bottom, 10)
                     zoomBar.padding(.bottom, 14)
@@ -42,10 +43,15 @@ struct CaptureView: View {
         .navigationTitle("Capture")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .task { await camera.start(preferredFPS: Double(model.preferredFPS)) }
+        // Form timing needs a high frame rate: floor Form capture at 60 fps (bestFormat still takes 120 when the
+        // device supports it at >=1080p). Shot keeps the user's preference. (DEC-121 Form capture defaults.)
+        .task {
+            let fps = model.captureMode == "form" ? max(60.0, Double(model.preferredFPS)) : Double(model.preferredFPS)
+            await camera.start(preferredFPS: fps)
+        }
         // Keep the screen awake for the whole capture flow (recording, trimming, upload, analysis).
         // Auto-Lock otherwise sleeps the phone mid-shot.
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true; model.prewarm() }   // warm the analyzer
         .onDisappear {
             camera.stopSession()
             if !busy { UIApplication.shared.isIdleTimerDisabled = false }
@@ -90,6 +96,20 @@ struct CaptureView: View {
                 .background(.ultraThinMaterial, in: Capsule())
                 .accessibilityLabel("Mode: \(model.captureMode == "form" ? "Form" : "Shot")")
         }
+    }
+
+    /// Form capture framing tip: step count + swing timing need every foot plant in view, so remind the bowler
+    /// to keep both feet framed through the whole approach (DEC-121 Form capture / supported-view coverage).
+    private var formFramingTip: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "figure.walk").font(.system(size: 12, weight: .semibold))
+            Text("Keep both feet in frame through your whole approach")
+                .font(.system(size: 12, weight: .semibold)).multilineTextAlignment(.leading)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(.ultraThinMaterial, in: Capsule())
+        .accessibilityLabel("Tip: keep both feet in frame through your whole approach")
     }
 
     /// "4K" / "1080p" / "720p" from the locked resolution string ("WxH").
@@ -273,6 +293,8 @@ struct CaptureView: View {
 struct ProcessingCover: View {
     @EnvironmentObject var model: AppModel
     @Binding var busy: Bool
+    /// Label for the button shown on a failure. Live capture returns to the camera; an upload just closes.
+    var failButtonLabel: String = "Back to camera"
 
     var body: some View {
         ZStack {
@@ -290,15 +312,38 @@ struct ProcessingCover: View {
                     stage(title: "Finishing up…")
                 }
 
+            case .offlineQueued:
+                // DEC-119: offline — the clip is saved and resumes automatically; never a data-loss failure.
+                VStack(spacing: 18) {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 44)).foregroundStyle(LS.dataYellow)
+                    Text("Saved — we'll finish when you're online")
+                        .font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary).multilineTextAlignment(.center)
+                    Text("No connection right now. Your shot is saved and will upload and analyze automatically as soon as you're back online.")
+                        .font(.lsCallout).foregroundStyle(LS.textSecondary).multilineTextAlignment(.center)
+                    Button(model.inLiveCapture ? "Back to session" : "Done") {
+                        if model.inLiveCapture { model.exitToSession() } else { model.resetPipeline(); busy = false }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                .padding(32)
+
             case .failed(let msg):
                 VStack(spacing: 18) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 44)).foregroundStyle(LS.bestEffort)
-                    Text("Shot couldn't be processed").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
+                    Text("We couldn't analyze this clip").font(.lsTitle3.bold()).foregroundStyle(LS.textPrimary)
                     Text(msg).font(.lsCallout).foregroundStyle(LS.textSecondary)
                         .multilineTextAlignment(.center)
-                    Button("Back to camera") { model.resetPipeline(); busy = false }
+                    // DEC-096: Retry re-analyzes the same clip (no re-recording); the secondary action returns to
+                    // the Active Session for a live session, else closes the upload cover.
+                    Button("Retry") { Task { await model.retryLastAnalysis() } }
                         .buttonStyle(PrimaryButtonStyle())
+                        .disabled(model.lastCaptureURL == nil)
+                    Button(model.inLiveCapture ? "Back to session" : failButtonLabel) {
+                        if model.inLiveCapture { model.exitToSession() } else { model.resetPipeline(); busy = false }
+                    }
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link)
                 }
                 .padding(32)
 
@@ -328,7 +373,7 @@ struct ProcessingCover: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             ProgressView(value: overallFrac).tint(LS.action)
-            Button("Cancel analysis") { model.resetPipeline(); busy = false }
+            Button("Cancel analysis") { model.cancelForegroundUpload(); model.resetPipeline(); busy = false }
                 .font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.link).padding(.top, 2)
         }
         .padding(20)

@@ -40,7 +40,9 @@ struct BallPickerSheet: View {
     }
 
     private func ballSubtitle(_ b: ArsenalBall) -> String {
-        [b.surface, b.weight_lb.map { "\(Int($0.rounded())) lb" }].compactMap { $0 }.joined(separator: " · ")
+        // DEC-099: mark the default ball so the bowler can tell it apart from a one-off pick.
+        [b.is_default == true ? "Default" : nil, b.surface, b.weight_lb.map { "\(Int($0.rounded())) lb" }]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 
     private func row(selected: Bool, title: String, subtitle: String, _ tap: @escaping () -> Void) -> some View {

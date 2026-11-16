@@ -6,13 +6,14 @@ their DB-backed handlers land, so the OpenAPI contract lists the full surface ho
 from __future__ import annotations
 import json
 import os
+import re
 import uuid
 import time
 from pathlib import Path
 
 import shutil
 
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Response, Body, Header
 from fastapi.responses import FileResponse, Response
 
 from . import API_VERSION, APP_COMPAT
@@ -20,85 +21,546 @@ from . import engines
 from . import userauth
 from .auth import current_user
 from .config import settings
-from .jobs import SerialJobQueue
+from .jobs import SerialJobQueue, AnalysisBusy
 from .store import get_store, session_csv
+from .profile_validation import validate_profile_patch, ProfileValidationError
 from lanesight_core.models.shot import ALGO_VERSION
 from lanesight_core.score import SCORE_VERSION
 from lanesight_core.benchmarks import BENCHMARK_VERSION
 from lanesight_core.form import spot_check
 
+# DEC-106 Phase 0: Cloud Run reports os.cpu_count()=8 but allocates only 4 vCPUs, so OpenCV defaults to 8
+# threads on 4 vCPUs → 2x oversubscription that dominates the stabilize/warp stages (OpenCV is NOT controlled
+# by OMP/OPENBLAS env). Cap OpenCV threads to the allocated vCPUs when the cap env is set. No-op locally.
+_cpu_cap = os.environ.get('LANESIGHT_CPU_THREADS') or os.environ.get('LANESIGHT_CV_WORKERS')
+if _cpu_cap:
+    try:
+        import cv2 as _cv2
+        _cv2.setNumThreads(max(1, int(_cpu_cap)))
+    except Exception:
+        pass
+
 DATA_ROOT = Path(os.environ.get('LANESIGHT_DATA', os.path.expanduser('~/LaneSightData')))
 _queue = SerialJobQueue()
+
+
+def _persist_job(job):
+    """Part 3a: write the job's public state through to Supabase on every transition, so GET /jobs/:id
+    resolves on ANY instance and after a restart (the in-memory queue is per-instance). Best-effort — the
+    queue swallows errors so durability can never fail an analysis."""
+    pub = job.public()
+    get_store().save_job({'id': pub['id'], 'user_id': job.user_id, 'shot_id': job.shot_id,
+                          'kind': pub['kind'], 'state': pub['state'], 'reason': pub.get('reason'),
+                          'result': pub.get('result'), 'failure': pub.get('failure'),
+                          'timings': pub.get('timings')})
+
+
+_queue.persist = _persist_job
+
+# --------------------------------------------------------------------------- DEC-116 ephemeral Job worker
+# POST returns immediately; the CPU-heavy analysis runs in a `lanesight-cv-analyze` Cloud Run Job (gen2, the
+# fast/steady pool) instead of inline on the slow gVisor service. The app's /jobs/:id polling (DEC-110) is
+# unchanged — the Job drives the durable analysis_job row. Gated by LANESIGHT_JOB_WORKER=1 (default OFF: the
+# in-service path stays the default until the Job path passes a live soak — DEC-116 step 5).
+_JOB_WORKER_PROJECT = 'project-fd28bc3f-a844-43c2-a1c'
+_JOB_WORKER_REGION = 'us-east1'
+_JOB_WORKER_NAME = 'lanesight-cv-analyze'
+# Concurrency cap: each execution is 4 vCPU; the region quota is 20, and the service needs headroom, so cap
+# simultaneous RUNNING executions. Excess shots stay 'queued' and are triggered by the drain when a slot frees.
+_JOB_WORKER_CAP = int(os.environ.get('LANESIGHT_JOB_CAP', '4'))
+_JOB_RUNNING_MAX_S = int(os.environ.get('LANESIGHT_JOB_RUNNING_MAX_S', '720'))   # reaper: a 'running' row older
+
+
+def _job_worker_on() -> bool:
+    return os.environ.get('LANESIGHT_JOB_WORKER') == '1'
+
+
+def _metadata_token() -> str:
+    import urllib.request as _u
+    r = _u.Request('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                   headers={'Metadata-Flavor': 'Google'})
+    return json.loads(_u.urlopen(r, timeout=10).read())['access_token']
+
+
+def _run_execution(env: dict) -> None:
+    """Fire one Cloud Run Job execution with per-execution container env overrides (the shot's params). Raises
+    on a non-2xx so the caller can keep the job 'queued' for the drain to retry."""
+    import urllib.request as _u
+    url = (f'https://run.googleapis.com/v2/projects/{_JOB_WORKER_PROJECT}/locations/{_JOB_WORKER_REGION}'
+           f'/jobs/{_JOB_WORKER_NAME}:run')
+    body = json.dumps({'overrides': {'taskCount': 1, 'timeout': '600s',
+                                     'containerOverrides': [{'env': [{'name': k, 'value': str(v)}
+                                                                     for k, v in env.items() if v is not None]}]}}).encode()
+    req = _u.Request(url, data=body, method='POST',
+                     headers={'Authorization': f'Bearer {_metadata_token()}', 'Content-Type': 'application/json'})
+    _u.urlopen(req, timeout=20).read()
+
+
+def _active_executions(store) -> int:
+    try:
+        return len(store._get('analysis_job', 'state=eq.running&kind=eq.analyze&select=id'))
+    except Exception:
+        return 0
+
+
+def _trigger_job_analysis(shot_id, user_id, session_id, clip_storage_path, handed, mode, is_upload, content_hash):
+    """Create the queued analysis_job row (stashing the trigger params in result._pending so the drain can fire
+    it later), then — if under the concurrency cap — mark it running and launch the execution. Returns a Job
+    handle whose .id the endpoint returns, so the client polls exactly as for the in-service path."""
+    from .jobs import Job
+    store = get_store()
+    env = {'LSW_JOB_ID': None, 'LSW_SHOT_ID': shot_id, 'LSW_USER_ID': user_id,
+           'LSW_SESSION_ID': session_id or '', 'LSW_CLIP_PATH': clip_storage_path, 'LSW_HANDED': handed or '',
+           'LSW_MODE': mode or 'shot', 'LSW_IS_UPLOAD': '1' if is_upload else '0',
+           'LSW_CONTENT_HASH': content_hash or ''}
+    job = Job(id=uuid.uuid4().hex, kind='analyze', user_id=user_id, shot_id=shot_id)
+    env['LSW_JOB_ID'] = job.id
+    # queued row with the trigger payload stashed (stripped from client responses in get_job)
+    store.save_job({'id': job.id, 'user_id': user_id, 'shot_id': shot_id, 'kind': 'analyze',
+                    'state': 'queued', 'result': {'_pending': env}})
+    if _active_executions(store) < _JOB_WORKER_CAP:
+        try:
+            _run_execution(env)
+            store.save_job({'id': job.id, 'user_id': user_id, 'shot_id': shot_id, 'kind': 'analyze',
+                            'state': 'running', 'result': None})
+            job.state = 'running'
+        except Exception as e:                       # couldn't launch now → stays queued for the drain
+            print(f'job execution launch deferred ({type(e).__name__}: {e})')
+    return job
+
+
+def _drain_and_reap():
+    """Called opportunistically from GET /jobs/:id (the client polls during an active analysis, which keeps the
+    instance alive, so no background thread is needed in scale-to-zero). (1) Reap: a 'running' row older than
+    the max runtime is marked failed TIMEOUT (never a stuck 'running'). (2) Drain: while under the cap, launch
+    the oldest still-'queued' execution from its stashed params."""
+    if not _job_worker_on():
+        return
+    store = get_store()
+    import datetime as _dt
+    try:
+        now = _dt.datetime.now(_dt.timezone.utc)
+        for r in store._get('analysis_job', 'state=eq.running&kind=eq.analyze&select=id,user_id,shot_id,updated_at,created_at'):
+            ts = r.get('updated_at') or r.get('created_at')
+            try:
+                age = (now - _dt.datetime.fromisoformat(str(ts).replace('Z', '+00:00'))).total_seconds()
+            except Exception:
+                age = 0
+            if age > _JOB_RUNNING_MAX_S:
+                store.save_job({'id': r['id'], 'user_id': r.get('user_id'), 'shot_id': r.get('shot_id'),
+                                'kind': 'analyze', 'state': 'failed', 'reason': 'ANALYSIS_TIMEOUT: worker exceeded max runtime',
+                                'failure': {'code': 'ANALYSIS_TIMEOUT', 'stage': 'worker'}})
+                try:
+                    store.mark_shot_failed(r['shot_id'], 'ANALYSIS_TIMEOUT', 'worker')
+                except Exception:
+                    pass
+        slots = _JOB_WORKER_CAP - _active_executions(store)
+        if slots > 0:
+            for r in store._get('analysis_job', f'state=eq.queued&kind=eq.analyze&order=created_at.asc&limit={slots}&select=id,user_id,shot_id,result'):
+                env = (r.get('result') or {}).get('_pending')
+                if not env:
+                    continue
+                try:
+                    _run_execution(env)
+                    store.save_job({'id': r['id'], 'user_id': r.get('user_id'), 'shot_id': r.get('shot_id'),
+                                    'kind': 'analyze', 'state': 'running', 'result': None})
+                except Exception as e:
+                    print(f'drain launch skipped ({type(e).__name__}: {e})')
+    except Exception as e:
+        print(f'drain/reap skipped ({type(e).__name__}: {e})')
+
+
 app = FastAPI(title='LaneSight API', version=API_VERSION)
 
 
+@app.exception_handler(AnalysisBusy)
+async def _analysis_busy_handler(request, exc):
+    # This instance already has an analysis running (per-instance memory guard). 409 so the app retries;
+    # the Retry-After hints a sensible backoff. Not an error — just back-pressure (DEC-043 per-session).
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=409, headers={'Retry-After': '20'},
+                        content={'detail': 'An analysis is already running. Please try again in a moment.'})
+
+
+# ----------------------------------------------------------------- §2 ops instrumentation (DEC-098)
+_HEXSEG = re.compile(r'^[0-9a-fA-F]{8,}$|^[0-9a-fA-F-]{20,}$')      # uuid/hex id segment
+_METRICS_SKIP = ('/health', '/docs', '/openapi', '/redoc', '/favicon')
+
+
+def _templatize_path(path: str) -> str:
+    """Collapse id-like path segments to ':id' so api_request stays low-cardinality and carries no ids."""
+    return '/'.join(':id' if _HEXSEG.match(seg or '') else seg for seg in path.split('/'))
+
+
+def _attempt_cost(duration_ms: int, clip: dict | None) -> dict | None:
+    """DEC-098 §2 (M1): best_effort compute + egress inputs for cost reporting. Resource-seconds are MEASURED
+    (duration x the Cloud Run vCPU/GiB config); no dollars here — ops.cost_daily applies sourced rates, and
+    returns NULL until the owner enters them. Never raises."""
+    try:
+        compute_s = round((duration_ms or 0) / 1000.0, 2)
+        vcpu = float(os.environ.get('LANESIGHT_VCPU', '4'))
+        gib = float(os.environ.get('LANESIGHT_GIB', '4'))
+        bytes_ = (clip or {}).get('bytes')
+        egress_mb = round(bytes_ / 1048576.0, 2) if bytes_ else None
+        return {k: v for k, v in {
+            'basis': 'best_effort', 'compute_s': compute_s, 'vcpu': vcpu, 'gib': gib,
+            'vcpu_s': round(compute_s * vcpu, 2), 'gib_s': round(compute_s * gib, 2),
+            'egress_mb': egress_mb,
+            'rate_ref': os.environ.get('LANESIGHT_COST_RATE_REF', 'cloud_run_us-east1'),
+        }.items() if v is not None}
+    except Exception:
+        return None
+
+
+@app.middleware('http')
+async def _ops_request_metrics(request, call_next):
+    """DEC-098 §2 (M2): record one api_request per call (best-effort; never fails the request). No bodies,
+    tokens or query strings — only method, templated path, status, latency, env/revision."""
+    t = time.monotonic()
+    response = await call_next(request)
+    try:
+        path = request.url.path
+        if not any(path == s or path.startswith(s) for s in _METRICS_SKIP):
+            get_store().log_api_request({
+                'method': request.method, 'path': _templatize_path(path),
+                'status': response.status_code, 'duration_ms': int((time.monotonic() - t) * 1000),
+                'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+                'api_revision': os.environ.get('K_REVISION'),
+            })
+    except Exception as me:
+        print(f'api_request log skipped ({me})')
+    return response
+
+
+# Consent-aware product events accepted at /events (schema registry — unknown names are dropped).
+_PRODUCT_EVENTS = {'app_opened', 'session_started', 'first_shot_analyzed', 'screen_view',
+                   'upload_started', 'analysis_completed', 'analysis_failed'}
+
+
 # ----------------------------------------------------------------- analysis job
-def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
-                 mode: str = 'shot', is_upload: bool = False):
+def _upload_dedupe_on() -> bool:
+    """DEC-086: upload de-duplication is OFF by default so the same clip can be uploaded/analyzed repeatedly
+    for testing. Turn it on with LANESIGHT_UPLOAD_DEDUPE=1. (Live-shot retry idempotency is separate and
+    always on — it's a dropped-connection guard, not upload dedupe.)"""
+    return os.environ.get('LANESIGHT_UPLOAD_DEDUPE') == '1'
+
+
+_PROCESS_START = time.monotonic()      # DEC-092 P0: a job within ~20s of process start hit a cold instance
+_COLD_START_WINDOW_S = 20.0
+
+
+def _clip_info(probe) -> dict:
+    """Clip facts for the analysis-attempt log (DEC-086). Captures the camera/recording characteristics we
+    need to correlate framing with analysis outcomes: resolution, rotation, fps (nominal + measured), HDR and
+    variable-frame-rate. Best-effort — whatever the probe carried."""
+    p = probe or {}
+    return {k: v for k, v in {
+        'fps': p.get('measured_fps') or p.get('fps'),
+        'nominal_fps': p.get('nominal_fps'),
+        'width': p.get('width'), 'height': p.get('height'),
+        'short_side_px': p.get('short_side_px'),
+        'rotation': p.get('rotation'),
+        'duration_s': p.get('duration') or p.get('duration_s'),
+        'frames': p.get('frames'),
+        'codec': p.get('codec'), 'color_transfer': p.get('color_transfer'),
+        'pix_fmt': p.get('pix_fmt'),
+        'bit_depth': (10 if '10' in str(p.get('pix_fmt') or '') else (8 if p.get('pix_fmt') else None)),
+        'hdr': p.get('hdr'),
+        'variable_frame_rate': p.get('variable_frame_rate'),
+        'max_frame_gap_ms': p.get('max_frame_gap_ms'),
+        'bytes': p.get('bytes'),
+    }.items() if v is not None}
+
+
+def _probe_clip(src: str) -> dict:
+    """Best-effort clip probe for the attempt log, taken BEFORE analysis so even a failed analysis records the
+    clip's camera/recording facts (most failures are framing-related). Never raises."""
+    info = {}
+    try:
+        from lanesight_runner.probe import probe as _rprobe
+        info = _clip_info(_rprobe(src, check_decoder=False))
+    except Exception as pe:
+        info = {'probe_error': str(pe)[:200]}
+    try:
+        info['bytes'] = os.path.getsize(src)
+    except Exception:
+        pass
+    return info
+
+
+def _snapshot_frames(src: str, n: int = 4, width: int = 480) -> list[dict]:
+    """DEC-100: a few small JPEG frames (base64) spread across the clip, stored on a FAILED attempt so the framing
+    can be inspected straight from the database (no clip download needed). ~20–30 KB each. Never raises."""
+    out = []
+    try:
+        import base64, cv2
+        cap = cv2.VideoCapture(src)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        if total <= 0:
+            return out
+        for frac in [(i + 0.5) / n for i in range(n)]:
+            idx = min(total - 1, int(total * frac))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, fr = cap.read()
+            if not ok:
+                continue
+            h, w = fr.shape[:2]
+            scale = width / max(w, h)
+            if scale < 1:
+                fr = cv2.resize(fr, (int(w * scale), int(h * scale)))
+            ok, buf = cv2.imencode('.jpg', fr, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            if ok:
+                out.append({'t': round(idx / fps, 2) if fps else None, 'frame': idx,
+                            'jpg_b64': base64.b64encode(buf.tobytes()).decode()})
+        cap.release()
+    except Exception as e:
+        out.append({'error': f'{type(e).__name__}: {e}'[:200]})
+    return out
+
+
+def _form_not_isolated(rec) -> dict | None:
+    """DEC-100: a form record whose swing events were ALL dropped by the DEC-095 gates (no ball start, top or
+    release, no key frames) isn't a result — it's a failure the bowler should see, with the gate numbers."""
+    ev = rec.get('events') or {}
+    if rec.get('key_frames') or any(ev.get(k) is not None for k in ('E2', 'E4', 'E7')):
+        return None
+    m = rec.get('metrics') or {}
+    def mv(k):
+        v = m.get(k)
+        return v.get('value') if isinstance(v, dict) else None
+    return {'swing_time_s': mv('swing_time'), 'step_count': mv('step_count'), 'view': rec.get('view'),
+            'gate': 'DEC-095 ball-start→release 1.3–2.5 s / release within −0.10…+0.15 s of slide stop',
+            'events_kept': {k: v for k, v in ev.items() if v is not None}}
+
+
+def _quality(rec) -> dict | None:
+    """Capture-quality + headline-geometry signals from a successful record (DEC-086), so we can correlate
+    camera framing with what analysis could measure. Defensive: missing fields are simply omitted."""
+    if not isinstance(rec, dict):
+        return None
+    cq = rec.get('capture_quality') or {}
+    m = rec.get('metrics') or {}
+    def mv(k):
+        v = m.get(k)
+        return v.get('value') if isinstance(v, dict) else v
+    out = {'far_lane': cq.get('far_lane'), 'capture_reason': cq.get('reason'),
+           'impact': cq.get('impact'),        # DEC-109: 'not_detected' = partial result (rev only), tracked in ops
+           'entry_board': mv('entry_board'), 'ball_speed': mv('ball_speed'),
+           'rev_rate': mv('rev_rate'), 'entry_angle': mv('entry_angle'),
+           'n_measured': sum(1 for v in m.values()
+                             if (v.get('value') if isinstance(v, dict) else v) is not None) or None}
+    for k in ('view', 'status', 'form_version'):     # form clips
+        if rec.get(k) is not None:
+            out[k] = rec.get(k)
+    return {k: v for k, v in out.items() if v is not None} or None
+
+
+def _log_outcomes(store, attempt_id, mode, record, failure, clip=None):
+    """DEC-122 §6: emit per-metric + per-stage outcome rows for a SERVER attempt (migration 036). Best-effort;
+    the caller swallows errors so this never fails an analysis. A completed partial (record present, some metrics
+    unavailable) writes a full row set; a hard failure with no record still records the failed stage so the
+    stage funnel and the "every attempt writes outcomes" invariant hold."""
+    if not attempt_id:
+        return
+    from .store import outcome_rows_from_record
+    cq = (record or {}).get('capture_quality') or {}
+    ctx = None
+    if clip:
+        ctx = {k: clip.get(k) for k in ('fps', 'width', 'height', 'short_side_px', 'rotation', 'hdr', 'source')
+               if clip.get(k) is not None} or None
+    cam_view = cq.get('camera_view') or (record or {}).get('view')      # camera_group tagging is future (DEC-118)
+    rcode = cq.get('reason_code') or getattr(failure, 'code', None)
+    rstage = cq.get('failed_stage') or getattr(failure, 'stage', None)
+    if record is not None:
+        mrows, srows = outcome_rows_from_record(attempt_id, 'server', ALGO_VERSION, mode,
+                                                record.get('metrics'), record.get('stage_report'),
+                                                camera_view=cam_view, context=ctx,
+                                                reason_code=rcode, failed_stage=rstage)
+    else:
+        mrows, srows = [], []
+        if rstage:
+            srows = [{'attempt_id': attempt_id, 'engine': 'server', 'engine_version': ALGO_VERSION,
+                      'capture_mode': mode, 'stage': rstage, 'status': 'failed', 'reason_code': rcode,
+                      'diagnostics': getattr(failure, 'diagnostics', None), 'context': ctx}]
+    store.log_outcomes(mrows, srows)
+
+
+def _build_run(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
+               mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
+               client_timings: dict | None = None, clip_storage_path: str | None = None):
+    """The analyze→persist→footer closure. Shared by the in-service queue (_analyze_job) and the ephemeral
+    Cloud Run Job worker (ops/analyze_worker.py, DEC-116) so both run byte-identical analysis + persistence."""
     def run(job):
         t0 = time.monotonic()
+        if client_timings:                       # DEC-092 P0 (M1): phone-side stage times onto the same row
+            job.timings['client'] = client_timings
         out_prefix = str(DATA_ROOT / 'out' / shot_id)
         os.makedirs(os.path.dirname(out_prefix), exist_ok=True)
         store = get_store()
-        if mode == 'form':
-            # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
-            # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball
-            # L-dev-0 score / Accuracy — hence we skip after_shot_analyzed and return a minimal footer.
-            from lanesight_core.form import analyze_form_clip
-            from lanesight_core.form.pose import pose_backend
-            rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
-            rec['shot_id'] = shot_id
-            # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
-            # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
-            for fkey in (rec.get('key_frames') or []):
-                local = f'{out_prefix}_form_{fkey}.jpg'
-                if os.path.exists(local):
-                    try:
-                        with open(local, 'rb') as fh:
-                            store.storage_upload(_IMAGE_BUCKET, f'frames/{shot_id}_form_{fkey}.jpg',
-                                                 fh.read(), 'image/jpeg')
-                    except Exception as e:
-                        print(f'key-frame upload {fkey} skipped ({e})')
-            job.timings['analyze'] = time.monotonic() - t0
-            # Form-only engine step (baselines -> watch -> focus -> footer). Runs BEFORE save so the current
-            # delivery is counted once; never touches the ball L-dev-0 score / Accuracy.
-            # Standalone uploads (DEC-055) still render the form card (focus/footer), but persist=False
-            # keeps them out of the user's Stats baselines.
-            form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
-                                                      analyze_seconds=job.timings['analyze'],
-                                                      persist=not is_upload)
-            store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'})
-            return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
-                        focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
-                        footer=form_footer.get('footer'))
-        from lanesight_runner.core import analyze_clip
-        rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
-        rec['shot_id'] = shot_id
-        for k, v in (timings or {}).items():
-            job.timings[k] = v
-        job.timings['analyze'] = time.monotonic() - t0
-        # Recompute insights with the thrown intent + session history (SHOT_REVIEW #5 / handoff C.4): the CV
-        # pipeline computes insights with neither, so without this an upload/session target never produces an
-        # EXECUTION_MISS and the transition read never fires. Pins come from the measured read; the user can
-        # override via POST /shots/{id}/pins. suggested_target ("Apply this move") is derived inside the recompute.
-        sh = store.get_shot(user_id, shot_id)
-        if sh and (sh.get('intent') or sh.get('session_id')):
-            pr = rec.get('pins') or {}
-            if pr.get('readable'):
-                standing, unc = set(pr.get('standing') or []), set(pr.get('uncertain') or [])
-            else:
-                standing, unc = None, set()
-            _recompute_insights(store, user_id, sh, rec, standing, unc)
-        store.save_shot_result(shot_id, rec, {'ok': True})
-        # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
-        # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
-        if is_upload:
-            return dict(shot_id=shot_id)
-        # After each analyzed shot: recompute score over the 90-day window, run achievements, findings.
-        footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
-        return dict(shot_id=shot_id, **footer)
+        # Every attempt is logged (success + failure) for failure-rate tracking (DEC-086). Best-effort —
+        # a logging failure must never fail the analysis.
+        attempt = {'user_id': user_id, 'shot_id': shot_id, 'session_id': session_id,
+                   'source': 'upload' if is_upload else 'live', 'capture_mode': mode,
+                   'content_hash': content_hash, 'algorithm_version': ALGO_VERSION,
+                   'api_revision': os.environ.get('K_REVISION'),
+                   # DEC-103: engine provenance. This server path is always 'server'; the on-device engine
+                   # (shadow) submits 'ios'. version/build = algorithm_version/api_revision above.
+                   'platform': 'server',
+                   'env': 'live' if os.environ.get('K_REVISION') else 'dev',
+                   # Probe up front so a FAILED analysis still records the clip's camera/recording facts
+                   # (resolution, rotation, fps, HDR, VFR) — most failures are framing-related. cold_start
+                   # (DEC-092 P0) rides in the clip jsonb so no schema change is needed.
+                   'clip': {**_probe_clip(src),
+                            'cold_start': (time.monotonic() - _PROCESS_START) < _COLD_START_WINDOW_S}}
+        # DEC-100: where the retained clip lives, so any attempt (failed or "succeeded" but empty) can be
+        # re-run on the exact bytes the server saw (ops/fetch_clip.py <shot_id>).
+        if clip_storage_path:
+            attempt['clip']['storage_path'] = clip_storage_path
+            attempt['clip']['retained_days'] = clip_retention_days()
 
-    return _queue.submit('analyze', run)
+        # DEC-092 P0: ~2 s framing precheck. SHADOW by default — record the verdict, never block — until the
+        # benchmark shows it rejects zero clips the full pipeline passes. Set LANESIGHT_PRECHECK_ENFORCE=1 to
+        # fail fast on a reject (only after that's validated). Ball/shot clips only (form uses the pose path).
+        if mode != 'form':
+            try:
+                from lanesight_core.cv.precheck import precheck as _precheck
+                attempt['clip']['precheck'] = _precheck(src)
+            except Exception as pe:
+                attempt['clip']['precheck'] = {'error': str(pe)[:150]}
+
+        def _log(status, failure=None, diagnostics=None, record=None):
+            try:
+                dur_ms = int((time.monotonic() - t0) * 1000)
+                logged = store.log_analysis_attempt({**attempt, 'status': status,
+                                            'failure_code': getattr(failure, 'code', None),
+                                            'failure_stage': getattr(failure, 'stage', None),
+                                            # failure numbers, or (on success) capture-quality + geometry signals
+                                            'diagnostics': getattr(failure, 'diagnostics', None) or diagnostics,
+                                            'duration_ms': dur_ms,
+                                            # DEC-098 §2 (M1): measured compute/egress for cost reporting
+                                            'cost': _attempt_cost(dur_ms, attempt.get('clip')),
+                                            'step_timings': {k: v for k, v in job.timings.items()}})
+                _log_outcomes(store, (logged or {}).get('id'), mode, record, failure,
+                              clip=attempt.get('clip'))
+            except Exception as le:
+                print(f'analysis_attempt log skipped ({le})')
+
+        try:
+            # DEC-092 P0: enforce the framing precheck only when explicitly enabled + validated (default off).
+            pc = (attempt.get('clip') or {}).get('precheck') or {}
+            if mode != 'form' and os.environ.get('LANESIGHT_PRECHECK_ENFORCE') == '1' and pc.get('ok') is False:
+                from lanesight_core.failures import AnalysisFailure as _AF
+                raise _AF(pc.get('code') or 'LANE_NOT_DETECTED', pc.get('message') or 'precheck rejected framing',
+                          stage=pc.get('stage') or 'lane', diagnostics={'precheck': True, **pc})
+            if mode == 'form':
+                # Form clips (rear / bowler-facing) run the pose pipeline, not the ball CV. Their measurements use
+                # source 'lanesight_form', which read_shot_records excludes, so a form shot never feeds the ball
+                # L-dev-0 score / Accuracy — hence we skip after_shot_analyzed and return a minimal footer.
+                from lanesight_core.form import analyze_form_clip
+                from lanesight_core.form.pose import pose_backend
+                rec = analyze_form_clip(src, out_prefix=out_prefix, handed=handed, pose_backend=pose_backend)
+                rec['shot_id'] = shot_id
+                gated = _form_not_isolated(rec)
+                if gated:
+                    # DEC-122: delivery isolation failing does NOT fail the whole form analysis. The swing events
+                    # are already `unavailable` (pose.analyze nulls them with a reason); step count / approach
+                    # duration / tempo that don't depend on the isolation gate still stand. Record the stage as
+                    # failed in the per-stage report and continue to persist + return the partial.
+                    sr = rec.setdefault('stage_report', {})
+                    sr['delivery_isolation'] = {'status': 'failed', 'reason_code': 'FORM_DELIVERY_NOT_ISOLATED',
+                                                'reason': 'every swing event failed the DEC-095 sanity gates',
+                                                'diagnostics': gated}
+                    print(f'FORM_DELIVERY_NOT_ISOLATED: partial result — swing events unavailable, other form metrics kept')
+                # Persist key-position frames to Storage so the Form card can serve them later — Cloud Run disk is
+                # ephemeral (scale-to-zero). A missing event wrote no file; skip it (never a substitute frame).
+                for fkey in (rec.get('key_frames') or []):
+                    local = f'{out_prefix}_form_{fkey}.jpg'
+                    if os.path.exists(local):
+                        try:
+                            with open(local, 'rb') as fh:
+                                store.storage_upload(_IMAGE_BUCKET, f'frames/{shot_id}_form_{fkey}.jpg',
+                                                     fh.read(), 'image/jpeg')
+                        except Exception as e:
+                            print(f'key-frame upload {fkey} skipped ({e})')
+                job.timings['analyze'] = time.monotonic() - t0
+                form_footer = engines.after_form_analyzed(store, user_id, session_id, rec,
+                                                          analyze_seconds=job.timings['analyze'],
+                                                          persist=not is_upload)
+                store.save_shot_result(shot_id, rec, {'ok': True, 'mode': 'form'}, algo_version=ALGO_VERSION)
+                _log('analyzed', diagnostics=_quality(rec), record=rec)
+                return dict(shot_id=shot_id, mode='form', status=rec.get('status'), view=rec.get('view'),
+                            focus=form_footer.get('focus'), key_frames=form_footer.get('key_frames'),
+                            footer=form_footer.get('footer'))
+            from lanesight_runner.core import analyze_clip
+            rec, probe, timings = analyze_clip(src, out_prefix, handed=handed, timings={})
+            rec['shot_id'] = shot_id
+            for k, v in (timings or {}).items():
+                job.timings[k] = v
+            job.timings['analyze'] = time.monotonic() - t0
+            # Recompute insights with the thrown intent + session history (SHOT_REVIEW #5 / handoff C.4).
+            sh = store.get_shot(user_id, shot_id)
+            if sh and (sh.get('intent') or sh.get('session_id')):
+                pr = rec.get('pins') or {}
+                if pr.get('readable'):
+                    standing, unc = set(pr.get('standing') or []), set(pr.get('uncertain') or [])
+                else:
+                    standing, unc = None, set()
+                _recompute_insights(store, user_id, sh, rec, standing, unc)
+            store.save_shot_result(shot_id, rec, {'ok': True}, algo_version=ALGO_VERSION)
+            # Enrich the attempt clip with the richer, validated probe from analysis (measured fps, frames…).
+            enriched = _clip_info(probe)
+            if enriched:
+                attempt['clip'] = {**(attempt.get('clip') or {}), **enriched}
+            # Standalone uploads (DEC-055) are analyzed and viewable, but never feed the LaneSight Score,
+            # tiers, achievements or findings — so skip the post-shot engine entirely (no footer nudges).
+            if is_upload:
+                _log('analyzed', diagnostics=_quality(rec), record=rec)
+                return dict(shot_id=shot_id)
+            footer = engines.after_shot_analyzed(store, user_id, session_id, rec)
+            _log('analyzed', diagnostics=_quality(rec), record=rec)
+            return dict(shot_id=shot_id, **footer)
+        except Exception as e:
+            # Persist the failure on the shot row (so Lab › Uploads can show it) + log the attempt, then
+            # re-raise so the job reports it. Unknown exceptions become a stable INTERNAL_ERROR.
+            from lanesight_core.failures import AnalysisFailure
+            if isinstance(e, AnalysisFailure):
+                fail = e
+            else:
+                # Capture the traceback HERE (the jobs.py wrapper won't re-wrap an already-raised
+                # AnalysisFailure, so without this the attempt row's diagnostics are null — exactly what
+                # hid the 57c1aa3c down-lane crash on 2026-10-30). These hard clips are the frontier; the
+                # trace is how we fix them.
+                import traceback
+                fail = AnalysisFailure('INTERNAL_ERROR', f'{type(e).__name__}: {e}'[:500], stage='internal',
+                                       diagnostics={'exc_type': type(e).__name__,
+                                                    'traceback_tail': traceback.format_exc()[-1200:]})
+            try:
+                store.mark_shot_failed(shot_id, fail.code, fail.stage)
+            except Exception as me:
+                print(f'mark_shot_failed skipped ({me})')
+            # DEC-100: keep what we need to diagnose it — snapshot frames of what the camera saw.
+            attempt['clip'] = {**(attempt.get('clip') or {}), 'frames': _snapshot_frames(src)}
+            _log('failed', failure=fail)
+            raise
+
+    return run
+
+
+def _analyze_job(shot_id: str, src: str, handed: str | None, user_id: str, session_id: str | None,
+                 mode: str = 'shot', is_upload: bool = False, content_hash: str | None = None,
+                 client_timings: dict | None = None, clip_storage_path: str | None = None):
+    """In-service path: build the analyze closure and run it on the serial queue (sync on Cloud Run). The
+    ephemeral-Job path (LANESIGHT_JOB_WORKER=1) is in _trigger_job_analysis — it reuses _build_run in a
+    separate Cloud Run Job instead, so the slow gVisor service pool never runs the CPU-heavy analysis."""
+    # DEC-116: ephemeral-Job path when enabled and the clip is in GCS (so the worker can fetch it). Ball shots
+    # only — form stays on the in-service pose path. No clip in GCS (retention off) → in-service fallback.
+    if _job_worker_on() and clip_storage_path and mode != 'form':
+        return _trigger_job_analysis(shot_id, user_id, session_id, clip_storage_path, handed, mode,
+                                     is_upload, content_hash)
+    run = _build_run(shot_id, src, handed, user_id, session_id, mode, is_upload, content_hash,
+                     client_timings, clip_storage_path)
+    return _queue.submit('analyze', run, user_id=user_id, shot_id=shot_id)
 
 
 # The engine versions that produced the results a piece of feedback is about. core/rules/formula are
@@ -144,11 +606,14 @@ def _shot_view_from_record(rec, standing, uncertain=None):
     recompute insights when the user reports their leave (POST /shots/{id}/pins). standing None = unreadable."""
     M = rec.get('metrics') or {}
     val = lambda k: (M.get(k) or {}).get('value')
+    # DEC-094 §5/§6: carry per-metric quality so the recompute path gates moves the same way analysis does.
+    quality = {k: {'status': v.get('status'), 'uncertainty': v.get('uncertainty'), 'confidence': v.get('confidence')}
+               for k, v in M.items() if isinstance(v, dict)}
     return dict(entry_board=val('entry_board'), entry_angle_deg=val('entry_angle'),
                 board_at_15ft=val('arrows_board'), board_at_0ft=val('laydown_board'),
                 breakpoint_board=val('breakpoint_board'),
                 speed_early=val('speed_early'), speed_late=val('speed_late'),
-                trajectory=rec.get('trajectory'),
+                trajectory=rec.get('trajectory'), _quality=quality,
                 pins_standing=standing, pins_uncertain=(set(uncertain) if uncertain else set()))
 
 
@@ -203,7 +668,33 @@ def health():
     return {'status': status, 'supabase_reachable': reachable,
             'versions': {'api': API_VERSION, 'app_compat': APP_COMPAT,
                          'core': ALGO_VERSION, 'rules': BENCHMARK_VERSION, 'formula': SCORE_VERSION},
-            'config': s.redacted()}
+            'config': {**s.redacted(), 'upload_dedupe': _upload_dedupe_on()}}   # DEC-086 flag (default off)
+
+
+@app.get('/debug/env')
+def debug_env(user=Depends(current_user)):
+    """DEC-106 Phase 0: Cloud Run CPU/threading introspection for the perf investigation. Owner-only (no
+    secrets, but not public). Confirms whether os.cpu_count() (what numpy/OpenCV/our worker pool size off)
+    matches the allocated vCPUs — the suspected oversubscription cause of the Cloud Run vs Mac latency gap."""
+    from lanesight_core.owner import OWNER_USER_ID
+    if user != OWNER_USER_ID:
+        raise HTTPException(403, 'owner only')
+    info = {'os_cpu_count': os.cpu_count(),
+            'env': {k: os.environ.get(k) for k in
+                    ('LANESIGHT_CV_WORKERS', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
+                     'NUMEXPR_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'K_SERVICE', 'K_REVISION')},
+            'execution_environment': os.environ.get('CLOUD_RUN_EXECUTION_ENVIRONMENT')}
+    try:
+        import cv2
+        info['cv2_num_threads'] = cv2.getNumThreads()
+    except Exception as e:
+        info['cv2'] = str(e)[:120]
+    try:
+        from lanesight_core.cv._parallel import workers
+        info['cv_workers'] = workers()
+    except Exception as e:
+        info['cv_workers_err'] = str(e)[:120]
+    return info
 
 
 # ----------------------------------------------------------------- auth (email/password, no bearer)
@@ -446,7 +937,7 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
     shot = store.create_shot(user, sid, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                          'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
                                          'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
-                                         'ball_configuration_id': cfg, 'user_ball_id': ub})
+                                         'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     dest = DATA_ROOT / 'sessions' / sid
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{shot['id']}.mov"
@@ -458,16 +949,109 @@ async def create_shot(sid: str, file: UploadFile = File(...), metadata: str = Fo
 
 @app.get('/jobs/{job_id}')
 def get_job(job_id: str, user=Depends(current_user)):
+    # In-memory first (this instance ran it). Part 3a: fall back to the durable row so a poll that lands on a
+    # different instance, or after the instance scaled to zero / restarted, resolves instead of 404ing — the
+    # lost-session bug. The DB row is the same public shape (id/kind/state/reason/timings/result/failure).
     job = _queue.get(job_id)
-    if not job:
+    if job:
+        return job.public()
+    _drain_and_reap()                                   # DEC-116: opportunistic queue drain + stuck-run reaper
+    row = get_store().get_job(job_id)
+    if not row:
         raise HTTPException(404, 'job not found')
-    return job.public()
+    if row.get('user_id') and row['user_id'] != user:   # scope to the owner (service role bypasses RLS)
+        raise HTTPException(404, 'job not found')
+    result = row.get('result')
+    if isinstance(result, dict) and '_pending' in result:   # don't leak the internal trigger payload
+        result = {k: v for k, v in result.items() if k != '_pending'} or None
+    return {'id': row['id'], 'kind': row.get('kind'), 'state': row.get('state'),
+            'reason': row.get('reason'), 'timings': row.get('timings') or {}, 'timings_detail': None,
+            'result': result, 'failure': row.get('failure')}
+
+def _flat_metrics(m: dict) -> dict:
+    """Flatten a record's metrics ({k:{value}} or {k:v}) to {k: value}."""
+    out = {}
+    for k, v in (m or {}).items():
+        out[k] = v.get('value') if isinstance(v, dict) else v
+    return out
+
+
+def _shot_card_enrich(store, user, sh: dict) -> dict:
+    """DEC-088/090: add the shot-card fields to a BALL shot's record — path_fit (from the already-smoothed
+    trajectory), impact_energy_j (DEC-024), baseline, and insights.throw/lane/coach (the coach matrix).
+    Best-effort + additive; a form shot or any error leaves the record untouched (older clients ignore the
+    new keys). Computed at read time so the baseline is always current."""
+    try:
+        rec = sh.get('record') or {}
+        if not rec or rec.get('form_version') or not rec.get('metrics'):
+            return sh          # form shots / empty records have no ball lane read
+        m = _flat_metrics(rec.get('metrics'))
+        # path_fit: the trajectory is already LOESS-smoothed in lane coords; expose it + the measured extent.
+        tr = rec.get('trajectory') or {}
+        sm = tr.get('smoothed') or []
+        if sm:
+            zs = [p['z_ft'] for p in sm if p.get('z_ft') is not None]
+            rec['path_fit'] = {'points': sm, 'measured_extent_ft': [min(zs), max(zs)] if zs else None}
+        # Power / impact energy (DEC-024): pocket speed + rev + ball weight; best-effort, labeled.
+        from lanesight_core import power
+        pw = power.power(engines._weight_lb(store, user), m.get('speed_late') or m.get('ball_speed'),
+                         m.get('rev_rate'))
+        rec['impact_energy_j'] = pw.get('energy_j')
+        rec['power'] = pw
+        # Coach: classify throw vs the bowler's normal (prior LIVE shots) + lane vs the pocket.
+        from lanesight_core.insights import coach as _coach
+        prior = []
+        for p in store.shot_points(user):
+            if p.get('shot_id') == sh.get('id'):
+                continue
+            pm = _flat_metrics((p.get('record') or {}).get('metrics'))
+            prior.append({'ball_speed': pm.get('ball_speed'), 'rev_rate': pm.get('rev_rate'),
+                          'arrows_board': pm.get('arrows_board')})
+        intent = sh.get('intent') or {}
+        # Target line for the coach + DEC-031 Accuracy: carry both the arrows and breakpoint intent (Accuracy
+        # uses both; breakpoint is dropped honestly downstream when it isn't measured from this camera).
+        target = None
+        if intent.get('arrows_board') is not None or intent.get('breakpoint_board') is not None:
+            target = {'arrows_board': intent.get('arrows_board'),
+                      'breakpoint_board': intent.get('breakpoint_board')}
+        rec0 = ((rec.get('insights') or {}).get('recommendations') or [{}])[0] or {}
+        far = 'not_read' if (rec.get('capture_quality') or {}).get('far_lane') in ('limited', 'not_read') else None
+        _mq = rec.get('metrics') or {}
+        quality = {k: {'status': v.get('status'), 'uncertainty': v.get('uncertainty'), 'confidence': v.get('confidence')}
+                   for k, v in _mq.items() if isinstance(v, dict)}       # DEC-094 §5/§6
+        cb = _coach.build(m, rec.get('key_points'), prior, target=target, recommendation=rec0, far_lane=far, quality=quality)
+        ins = rec.setdefault('insights', {})
+        ins['throw'], ins['lane'], ins['coach'] = cb['throw'], cb['lane'], cb['coach']
+        rec['baseline'] = cb['baseline']
+        # Speed vs the bowler's OWN baseline (≥20 prior shots): a speed far from their norm is suspect even when
+        # internally consistent — mark it low_confidence, never a silent 'ok' (2026-10-29). Serve-time only.
+        base_sp = (cb['baseline'] or {}).get('speed'); base_n = (cb['baseline'] or {}).get('n') or 0
+        spm = _mq.get('ball_speed') if isinstance(_mq.get('ball_speed'), dict) else None
+        if base_sp and base_n >= 20 and spm and spm.get('value') is not None and spm.get('status') == 'ok' \
+           and abs(spm['value'] - base_sp) > max(3.0, 0.25 * base_sp):
+            spm['status'] = 'low_confidence'
+            spm['confidence'] = min(spm.get('confidence') or 1.0, 0.4)
+            spm['note'] = ((spm.get('note') + ' ') if spm.get('note') else '') + \
+                f"{spm['value']:.1f} mph is far from your {base_sp:.1f} mph average ({base_n} shots) — read with caution."
+    except Exception as e:
+        print(f'shot-card enrich skipped ({type(e).__name__}: {e})')
+    return sh
+
 
 @app.get('/shots/{shot_id}')
 def get_shot(shot_id: str, user=Depends(current_user)):
-    sh = get_store().get_shot(user, shot_id)
+    store = get_store()
+    sh = store.get_shot(user, shot_id)
     if not sh:
         raise HTTPException(404, 'shot not found')
+    sh = _shot_card_enrich(store, user, sh)
+    # DEC-097: the shot card shows the ball used (and the oil it was thrown on), resolved per shot.
+    try:
+        ball_names, oil_names = store._ball_oil_names(user)
+        sh['ball_name'] = ball_names.get(sh.get('user_ball_id') or sh.get('ball_configuration_id'))
+        sh['oil_name'] = oil_names.get(sh.get('oil_pattern_id'))
+    except Exception as e:
+        print(f'shot ball/oil name resolve skipped ({type(e).__name__}: {e})')
     return sh
 
 @app.patch('/shots/{shot_id}')
@@ -559,11 +1143,42 @@ def do_spot_check(body: dict | None = None, user=Depends(current_user)):
 
 
 # ----------------------------------------------------------------- score
+_SCORE_PART_KEYS = ('s_perf', 'a_acc', 'c_cons', 'p_power')
+
+
+def _with_part_deltas(store, user, snap, window_days=30):
+    """DEC-083: attach `parts_delta_30d` — each part's change vs the most recent snapshot at least
+    `window_days` old. Only parts with a value in BOTH the current and reference snapshot get a delta;
+    the rest are omitted (the app renders 'New'). Needs real history — nothing is fabricated."""
+    if not snap:
+        return snap
+    try:
+        hist = sorted(store.score_history(user), key=lambda s: s.get('computed_at') or 0)
+    except Exception:
+        hist = []
+    deltas = {}
+    if hist:
+        cutoff = time.time() - window_days * 86400
+        older = [s for s in hist if (s.get('computed_at') or 0) <= cutoff]
+        ref = older[-1] if older else None
+        if ref:
+            for k in _SCORE_PART_KEYS:
+                cur, old = snap.get(k), ref.get(k)
+                if cur is not None and old is not None:
+                    deltas[k] = round(cur - old, 1)
+    # DEC-108: the tier is PROVISIONAL until TIER_PROVISIONAL_UNTIL shots (a 5-shot tier isn't settled). Derive
+    # on read from the single constant so persisted snapshots (which don't store the flag) stay consistent.
+    from lanesight_core.score.ldev0 import TIER_PROVISIONAL_UNTIL
+    n_shots = (snap.get('inputs') or {}).get('n_shots', 0) if snap.get('inputs') else snap.get('n_shots', 0)
+    tier_prov = bool(snap.get('eligible') and snap.get('tier') is not None and (n_shots or 0) < TIER_PROVISIONAL_UNTIL)
+    return {**snap, 'parts_delta_30d': deltas, 'tier_provisional': snap.get('tier_provisional', tier_prov)}
+
+
 @app.get('/me/score')
 def me_score(user=Depends(current_user)):
     store = get_store()
-    snap = store.latest_score(user)
-    return snap or engines.recompute_score(store, user, trigger='shot')
+    snap = store.latest_score(user) or engines.recompute_score(store, user, trigger='shot')
+    return _with_part_deltas(store, user, snap)
 
 
 @app.get('/me/score/breakdown')
@@ -599,6 +1214,21 @@ def me_score_breakdown(user=Depends(current_user)):
         'power': {'value': P.get('value'), 'entry_speed': _mean('ball_speed'),
                   'rev_rate': _mean('rev_rate'), 'entry_angle': _mean('entry_angle')},
     }
+
+
+@app.get('/me/notify')
+def get_notify(user=Depends(current_user)):
+    """DEC-084: the user's launch-notify flags (currently just coaching_launch)."""
+    return get_store().get_notify_prefs(user)
+
+
+@app.put('/me/notify')
+def put_notify(body: dict, user=Depends(current_user)):
+    """DEC-084: record "notify me when Coaching launches". Idempotent; returns the current flags."""
+    store = get_store()
+    if (body or {}).get('coaching_launch'):
+        store.set_notify_pref(user, 'coaching_launch', True)
+    return store.get_notify_prefs(user)
 
 
 @app.get('/me/last-setup')
@@ -647,6 +1277,42 @@ def submit_feedback(body: dict, user=Depends(current_user)):
         raise HTTPException(404, 'session not found')
     return store.add_feedback(user, data)
 
+
+@app.post('/ops/insights/analyze')
+def ops_insights_analyze(user=Depends(current_user)):
+    """DEC-125 "Analyze now": run the feedback analyst once. Owner-only (the Cloud Scheduler path runs the
+    same `run_analyst` as the Cloud Run job). The LLM cost is capped at $10/month inside the run."""
+    from lanesight_core.owner import OWNER_USER_ID
+    if user != OWNER_USER_ID:
+        raise HTTPException(403, 'owner only')
+    from .feedback_analyst import run_analyst
+    return run_analyst(get_store())
+
+@app.post('/events')
+def post_events(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-098 §2 (M3): ingest consent-aware product events. Body: {"events": [{event_name, occurred_at,
+    client_event_id, app_version, feature, flow_step, status, props}, ...]}. Unknown event_names are dropped
+    (schema registry); the store pseudonymises user_id -> user_ref and dedups on client_event_id. Never
+    accepts raw PII — props should already be masked by the client (strategy §4 exclusions)."""
+    events = body.get('events') if isinstance(body, dict) else None
+    if not isinstance(events, list):
+        raise HTTPException(400, 'events must be a list')
+    env = 'live' if os.environ.get('K_REVISION') else 'dev'
+    rows = []
+    for e in events[:200]:
+        if not isinstance(e, dict):
+            continue
+        name = (e.get('event_name') or '').strip()
+        if name not in _PRODUCT_EVENTS:
+            continue
+        rows.append({'event_name': name, 'user_id': user, 'env': env,
+                     'occurred_at': e.get('occurred_at'), 'app_version': e.get('app_version'),
+                     'feature': e.get('feature'), 'flow_step': e.get('flow_step'),
+                     'status': e.get('status'), 'props': e.get('props'),
+                     'client_event_id': e.get('client_event_id')})
+    inserted = get_store().log_events(rows)
+    return {'received': len(events), 'accepted': inserted}
+
 @app.get('/sessions/{sid}/export.csv')
 def export_csv(sid: str, user=Depends(current_user)):
     store = get_store()
@@ -663,7 +1329,34 @@ def get_profile(user=Depends(current_user)):
 
 @app.put('/me/profile')
 def put_profile(body: dict, user=Depends(current_user)):
-    return get_store().put_profile(user, body or {})
+    store = get_store()
+    existing = store.get_profile(user) or {}
+    try:
+        # DEC-087: reject bad input (phone / grip / PAP / DOB + 13+ gate), never clamp. The 400 detail is
+        # {field, message} so the app can show the reason inline on the field and keep the user's input.
+        validate_profile_patch(body or {}, existing)
+    except ProfileValidationError as e:
+        raise HTTPException(400, {'field': e.field, 'message': e.message})
+    return store.put_profile(user, body or {})
+
+
+@app.put('/me/email')
+def put_email(body: dict, authorization: str | None = Header(default=None), user=Depends(current_user)):
+    """DEC-087: start an email change via Supabase Auth. GoTrue emails a confirmation link; the address
+    does NOT change until the user confirms, and email is never written into `profiles`."""
+    email = str((body or {}).get('email') or '').strip()
+    if '@' not in email or email.startswith('@') or email.endswith('@'):
+        raise HTTPException(400, {'field': 'email', 'message': 'Enter a valid email address.'})
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(401, 'missing bearer token')
+    try:
+        st, resp = userauth.update_email(authorization[7:], email)
+    except userauth.AuthError as e:
+        raise HTTPException(e.status if 400 <= e.status < 600 else 400, str(e.body)[:300])
+    if st >= 400:
+        raise HTTPException(st if 400 <= st < 600 else 400, str(resp)[:300])
+    return {'status': 'confirmation_sent', 'email_pending': email,
+            'message': 'Check your new email to confirm the change.'}
 
 
 # ----------------------------------------------------------------- profile photo (handoff G)
@@ -691,7 +1384,10 @@ def _process_avatar(data: bytes) -> bytes:
             src, dst = _os.path.join(td, 'in'), _os.path.join(td, 'out.jpg')
             with open(src, 'wb') as f:
                 f.write(data)
-            r = subprocess.run(['sips', '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+            try:
+                r = subprocess.run(['sips', '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+            except OSError:                                 # no `sips` (Linux / Cloud Run): treat as unreadable
+                raise ValueError('unsupported image format')
             if r.returncode != 0 or not _os.path.exists(dst):
                 raise ValueError('unsupported image format')
             img = Image.open(dst); img.load()
@@ -809,13 +1505,14 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     import hashlib
     data = await file.read()
     content_hash = hashlib.sha256(data).hexdigest()
-    dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+    dup = (store.find_upload_by_hash(user, content_hash)
+           if (_upload_dedupe_on() and hasattr(store, 'find_upload_by_hash')) else None)
     if dup:
         return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
     shot = store.create_shot(user, None, {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                                           'source': 'upload', 'sensor_used': meta.get('sensor_used'),
                                           'sensor_id': meta.get('sensor_id'), 'handed': meta.get('handed'),
-                                          'ball_configuration_id': cfg, 'user_ball_id': ub})
+                                          'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     if hasattr(store, 'set_content_hash'):
         store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / 'uploads'
@@ -824,7 +1521,7 @@ async def upload_clip(file: UploadFile = File(...), metadata: str = Form('{}'),
     with open(path, 'wb') as f:
         f.write(data)
     job = _analyze_job(shot['id'], str(path), meta.get('handed'), user, None,
-                       mode=(meta.get('capture_mode') or 'shot'), is_upload=True)
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=True, content_hash=content_hash)
     return {'shot_id': shot['id'], 'job_id': job.id, 'source': 'upload'}
 
 
@@ -838,11 +1535,127 @@ def create_upload_url(user=Depends(current_user)):
     return store.storage_signed_upload_url('shot-clips', path)
 
 
+def clip_retention_days() -> int:
+    """DEC-100: days a clip stays in the private `shot-clips` bucket after analysis (diagnostics). LaneSight sets
+    this, not the user (DEC-099). LANESIGHT_CLIP_RETENTION_DAYS overrides; 0 = delete right after analysis.
+    The legacy LANESIGHT_KEEP_CLIPS=1 still means "retain"."""
+    raw = os.environ.get('LANESIGHT_CLIP_RETENTION_DAYS')
+    if raw is not None:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return 7
+
+
+def clip_keep_max() -> int:
+    """Per-user cap on retained clips (newest kept) so the Storage quota can't fill during heavy testing."""
+    try:
+        return max(1, int(os.environ.get('LANESIGHT_CLIP_KEEP_MAX', '40')))
+    except ValueError:
+        return 40
+
+
+@app.post('/analysis/client-failure')
+def client_failure(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-100: the phone reports an analysis that failed BEFORE it reached the server (trim, signed URL,
+    upload, or the analyze request itself dropping). Logged to analysis_attempt so no attempt is invisible."""
+    b = dict(body or {})
+    stage = str(b.get('stage') or 'unknown')[:40]
+    row = {'user_id': user, 'session_id': b.get('session_id'), 'shot_id': None,
+           'source': b.get('source') if b.get('source') in ('live', 'upload') else None,
+           'capture_mode': b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else None,
+           'status': 'failed', 'failure_code': f'CLIENT_{stage.upper()}', 'failure_stage': 'client',
+           'diagnostics': {'error': str(b.get('error') or '')[:500], 'stage': stage,
+                           'app_version': b.get('app_version'), 'clip_bytes': b.get('clip_bytes'),
+                           'clip_duration_s': b.get('clip_duration_s')},
+           'step_timings': {'client': b.get('client_timings')} if b.get('client_timings') else None,
+           'algorithm_version': ALGO_VERSION, 'api_revision': os.environ.get('K_REVISION'),
+           'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+    try:
+        get_store().log_analysis_attempt(row)
+    except Exception as e:
+        print(f'client-failure log skipped ({e})')
+    return {'logged': True}
+
+
+@app.post('/analysis/shadow')
+def shadow_attempt(body: dict = Body(...), user=Depends(current_user)):
+    """DEC-106 Phase-6 prep: the phone's native on-device engine analyses each shot in the BACKGROUND (shadow)
+    and submits its result here. Recorded as an analysis_attempt with platform='ios' (DEC-103) — it is NEVER
+    shown to the user and NEVER feeds Score/coaching; the server stays authoritative. This lets us compare
+    on-device vs server (and, once the DEC-094 ground-truth set exists, vs truth) in the ops layer BEFORE any
+    per-metric flip. No flip happens here — ingestion only."""
+    b = dict(body or {})
+    m = b.get('metrics') or {}
+    events = b.get('events') or {}                    # form: per-event TIMES (ball_start_s, release_s, …)
+    perf = b.get('device_perf') or {}
+    basis = str(b.get('basis') or '')[:20]
+    mode = b.get('capture_mode') if b.get('capture_mode') in ('shot', 'form') else 'shot'
+    # Measured = the engine produced something (a metric value or, for form, an event time) and didn't
+    # self-report unavailable. Works for both ball shots and form.
+    measured = basis != 'unavailable' and (
+        any(v is not None for v in m.values()) or any(v is not None for v in events.values()))
+    # Ball metric keys go to top-level diagnostics so ops.attempt surfaces them (split by platform); the full
+    # metric + event dicts are kept for DEC-094 Gate A (per-metric for shot, per-event-time for form).
+    diag = {k: m.get(k) for k in ('ball_speed', 'entry_board', 'entry_angle', 'rev_rate', 'n_measured')
+            if m.get(k) is not None}
+    diag['basis'] = basis or None
+    diag['note'] = (str(b.get('note'))[:300] if b.get('note') else None)
+    if m:
+        diag['metrics'] = m
+    if events:
+        diag['events'] = events
+    dev = {k: perf.get(k) for k in ('latency_s', 'peak_mem_mb', 'thermal_state', 'thermal_transitions',
+                                    'battery_delta', 'decode_fps', 'pose_confidence') if perf.get(k) is not None}
+    if dev:
+        diag['device'] = dev
+    lat = perf.get('latency_s')
+    row = {'user_id': user,
+           'shot_id': b.get('shot_id'),                 # correlate with the server shot (same clip)
+           'session_id': b.get('session_id'),
+           'source': b.get('source') if b.get('source') in ('live', 'upload') else None,
+           'capture_mode': mode,
+           'status': 'analyzed' if measured else 'failed',
+           'failure_code': None if measured else 'SHADOW_UNAVAILABLE',
+           'failure_stage': None if measured else ('form_pose' if mode == 'form' else 'track'),
+           'platform': 'ios',                           # DEC-103: the on-device shadow engine
+           'algorithm_version': str(b.get('algorithm_version') or 'ios-ondevice')[:60],
+           'api_revision': (str(b.get('app_version'))[:60] if b.get('app_version') else None),
+           'duration_ms': int(lat * 1000) if isinstance(lat, (int, float)) else None,
+           'diagnostics': {k: v for k, v in diag.items() if v is not None},
+           'step_timings': {'client': b.get('timings')} if b.get('timings') else None,
+           'env': 'live' if os.environ.get('K_REVISION') else 'dev'}
+    try:
+        st = get_store()
+        logged = st.log_analysis_attempt(row)
+        # DEC-122 §6: per-metric + per-stage outcomes for the on-device engine (platform 'ios' -> engine 'iphone').
+        # Metrics come from the device's per-metric dict; stage_report if the client sent one (else just the
+        # single failed stage for an unavailable shadow run, so the funnel still sees it). Best-effort.
+        aid = (logged or {}).get('id')
+        if aid:
+            from .store import outcome_rows_from_record
+            sr = b.get('stage_report') if isinstance(b.get('stage_report'), dict) else None
+            if not sr and not measured:
+                sr = {(row['failure_stage'] or 'track'): {'status': 'failed', 'reason_code': row['failure_code']}}
+            ctx = {k: (perf.get(k) if k in perf else b.get(k)) for k in ('fps', 'thermal_state')
+                   if (perf.get(k) is not None or b.get(k) is not None)} or None
+            mrows, srows = outcome_rows_from_record(
+                aid, 'iphone', row['algorithm_version'], mode, m, sr, context=ctx,
+                reason_code=(None if measured else row['failure_code']),
+                failed_stage=(None if measured else row['failure_stage']))
+            st.log_outcomes(mrows, srows)
+    except Exception as e:
+        print(f'shadow attempt log skipped ({e})')
+    return {'logged': True, 'platform': 'ios', 'status': row['status']}
+
+
 @app.post('/shots/analyze')
 async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user)):
     """Analyze a clip already uploaded to Storage. body: {storage_path, session_id?, metadata?}. With a
     session_id it's a live session shot (feeds Score/Stats); without, a standalone upload (DEC-055). The clip
-    is downloaded (service role), analyzed on the same serial path, then DELETED (clips aren't retained)."""
+    is downloaded (service role), analyzed on the same serial path, then RETAINED for the diagnostic window
+    (DEC-100, default 7 days) — or deleted right away when retention is 0."""
     store = get_store()
     storage_path = body.get('storage_path')
     if not storage_path or not storage_path.startswith(f'{user}/'):
@@ -857,7 +1670,8 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     import hashlib
     content_hash = hashlib.sha256(data).hexdigest()
     if is_upload:
-        dup = store.find_upload_by_hash(user, content_hash) if hasattr(store, 'find_upload_by_hash') else None
+        dup = (store.find_upload_by_hash(user, content_hash)
+               if (_upload_dedupe_on() and hasattr(store, 'find_upload_by_hash')) else None)
         if dup:
             store.storage_delete('shot-clips', storage_path)
             return {'shot_id': dup['id'], 'duplicate': True, 'source': 'upload'}
@@ -872,7 +1686,7 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
                              {'intent': meta.get('intent'), 'capture_mode': meta.get('capture_mode'),
                               'source': 'upload' if is_upload else meta.get('source', 'live'),
                               'sensor_used': meta.get('sensor_used'), 'sensor_id': meta.get('sensor_id'),
-                              'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub})
+                              'handed': meta.get('handed'), 'ball_configuration_id': cfg, 'user_ball_id': ub, 'oil_pattern_id': meta.get('oil_pattern_id')})
     if hasattr(store, 'set_content_hash'):                  # live shots too, so a retry can dedupe (above)
         store.set_content_hash(shot['id'], content_hash)
     dest = DATA_ROOT / ('uploads' if is_upload else 'sessions')
@@ -880,9 +1694,21 @@ async def analyze_from_storage(body: dict = Body(...), user=Depends(current_user
     local = dest / f"{shot['id']}.mov"
     with open(local, 'wb') as f:
         f.write(data)
+    days = clip_retention_days()
     job = _analyze_job(shot['id'], str(local), meta.get('handed'), user, session_id,
-                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload)
-    store.storage_delete('shot-clips', storage_path)      # clip analyzed; don't retain it
+                       mode=(meta.get('capture_mode') or 'shot'), is_upload=is_upload, content_hash=content_hash,
+                       client_timings=body.get('client_timings'),
+                       clip_storage_path=storage_path if days > 0 else None)
+    if days > 0:
+        # DEC-100: keep the clip for a short diagnostic window (default 7 days, newest CLIP_KEEP_MAX per user)
+        # so every analysis can be reproduced and debugged. Owner-only access via the service role; the
+        # bucket is private. Old clips are purged here, best effort, on every analysis.
+        try:
+            store.purge_old_clips('shot-clips', user, days=days, keep_max=clip_keep_max())
+        except Exception as pe:
+            print(f'clip purge skipped ({type(pe).__name__}: {pe})')
+    else:
+        store.storage_delete('shot-clips', storage_path)  # retention off: clip analyzed; don't retain it
     try:
         os.remove(local)
     except OSError:

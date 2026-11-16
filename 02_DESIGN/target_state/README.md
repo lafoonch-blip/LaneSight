@@ -1,29 +1,32 @@
 # Target-state (MVP) designs — v3.7
-Status: APPROVED FOR HANDOFF · Version: 3.7.4 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: APPROVED FOR HANDOFF · Version: 3.7.10 · Last Updated: 2026-10-27 · Owner: Shayne
+
+## Role (DEC-091)
+These Figma designs are **the app's design source**. Every change is queued for the build in `03_ENGINEERING/APP_DESIGN_CHANGES.md`, with PNGs in `screens/<date>/`.
 
 ## Where they live
 - **Figma:** "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7**.
 - **Parked:** section "Parked · Sensor partnership (post-MVP)" (DEC-070).
 - **Archived:** page **archived** holds superseded sections, old screens and removed parts (nothing deleted).
 - **PNG export:** `LaneSight_v3.7_target_state_screens_2026-10-26.zip` (63 frames), shared in the claude.ai chat; not committed (binary).
-- **Dev Build v0** screens are separate: `02_DESIGN/dev_build_v0/` (Claude Design canvas). Target-state decisions apply there only when a DEC says so.
+- `02_DESIGN/dev_build_v0/` (Claude Design canvas) is frozen as of 2026-10-26 and is no longer a design source (DEC-091).
 
 ## Prototype (Figma › Present)
-Flow starts: **Shot session (live)** · **Form session (live)** · **Onboarding → first use** · **Stats**. 204 links, none broken (audited 2026-10-26).
-- Shot loop (DEC-080): Setup → Record → Analyzing (blocking, screen stays on) → Shot card → Record next shot, or Close → Active Session → End → score popup → Session summary → feedback.
+Flow starts: **Shot session (live)** · **Form session (live)** · **Onboarding → first use** · **Stats**. 245 links, none broken (audited 2026-10-27).
+- Shot loop (DEC-080): Setup → Record → Analyzing (blocking, screen stays on) → Shot card → **Record next shot**, or Close → Active Session → End → score popup → Session summary → feedback.
 - Form loop (DEC-081): Setup (no ball/oil; camera-view guidance) → Record delivery (side or behind, detected) → Analyzing → Form results (side or rear example) → Record next delivery, or Close → Form session → End → Form summary.
 - Uploads (DEC-069): Lab → Shot or Form → Live session / Upload video → result (not counted in Stats or Score).
 
-## Screen inventory (67)
+## Screen inventory (69)
 Row 1: nav component · Home · Lab · choose source (Shot, Form) · Setup (Shot, Form) · ball / oil sheets · Record (Shot, Form) · Analyzing (Shot, Form).
-Row 2: Active Session · Shot card · next-shot states board · Next-shot card component · connection & clip problems · session & data states board.
+Row 2: Active Session · Shot card (DEC-088) + states "off throw → no move" and "far lane not read" · next-shot states board · Next-shot card component · connection & clip problems · session & data states board.
 Row 3: Session summary · feedback sheet · score popup · Form results (rear, side) · key position full frame · Form session (active, summary) · uploads (Shot, Form) and upload results.
 Row 4: Stats (Score, Shot, Form, Equipment) · nine metric detail screens · achievements (overview, collection, unlock, new tier).
 Row 5: Welcome · Sign in · Create account · onboarding (2 steps) · Under 13 · Profile · Settings · Delete account · Ball setup (add, edit).
 Row 6: camera permission (ask, denied) · first-use Home, Lab, Stats › Score, Stats › Form, Stats › Equipment, Achievements · metric detail screens.
 
 ## Decisions reflected
-DEC-061, DEC-066–077, DEC-079–081 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v0.2. Score: DEC-077 (DEC-048 formula, labeled provisional).
+DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v0.2. Score: DEC-077 (DEC-048 formula, labeled provisional).
 
 ## Build rules
 - **Sample numbers are illustrative.** `[Bracketed text]` is user data.
@@ -39,6 +42,12 @@ DEC-061, DEC-066–077, DEC-079–081 (DEC-078 withdrawn). Metric placement: `01
 Back, Edit, Form/Field, Control/Segment option, Row/List item, Tile/Stat were orphaned (main components lost). Rebuilt in Design Components › "LaneSight / Core controls (rebuilt 2026-10-26)" and all 94 instances relinked. Also new: `Sessions / Next-shot card` (6 states); Result badge gained Not a strike / Not read; Metric status row gained Best effort.
 
 ## Changelog
+- **3.7.10 (2026-10-27):** DEC-091: these designs are the app's design source; build queue `03_ENGINEERING/APP_DESIGN_CHANGES.md`; PNG exports in `screens/2026-10-27/`.
+- **3.7.9 (2026-10-27):** lane view camera pulled back so the **foul line, approach dots and pins** are all in frame; new **Laydown** label (board + distance past the foul line); target and ball lines thinned to ~1 board with minimal glow so they stay readable when they overlap.
+- **3.7.8 (2026-10-27):** DEC-090 — lane view gets Entry point, Breakpoint and Arrows data labels with dots on the path (markers drawn on top; pin glow reduced); "Target" ring → **Accuracy**; Lane & pins rings → **Entry point, Entry angle, Power** (Impact Energy, J). Breakpoint moves to the lane view and All metrics.
+- **3.7.7 (2026-10-27):** DEC-088 — new Shot card: 3D lane view rendered from the shot data (fitted ball path, target band, Entry/Breakpoint labels, true-scale pins), core rings split into **Your throw** (speed, revs, target vs your normal) and **Lane & pins** (breakpoint, entry board, entry angle vs target), one **Coach** takeaway, All metrics / notes collapsed, button "Record next shot". New state frames "off throw → no move" and "far lane not read"; Upload result rebuilt on the same layout (Done). Old Shot card, old Upload result and redesign options A–D moved to "archived". The lane images in Figma are renders from `02_DESIGN/target_state/lane_render/` (Three.js); the app draws the same view live.
+- **3.7.6 (2026-10-27):** DEC-085 — Stats tabs Shot · Form · Score · Arsenal (Equipment renamed; Stats opens on Shot). New building-state screens built from the real ones: "Stats · Shot · building", "Stats · Score · building", "Stats · Arsenal · building" (small-sample labels); Form keeps its empty state.
+- **3.7.5 (2026-10-27):** DEC-084 — nav is Home · Stats · Lab · Coaching (Leagues/Tournaments removed; new "Active tab=Coaching" variant); new screen "Coaching · coming soon" with Notify me. 257 prototype links, none broken.
 - **3.7.4 (2026-10-27):** DEC-083 — Home while the score is building uses the real card (greyed, blurred badge; "—", BUILDING, hint, "Score unlocks · N%" bar). Score-part tiles show the part score and its 30-day change; weights only in score details. Frame: "Home · score building (first use)".
 - **3.7.3 (2026-10-26):** approvals recorded; Shot/Form cards equal height on Home and Lab; empty states for Stats › Form, Stats › Equipment and Achievements; notes on full-frame pattern, screen sizes and Dynamic Type; MVP engineering handoff.
 - **3.7.2 (2026-10-26):** Form video player removed (DEC-082); key-position thumbnails get measured skeleton overlays and a key measurement; new screen "Key position · full frame (Release, side view)" (64 screens).

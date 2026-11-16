@@ -1,5 +1,12 @@
 import Foundation
 
+/// Wraps one array element so a single malformed element decodes to nil instead of failing the whole array
+/// (used by APIClient.decodeLossyArray — DEC-086 lossy list decode).
+private struct LossyElement<U: Decodable>: Decodable {
+    let value: U?
+    init(from decoder: Decoder) throws { value = try? U(from: decoder) }
+}
+
 enum APIError: LocalizedError {
     case badBaseURL(String)
     case http(status: Int, body: String)
@@ -16,6 +23,32 @@ enum APIError: LocalizedError {
         case .transport(let s): return "Network error: \(s)"
         case .decoding(let s): return "Could not read server response: \(s)"
         case .unauthorized: return "Your session expired. Please sign in again."
+        }
+    }
+
+    /// A transient error worth an automatic retry / a "try again" affordance: 5xx, 408/429, and transport
+    /// failures. A raw HTML body (a Google/Cloud Run 5xx page rather than the app's JSON) is treated as a
+    /// server problem even if the status slipped through (P0 2026-10-29 — the user saw a raw Google 500 page).
+    var isTransientServerProblem: Bool {
+        switch self {
+        case .transport: return true
+        case .http(let status, let body):
+            return status >= 500 || status == 408 || status == 429
+                || body.trimmingCharacters(in: .whitespaces).hasPrefix("<")
+        default: return false
+        }
+    }
+
+    /// Friendly, user-facing copy. NEVER leaks a raw server body / HTML / status code, and never names the
+    /// "analysis host" for a non-analysis call. Callers show this (not `errorDescription`) in the UI.
+    var userMessage: String {
+        switch self {
+        case .unauthorized: return "Your session expired. Please sign in again."
+        case .transport: return "Can't reach the server. Check your connection and try again."
+        default:
+            return isTransientServerProblem
+                ? "Server problem — please try again in a moment."
+                : "Something went wrong. Please try again."
         }
     }
 }
@@ -191,8 +224,22 @@ struct APIClient {
     }
 
     /// Standalone upload analyses for Lab › Uploads (GET /me/uploads, DEC-055). Each row opens its result.
+    /// Lossy decode (DEC-086): one malformed row — e.g. a new failure field an older build doesn't know —
+    /// must not blank the whole list, so rows decode independently and bad ones are dropped.
     func listUploads() async throws -> [UploadRow] {
-        try await send(makeRequest("me/uploads"), as: [UploadRow].self)
+        let data = try await sendRaw(makeRequest("me/uploads"))
+        return try decodeLossyArray(data, as: UploadRow.self)
+    }
+
+    /// Decodes a JSON array element-by-element, skipping any element that fails to decode. Throws only if
+    /// the payload isn't a JSON array at all (a real server/transport problem worth surfacing).
+    private func decodeLossyArray<T: Decodable>(_ data: Data, as type: T.Type) throws -> [T] {
+        do {
+            return try JSONDecoder().decode([LossyElement<T>].self, from: data).compactMap(\.value)
+        } catch {
+            let snippet = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.decoding("\(error.localizedDescription) [\(snippet.prefix(200))]")
+        }
     }
 
     /// Home Recent activity (GET /me/activity). Server-scoped to practice sessions, achievement unlocks
@@ -213,6 +260,17 @@ struct APIClient {
 
     func endSession(_ sid: String) async throws -> EndSessionResponse {
         try await send(makeRequest("sessions/\(sid)/end", method: "POST"), as: EndSessionResponse.self)
+    }
+
+    /// DEC-098 §2 (M3): best-effort product-event ingest (POST /events). Fire-and-forget — never throws to
+    /// the caller; analytics must not affect a user action. The server validates names, pseudonymises the
+    /// user, and dedups on client_event_id.
+    func postEvents(_ events: [[String: Any]]) async {
+        guard !events.isEmpty else { return }
+        var req = makeRequest("events", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["events": events])
+        _ = try? await sendRaw(req)
     }
 
     /// Per-shot rows for the live Session screen (GET /sessions/{id}/shots).
@@ -376,14 +434,25 @@ struct APIClient {
     /// set → a shot in that live session. Phase-1 backend runs the CV INLINE, so this request blocks for the
     /// whole analysis — hence the long client timeout (treat as async in the UI regardless).
     func analyzeFromStorage(storagePath: String, sessionId: String?,
-                            metadata: ShotMetadata) async throws -> CreateShotResponse {
+                            metadata: ShotMetadata,
+                            clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
+        let metaObj = (try? JSONSerialization.jsonObject(with: Data(metadata.jsonString().utf8))) as? [String: Any] ?? [:]
+        return try await analyzeFromStorage(storagePath: storagePath, sessionId: sessionId,
+                                            metadataObject: metaObj, clientTimings: clientTimings)
+    }
+
+    /// DEC-119: analyze from a pre-serialized metadata object. Used when resuming a durable ShotUpload record
+    /// whose metadata was snapshotted (as JSON) at record time, so the ball/oil/target it was thrown with is
+    /// locked even across a relaunch.
+    func analyzeFromStorage(storagePath: String, sessionId: String?,
+                            metadataObject: [String: Any],
+                            clientTimings: [String: Double]? = nil) async throws -> CreateShotResponse {
         var req = makeRequest("shots/analyze", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 600
-        let metaObj = (try? JSONSerialization.jsonObject(
-            with: Data(metadata.jsonString().utf8))) ?? [:]
-        var body: [String: Any] = ["storage_path": storagePath, "metadata": metaObj]
+        var body: [String: Any] = ["storage_path": storagePath, "metadata": metadataObject]
         if let sessionId { body["session_id"] = sessionId }
+        if let clientTimings { body["client_timings"] = clientTimings }   // DEC-092 P0: phone-side stage times
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(req, as: CreateShotResponse.self)
     }
@@ -434,6 +503,42 @@ struct APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: fields)
         return try await send(req, as: Profile.self)
+    }
+
+    /// DEC-084: whether the user has asked to be notified when Coaching launches.
+    func getCoachingNotify() async throws -> Bool {
+        struct R: Decodable { let coaching_launch: Bool? }
+        return (try await send(makeRequest("me/notify"), as: R.self)).coaching_launch ?? false
+    }
+
+    /// DEC-084: record the "Notify me when Coaching is ready" choice (one launch notification later).
+    func setCoachingNotify() async throws {
+        var req = makeRequest("me/notify", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["coaching_launch": true])
+        _ = try await sendRaw(req)
+    }
+
+    /// DEC-087: start an email change. The server calls Supabase Auth, which emails a confirmation link;
+    /// the address isn't changed until the user confirms. Returns the user-facing message to show.
+    func putEmail(_ email: String) async throws -> String {
+        var req = makeRequest("me/email", method: "PUT")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        struct R: Decodable { let message: String?; let email_pending: String? }
+        return (try await send(req, as: R.self)).message ?? "Check your new email to confirm the change."
+    }
+
+    /// Pulls a {"detail":{"field","message"}} validation error (DEC-087) out of a 400 so the UI can show the
+    /// server's reason inline on the offending field. Returns nil for any other error.
+    static func fieldError(from error: Error) -> (field: String, message: String)? {
+        guard case APIError.http(let status, let body) = error, status == 400,
+              let data = body.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let detail = obj["detail"] as? [String: Any],
+              let field = detail["field"] as? String, let message = detail["message"] as? String
+        else { return nil }
+        return (field, message)
     }
 
     // MARK: profile photo (handoff G)
@@ -516,7 +621,8 @@ struct APIClient {
                  layoutSystem: String? = nil,
                  layout: String? = nil,
                  surface: String? = nil,
-                 makeCurrent: Bool = false) async throws -> ArsenalBall {
+                 makeCurrent: Bool = false,
+                 makeDefault: Bool = false) async throws -> ArsenalBall {
         var req = makeRequest("me/arsenal", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: Any] = [:]
@@ -529,6 +635,7 @@ struct APIClient {
         if let layout, !layout.isEmpty { body["layout"] = layout }
         if let surface, !surface.isEmpty { body["surface"] = surface }
         if makeCurrent { body["make_current"] = true }
+        if makeDefault { body["make_default"] = true }      // DEC-099
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(req, as: ArsenalBall.self)
     }
@@ -542,17 +649,57 @@ struct APIClient {
         return try await send(req, as: ArsenalBall.self)
     }
 
+    /// DEC-100: report an analysis that failed on the phone before the server saw it (trim / signed URL /
+    /// upload / dropped analyze request), so every attempt is visible in analysis_attempt.
+    func reportClientFailure(_ json: Data) async throws {
+        var req = makeRequest("analysis/client-failure", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = json
+        _ = try await send(req, as: [String: Bool].self)
+    }
+
+    /// DEC-106: submit a native on-device "shadow" result (platform='ios'). Never affects the user's result.
+    func postShadow(_ json: Data) async throws {
+        var req = makeRequest("analysis/shadow", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = json
+        _ = try await send(req, as: ShadowAck.self)
+    }
+
     /// Makes `id` the one current ball (server unsets the others). PATCH is_current:true.
     @discardableResult
     func setCurrentBall(id: String) async throws -> ArsenalBall {
         try await updateBall(id: id, patch: ["is_current": true])
     }
 
-    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool) async throws {
+    func feedbackFull(sessionId: String, rating: Int, tags: [String], text: String?, diagnostics: Bool,
+                      appPhase: String? = nil) async throws {
         var req = makeRequest("sessions/\(sessionId)/feedback", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         var body: [String: Any] = ["rating": rating, "tags": tags, "diagnostics": diagnostics]
         if let text, !text.isEmpty { body["text"] = text }
+        if let appPhase { body["app_phase"] = appPhase }      // DEC-124: every feedback source carries the phase
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try await sendRaw(req)
+    }
+
+    /// DEC-124: build the POST /feedback body for a general (Home Feedback button) submission. Pure + internal
+    /// so it can be unit-tested without a network call. Category rides in tags[0]; app_phase is always present
+    /// (the server overrides it from the account cohort); diagnostics are attached only when provided.
+    static func generalFeedbackBody(category: String, text: String, appPhase: String, appVersion: String?,
+                                    diagnostics: [String: Any]?) -> [String: Any] {
+        var body: [String: Any] = ["source": "general", "tags": [category], "text": text, "app_phase": appPhase]
+        if let appVersion { body["app_version"] = appVersion }
+        if let diagnostics { body["diagnostics"] = diagnostics }
+        return body
+    }
+
+    func submitGeneralFeedback(category: String, text: String, appPhase: String, appVersion: String?,
+                               diagnostics: [String: Any]?) async throws {
+        var req = makeRequest("feedback", method: "POST")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body = Self.generalFeedbackBody(category: category, text: text, appPhase: appPhase,
+                                            appVersion: appVersion, diagnostics: diagnostics)
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         try await sendRaw(req)
     }

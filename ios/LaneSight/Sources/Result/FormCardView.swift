@@ -10,6 +10,9 @@ struct FormCardView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let result: ShotResult
+    // DEC-099: "Use this delivery as my baseline".
+    @State private var baselineBusy = false
+    @State private var baselineNote: String?
 
     /// Whether the pose backend itself couldn't run (top-level form status). When true the whole analysis
     /// is unavailable; otherwise the per-section honest states carry the story.
@@ -38,10 +41,14 @@ struct FormCardView: View {
             .background(LSBackground())
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss(); model.resetPipeline() }
+                    // DEC-096: live form session → Done returns to the Active (form) session; else dismiss in place.
+                    Button("Done") {
+                        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
+                    }
                 }
             }
         }
@@ -164,6 +171,7 @@ struct FormCardView: View {
                         label: pos.label,
                         timeText: eventTimeText(pos.event),
                         available: result.keyFrames.contains(pos.key),
+                        poseJoints: result.keyFramePoses[pos.key],      // skeleton overlay (DEC-082); nil → plain still
                         loader: { await fetchFrame(pos.key) })
                     if result.keyFrames.contains(pos.key) {
                         // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
@@ -246,8 +254,47 @@ struct FormCardView: View {
                 Text("Baseline from your Profile. Change it in Profile › Form baseline.")
                     .font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
+
+            if let st, Self.measuredPhases(st).count >= 2 {
+                Button { Task { await useAsBaseline(st) } } label: {
+                    HStack(spacing: 6) {
+                        if baselineBusy { ProgressView().tint(LS.link) }
+                        Text("Use this delivery as my baseline").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(LS.link)
+                }
+                .buttonStyle(.plain).disabled(baselineBusy).padding(.top, 2)
+            }
+            if let baselineNote {
+                Text(baselineNote).font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
         }
         .lsCard()
+    }
+
+    /// The measured phase splits of this delivery (seconds), keyed by phase.
+    static func measuredPhases(_ st: SwingTiming) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for ph in FormBaselineView.phases.map(\.key) {
+            if let v = st.this_delivery?[ph]?.value, v > 0 { out[ph] = v }
+        }
+        return out
+    }
+
+    /// DEC-099: save this delivery's measured phase splits as the bowler's entered Form baseline. Only measured
+    /// phases are saved; a phase this clip didn't measure stays unset (never filled in).
+    private func useAsBaseline(_ st: SwingTiming) async {
+        baselineBusy = true; baselineNote = nil
+        var fb: [String: Any] = ["mode": "entered"]
+        for (k, v) in Self.measuredPhases(st) { fb[k] = (v * 100).rounded() / 100 }
+        if let t = st.this_delivery?["total"]?.value, t > 0 { fb["total"] = (t * 100).rounded() / 100 }
+        do {
+            _ = try await model.makeClient().putProfile(["form_baseline": fb])
+            baselineNote = "Saved. Future deliveries compare against this one."
+        } catch {
+            baselineNote = APIClient.fieldError(from: error)?.message ?? "Couldn't save your baseline — try again."
+        }
+        baselineBusy = false
     }
 
     private func phaseDiffGrid(_ st: SwingTiming) -> some View {
@@ -398,10 +445,14 @@ private struct KeyPositionTile: View {
     let label: String
     let timeText: String?
     let available: Bool
+    var poseJoints: [[Double]?]? = nil
     let loader: () async -> UIImage?
 
     @State private var image: UIImage?
     @State private var loaded = false
+
+    // Skeleton is drawn only when the pose found confident joints for this still (never guessed).
+    private var hasSkeleton: Bool { (poseJoints?.contains { $0 != nil }) ?? false }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -409,7 +460,14 @@ private struct KeyPositionTile: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(LS.raised)
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1)
                 if let image {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                    // scaledToFit (not fill) so the skeleton overlay's aspect-fit mapping lines up with the
+                    // bowler-cropped still, matching KeyPositionFullView (DEC-082: thumbnails carry the skeleton).
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .overlay {
+                            if let j = poseJoints, hasSkeleton {
+                                SkeletonOverlay(joints: j, imageSize: image.size)
+                            }
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 } else {
                     VStack(spacing: 4) {

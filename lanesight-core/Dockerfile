@@ -4,7 +4,10 @@
 # so the first deploy stays small and reliable. Importing the form package is safe without mediapipe (the
 # mediapipe import is lazy, inside the pose backend), so the API starts fine; only analyzing a *form* clip
 # would need it.
-FROM python:3.12-slim
+# Pin the Debian release (bookworm) so apt's ffmpeg/decode libs are the SAME every build — the clip decode
+# (and thus the lane geometry / speed) must be reproducible (2026-10-29; DEC-107). Python deps are pinned in
+# pyproject. The container is the single production reference; Gate A (cv_eval) runs in THIS image, not a Mac.
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \

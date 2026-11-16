@@ -1,0 +1,155 @@
+{
+  "title": "Form: per-step foot plants",
+  "instructions": "Mark the frame where each foot touches the floor during the approach, in order: Step 1 (first step) through the slide-foot plant (the last step). Use the MOMENT the foot first contacts the floor. Press X (Not visible) for any step number beyond this bowler's approach (e.g. Step 6 on a 5-step approach) or a plant the camera cannot see. The hints open the player near the detector's current guess — move to the exact contact frame and set it. These per-plant times are the ground truth for the step-count + foot-strike detector (DEC-120 / form baseline).\n\nSteps 5 and 6 are optional: leave them unmarked if your approach has fewer steps, and enter the total in 'Total steps'.",
+  "clips": [
+    {
+      "id": "IMG_8824",
+      "static": {
+        "view": "side"
+      },
+      "hints": {
+        "step1": 166,
+        "step2": 180,
+        "step3": 199,
+        "step4": 218,
+        "step5": 246
+      }
+    },
+    {
+      "id": "IMG_8825",
+      "static": {
+        "view": "side"
+      },
+      "hints": {
+        "step1": 1083,
+        "step2": 1101,
+        "step3": 1136
+      }
+    },
+    {
+      "id": "IMG_8826",
+      "static": {
+        "view": "side"
+      },
+      "hints": {
+        "step1": 988,
+        "step2": 1003,
+        "step3": 1026,
+        "step4": 1049,
+        "step5": 1071,
+        "step6": 1109
+      }
+    },
+    {
+      "id": "IMG_8846",
+      "static": {
+        "view": "rear"
+      },
+      "hints": {
+        "step1": 405,
+        "step2": 421,
+        "step3": 439
+      }
+    },
+    {
+      "id": "IMG_8847",
+      "static": {
+        "view": "rear"
+      },
+      "hints": {
+        "step1": 931,
+        "step2": 956,
+        "step3": 976,
+        "step4": 998
+      }
+    },
+    {
+      "id": "IMG_8848",
+      "static": {
+        "view": "rear"
+      },
+      "hints": {
+        "step1": 726,
+        "step2": 765,
+        "step3": 804,
+        "step4": 831,
+        "step5": 851,
+        "step6": 872
+      }
+    },
+    {
+      "id": "IMG_8980",
+      "static": {
+        "view": "side"
+      },
+      "hints": {
+        "step1": 908,
+        "step2": 929,
+        "step3": 959,
+        "step4": 974,
+        "step5": 991,
+        "step6": 1011
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "step1",
+      "label": "Step 1 plant",
+      "help": "First foot plant of the approach.",
+      "export_key": "step1_s",
+      "export_unit": "seconds"
+    },
+    {
+      "id": "step2",
+      "label": "Step 2 plant",
+      "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
+      "export_key": "step2_s",
+      "export_unit": "seconds"
+    },
+    {
+      "id": "step3",
+      "label": "Step 3 plant",
+      "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
+      "export_key": "step3_s",
+      "export_unit": "seconds"
+    },
+    {
+      "id": "step4",
+      "label": "Step 4 plant",
+      "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
+      "export_key": "step4_s",
+      "export_unit": "seconds"
+    },
+    {
+      "id": "step5",
+      "label": "Step 5 plant",
+      "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
+      "export_key": "step5_s",
+      "export_unit": "seconds",
+      "optional": true
+    },
+    {
+      "id": "step6",
+      "label": "Step 6 plant",
+      "help": "The slide-foot plant (last step) if this is the final step; otherwise the next foot plant. Press X if this bowler has fewer steps.",
+      "export_key": "step6_s",
+      "export_unit": "seconds",
+      "optional": true
+    }
+  ],
+  "fields": [
+    {
+      "id": "step_count",
+      "label": "Total steps",
+      "type": "int",
+      "required": true,
+      "help": "Total steps in this approach (should equal the number of plants you marked)."
+    }
+  ],
+  "export": {
+    "path": "lanesight-core/validation/form_steps_labels.json",
+    "wrap": "clips",
+    "add_fps": true
+  }
+}

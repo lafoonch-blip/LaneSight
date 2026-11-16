@@ -1,11 +1,13 @@
 # LaneSight Build Plan
 Status: CANONICAL  
-Version: 3.11  
-Last Updated: 2026-10-26  
+Version: 3.12  
+Last Updated: 2026-11-01  
 Owner: Shayne  
 Supersedes: v3.9 (MVP+ Multi-Bowler Session Tracking added — DEC-060); v3.8 (DV-03 lanesight_api done — live e2e on the real project passed; shots/measurements persistence + remaining §3 endpoints are follow-ups); v3.7 (DV-02 engines landed — score/tiers/benchmarks/achievements/routing/owner, 127 tests; Form P1 values deferred to a pose backend + clips); v3.6 (DV-01 done — migrations 006–010 applied to LaneSight, advisor clean, RLS tested; DV-03 gains Keychain secrets + pg_dump backups); v3.5 (DV-01 reconcile: Supabase project confirmed, 004+005 pulled into the repo, DV migrations renumbered from 006); v3.4 (Dev Build v0 stage with DV-00…DV-05, and MVP exit recast as Shayne's judgment — DEC-045…053); v3.3; v3.2 (performance/reliability targets recast as target state, upload in MVP, serial analysis, cost caps — DEC-043); v2.5 (Stage 7 native SwiftUI + AVFoundation capture, Stage 8 analyze_clip entry — DEC-029); v2.4; v2.3; v2.2; v1.0 (phase ordering). Task IDs from v1.0 keep their meaning. Where a v1.0 task moved, the new task notes it with "(was X)".
 
 Sequence (DEC-017): **Back end → UI → Cloud.** MVP scope: DEC-019. Moving camera is in MVP back end: DEC-018. Metric definitions: DEC-022.
+
+**MVP scope restated (DEC-118, 2026-11-01):** the MVP is two independent products on one platform — **Shot Analysis** (ball speed, rev rate, observed ball path, laydown+launch angle when geometry validates, strike/no-strike when pins readable) and **Form Analysis** (step count, approach duration, swing timing events + release-vs-slide, tempo consistency). Each has its own Friends-Beta gate (Shot: speed ±0.5 mph / revs ±25 rpm; Form: step count ≥95% exact / events ±2 frames; both: ≤20% unavailable, on-device <30 s). Far-lane (DEC-065) + drift/spine/knee (post-MVP, amends DEC-057) are NOT MVP. **Sessions (DEC-119):** an active session lasts until the user taps End session (survives navigation/background/crash); "Session in progress · Return" banner; cold-launch/≥30-min-background resume prompt; shots persisted before upload + resumed on relaunch.
 
 The back end has to satisfy the contracts in `LaneSight_PRD_UI_Spec_v1`:
 - §7 metric targets
@@ -114,6 +116,7 @@ Through-line: robustness means degrading gracefully with calibrated confidence, 
 
 ## Stage 5 — Profile, arsenal, oil patterns, sensor variance (back end)  (M)
 - [~] M5-01 Bowler profile: handedness, style, baseline speed/rev/axis, PAP (schema) (was P2-01)
+  - **2026-10-27 (DEC-087):** first/last/phone + bowler-level **grip (middle pitch, span) and PAP (over, up)** are now MVP + dev-build, stored on `profiles` (inches), editable in Profile › Advanced, validated (reject-not-clamp) and surfaced to `configured_reaction(bowler=…)` (no reaction effect yet — documented plug-in point). DOB has no default and passes a real-date + 13+ gate on create/edit. Profile autosaves (no Save button); email changes via Supabase Auth confirmation. Migration `020_profile_fields.sql`.
 - [~] M5-02 Arsenal: BallModel catalog → UserBall → versioned BallConfiguration (layout, pin/PSA, PAP used, weight) → surface and maintenance events (schema) (was P2-02/03/04)
   - **2026-10-21 (DEC-044):** ball catalog built — 211 current balls, 10 brands, photo link + 15 lb specs + published ratings + normalized reaction (`lanesight-core/data/ball_catalog/`, migration `002_ball_catalog.sql`, `seed_ball_catalog.sql`, `lanesight_core/arsenal/`). Configured reaction from layout + current surface (`configured.py`, migration `003_ball_configuration_surface.sql`). Provisional recommenders: `rank_for_condition`, `arsenal_gaps`. Tested; migrations verified on Postgres 16. **Applied to the LaneSight Supabase project (`europwryibstnmipbvam`) with `ball_models` seeded (211); 004/005 reconciled into the repo 2026-10-22 (see DV-01a).**
   - **2026-10-22:** live in Supabase project `LaneSight` (`europwryibstnmipbvam`): schema v1 + 002 + 003 + 004 (RLS hardening — the first deploy's security advisor found 14 tables without RLS and a security-definer view), 211 balls loaded and checksum-verified. Security advisor clean. Temporary `http` extension used for seeding dropped (verified 2026-10-22).

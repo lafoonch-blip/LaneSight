@@ -191,7 +191,7 @@ insert into score_formula_version (id, description, params, status) values (
                                  'pocket_board_range',jsonb_build_array(16,19),'pocket_board_range_left_mirror',true,
                                  'entry_angle_range_deg',jsonb_build_array(4,6)),
     'power_ref_ranges', null,            -- entry speed / rev / entry angle / weight — PENDING SHAYNE (HANDOFF §7)
-    'eligibility_floors', jsonb_build_object('s_perf',20,'a_acc',20,'c_cons',10,'p_power',10),
+    'eligibility_floors', jsonb_build_object('s_perf',5,'a_acc',5,'c_cons',5,'p_power',5),
     'window_days', 90,
     'tier_ranges', jsonb_build_object('bronze',jsonb_build_array(0,399),'silver',jsonb_build_array(400,549),
                                       'gold',jsonb_build_array(550,699),'platinum',jsonb_build_array(700,849),

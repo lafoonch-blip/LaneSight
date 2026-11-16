@@ -1,0 +1,251 @@
+{
+  "task": "form_steps",
+  "updated_at": "2026-11-01T21:13:55-05:00",
+  "clips": {
+    "IMG_8824": {
+      "events": {
+        "step1": {
+          "frame": null,
+          "t_s": null,
+          "status": "not_visible"
+        },
+        "step2": {
+          "frame": 179,
+          "t_s": 2.9893,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 200,
+          "t_s": 3.34,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 218,
+          "t_s": 3.6406,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 256,
+          "t_s": 4.2752,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.87963891675025,
+      "complete": false
+    },
+    "IMG_8825": {
+      "events": {
+        "step1": {
+          "frame": 1034,
+          "t_s": 17.2677,
+          "status": "set"
+        },
+        "step2": {
+          "frame": 1059,
+          "t_s": 17.6852,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 1080,
+          "t_s": 18.0359,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 1100,
+          "t_s": 18.3699,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 1134,
+          "t_s": 18.9377,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.88053758088601,
+      "complete": false
+    },
+    "IMG_8826": {
+      "events": {
+        "step1": {
+          "frame": 955,
+          "t_s": 15.9481,
+          "status": "set"
+        },
+        "step2": {
+          "frame": 980,
+          "t_s": 16.3655,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 1004,
+          "t_s": 16.7663,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 1027,
+          "t_s": 17.1504,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 1062,
+          "t_s": 17.7349,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.88189604724158,
+      "complete": false
+    },
+    "IMG_8846": {
+      "events": {
+        "step1": {
+          "frame": 386,
+          "t_s": 12.8667,
+          "status": "set"
+        },
+        "step2": {
+          "frame": 409,
+          "t_s": 13.6333,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 420,
+          "t_s": 14.0,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 431,
+          "t_s": 14.3667,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 445,
+          "t_s": 14.8333,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 30.0,
+      "complete": false
+    },
+    "IMG_8847": {
+      "events": {
+        "step1": {
+          "frame": 905,
+          "t_s": 15.0894,
+          "status": "set"
+        },
+        "step2": {
+          "frame": 937,
+          "t_s": 15.623,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 961,
+          "t_s": 16.0231,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 978,
+          "t_s": 16.3066,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 1008,
+          "t_s": 16.8068,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.97586484312148,
+      "complete": false
+    },
+    "IMG_8848": {
+      "events": {
+        "step1": {
+          "frame": 773,
+          "t_s": 12.8892,
+          "status": "set"
+        },
+        "step2": {
+          "frame": 808,
+          "t_s": 13.4728,
+          "status": "set"
+        },
+        "step3": {
+          "frame": 832,
+          "t_s": 13.8729,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 853,
+          "t_s": 14.2231,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 881,
+          "t_s": 14.69,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.97288339861404,
+      "complete": false
+    },
+    "IMG_8980": {
+      "events": {
+        "step1": {
+          "frame": null,
+          "t_s": null,
+          "status": "not_visible"
+        },
+        "step2": {
+          "frame": null,
+          "t_s": null,
+          "status": "not_visible"
+        },
+        "step3": {
+          "frame": 971,
+          "t_s": 16.2066,
+          "status": "set"
+        },
+        "step4": {
+          "frame": 990,
+          "t_s": 16.5237,
+          "status": "set"
+        },
+        "step5": {
+          "frame": 1016,
+          "t_s": 16.9576,
+          "status": "set"
+        }
+      },
+      "fields": {
+        "step_count": 5
+      },
+      "done": false,
+      "fps": 59.91404011461318,
+      "complete": false
+    }
+  }
+}

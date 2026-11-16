@@ -1,0 +1,151 @@
+[cv_eval] Ruby session match: 5 clip(s) paired by timestamp (IMG_8807, IMG_8810, IMG_8815, IMG_8817, IMG_8819)
+[cv_eval] IMG_8751 …
+trimmed 34.92s clip to (np.float64(22.47), np.float64(30.6)) (burst (np.float64(26.47), np.float64(28.0)))
+HDR -> SDR in 38.2s (hlg-numpy+h264_videotoolbox, 490 frames; times from the original)
+ref frame 389 (t=6.49s); median inliers 1142; chained 0/490; camera motion up to 0px
+VP (982,538); 1/1 lanes consistent: edges±1.0/0.4px vp-miss 0/0px foul±1.9px
+blobs extracted for 490 frames
+extended track back 3 frames to t=4.168s (loft/airborne)
+extended track forward 1 pts toward the pins (far-lane recovery)
+impact t=6.486667 (ROI rows 613-838, ball enters ROI 5.09s, baseline 9.4428±4.1484)
+refine: 63 colour-measured points (138 raw)
+pins: rack snapped by (-8,3) px; standing [] (STRIKE) settled t=7.69s conf 1.00
+[cv_eval]   analyzed in 62.07s · obs {'0-15ft': 34, '15-40ft': 55, '40-60ft': 48}
+[cv_eval] IMG_8752 …
+trimmed 28.07s clip to (np.float64(14.47), np.float64(22.33)) (burst (np.float64(18.47), np.float64(19.73)))
+ref frame 378 (t=6.30s); median inliers 1302; chained 0/474; camera motion up to 1px
+VP (947,557); 1/1 lanes consistent: edges±0.7/1.7px vp-miss 0/0px foul±0.9px
+blobs extracted for 474 frames
+extended track back 4 frames to t=4.035s (loft/airborne)
+impact t=6.386667 (ROI rows 617-832, ball enters ROI 4.95s, baseline 7.6717±4.0029)
+refine: 69 colour-measured points (139 raw)
+pins: rack snapped by (-12,3) px; standing [] (STRIKE) settled t=7.59s conf 0.90
+[cv_eval]   analyzed in 15.31s · obs {'0-15ft': 35, '15-40ft': 56, '40-60ft': 47}
+[cv_eval] IMG_8753 …
+no trim (no sustained burst)
+ref frame 684 (t=11.40s); median inliers 371; chained 135/885; camera motion up to 382px
+VP (371,992); 1/2 lanes consistent: edges±0.6/0.8px vp-miss 0/0px foul±1.2px
+blobs extracted for 885 frames
+impact t=11.555 (ROI rows 1104-1273, ball enters ROI 10.42s, baseline 10.8804±6.2968)
+refine: 55 colour-measured points (92 raw)
+pins: rack snapped by (3,3) px; standing [] (STRIKE) settled t=12.75s conf 1.00
+[cv_eval]   analyzed in 24.02s · obs {'0-15ft': 7, '15-40ft': 46, '40-60ft': 38}
+[cv_eval] IMG_8754 …
+trimmed 33.87s clip to (np.float64(21.43), np.float64(31.0)) (burst (np.float64(25.43), np.float64(28.4)))
+HDR -> SDR in 45.77s (hlg-numpy+h264_videotoolbox, 576 frames; times from the original)
+ref frame 394 (t=6.57s); median inliers 1656; chained 0/576; camera motion up to 0px
+VP (979,770); 1/1 lanes consistent: edges±0.9/0.4px vp-miss 0/0px foul±2.5px
+blobs extracted for 576 frames
+extended track forward 9 pts toward the pins (far-lane recovery)
+impact t=6.636667 (ROI rows 840-1060, ball enters ROI 5.22s, baseline 12.2787±4.6541)
+refine: 71 colour-measured points (145 raw)
+pins: rack snapped by (-7,3) px; standing [3, 6, 10] uncertain [9] (6 down) settled t=7.84s conf 1.00
+[cv_eval]   analyzed in 71.65s · obs {'0-15ft': 34, '15-40ft': 56, '40-60ft': 49}
+[cv_eval] IMG_8929 …
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/metrics.py:66: RankWarning: Polyfit may be poorly conditioned
+  pz = np.polyfit(Z, board_from_left, 3)
+trimmed 34.2s clip to (np.float64(11.83), np.float64(21.3)) (burst (np.float64(15.83), np.float64(18.7)))
+ref frame 477 (t=7.95s); median inliers 1694; chained 0/570; camera motion up to 2px
+VP (624,934); 1/1 lanes consistent: edges±1.0/0.9px vp-miss 0/0px foul±1.1px
+blobs extracted for 570 frames
+impact t=None (ROI rows 959-1059, ball enters ROI 5.67s, baseline 182.4960±38.3297)
+windowed analysis failed (PIN_IMPACT_NOT_DETECTED: pin impact not detected); retrying on the full clip
+ref frame 486 (t=8.10s); median inliers 2159; chained 47/2052; camera motion up to 306px
+VP (627,940); 1/1 lanes consistent: edges±0.9/0.8px vp-miss 0/0px foul±1.0px
+blobs extracted for 2052 frames
+impact t=4.051667 (ROI rows 1104-1804, ball enters ROI 3.52s, baseline 61.3515±4.6941)
+refine: 0 colour-measured points (14 raw)
+[cv_eval]   failed in 45.38s
+[cv_eval] IMG_8930 …
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+/Users/shaynel/Developer/LaneSight/lanesight-core/lanesight_core/cv/lanes.py:263: RankWarning: Polyfit may be poorly conditioned
+  c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])
+no trim (no sustained burst)
+ref frame 545 (t=4.54s); median inliers 791; chained 0/664; camera motion up to 14px
+pale lane: detected at saturation floor s_min=50 (wood below the default 105)
+VP (680,792); 1/2 lanes consistent: edges±0.8/1.2px vp-miss 0/0px foul±202.9px
+blobs extracted for 664 frames
+[cv_eval]   failed in 11.82s
+[cv_eval] IMG_8807 …
+trimmed 18.87s clip to (np.float64(8.47), np.float64(16.3)) (burst (np.float64(12.47), np.float64(13.7)))
+ref frame 335 (t=5.59s); median inliers 1199; chained 0/472; camera motion up to 0px
+VP (643,764); 1/1 lanes consistent: edges±0.6/7.3px vp-miss 0/0px foul±2.5px
+blobs extracted for 472 frames
+extended track forward 15 pts toward the pins (far-lane recovery)
+impact t=6.386667 (ROI rows 774-871, ball enters ROI 5.19s, baseline 17.6803±6.0651)
+refine: 66 colour-measured points (124 raw)
+pins: rack snapped by (-7,3) px; standing [10] (9 down) settled t=7.59s conf 0.80
+[cv_eval]   analyzed in 14.77s · obs {'0-15ft': 42, '15-40ft': 51, '40-60ft': 28}
+[cv_eval] IMG_8817 …
+trimmed 19.28s clip to (np.float64(9.63), np.float64(18.4)) (burst (np.float64(13.63), np.float64(15.8)))
+ref frame 356 (t=5.93s); median inliers 1685; chained 0/528; camera motion up to 0px
+pale lane: detected at saturation floor s_min=70 (wood below the default 105)
+windowed analysis failed (FOUL_LINE_NOT_IN_VIEW: foul line not found — the lane runs off the bottom of the frame); retrying on the full clip
+ref frame 11 (t=0.18s); median inliers 2231; chained 0/1157; camera motion up to 18px
+pale lane: detected at saturation floor s_min=70 (wood below the default 105)
+[cv_eval]   failed in 29.45s
+[cv_eval] IMG_8808 …
+no trim (window covers most of the clip)
+ref frame 203 (t=3.38s); median inliers 2038; chained 0/485; camera motion up to 3px
+VP (334,763); 1/1 lanes consistent: edges±9.8/0.8px vp-miss 0/0px foul±1.8px
+blobs extracted for 485 frames
+impact t=5.92 (ROI rows 769-874, ball enters ROI 4.54s, baseline 13.8501±5.0608)
+refine: 84 colour-measured points (100 raw)
+pins: rack snapped by (6,3) px; standing [] (STRIKE) settled t=7.12s conf 0.90
+[cv_eval]   analyzed in 13.3s · obs {'0-15ft': 6, '15-40ft': 54, '40-60ft': 40}
+[cv_eval] IMG_8810 …
+trimmed 22.38s clip to (np.float64(11.8), np.float64(19.6)) (burst (np.float64(15.8), np.float64(17.0)))
+ref frame 304 (t=5.07s); median inliers 1912; chained 0/470; camera motion up to 0px
+pale lane: detected at saturation floor s_min=70 (wood below the default 105)
+windowed analysis failed (FOUL_LINE_NOT_IN_VIEW: foul line not found — the lane runs off the bottom of the frame); retrying on the full clip
+ref frame 8 (t=0.13s); median inliers 2350; chained 0/1343; camera motion up to 6px
+VP (754,756); 1/1 lanes consistent: edges±0.5/7.9px vp-miss 0/0px foul±1.9px
+blobs extracted for 1343 frames
+extended track forward 3 pts toward the pins (far-lane recovery)
+impact t=18.475 (ROI rows 766-872, ball enters ROI 17.09s, baseline 11.5209±4.4566)
+refine: 86 colour-measured points (122 raw)
+pins: rack snapped by (-5,3) px; standing [] (STRIKE) settled t=19.68s conf 0.70
+[cv_eval]   analyzed in 40.23s · obs {'0-15ft': 47, '15-40ft': 59, '40-60ft': 16}
+[cv_eval] IMG_8815 …
+/Users/shaynel/Developer/LaneSight/lanesight-core/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:3862: RuntimeWarning: Mean of empty slice
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/Users/shaynel/Developer/LaneSight/lanesight-core/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:142: RuntimeWarning: invalid value encountered in scalar divide
+  ret = ret.dtype.type(ret / rcount)
+trimmed 18.27s clip to (np.float64(9.2), np.float64(17.87)) (burst (np.float64(13.2), np.float64(15.27)))
+ref frame 346 (t=5.77s); median inliers 1367; chained 0/522; camera motion up to 0px
+VP (632,822); 1/2 lanes consistent: edges±0.5/6.8px vp-miss 0/0px foul±2.2px
+blobs extracted for 522 frames
+extended track forward 2 pts toward the pins (far-lane recovery)
+impact t=6.118333 (ROI rows 827-938, ball enters ROI 4.99s, baseline 41.4671±7.6436)
+refine: 43 colour-measured points (86 raw)
+pins: rack snapped by (3,-3) px; UNREADABLE (the view just above the pin deck was blocked as the pins settled, so the deck couldn't be read) settled t=7.32s conf 0.87
+[cv_eval]   analyzed in 16.26s · obs {'0-15ft': 8, '15-40ft': 41, '40-60ft': 32}
+[cv_eval] IMG_8819 …
+trimmed 38.03s clip to (np.float64(11.67), np.float64(21.23)) (burst (np.float64(15.67), np.float64(18.63)))
+ref frame 402 (t=6.70s); median inliers 1034; chained 0/576; camera motion up to 1px
+VP (635,823); 1/2 lanes consistent: edges±1.0/6.8px vp-miss 0/0px foul±2.8px
+blobs extracted for 576 frames
+impact t=6.27 (ROI rows 837-953, ball enters ROI 5.07s, baseline 22.1324±13.4670)
+refine: 64 colour-measured points (118 raw)
+pins: rack snapped by (-7,3) px; standing [6] (9 down) settled t=7.47s conf 0.82
+[cv_eval]   analyzed in 17.94s · obs {'0-15ft': 35, '15-40ft': 42, '40-60ft': 37}
+
+[cv_eval] 9/12 analyzed, 3 failed, 0 missing · 1 labeled
+[cv_eval] coverage: ball_speed 100%, speed_release 100%, speed_early 100%, speed_late 100%, laydown_board 78%, arrows_board 100%, breakpoint_board 100%, entry_board 89%, entry_angle 100%, loft 33%, rev_rate 78%
+[cv_eval] plausible-but-wrong: 6 instances, rate 0.353
+[cv_eval] labels needed for: IMG_8752, IMG_8753, IMG_8754, IMG_8807, IMG_8808, IMG_8810, IMG_8815, IMG_8819
+[cv_eval] thin camera classes (film more): {'rear-centered': 4, 'ball-return-POV': 1, 'low-approach': 1}
+[cv_eval] wrote ops/perf_reports/cv_eval_baseline.json

@@ -51,6 +51,7 @@ struct AddBallView: View {
         .navigationTitle("Add ball")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .task { if case .idle = results { await search() } }
     }
 
@@ -126,6 +127,10 @@ struct BallSetupView: View {
     @State private var layoutC = ""
     @State private var surface = ""
     @State private var makeCurrent = true
+    /// DEC-099: "Make this my default ball" checkbox (add mode) / Default ball toggle (edit mode).
+    /// Add mode seeds it ON when the bowler has no default yet (e.g. their first ball), else OFF.
+    @State private var makeDefault: Bool? = nil
+    @State private var defaultSaving = false
     @State private var saving = false
     @State private var saveError: String?
     @State private var perf: EquipGroup?
@@ -170,6 +175,7 @@ struct BallSetupView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerRow
+                defaultBallRow
 
                 // Factory specs (read-only, from the catalog). Custom balls have no factory data.
                 if hasFactorySpecs {
@@ -213,6 +219,7 @@ struct BallSetupView: View {
         .navigationTitle("Ball setup")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
         .toolbar {
             if isEdit {
                 ToolbarItem(placement: .confirmationAction) {
@@ -276,6 +283,50 @@ struct BallSetupView: View {
         .padding(10)
         .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.borderStrong, lineWidth: 1))
+    }
+
+    // MARK: default ball (DEC-099)
+
+    private var isDefaultOn: Bool {
+        makeDefault ?? (isEdit ? (arsenalBall?.is_default == true) : (model.defaultBall == nil))
+    }
+
+    /// A checkbox row: "Make this my default ball". Add mode: sent with "Add to arsenal". Edit mode: saves on
+    /// tap (Profile autosaves, DEC-087). The default is the ball every new session starts with.
+    private var defaultBallRow: some View {
+        Button {
+            let next = !isDefaultOn
+            makeDefault = next
+            if isEdit, let id = arsenalBall?.id {
+                Task {
+                    defaultSaving = true; saveError = nil
+                    do { try await model.setDefaultBall(id: id, isDefault: next) }
+                    catch { makeDefault = !next; saveError = "Couldn't update your default ball: \(error.localizedDescription)" }
+                    defaultSaving = false
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isDefaultOn ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 22)).foregroundStyle(isDefaultOn ? LS.action : LS.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Make this my default ball").font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(LS.textPrimary)
+                    Text("New sessions start with this ball. You can still change it in Setup or during a session.")
+                        .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                if defaultSaving { ProgressView().tint(LS.textSecondary) }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LS.raised, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(isDefaultOn ? LS.heroStroke : LS.borderStrong, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(defaultSaving)
+        .accessibilityAddTraits(isDefaultOn ? [.isSelected] : [])
     }
 
     // Header: round ball thumbnail + name + "{mfr} · from catalog" (Figma 437:6000).
@@ -402,7 +453,8 @@ struct BallSetupView: View {
                 layoutSystem: clean(layoutSystem),
                 layout: combinedLayout,
                 surface: clean(surface),
-                makeCurrent: makeCurrent)
+                makeCurrent: makeCurrent,
+                makeDefault: isDefaultOn)
             dismiss()
         } catch {
             saveError = "Couldn't add ball: \(error.localizedDescription)"

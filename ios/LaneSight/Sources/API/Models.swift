@@ -49,13 +49,59 @@ struct FocusResponse: Codable, Equatable {
     let based_on: Int?
 }
 
-struct JobResponse: Codable {
+struct ShadowAck: Decodable {   // DEC-106 POST /analysis/shadow response (extra keys ignored)
+    let logged: Bool
+}
+
+/// Decodes a JSON object as [String: Double], silently skipping any value that isn't a plain number (nested
+/// objects, strings, bools). The job response's `timings` gained nested fields (client/decode/cv, DEC-092) that
+/// broke a strict [String: Double] decode and failed every post-analysis fetch (P0 2026-10-29). This makes a new
+/// or nested server timing field incapable of breaking the client.
+nonisolated struct LenientDoubleDict: Codable {
+    let values: [String: Double]
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyKey.self)
+        var out: [String: Double] = [:]
+        for k in c.allKeys {
+            if (try? c.decode(Bool.self, forKey: k)) != nil { continue }      // skip JSON bools
+            if let d = try? c.decode(Double.self, forKey: k) { out[k.stringValue] = d }   // numbers only
+        }
+        values = out
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: AnyKey.self)
+        for (k, v) in values { if let key = AnyKey(stringValue: k) { try c.encode(v, forKey: key) } }
+    }
+    struct AnyKey: CodingKey {
+        var stringValue: String; var intValue: Int?
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { self.intValue = intValue; stringValue = String(intValue) }
+    }
+}
+
+nonisolated struct JobResponse: Codable {
     let id: String
     let kind: String?
     let state: String          // queued | running | done | failed
     let reason: String?
-    let timings: [String: Double]?
+    let timings: LenientDoubleDict?   // flat numeric step times; nested detail is ignored (see LenientDoubleDict)
     var result: ShotFooter?    // analyze-job footer (score_delta + achievement_nudges + unlocked)
+    var failure: FailureInfo?  // DEC-086: server-owned friendly copy when state == "failed"
+}
+
+/// DEC-086 structured analysis failure, as the server renders it for the user (AnalysisFailure.as_dict()).
+/// The app shows `user_title` / `user_message` / `tip` — never the raw `code`.
+nonisolated struct FailureInfo: Codable, Equatable {
+    let code: String?
+    let stage: String?
+    let user_title: String?
+    let user_message: String?
+    let tip: String?
+
+    /// One friendly paragraph for the processing cover: the message, plus the tip when present.
+    var display: String {
+        [user_message, tip].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
 }
 
 /// The analyze job's result footer (engines.after_shot_analyzed). All optional — present only on a
@@ -83,6 +129,8 @@ struct ShotResponse: Codable {
     let sequence: Int?          // 1-based shot number within its session (for the "Shot N" header)
     let capture_mode: String?
     let source: String?
+    let ball_name: String?      // DEC-097: the ball this shot was thrown with (resolved server-side)
+    let oil_name: String?
 }
 
 struct ShotRecord: Codable {
@@ -100,7 +148,13 @@ struct ShotRecord: Codable {
     // Capture quality (GUARDRAILS 3.7 B): far_lane == "limited" drives the camera-spot banner; `reason`
     // is the honest one-line explanation. `source` distinguishes an uploaded clip from a live shot.
     let capture_quality: CaptureQuality?
+    let stage_report: [String: StageOutcome]?    // DEC-122: per-stage ok/failed/skipped (dev/TestFlight "What worked")
     let source: String?
+    // DEC-088/090 shot card: the fitted lane path, the 4 pinned points, Power, and the bowler's baseline.
+    let path_fit: PathFit?
+    let key_points: [String: ShotKeyPoint]?
+    let impact_energy_j: Double?
+    let baseline: Baseline?
 
     // Form fundamentals v1 (DEC-057) — the after_form_analyzed footer fields written onto the record.
     // key_frames: the KEY POSITIONS stills actually exported (fetched via GET /shots/{id}/frame/{key}).
@@ -120,7 +174,8 @@ struct ShotRecord: Codable {
         case shot_id, metrics, insights, form_version, view, status, fps
         case key_frames, key_frame_poses, events, timing_checkpoints, measured_positions
         case swing_timing, coaching_cues, focus, footer
-        case capture_quality, source
+        case capture_quality, stage_report, source
+        case path_fit, key_points, impact_energy_j, baseline
     }
 
     // Lenient decode: decode each field independently with `try?` so one malformed/unexpected form field
@@ -145,7 +200,12 @@ struct ShotRecord: Codable {
         focus = (try? c?.decodeIfPresent(FormFocus.self, forKey: .focus)) ?? nil
         footer = (try? c?.decodeIfPresent(FormFooter.self, forKey: .footer)) ?? nil
         capture_quality = (try? c?.decodeIfPresent(CaptureQuality.self, forKey: .capture_quality)) ?? nil
+        stage_report = (try? c?.decodeIfPresent([String: StageOutcome].self, forKey: .stage_report)) ?? nil
         source = (try? c?.decodeIfPresent(String.self, forKey: .source)) ?? nil
+        path_fit = (try? c?.decodeIfPresent(PathFit.self, forKey: .path_fit)) ?? nil
+        key_points = (try? c?.decodeIfPresent([String: ShotKeyPoint].self, forKey: .key_points)) ?? nil
+        impact_energy_j = (try? c?.decodeIfPresent(Double.self, forKey: .impact_energy_j)) ?? nil
+        baseline = (try? c?.decodeIfPresent(Baseline.self, forKey: .baseline)) ?? nil
     }
 }
 
@@ -154,6 +214,15 @@ struct ShotRecord: Codable {
 struct CaptureQuality: Codable, Equatable {
     let far_lane: String?
     let reason: String?
+}
+
+/// DEC-122: one entry per analysis stage (decode/stabilize/lane/foul/ball_track/impact/pose/…). Drives the
+/// dev/TestFlight "What worked" list on the result screen — never shown to production users.
+struct StageOutcome: Codable, Equatable {
+    let status: String?        // ok | failed | skipped
+    let reason_code: String?
+    let reason: String?
+    let duration_ms: Double?
 }
 
 // MARK: - Form fundamentals v1 contract (DEC-057, after_form_analyzed footer / shot record)
@@ -272,7 +341,50 @@ struct ShotInsights: Codable, Equatable {
     let state: String?
     let confidence: String?
     let note: String?
+    // DEC-088/090 shot card: the two-part read + the single coach action (server `insights.throw/lane/coach`).
+    let throwRead: CoachThrow?
+    let lane: CoachLane?
+    let coach: CoachAction?
+
+    enum CodingKeys: String, CodingKey {
+        case recommendations, suggested_target, state, confidence, note, lane, coach
+        case throwRead = "throw"
+    }
 }
+
+// MARK: - DEC-088/090 shot-card coach
+struct CoachThrow: Codable, Equatable {
+    let status: String?        // good | off | building
+    let verdict: String?
+    let rings: [String: CoachRing]?   // speed | rev | accuracy
+}
+struct CoachRing: Codable, Equatable {
+    let value: Double?          // the ring number (Accuracy = DEC-031 0-100 score; nil when not measured)
+    let vs: String?             // comparison line under the ring ("= your avg", "12.2 vs 12")
+    let status: String?         // ok | low_confidence | unavailable (Accuracy; absent on speed/rev)
+    let note: String?           // one-line reason when unavailable / low-confidence (never a bare number)
+}
+struct CoachLane: Codable, Equatable {
+    let status: String?        // good | miss | not_read
+    let explanation: String?
+    let side: String?          // light | high (on a miss)
+    let entry_board: Double?
+    let entry_angle: Double?
+}
+struct CoachAction: Codable, Equatable {
+    let action: String?        // keep | lane_move | no_move | no_move_yet
+    let text: String?
+    let move: CoachMove?
+}
+struct CoachMove: Codable, Equatable { let feet: Double?; let eyes: Double?; let direction: String? }
+
+struct PathFit: Codable, Equatable {
+    let points: [PathPoint]?
+    let measured_extent_ft: [Double]?
+}
+struct PathPoint: Codable, Equatable { let z_ft: Double?; let board: Double? }
+struct ShotKeyPoint: Codable, Equatable { let z_ft: Double?; let board: Double?; let angle_deg: Double? }
+struct Baseline: Codable, Equatable { let n: Int?; let speed: Double?; let rev: Double?; let arrows: Double? }
 
 struct Recommendation: Codable, Equatable {
     let type: String?
@@ -317,6 +429,9 @@ struct ScoreResponse: Codable {
     let c_cons: Double?
     let p_power: Double?
     let eligibility: [String: Eligibility]?
+    // DEC-083: each part's change over the last ~30 days (s_perf/a_acc/c_cons/p_power → delta). A part
+    // without a 30-day-old reference is absent → the tile shows "New". Omitted entirely by older servers.
+    let parts_delta_30d: [String: Double]?
     let formula_version: String?
     let label: String?
 }
@@ -414,8 +529,17 @@ struct SessionShotRow: Codable, Identifiable, Equatable {
     let classification: String?  // e.g. pocket / light / high (from insights)
     let source: String?          // live | upload
     let metrics: ShotRowMetrics?
+    // DEC-097: the ball + oil this shot was thrown with (names, resolved server-side) — for the shot list +
+    // the mid-session "Switched to …" dividers. nil when the server doesn't supply them (older response).
+    let user_ball_id: String?
+    let oil_pattern_id: String?
+    let ball_name: String?
+    let oil_name: String?
 
-    enum CodingKeys: String, CodingKey { case id, state, created_at, classification, source, metrics }
+    enum CodingKeys: String, CodingKey {
+        case id, state, created_at, classification, source, metrics
+        case user_ball_id, oil_pattern_id, ball_name, oil_name
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -425,6 +549,10 @@ struct SessionShotRow: Codable, Identifiable, Equatable {
         classification = try? c.decodeIfPresent(String.self, forKey: .classification)
         source = try? c.decodeIfPresent(String.self, forKey: .source)
         metrics = try? c.decodeIfPresent(ShotRowMetrics.self, forKey: .metrics)
+        user_ball_id = try? c.decodeIfPresent(String.self, forKey: .user_ball_id)
+        oil_pattern_id = try? c.decodeIfPresent(String.self, forKey: .oil_pattern_id)
+        ball_name = try? c.decodeIfPresent(String.self, forKey: .ball_name)
+        oil_name = try? c.decodeIfPresent(String.self, forKey: .oil_name)
     }
 }
 
@@ -616,12 +744,20 @@ struct SessionConsistency: Codable {
 
 struct UploadRow: Codable, Identifiable, Equatable {
     let id: String
-    let state: String?            // pending | analyzed | failed
+    let state: String?            // pending | running | analyzed | failed (DEC-086)
     let created_at: Double?
     let capture_mode: String?     // shot | form (drives the SHOT/FORM badge + result routing)
     let classification: String?
     let source: String?           // always "upload"
     let metrics: ShotRowMetrics?
+    // DEC-086: when state == "failed", the server sends ready-to-show copy (never a raw error code).
+    let failure_code: String?
+    let failure_title: String?
+    let failure_message: String?
+    let tip: String?
+
+    var isAnalyzing: Bool { state == "pending" || state == "running" }
+    var isFailed: Bool { state == "failed" }
 }
 
 // MARK: - Home Recent activity (GET /me/activity, DEC-055)
@@ -802,12 +938,20 @@ struct Flex: Codable, Equatable {
 struct Profile: Codable, Equatable {
     var user_id: String?
     var name: String?
+    var first_name: String?           // DEC-087: separate, editable name fields
+    var last_name: String?
     var email: String?
+    var phone: String?                // DEC-087: optional contact phone (never the login email)
     var dob: String?
     var handedness: String?           // "right" | "left"
     var delivery_style: String?       // one_handed_thumb | one_handed_no_thumb | two_handed
     var approach_steps: FlexString?
     var location: String?
+    // DEC-074/087: bowler-level grip + PAP (inches). Optional; used by layout-aware ball stats.
+    var grip_middle_pitch_in: Double?
+    var grip_span_in: Double?
+    var pap_over_in: Double?
+    var pap_up_in: Double?
     var form_baseline: FormBaseline?
     var has_avatar: Bool?             // profile photo set (served by GET /me/avatar)
     var avatar_updated_at: String?    // cache-buster for the avatar image
@@ -867,6 +1011,9 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
     let weight_lb: Double?
     let color_desc: String?
     let is_current: Bool?
+    /// DEC-099: the bowler's default ball — what a NEW session starts with (separate from `is_current`,
+    /// which moves whenever a ball is picked in Setup / the Active Session). At most one per bowler.
+    let is_default: Bool?
     let retired: Bool?
     let ball_configuration_id: String?
     let layout_system: String?
@@ -892,7 +1039,7 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
     // Decode leniently: weight can arrive as a number or string; booleans/strings tolerate nulls.
     enum CodingKeys: String, CodingKey {
         case id, name, nickname, ball_model_id, manufacturer, model_name, image_url,
-             weight_lb, color_desc, is_current, retired, ball_configuration_id,
+             weight_lb, color_desc, is_current, is_default, retired, ball_configuration_id,
              layout_system, layout, surface, coverstock, core_type, rg, diff, factory_finish
     }
     init(from decoder: Decoder) throws {
@@ -909,6 +1056,7 @@ struct ArsenalBall: Codable, Identifiable, Equatable {
         else { weight_lb = nil }
         color_desc = try? c.decodeIfPresent(String.self, forKey: .color_desc)
         is_current = (try? c.decodeIfPresent(Bool.self, forKey: .is_current)) ?? false
+        is_default = (try? c.decodeIfPresent(Bool.self, forKey: .is_default)) ?? false
         retired = (try? c.decodeIfPresent(Bool.self, forKey: .retired)) ?? false
         ball_configuration_id = try? c.decodeIfPresent(String.self, forKey: .ball_configuration_id)
         layout_system = try? c.decodeIfPresent(String.self, forKey: .layout_system)
@@ -979,6 +1127,9 @@ struct ShotMetadata {
     /// Current ball's `ball_configuration_id` and arsenal row `id` (sent so the analyzer knows the ball).
     var ballConfigurationId: String?
     var userBallId: String?
+    /// DEC-097: the oil pattern for THIS shot, locked at record time (the session's current oil, including any
+    /// mid-session change). Sent for live shots so oil is stored per shot, not only per session.
+    var oilPatternId: String? = nil
 
     /// Builds the exact JSON string the API expects for the `metadata` multipart field.
     /// Intent values are emitted explicitly as `null` when absent (matches the contract); the ball ids
@@ -1001,6 +1152,7 @@ struct ShotMetadata {
         if let suggested { dict["suggested"] = Self.boardDict(suggested) }
         if let ballConfigurationId { dict["ball_configuration_id"] = ballConfigurationId }
         if let userBallId { dict["user_ball_id"] = userBallId }
+        if let oilPatternId { dict["oil_pattern_id"] = oilPatternId }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let str = String(data: data, encoding: .utf8) else {
             return "{}"

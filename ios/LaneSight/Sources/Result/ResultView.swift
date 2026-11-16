@@ -45,21 +45,34 @@ struct ShotCardView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    if !result.isForm { resultBadge }
-                    if result.captureFarLaneLimited { captureBanner }
-                    laneAndTarget
-                    nextShotCard
-                    if !result.isForm {
-                        ringRow
-                        allMetricsSection
+                    if result.isForm {
+                        laneAndTarget
+                        nextShotCard
+                    } else {
+                        // DEC-088/090 shot card: live 3D lane view + the two-part Shot-read card (rings +
+                        // coach). The old result badge / capture banner / next-shot card / flat lane are
+                        // replaced; detail metrics move behind a collapsed "All metrics".
+                        ShotLaneView(result: result)
+                        ShotReadCard(result: result)
+                        DisclosureGroup {
+                            allMetricsSection.padding(.top, 8)
+                        } label: {
+                            Text("All metrics").font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                        }
+                        .tint(LS.textSecondary)
+                        .padding(14)
+                        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
                     }
                     if !formMetrics.isEmpty { formSection }
                     // v3.7 folds leave/sensor correction into the result badge's "Change" — no standalone
                     // "Was a sensor in the ball?" card on the shot screen (kept wired for the report sheet).
                     if result.isUpload { uploadFooter }
                     ShotNotesView(shotId: result.shotId, isUpload: result.isUpload).environmentObject(model)
+                    if AppModel.diagnosticsEnabled && !result.stageReport.isEmpty { whatWorkedSection }
                     analyzedFooter
-                    if !result.isUpload && !result.isForm { recordNextCTA }
+                    // Dock (2026-10-29-A B2): live shot → "Record next shot"; upload / pushed review → bottom Done.
+                    if !result.isUpload && !result.isForm { recordNextCTA } else { doneCTA }
                     Color.clear.frame(height: 1).id("ls-bottom")
                 }
                 .padding(16)
@@ -77,10 +90,13 @@ struct ShotCardView: View {
             .background(LSBackground())
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .lsHidesTabBar()      // DEC-099: only Home · Stats · Lab · Coaching show the tab bar
             .toolbar {
                 ToolbarItem(placement: .principal) { headerTitle }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss(); model.resetPipeline() }
+                // 2026-10-29-A B2: ✕ close top-LEFT (not a top-right Done pill). Done moves to a bottom button.
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { closeCard() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
                 }
             }
             .task { await loadSensors() }
@@ -487,8 +503,10 @@ struct ShotCardView: View {
     // subtitle. For a form clip it reads "Form Analysis".
     private var headerTitle: some View {
         let title = result.isForm ? "Form Analysis" : (result.shotNumber.map { "Shot \($0)" } ?? "Shot")
-        let subtitle = result.isForm ? "Form Analysis"
+        // DEC-097: the ball used appears in the subtitle for a ball shot (never on a form clip — form has no ball).
+        let base = result.isForm ? "Form Analysis"
             : (result.isUpload ? "Uploaded clip · Shot Analysis" : "Shot Analysis")
+        let subtitle = (!result.isForm && result.ballName?.isEmpty == false) ? "\(base) · \(result.ballName!)" : base
         return VStack(spacing: 1) {
             Text(title).font(.lsRoboto(20, weight: .semibold)).foregroundStyle(LS.textPrimary)
             Text(subtitle).font(.system(size: 11)).foregroundStyle(LS.textSecondary)
@@ -496,13 +514,26 @@ struct ShotCardView: View {
     }
 
     // Live in-session CTA (Figma 413:4129 bottom): record the next shot. Dismisses back to capture.
+    /// DEC-096 close: in a live session, return to the Active Session (collapse the capture cover); for an
+    /// upload / a pushed review, dismiss in place. Shared by the ✕ (top-left) and the bottom Done.
+    private func closeCard() {
+        if model.inLiveCapture { model.exitToSession() } else { dismiss(); model.resetPipeline() }
+    }
+
+    /// Bottom full-width Done for uploads / pushed reviews (2026-10-29-A B2). Done and ✕ both return to Lab.
+    private var doneCTA: some View {
+        Button { closeCard() } label: { Text("Done").frame(maxWidth: .infinity) }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.top, 4)
+    }
+
     private var recordNextCTA: some View {
         Button {
             dismiss(); model.resetPipeline()
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "circle.fill").font(.system(size: 14))
-                Text(result.shotNumber.map { "Record Shot \($0 + 1)" } ?? "Record next shot")
+                Text("Record next shot")     // DEC-088
             }
         }
         .buttonStyle(PrimaryButtonStyle())
@@ -570,8 +601,14 @@ struct ShotCardView: View {
         // Ball speed (headline dynamic).
         if let m = metricDict["ball_speed"] {
             used.insert("ball_speed")
-            rows.append(.init(id: "ball_speed", name: "Ball speed", sublabel: m.note,
+            rows.append(.init(id: "ball_speed", name: "Release speed", sublabel: m.note ?? "front ~4–24 ft",
                               value: fmtVal(m, suffix: "mph"), status: status("ball_speed")))
+        }
+        // 60 ft foul→pins average, secondary (only when the ball was tracked to the pins).
+        if let m = metricDict["speed_avg_60ft"], m.value != nil {
+            used.insert("speed_avg_60ft")
+            rows.append(.init(id: "speed_avg_60ft", name: "60 ft average", sublabel: "foul → pins",
+                              value: fmtVal(m, suffix: "mph"), status: status("speed_avg_60ft")))
         }
         // Positional boards carry their set target as the sublabel.
         if let m = metricDict["arrows_board"] {
@@ -721,6 +758,55 @@ struct ShotCardView: View {
         }
         .font(.lsCaption).foregroundStyle(LS.textSecondary)
         .accessibilityElement(children: .combine)
+    }
+
+    // DEC-122 "What worked": the per-stage analysis report, shown on dev/TestFlight only. Stages in pipeline
+    // order; a shot carries the ball stages, a form clip the pose stages — only present keys render.
+    private static let stageOrder: [(String, String)] = [
+        ("decode", "Decode"), ("stabilize", "Stabilize"), ("lane", "Lane detect"), ("foul", "Foul line"),
+        ("ball_track", "Ball track"), ("impact", "Pin impact"), ("refine", "Refine"), ("compute", "Geometry"),
+        ("pins", "Pin read"), ("rev", "Rev rate"),
+        ("pose", "Pose"), ("swing_events", "Swing events"), ("delivery_isolation", "Delivery"), ("slowmo", "Slow-mo")]
+
+    private func stageIcon(_ s: String?) -> String {
+        switch s { case "ok": return "checkmark.circle.fill"; case "failed": return "xmark.octagon.fill"
+        default: return "minus.circle" }
+    }
+    private func stageColor(_ s: String?) -> Color {
+        switch s { case "ok": return .green; case "failed": return .red; default: return LS.textSecondary }
+    }
+
+    private var whatWorkedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What worked").font(.system(size: 15, weight: .semibold)).foregroundStyle(LS.textPrimary)
+            Text("Per-stage analysis outcome · dev/TestFlight only")
+                .font(.lsCaption).foregroundStyle(LS.textSecondary)
+            ForEach(Self.stageOrder, id: \.0) { key, label in
+                if let s = result.stageReport[key] {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: stageIcon(s.status)).foregroundStyle(stageColor(s.status))
+                            .font(.system(size: 14, weight: .semibold)).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(label).font(.system(size: 14, weight: .medium)).foregroundStyle(LS.textPrimary)
+                                Spacer()
+                                if let ms = s.duration_ms {
+                                    Text("\(Int(ms)) ms").font(.lsCaption).foregroundStyle(LS.textSecondary)
+                                }
+                            }
+                            if s.status == "failed", let r = s.reason_code ?? s.reason {
+                                Text(r).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     /// Job timing isn't carried onto the result record in this build, so it's shown as "—" rather than a

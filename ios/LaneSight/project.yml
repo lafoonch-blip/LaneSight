@@ -30,7 +30,9 @@ targets:
       base:
         PRODUCT_NAME: LaneSight
         PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app
-        MARKETING_VERSION: "0.1.0"
+        # DEC-123: 0.9.0 (pre-1.0) for the first Friends & Family TestFlight build. Bump CURRENT_PROJECT_VERSION
+        # on every upload to App Store Connect (each build number must be unique) — see TESTFLIGHT_FF.md.
+        MARKETING_VERSION: "0.9.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: Info.plist
         GENERATE_INFOPLIST_FILE: "NO"
@@ -40,3 +42,41 @@ targets:
         DEVELOPMENT_TEAM: GK3N928748   # personal team (lafoonch@gmail.com); pinned so xcodegen regen keeps signing
         ENABLE_PREVIEWS: "YES"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon   # brand app icon from Sources/Assets.xcassets (DEC-054 official logo)
+        # DEC-123 build phase, surfaced to the app via Info.plist LSAppPhase. Debug = dev (Shayne/dev tools);
+        # Release (the F&F TestFlight archive) = ff. Later App Store builds set this to beta/live here.
+        LS_APP_PHASE: dev
+      configs:
+        Release:
+          LS_APP_PHASE: ff
+
+  LaneSightTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes:
+          - GateClips        # videos go in via the explicit resources entry below (avoid double-inclusion)
+          - ParityFixtures   # plates/masks/golden go in via the explicit resources entry below
+      # DEC-117 device-gate clips (local only; gitignored — never committed). Absent on other machines → the
+      # gate test SKIPs. Comment this out if `xcodegen generate` can't find GateClips/.
+      - path: Tests/GateClips
+        buildPhase: resources
+        optional: true
+      # DEC-117 lane-parity fixtures (local only; gitignored). Background plates (.bgra), the Python strict/loose
+      # masks (.u8) and the committed golden JSON for IMG_8751-54. Absent on other machines → OnDeviceLaneParityTests
+      # SKIPs. Regenerate with scratchpad/parity_gen.py.
+      - path: Tests/ParityFixtures
+        buildPhase: resources
+        optional: true
+    dependencies:
+      - target: LaneSight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lanesight.app.tests
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: GK3N928748   # same personal team as the app target (device gate signing)
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LaneSight.app/LaneSight"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        # XCTest's init overrides are nonisolated; don't inherit the app's MainActor-by-default isolation here.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: "nonisolated"

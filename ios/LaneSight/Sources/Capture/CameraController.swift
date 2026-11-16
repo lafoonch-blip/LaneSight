@@ -1,4 +1,5 @@
 import AVFoundation
+import simd
 import Combine
 
 enum CameraError: LocalizedError {
@@ -36,6 +37,14 @@ final class CameraController: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
+    // DEC-117 item 2: per-frame camera intrinsics. AVCaptureMovieFileOutput does not persist the intrinsic
+    // matrix, so a parallel video-data output carries it (kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix);
+    // we write it to a <clip>.intrinsics.json sidecar so the on-device metric lane-plane (OnDeviceMetricPlane)
+    // gets the EXACT focal instead of an assumed one (the down-lane POV is focal-dominated).
+    private let intrinsicsOutput = AVCaptureVideoDataOutput()
+    private let intrinsicsQueue = DispatchQueue(label: "com.lanesight.intrinsics")
+    private let intrinsicsBox = IntrinsicsBox()
+    @Published private(set) var intrinsicsDelivered = false
     private var configured = false
     private var stopContinuation: CheckedContinuation<URL, Error>?
     private var device: AVCaptureDevice?        // the active back camera, for torch + zoom
@@ -102,6 +111,18 @@ final class CameraController: NSObject, ObservableObject {
             guard session.canAddOutput(movieOutput) else { throw CameraError.notReady }
             session.addOutput(movieOutput)
 
+            // DEC-117 item 2: parallel video-data output to carry per-frame camera intrinsics. Minimal cost —
+            // the delegate just reads the matrix attachment and returns; frames are discarded. Enabled only if
+            // the connection supports intrinsic delivery (requires geometric-distortion params available).
+            intrinsicsOutput.alwaysDiscardsLateVideoFrames = true
+            intrinsicsOutput.setSampleBufferDelegate(self, queue: intrinsicsQueue)
+            if session.canAddOutput(intrinsicsOutput) {
+                session.addOutput(intrinsicsOutput)
+                if let conn = intrinsicsOutput.connection(with: .video), conn.isCameraIntrinsicMatrixDeliverySupported {
+                    conn.isCameraIntrinsicMatrixDeliveryEnabled = true
+                }
+            }
+
             let chosen = bestFormat(for: device, preferred: preferredFPS)
             session.sessionPreset = (chosen != nil) ? .inputPriority : .high
             session.commitConfiguration()
@@ -109,6 +130,10 @@ final class CameraController: NSObject, ObservableObject {
             if let chosen {
                 try device.lockForConfiguration()
                 device.activeFormat = chosen.format
+                // DEC-092 P0 (D3): capture 8-bit SDR. bestFormat already prefers an 8-bit 420v/420f format;
+                // also pin HDR off so the server never spends ~40s on HDR→SDR conversion.
+                device.automaticallyAdjustsVideoHDREnabled = false
+                if device.activeFormat.isVideoHDRSupported { device.isVideoHDREnabled = false }
                 let dur = CMTime(value: 1, timescale: CMTimeScale(chosen.fps))
                 device.activeVideoMinFrameDuration = dur
                 device.activeVideoMaxFrameDuration = dur
@@ -134,25 +159,38 @@ final class CameraController: NSObject, ObservableObject {
     /// Picks a >=1080p (falling back to >=720p) format at the highest supported frame rate that is
     /// ≤ the user's `preferred` choice (never faster than they asked — higher fps = bigger files).
     /// Returns nil if none qualify (then we keep the device default).
+    /// True for an 8-bit 4:2:0 format ('420v' video-range / '420f' full-range). DEC-092 P0 (D3): prefer these
+    /// so capture is SDR and the server never runs the ~40s HDR→SDR conversion. 10-bit ('x420', HLG) is only
+    /// used as a last resort if a device somehow offers no 8-bit format at the wanted resolution/fps.
+    private func is8Bit(_ format: AVCaptureDevice.Format) -> Bool {
+        let st = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+        return st == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            || st == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+    }
+
     private func bestFormat(for device: AVCaptureDevice, preferred: Double) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
         // Candidate rates no higher than the user's choice, highest first.
         let targets = [120.0, 60.0, 30.0].filter { $0 <= preferred + 0.5 }.sorted(by: >)
-        var best: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
+        // Prefer 8-bit SDR formats; keep any 10-bit match only as a fallback (same resolution/fps selection).
+        var best8: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
+        var bestAny: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
         for minHeight: Int32 in [1080, 720] {
             for format in device.formats {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 guard dims.height >= minHeight else { continue }
                 let maxRate = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
                 for t in targets where maxRate + 0.5 >= t {
-                    if best == nil || t > best!.fps {
-                        best = (format, t, dims.width, dims.height)
-                    }
+                    if bestAny == nil || t > bestAny!.fps { bestAny = (format, t, dims.width, dims.height) }
+                    if is8Bit(format), best8 == nil || t > best8!.fps { best8 = (format, t, dims.width, dims.height) }
                     break
                 }
             }
-            if best != nil { break }   // prefer the higher resolution tier
+            if best8 != nil || bestAny != nil { break }   // prefer the higher resolution tier
         }
-        return best
+        // Frame rate wins over bit depth: keep 8-bit ONLY if it's available at the top frame rate we found;
+        // otherwise take the higher-fps format even if it's 10-bit (never drop 120→60 just to get SDR).
+        if let b8 = best8, let ba = bestAny, b8.fps >= ba.fps { return b8 }
+        return bestAny ?? best8
     }
 
     // MARK: recording
@@ -162,6 +200,7 @@ final class CameraController: NSObject, ObservableObject {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("lanesight-shot-\(UUID().uuidString).mov")
         try? FileManager.default.removeItem(at: url)
+        intrinsicsBox.reset()
         movieOutput.startRecording(to: url, recordingDelegate: self)
         state = .recording
     }
@@ -188,8 +227,10 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         let attrs = try? FileManager.default.attributesOfItem(atPath: outputFileURL.path)
         let size = (attrs?[.size] as? Int) ?? 0
         let errMsg = error.map { String(describing: $0) }
+        let delivered = intrinsicsBox.writeSidecar(for: outputFileURL)   // DEC-117 item 2: <clip>.intrinsics.json
         Task { @MainActor in
             self.state = .ready
+            self.intrinsicsDelivered = delivered
             guard let cont = self.stopContinuation else { return }
             self.stopContinuation = nil
             if size > 0 {
@@ -198,5 +239,50 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
                 cont.resume(throwing: CameraError.recording(errMsg ?? "empty recording"))
             }
         }
+    }
+}
+
+extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate {
+    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
+                                   from connection: AVCaptureConnection) {
+        // Per-frame camera intrinsic matrix (3x3, column-major float), attached when delivery is enabled.
+        guard let att = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix,
+                                        attachmentModeOut: nil) as? Data else { return }
+        att.withUnsafeBytes { raw in
+            guard raw.count >= MemoryLayout<matrix_float3x3>.size else { return }
+            let m = raw.load(as: matrix_float3x3.self)
+            intrinsicsBox.record(m)
+        }
+    }
+}
+
+/// Thread-safe collector for the per-frame intrinsic matrix (delegate runs off the main actor). Keeps the first
+/// and last seen matrix (so a zoom change mid-shot is visible) and the sample count.
+nonisolated final class IntrinsicsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var first: matrix_float3x3?
+    private var last: matrix_float3x3?
+    private var count = 0
+
+    func reset() { lock.lock(); first = nil; last = nil; count = 0; lock.unlock() }
+    func record(_ m: matrix_float3x3) {
+        lock.lock(); if first == nil { first = m }; last = m; count += 1; lock.unlock()
+    }
+    /// Write <clip>.intrinsics.json next to the clip. Returns true if any intrinsics were delivered.
+    func writeSidecar(for clipURL: URL) -> Bool {
+        lock.lock(); let f = first; let l = last; let n = count; lock.unlock()
+        guard let f, let l else { return false }
+        func mat(_ m: matrix_float3x3) -> [[Double]] {       // row-major [fx 0 cx; 0 fy cy; 0 0 1]
+            (0..<3).map { r in (0..<3).map { c in Double(m[c][r]) } }   // simd is column-major: m[col][row]
+        }
+        let obj: [String: Any] = [
+            "source": "AVCameraCalibrationData per-frame (isCameraIntrinsicMatrixDeliveryEnabled)",
+            "intrinsic_matrix_first": mat(f), "intrinsic_matrix_last": mat(l),
+            "samples": n, "note": "3x3 row-major [fx 0 cx; 0 fy cy; 0 0 1] in pixels at capture resolution",
+        ]
+        let side = clipURL.deletingPathExtension().appendingPathExtension("intrinsics.json")
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) else { return false }
+        try? data.write(to: side)
+        return true
     }
 }
