@@ -1,7 +1,16 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-15 (audio t_pins — the speed metric is solved on the labeled set; see v4 below).
+**Last updated:** 2026-11-15 (DEC-131: audio REMOVED, no mic; building the visual pin-contact classifier — see v5).
+
+## v5 (2026-11-15) — DEC-131: no audio; visual pin-contact classifier
+Shayne's decision: no audio-based measurement, app must not request the mic. The audio work below (v4) proved pin
+contact is a frame-accurate event (20/22 within ±4 frames) but is **removed** (`ops/audio_contact.py`, the audio block
+in `learned_analyze`, and all iOS mic code). Replacement = a visual temporal "pins start moving" classifier on the
+trained pin-deck crop of the bowler's (target) lane; train on classical-`detect_impact`-reliable clips + Shayne's 22
+labeled contact frames (session split, hold out 6); goal ≤4 frames median. Foul-row / false-track guards kept.
+`analyze_learned` now takes `pin_contact_detector`; `.contact_time(...)` supplies t_pins. Rollout per DEC-131: wire →
+iOS CoreML → deploy (merge feat/form-ondevice) → install on-device-primary ON → 22-clip iPhone-engine table.
 
 ## Persistence rule (this run)
 Everything under `~/LaneSightData/dec130/` — NOT /tmp or scratchpad:

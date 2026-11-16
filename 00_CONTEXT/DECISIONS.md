@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.85  
-Last Updated: 2026-11-03  
+Version: 1.86  
+Last Updated: 2026-11-15  
 Owner: Shayne  
-Supersedes: v1.84 (+ DEC-130 learned detection front-end so shot metrics work from any normal camera position)
+Supersedes: v1.85 (+ DEC-131 pin contact measured visually, never from audio; app must not request the mic)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1666,6 +1666,28 @@ normal camera position, while DEC-128's plausibility/honesty gates keep "works m
 engines, server stays reference/shadow first); DEC-128 (all four honesty/plausibility rules bind the learned path
 unchanged); DEC-062 production-CV freeze stays lifted for this shadow/validation track; DEC-001 fixed-camera
 assumption is the thing being removed.
+
+### DEC-131 — Pin contact is measured VISUALLY, never from audio (2026-11-15)
+**Decision (Shayne, 2026-11-15):** LaneSight uses **no audio-based measurement**. A prototype derived a frame-accurate
+`t_pins` from the pin-impact audio onset (DEC-130 exploration: it worked — 20/22 within ±4 frames — and would have
+needed the microphone). It is **removed completely**: the audio `t_pins` path, the laydown-thud idea, the server
+`ops/audio_contact.py`, the shot-mode microphone input, and the mic-permission priming + `NSMicrophoneUsageDescription`.
+**The app must not request the microphone.** Pin contact is instead made frame-accurate with a **visual temporal
+"pins start moving" classifier** on the trained pin-deck crop of the **bowler's (target) lane** (target-lane filtered):
+an optical-flow / frame-diff stack or a tiny temporal CNN over ~8–16 frames. Training signal = the contact frames from
+clips where classical `detect_impact` is reliable (IMG_8751–54 etc.) **plus Shayne's 22 labeled contact frames**, with
+a **session-level split (hold out 6)**. Goal: **≤4 frames median error.** The foul-row / false-track guards from the
+DEC-130 work are kept so IMG_8963 / 8968 / 8975 become correct **or** unavailable — **zero plausible-but-wrong**.
+Rollout is unchanged from DEC-130: wire into the production classical-first/learned-fallback path → port to iOS
+(Core ML) → deploy (merging `feat/form-ondevice` as well) → install with on-device primary default **ON** → report the
+22-clip table for the iPhone engine.
+**Why:** audio measurement means recording the user and shipping a microphone permission, which Shayne does not want;
+the pin impact is equally observable in the video (the pins start moving), so a visual temporal model gets the same
+frame accuracy without the mic. Keeps the metric honest and the privacy surface minimal.
+**Date:** 2026-11-15 · **Status:** ACCEPTED (in progress).
+**Amends/extends:** DEC-130 (replaces its audio `t_pins` exploration with the visual pin-contact classifier; everything
+else in DEC-130 — learned detection front-end, evaluation bar, rollout — stands); DEC-128 honesty/plausibility rules
+continue to bind.
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

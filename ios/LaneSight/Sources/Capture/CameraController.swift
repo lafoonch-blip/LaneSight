@@ -35,11 +35,6 @@ final class CameraController: NSObject, ObservableObject {
     /// rate ≤ this value. Set from Settings before `start()`; defaults to 120.
     var preferredFPS: Double = 120
 
-    /// DEC-130: record an audio track on SHOT clips. The pin impact is a sharp broadband transient, so the
-    /// audio onset gives a frame-accurate t_pins (the server derives speed from it; position-based pin timing
-    /// is perspective-limited near the deck). Set true for shot capture, false for form (form needs no audio).
-    var includeAudio = false
-
     let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
     // DEC-117 item 2: per-frame camera intrinsics. AVCaptureMovieFileOutput does not persist the intrinsic
@@ -80,11 +75,6 @@ final class CameraController: NSObject, ObservableObject {
 
     func start(preferredFPS: Double = 120) async {
         self.preferredFPS = preferredFPS
-        // DEC-130: for shot capture, make sure the mic is authorized before configuring so the audio track is
-        // present. Best-effort — a denied mic just means no audio track (server falls back to visual pin timing).
-        if includeAudio, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .audio)
-        }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configure()
@@ -100,10 +90,6 @@ final class CameraController: NSObject, ObservableObject {
     /// Called from the priming screen's "Continue": asks iOS for access, then configures or shows denied.
     func requestAccess() async {
         let granted = await AVCaptureDevice.requestAccess(for: .video)
-        // DEC-130: also prime the mic for shot capture (best-effort; a denial only drops the audio track).
-        if includeAudio, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .audio)
-        }
         if granted { configure() } else { state = .denied }
     }
 
@@ -122,16 +108,6 @@ final class CameraController: NSObject, ObservableObject {
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else { throw CameraError.notReady }
             session.addInput(input)
-
-            // DEC-130: add the microphone on SHOT clips so the server can read a frame-accurate t_pins from the
-            // pin-impact audio onset. Best-effort — if the mic is unavailable or permission is denied we keep
-            // recording video (the server falls back to visual pin timing), never failing the capture session.
-            if includeAudio, AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-               let mic = AVCaptureDevice.default(for: .audio),
-               let micInput = try? AVCaptureDeviceInput(device: mic), session.canAddInput(micInput) {
-                session.addInput(micInput)
-            }
-
             guard session.canAddOutput(movieOutput) else { throw CameraError.notReady }
             session.addOutput(movieOutput)
 

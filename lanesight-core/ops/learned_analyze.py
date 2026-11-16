@@ -30,9 +30,6 @@ BOARDS = 39
 LANE_IN = 41.5
 Z_FOUL_PINS = 59.44          # ft, foul line -> head pin (DEC-064)
 SPEED_MIN, SPEED_MAX = 8.0, 30.0   # mph plausibility (DEC-128)
-AUDIO_AV_OFFSET_F = 1.16     # measured iPhone capture A/V sync offset (frames); audio_calib on 22 labeled clips
-AUDIO_GATE_F = 12.0          # audio t_pins must agree with the ball's geometric arrival within this (frames),
-#                              else CONTACT_AMBIGUOUS — guards against audio locking onto a neighbour-lane crash
 
 
 def _foul_row_at(lane, x):
@@ -328,7 +325,7 @@ def extend_track_to_pins(video, S, lane, vp, track, head_pin_row, detector, log=
     return track + new
 
 
-def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None):
+def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None, pin_contact_detector=None):
     """Run the learned detector + event-timing metrics on one clip. Returns a dict with 'metrics', 'status',
     'reason_code', 'camera_class'(caller fills), 'track_pts'."""
     with tempfile.TemporaryDirectory() as td:
@@ -373,47 +370,17 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None):
             t_geom = geometric_contact_time(Tk, pins['head_pin_row'], fps)
         frame_s = 1.0 / max(fps, 1)
         tf = t_foul_cross(Tk, lane)
-        # --- t_pins via AUDIO (DEC-130: the pin crash is a sharp broadband transient — frame-accurate, unlike
-        # position-based pin_geo which is perspective-limited near the deck). The search window is anchored on the
-        # visual arrival (t_geom/t_motion) when pins are detected, else on the foul-cross + a nominal travel time
-        # (reliable even when pins are not detected), and is wide enough to tolerate the anchor's error. ---
-        t_audio = None
-        t_vis = t_geom if t_geom is not None else t_motion
-        # anchor: visual arrival if available; else foul + ~2.4 s (17 mph nominal). The +/-50-frame window then spans
-        # roughly 12-23 mph, covering real shots without reaching far enough to grab an unrelated crash.
-        anchor = t_vis if t_vis is not None else ((tf + 2.4) if tf is not None else None)
-        if anchor is not None:
-            from ops.audio_contact import onset_peaks
-            lo = t0 + anchor - 50 * frame_s; hi = t0 + anchor + 50 * frame_s
+        # --- t_pins: VISUAL pin-contact (DEC-131). Primary = the temporal "pins start moving" classifier on the
+        # target-lane pin-deck crop (frame-accurate); fall back to the motion/geom cross-check. No audio (DEC-131). ---
+        t_cls = None
+        if pins is not None and pin_contact_detector is not None:
             try:
-                peaks = onset_peaks(clip, lo, hi, av_offset_s=AUDIO_AV_OFFSET_F * frame_s, log=log)
+                t_cls = pin_contact_detector.contact_time(video, S, pins, lane, vp, fps, anchor=t_geom, log=log)
             except Exception as e:
-                peaks = []; log(f'[audio] onset failed: {e}')
-            cand = [(p['t_contact_s'] - t0, p['strength']) for p in peaks]     # (analysis-time contact, strength)
-            if cand:
-                out['audio_peaks'] = [(round(tt, 4), round(st, 1)) for tt, st in cand]   # diagnostics
-                t_audio = max(cand, key=lambda c: c[1])[0]           # loudest in-window onset = the pin scatter
-                out['t_pins_audio'] = t_audio
-                # Neighbour-lane guard (multi-lane views): a single pin scatter rings as ONE contiguous group of
-                # onsets; two comparable, well-SEPARATED groups mean a second lane's crash is in the window and the
-                # loudest may be the wrong lane. Can't attribute by audio alone -> CONTACT_AMBIGUOUS (unavailable).
-                smax = max(st for _, st in cand)
-                strong = sorted([(tt, st) for tt, st in cand if st >= 0.55 * smax])
-                groups, cur = [], []
-                for tt, st in strong:
-                    if cur and (tt - cur[-1][0]) > 10 * frame_s:
-                        groups.append(cur); cur = []
-                    cur.append((tt, st))
-                if cur:
-                    groups.append(cur)
-                gpeaks = sorted([max(st for _, st in g) for g in groups], reverse=True)
-                if len(groups) >= 2 and gpeaks[1] >= 0.55 * smax:
-                    out['reason_code'] = 'CONTACT_AMBIGUOUS'; t_audio = None; out.pop('t_pins_audio', None)
+                log(f'[pin-cls] contact failed: {e}')
         t_imp = None
-        if t_audio is not None:
-            t_imp = t_audio; out['t_pins_src'] = 'audio'             # frame-accurate (pin-impact onset)
-        elif out['reason_code'] == 'CONTACT_AMBIGUOUS':
-            pass
+        if t_cls is not None:
+            t_imp = t_cls; out['t_pins_src'] = 'classifier'          # frame-accurate (pins-start-moving classifier)
         elif t_motion is not None and t_geom is not None:
             if abs(t_motion - t_geom) <= 2.0 * frame_s:
                 t_imp = max(t_motion, t_geom); out['t_pins_src'] = 'visual'
@@ -426,7 +393,7 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None):
         if t_imp is None and out['reason_code'] is None and os.environ.get('LS_IMPACT_FALLBACK') == '1':
             # Opt-in last resort only: the engine's ball-following detect_impact is unreliable on these camera
             # angles (it produced plausible-but-wrong speeds), so it no longer feeds the headline by default —
-            # without pins/audio the honest answer is PIN_IMPACT_NOT_DETECTED (unavailable).
+            # without a pin-contact time the honest answer is PIN_IMPACT_NOT_DETECTED (unavailable).
             try:
                 t_imp, _ = T.detect_impact(video, S, lane, Tk, log=log)
             except Exception:
