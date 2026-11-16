@@ -246,7 +246,9 @@ enum OnDeviceTracker {
         result.selectedLane = b.lane
         result.laneFromFallback = fromFallback
         if let first = b.pts.first {
-            result.impactT = detectImpact(url: url, track: b.pts, lane: b.lane, vpY: vpY, afterT: first.t, rot: rot)
+            let foulY = Float(geo.foulLineY ?? Int(b.lane.yNear))
+            result.impactT = detectImpact(url: url, track: b.pts, lane: b.lane, vpY: vpY, afterT: first.t,
+                                          foulY: foulY, rot: rot)
         }
         return result
     }
@@ -384,6 +386,93 @@ enum OnDeviceTracker {
         return l
     }
 
+    // MARK: DEC-131 visual pin-contact (changepoint) — Swift/Accelerate parity port of ops/pin_contact.py
+    nonisolated private static func mean(_ a: ArraySlice<Float>) -> Float { a.isEmpty ? 0 : a.reduce(0,+) / Float(a.count) }
+    nonisolated private static func median(_ a: [Float]) -> Float { a.isEmpty ? 0 : a.sorted()[a.count/2] }
+    nonisolated private static func pctile(_ a: [Float], _ p: Float) -> Float {
+        if a.isEmpty { return 0 }; let s = a.sorted(); return s[min(s.count-1, Int(p/100 * Float(s.count)))] }
+
+    /// DEC-131 pin contact = the frame the pins START MOVING, timed by a frame-diff changepoint over the target-lane
+    /// pin-deck (bodies above the bases). Parity port of ops/pin_contact.py (deck_motion_series + detect_contact):
+    /// foul-anchored window, GRAY luma, reference = first 0.15 s, per-frame body-pixel-change energy, changepoint =
+    /// frame maximising mean(E after) − mean(E before), walk back to the rise start, subtract the calibrated offset.
+    /// NOISY (handheld residual) / WEAK (far/small deck) decks return nil → the caller withholds rather than guesses.
+    nonisolated private static func contactChangepoint(url: URL, track: [TrackPoint], lane: ODDetectedLane,
+                                                       vpY: Float, foulY: Float, rot: ODRotation) -> Double? {
+        let pts = track.sorted { $0.t < $1.t }
+        guard pts.count >= 6 else { return nil }
+        func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
+        // foul-cross time from the least-squares u = slope·t + intc fit (same as speed())
+        var n = 0.0, st = 0.0, su = 0.0, stt = 0.0, stu = 0.0
+        for p in pts { let t = Double(p.t), uu = Double(u(p.contactRow)); n += 1; st += t; su += uu; stt += t*t; stu += t*uu }
+        let den = n*stt - st*st; guard abs(den) > 1e-9 else { return nil }
+        let slope = (n*stu - st*su)/den, intc = (su - slope*st)/n
+        guard slope > 0 else { return nil }
+        let tFoul = (Double(u(foulY)) - intc) / slope
+        // deck ROI: head-pin row ≈ the ball's farthest tracked row; width from the lane geometry there
+        let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
+        let head = far.contactRow, farD = expDiam(lane, head)
+        let (xl, xr) = laneX(lane, head); let padx = 0.2 * (xr - xl)
+        let xA = max(0, Int(min(xl, xr) - padx)), xB = Int(max(xl, xr) + padx)
+        let y1 = Int(head), y0 = max(0, Int(head - 6 * farD))       // pins stand ABOVE the base row (toward the VP)
+        guard y1 > y0 + 6, xB > xA + 6 else { return nil }
+        let roiW = xB - xA, bodyH = max(y0 + Int(0.60 * Double(y1 - y0)) - y0, 1)   // bodies = upper 60% of the deck
+        let lo = tFoul + 1.2, hi = tFoul + 3.6, refEnd = lo + 0.15  // ~11–25 mph window; first 0.15 s = static ref
+        let asset = AVURLAsset(url: url)
+        guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
+        var refs: [[Float]] = []; var ref: [Float]? = nil
+        var ts: [Double] = []; var energy: [Float] = []
+        while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            if Task.isCancelled { reader.cancelReading(); return nil }
+            autoreleasepool {
+                guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
+                let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+                if t < lo || t > hi { return }
+                CVPixelBufferLockBaseAddress(px, .readOnly); defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
+                let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
+                guard let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return }
+                var roi = [Float](repeating: 0, count: roiW * bodyH)
+                for yy in 0..<bodyH { let y = y0 + yy; if y < 0 || y >= H { continue }
+                    for xx in 0..<roiW { let x = xA + xx; if x < 0 || x >= W { continue }
+                        let p = y*rb + x*4                                    // BGRA; GRAY = 0.299R+0.587G+0.114B
+                        roi[yy*roiW + xx] = 0.114*Float(base[p]) + 0.587*Float(base[p+1]) + 0.299*Float(base[p+2]) } }
+                if t < refEnd { refs.append(roi); return }
+                if ref == nil, refs.count >= 2 {
+                    var r = [Float](repeating: 0, count: roiW * bodyH); var col = [Float](repeating: 0, count: refs.count)
+                    for p in 0..<(roiW * bodyH) { for k in 0..<refs.count { col[k] = refs[k][p] }; col.sort(); r[p] = col[col.count/2] }
+                    ref = r
+                }
+                guard let rr = ref else { return }
+                var cnt = 0; for p in 0..<(roiW * bodyH) where abs(roi[p] - rr[p]) > 35 { cnt += 1 }
+                ts.append(t); energy.append(Float(cnt) / Float(roiW * bodyH))
+            }
+        }
+        let wa = 15, wb = 8
+        guard ts.count > wb + wa + 4 else { return nil }                     // enough frames for the changepoint scan
+        let dt = (ts.last! - ts[0]) / Double(ts.count - 1)
+        let n0 = max(Int(0.5 / dt), 5)
+        let base = median(Array(energy[0..<min(n0, energy.count)])), peak = pctile(energy, 95)
+        if base > 0.08 { return nil }                                        // NOISY (stabilisation residual)
+        if peak - base < 0.10 { return nil }                                 // WEAK (deck too far/small)
+        var bestStep = -Float.infinity, bestC = wb
+        for c in wb..<(energy.count - 4) {
+            let step = mean(energy[c..<min(c+wa, energy.count)]) - mean(energy[max(c-wb,0)..<c])
+            if step > bestStep { bestStep = step; bestC = c }
+        }
+        let c = bestC
+        let before = mean(energy[max(c-wb,0)..<c]), after = mean(energy[c..<min(c+wa, energy.count)])
+        let thr = before + 0.20 * (after - before)
+        var k = c; while k > max(c-wb, 0) && energy[k-1] > thr { k -= 1 }
+        var tRise: Double
+        if k > 0 && energy[k] != energy[k-1] {
+            let fr = Double(min(max((thr - energy[k-1]) / (energy[k] - energy[k-1]), 0), 1))
+            tRise = ts[k-1] + fr * (ts[k] - ts[k-1])
+        } else { tRise = ts[k] }
+        return tRise - 3.0 * dt                                              // calibrated changepoint offset
+    }
+
     /// Pin-deck arrival = t_impact. Faithful port of cv/track.py detect_impact (tripod: no per-frame warp): the
     /// ROI is a window around the ball's FARTHEST tracked point (≈ the pin deck); for each frame the diff-vs-
     /// reference is measured in a band JUST BEYOND the ball's top (where the pins it is about to hit stand),
@@ -393,7 +482,12 @@ enum OnDeviceTracker {
     /// that fires BEFORE the ball entered the ROI (t_imp < t_enter) is an early reflection → defer to far.t;
     /// otherwise a sustained hotness IS the contact (do NOT drag it to a far point sitting past the pins).
     nonisolated private static func detectImpact(url: URL, track: [TrackPoint], lane: ODDetectedLane,
-                                                 vpY: Float, afterT: Double, rot: ODRotation = .r0) -> Double? {
+                                                 vpY: Float, afterT: Double, foulY: Float, rot: ODRotation = .r0) -> Double? {
+        // DEC-131: the frame-diff CHANGEPOINT is the primary pin-contact timer (frame-accurate on a clean deck).
+        // Only when it withholds (NOISY/WEAK deck) do we fall back to the legacy 5σ pin-motion spike below.
+        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot) {
+            return cp
+        }
         let pts = track.sorted { $0.t < $1.t }
         guard pts.count >= 4 else { return nil }
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }

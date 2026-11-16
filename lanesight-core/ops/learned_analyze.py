@@ -422,6 +422,14 @@ def analyze_learned(clip, detector, log=lambda *a, **k: None, mc_detector=None, 
                 out['reason_code'] = 'IMPLAUSIBLE_VALUE'
         else:
             out['reason_code'] = 'PIN_IMPACT_NOT_DETECTED' if t_imp is None else 'FOUL_CROSS_NOT_DETECTED'
+        # Best-effort speed (cross-check ONLY, never the headline): the best available pin-contact estimate
+        # (classifier > motion > geom) with the foul, computed even when the headline is withheld. production_engine
+        # compares it against classical to catch engine disagreement on clips the headline withholds (e.g. IMG_8968).
+        be_imp = t_cls if t_cls is not None else (t_motion if t_motion is not None else t_geom)
+        if be_imp is not None and tf is not None and be_imp > tf:
+            be_mph = Z_FOUL_PINS / (be_imp - tf) * 3600 / 5280
+            if SPEED_MIN <= be_mph <= SPEED_MAX:
+                out['speed_besteffort'] = round(float(be_mph), 2)
         # --- boards: LATERAL only, calibrated by the detected landmarks (known boards) where available ---
         foul_y = lane.get('yNear') or max(_foul_row_at(lane, Tk[0]['cx']), 1)
         # landmark-calibrated laydown (foul-dots) + arrows board (arrows), falling back to lane-edge interpolation.
