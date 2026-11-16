@@ -116,6 +116,35 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         return (ball, lane6)
     }
 
+    /// Run the detector on a NATIVE-RESOLUTION crop centred at (cx,cy) — the far/small ball (~8 px) vanishes when the
+    /// whole frame is downsized to the 512 input, but at native res inside a 512 crop it is full-size and precisely
+    /// located. Returns the ball in FULL-FRAME coords, or nil. Port of ops/detector_integrate.detect_in_crop (#3).
+    func detectInCrop(_ px: CVPixelBuffer, cx: Float, cy: Float, rot: ODRotation, thr: Float = 0.2) -> ODBallDet? {
+        guard let buf = OnDeviceDecode.rotated(px, rot) else { return nil }
+        CVPixelBufferLockBaseAddress(buf, .readOnly); defer { CVPixelBufferUnlockBaseAddress(buf, .readOnly) }
+        let W = CVPixelBufferGetWidth(buf), H = CVPixelBufferGetHeight(buf), rb = CVPixelBufferGetBytesPerRow(buf)
+        guard W >= input, H >= input, let base = CVPixelBufferGetBaseAddress(buf)?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        let x0 = max(0, min(Int(cx) - input/2, W - input)), y0 = max(0, min(Int(cy) - input/2, H - input))  // 512 window, clamped
+        guard let arr = try? MLMultiArray(shape: [1, 3, NSNumber(value: input), NSNumber(value: input)], dataType: .float32) else { return nil }
+        let ptr = arr.dataPointer.assumingMemoryBound(to: Float.self); let plane = input * input
+        for yy in 0..<input {
+            let row = (y0 + yy) * rb
+            for xx in 0..<input {
+                let p = row + (x0 + xx) * 4; let o = yy * input + xx       // BGRA, native res (no scale)
+                ptr[o] = (Float(base[p + 2]) / 255 - mean[0]) / std[0]
+                ptr[plane + o] = (Float(base[p + 1]) / 255 - mean[1]) / std[1]
+                ptr[2 * plane + o] = (Float(base[p]) / 255 - mean[2]) / std[2]
+            }
+        }
+        guard let out = try? model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": arr])),
+              let hm = out.featureValue(for: "heatmap")?.multiArrayValue else { return nil }
+        let O = hm.shape[hm.shape.count - 1].intValue, st = input / O, read = Self.reader(hm)
+        var best: Float = thr; var bi = -1
+        for i in 0..<(O * O) { let v = read(i); if v > best { best = v; bi = i } }
+        guard bi >= 0 else { return nil }
+        return ODBallDet(cx: Float(x0 + (bi % O) * st), cy: Float(y0 + (bi / O) * st), score: best)   // crop → full frame
+    }
+
     // --- lane helpers (match OnDeviceTracker) ---
     private static let BALL_IN: Float = 8.5, LANE_IN: Float = 41.5
     private func laneX(_ l: ODDetectedLane, _ y: Float) -> (Float, Float) { (l.left.a*y + l.left.b, l.right.a*y + l.right.b) }
@@ -162,7 +191,7 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
                 let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)); scanned += 1
                 let (ball, lane) = detect(raw0, rot: rot)
                 if let l = lane { laneAcc.append(l) }
-                if let b = ball { raw.append((t, b.cx, b.cy)) }
+                if let b = ball { raw.append((t, b.cx, b.cy)) }   // (crop-refine needs a 2-pass over a validated track)
             }
         }
         guard raw.count >= 6 else { return nil }
