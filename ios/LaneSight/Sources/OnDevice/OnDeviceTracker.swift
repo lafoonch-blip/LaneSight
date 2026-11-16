@@ -483,13 +483,18 @@ enum OnDeviceTracker {
     /// otherwise a sustained hotness IS the contact (do NOT drag it to a far point sitting past the pins).
     nonisolated private static func detectImpact(url: URL, track: [TrackPoint], lane: ODDetectedLane,
                                                  vpY: Float, afterT: Double, foulY: Float, rot: ODRotation = .r0) -> Double? {
-        // DEC-131: the frame-diff CHANGEPOINT is the primary pin-contact timer (frame-accurate on a clean deck).
-        // Only when it withholds (NOISY/WEAK deck) do we fall back to the legacy 5σ pin-motion spike below.
-        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot) {
-            return cp
-        }
         let pts = track.sorted { $0.t < $1.t }
         guard pts.count >= 4 else { return nil }
+        // DEC-131: the frame-diff CHANGEPOINT is the primary pin-contact timer (frame-accurate on a clean deck).
+        // Sanity guard (on-device has no learned cross-engine check): the contact must sit near the ball's farthest
+        // tracked point (arrival). If the changepoint lands far from it the deck ROI/window is unreliable (weak
+        // on-device track) and it would emit a plausible-but-wrong speed — reject and fall through / withhold.
+        func uu(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
+        let farT = Double(pts.max(by: { uu($0.contactRow) < uu($1.contactRow) })!.t)
+        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot),
+           cp >= farT - 0.1, cp <= farT + 0.5 {
+            return cp
+        }
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
         let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
         let farD = expDiam(lane, far.contactRow)
