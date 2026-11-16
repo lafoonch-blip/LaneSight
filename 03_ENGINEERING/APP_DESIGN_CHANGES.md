@@ -218,3 +218,20 @@ in `FORM_ONDEVICE_INTEGRATION.md` §B is now WIRED into the capture pipeline (Me
 builds, `capture_mode=form` routes through the on-device-first path, gated by `ls.ondevice_primary` default OFF).
 Pending a device run: the on-device parity gate + one end-to-end form upload (the iPhone was unavailable during the
 build session). No Figma change — the Form result reuses `FormCardView` + the DEC-127 Complete/Offline states.
+
+### Progress — 2026-11-15 · Form result vs target-state design (comparison set up; montage pending a real form render)
+Pulled the target-state **Form results** frames from Figma (`k6F8iHTtl2ZHvnXlHmYPnd`, "01 — Home & Foundation"):
+`421:5048` Form results · rear and `464:7167` Form results · side, saved to
+`02_DESIGN/target_state/compare/form/design_form_results_{rear,side}.png`. Compared against `FormCardView` section
+by section (code read). Section structure matches the design (context line → focus card → key positions → timing vs
+baseline → swing timing → approach & balance → posture & finish → bottom CTA). **Candidate DIFFERS (from code, to
+confirm against a render):**
+- Key-positions subtitle: code "tap to open the frame" vs design "Tap a position to see the full frame".
+- Timing-section right label: code shows the view only; design shows "best effort · rear view" (status + view).
+- Swing-timing badge casing: code "MEASURED" vs design "● Measured".
+- Context line: design shows "Form Analysis · {view} (detected) · {fps} fps" as a body line; code renders it as the
+  nav subtitle and puts a data-honesty disclaimer ("Early form analysis … directional, not exact") as the first body
+  line — keep the disclaimer (DEC-086 honesty) but reconcile placement with the design.
+**Blocked:** the side-by-side montage (the way the shot card was done) needs `FormCardView` rendered with a REAL
+form result — the key-position tiles are frames from the bowler's own clip, so a synthetic render is blank. Will
+capture + montage + apply verified fixes from Shayne's next on-device Form upload (ties into the 60 fps check).
