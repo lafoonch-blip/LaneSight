@@ -1,9 +1,9 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.89  
+Version: 1.90  
 Last Updated: 2026-11-15  
 Owner: Shayne  
-Supersedes: v1.88 (DEC-131 E8 slide-stop robustness: clamp the search + plant-based nil fallback — device 8825 68f→12f, 8826 64f→10f, no-op on good landmarks)
+Supersedes: v1.89 (DEC-131 E5 slide-start snap: device 8825 E5 13f->1f, no-op on rear clips; + DEC-126 on-device-primary default ON in code)
 
 Format: Decision / Why / Date / Status / Supersedes. To change a decision, add a new DEC and mark the old one `SUPERSEDED by DEC-0xx` — never edit history.
 
@@ -1488,6 +1488,10 @@ never a fabricated or estimated number — on the iPhone path exactly as on the 
 on-lane experience indefinitely; a fast, local, honest result the bowler gets immediately beats a marginally more
 accurate server result they wait for. Parity work is real but belongs after the primary path is in users' hands.
 **Date:** 2026-11-02 · **Status:** ACCEPTED.
+**Default-on (2026-11-15):** the `ls.ondevice_primary` switch is now **ON by default in code** (AppModel.onDevicePrimary
+fallback + the CaptureView/DevPanel `@AppStorage` defaults) — shots AND form run on-device-primary out of the box;
+the server stays the shadow/reference. The Dev Panel toggle still overrides per device (set false to force the server
+path). Form rode in on DEC-129/DEC-131; this flips the default for both products.
 **Amends:** DEC-102 (offline-first hybrid) and DEC-103 (on-device stays shadow until the accuracy gates pass) —
 the iPhone→primary switch no longer waits on those gates; only the crash / >30 s blockers apply. DEC-117's
 phone-primary-with-server-review parity tolerance becomes a POST-switch tuning target, not a precondition.
@@ -1752,6 +1756,14 @@ search** — anchor `min(E6, slide_plant+0.5)`, upper bound `slide_plant + SLIDE
 **8825 68 f → 12 f, 8826 64 f → 10 f.** Bonus: fixing E8 un-nulled E4/E7 on 8825 (the DEC-095 release-vs-E8 honesty
 gate had been nulling them off the bad E8) — now detected at ~2 f. The residual ~10–12 f is bounded by the device
 slide-plant (E5) landing ~13 f early — a separate plant-detection limit, not E8.
+**E5 (slide-start) snap (both engines):** diagnosed (`examples/form_e5_diag.py` + foot-speed frame dumps): on
+IMG_8825 the last detected plant is the TRAIL foot's plant (a dip), while the SLIDE foot slides right after — a
+clear speed peak ~13 f later where the label puts slide-start. `slide_plant` (the dip) therefore reads ~13 f early.
+Fix: snap the reported **E5 to the slide-foot speed peak** in the 0.3 s after the plant, but ONLY when that peak
+exceeds 2× the slide-foot speed at the plant AND dominates the 0.3 s before it (i.e. the slide clearly FOLLOWS the
+plant). On rear clips the last plant is the post-slide settle (motion before dominates) so the snap is a **no-op**.
+`slide_plant` itself is unchanged (it still drives step timing, the plant checks, and the E8 anchor), so nothing
+else moves. Cached result: **IMG_8825 E5 −13 f → −1 f**, 8824/8846/8847/8848 unchanged (no snap), no regression.
 **Holdout status (IMPORTANT):** **IMG_8980 is no longer a blind-test clip.** DEC-129 held it out of the parity
 gate as unseen; this fix was *developed on it* (the server selector + hold-bound were tuned against its
 delivery-then-walk-back failure), so it is now a **training clip** and cannot certify generalization. The selector

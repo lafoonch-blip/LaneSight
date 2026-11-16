@@ -985,6 +985,22 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
         # hold_start (~1.5 s later, which produced the big 8825/8826 E8 errors). DEC-131.
         slide_stop = min(hold_start, slide_plant + 0.3)
 
+    # E5 (slide START): `slide_plant` is a foot PLANT (a dip). When the SLIDE foot then slides — a clear speed peak
+    # in the 0.3 s AFTER the plant that both exceeds 2× its speed at the plant AND dominates the motion in the 0.3 s
+    # BEFORE it — the labeled slide-start sits at that slide (~0.2 s after the plant, e.g. IMG_8825 where the last
+    # detected plant is the trail foot and the slide foot slides right after). Snap E5 to the slide peak in that
+    # case. It is a no-op when the last plant is the post-slide settle (the motion before the plant dominates), so
+    # rear clips are unchanged. `slide_plant` itself is kept for the step timing, plant checks, and E8 anchor. DEC-131.
+    slide_start = slide_plant
+    _ss = _smooth(np.nan_to_num(slide_speed, nan=0.0), 3)
+    _aft = (t >= slide_plant) & (t <= slide_plant + 0.3)
+    _bef = (t >= slide_plant - 0.3) & (t < slide_plant)
+    if _aft.any() and _bef.any():
+        _pk_a, _pk_b = float(np.max(_ss[_aft])), float(np.max(_ss[_bef]))
+        _at = float(_ss[int(np.argmin(np.abs(t - slide_plant)))])
+        if _pk_a > 2.0 * max(_at, 0.05) and _pk_a > _pk_b:
+            slide_start = float(t[_aft][int(np.argmax(_ss[_aft]))])
+
     raw_first_to_release = (E7 - first_step) if (E7 is not None) else None
     is_slow, factor, slownote = detect_slowmo(raw_intervals, raw_first_to_release)
     slow_uncorrected = False
@@ -1123,7 +1139,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # (FORM_ANALYSIS_SPEC §3) — NOT the later posted-finish start (hold_start), which is kept separately for the
     # finish-hold metric. These feed the T3 (E4−E5) and T4 (E7−E8) timing checkpoints (DEC-057).
     extras['events'] = {k: (None if v is None else round(v, 3)) for k, v in
-                        dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=slide_stop,
+                        dict(E2=E2, E3=E3, E4=E4, E5=slide_start, E6=E6, E7=E7, E8=slide_stop,
                              first_step=first_step, slide_plant=slide_plant, slide_stop=slide_stop,
                              hold_start=hold_start, hold_end=hold_end).items()}
     # Sanity-gate the display events: an implausible one (e.g. release not at the slide stop, or a too-short
@@ -1149,7 +1165,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # Use the GATED events (a dropped E2/E3/E4/E6/E7 is now None) so a fundamentals position built on an
     # untrustworthy event is not surfaced either — consistent with the thumbnails/timings.
     g = extras['events']
-    pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_plant, E6=g.get('E6'),
+    pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_start, E6=g.get('E6'),
                       E7=g.get('E7'), E8=slide_stop, first_step=first_step, slide_plant=slide_plant,
                       slide_stop=slide_stop, hold_start=hold_start, hold_end=hold_end)
     extras['measured_positions'] = _fund.measured_positions(t, lms, pos_events, torso, handed, out)

@@ -164,6 +164,22 @@ nonisolated enum OnDeviceFormEngine {
         var slideStop = FormEngine.slideStop(t, slideSpeed: slideSpeedArr, anchor: stopAnchor, tTo: stopTo)
             ?? Swift.min(holdStart, slidePlant + 0.3)
 
+        // E5 (slide START): slidePlant is a foot PLANT (a dip). When the SLIDE foot then slides — a clear speed peak
+        // in the 0.3 s AFTER the plant that exceeds 2× its speed at the plant AND dominates the 0.3 s BEFORE it — the
+        // labeled slide-start sits at that slide (~0.2 s later, e.g. IMG_8825). Snap E5 to the slide peak; it's a
+        // no-op when the last plant is the post-slide settle (motion before dominates), so rear clips are unchanged.
+        // slidePlant itself is kept for step timing, plant checks, and the E8 anchor. DEC-131.
+        var slideStart = slidePlant
+        let ssSmooth = FormSignal.smooth(FormSignal.nanToNum(slideSpeedArr, nan: 0.0), 3)
+        var pkA = 0.0, pkB = 0.0, atPlant = 0.0, bestAftT = slidePlant
+        var haveA = false, haveB = false
+        for k in 0..<t.count {
+            if t[k] >= slidePlant && t[k] <= slidePlant + 0.3 { haveA = true; if ssSmooth[k] > pkA { pkA = ssSmooth[k]; bestAftT = t[k] } }
+            if t[k] >= slidePlant - 0.3 && t[k] < slidePlant { haveB = true; pkB = Swift.max(pkB, ssSmooth[k]) }
+            if abs(t[k] - slidePlant) < 0.03 { atPlant = ssSmooth[k] }
+        }
+        if haveA && haveB && pkA > 2.0 * Swift.max(atPlant, 0.05) && pkA > pkB { slideStart = bestAftT }
+
         let rawFirstToRelease = E7.map { $0 - firstStep }
         var (isSlow, factor, slowNote) = FormEngine.detectSlowmo(stepIntervals: rawIntervals.map { Optional($0) },
                                                                  firstToRelease: rawFirstToRelease)
@@ -257,9 +273,9 @@ nonisolated enum OnDeviceFormEngine {
         metrics["timing_at_slide"] = FormMeasurement("timing_at_slide", nil, "s", 0.0, "unavailable", note: FormEngine.validatingReason)
         metrics["slide_length"] = FormMeasurement("slide_length", nil, "inch", 0.0, "unavailable", note: FormEngine.validatingReason)
 
-        // events (E5 = slide plant; E8 = slide stop)
+        // events (E5 = slide start; E8 = slide stop)
         var events: [String: Double?] = [
-            "E2": E2, "E3": E3, "E4": E4, "E5": slidePlant, "E6": E6, "E7": E7, "E8": slideStop,
+            "E2": E2, "E3": E3, "E4": E4, "E5": slideStart, "E6": E6, "E7": E7, "E8": slideStop,
             "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
             "hold_start": holdStart, "hold_end": holdEnd,
         ]
@@ -270,7 +286,7 @@ nonisolated enum OnDeviceFormEngine {
 
         // measured positions from the GATED events
         let posEvents: [String: Double?] = [
-            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slidePlant,
+            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slideStart,
             "E6": events["E6"] ?? nil, "E7": events["E7"] ?? nil, "E8": slideStop,
             "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
             "hold_start": holdStart, "hold_end": holdEnd,
