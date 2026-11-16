@@ -37,6 +37,13 @@ targets:
       - path: Models/pose_landmarker_heavy.task
         buildPhase: resources
         optional: true
+      # DEC-130/131: the learned shot detectors (CoreML, gitignored — copy from ~/LaneSightData/dec130/coreml before
+      # building; absent → the on-device learned fallback is unavailable and the engine stays classical-only). Added
+      # as SOURCES so Xcode compiles .mlpackage → .mlmodelc and generates the Swift model class.
+      - path: Models/BallLaneDetector.mlpackage
+        optional: true
+      - path: Models/BallPinsDetector.mlpackage
+        optional: true
     # DEC-129: MediaPipe Pose Landmarker for iOS (v1.0.0). Two STATIC xcframeworks fetched per-machine by
     # Vendor/fetch_mediapipe.sh (gitignored): the Vision wrapper + the heavy Common (TFLite/XNNPACK) binary.
     # Static → embed:false. They link libc++ + the Accelerate/AVFoundation/CoreMedia/… system frameworks.

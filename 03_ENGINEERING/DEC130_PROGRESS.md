@@ -3,6 +3,29 @@
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
 **Last updated:** 2026-11-15 (DEC-131: audio REMOVED, no mic; building the visual pin-contact classifier — see v5).
 
+## v7 (2026-11-16) — production dual-engine + iOS changepoint; on-device parity gap found
+**Server production path** (`ops/production_engine.py`): classical `analyze_clip` + learned `analyze_learned`
+(CoreML ball/lane + pins + changepoint) reconciled — agree → classical; disagree >0.5 mph → **ENGINE_DISAGREE**
+(unavailable, never pick one); only one → use it. `analyze_learned` also exposes `speed_besteffort` (classifier >
+motion > geom) used only for the disagreement cross-check, so a clip the learned headline withholds (IMG_8968) is
+still caught. **Production grade on 22: within ±0.5 10/22, coverage 10/22, MAE 0.146, held-out 6/6, landscape 2/2,
+`wrong=[]` — ZERO plausible-but-wrong.** Committed `eb714b3`. MC pins exported to CoreML (3 ms, 0 px parity).
+
+**iOS changepoint** (`OnDeviceTracker.contactChangepoint`, parity port) + arrival-agreement guard. On-device Release
+validated: IMG_8751 18.08 (+0.21, 4.4 s), IMG_8966 16.95 (−0.29, 10.9 s **via the changepoint**), IMG_8967 (−0.15) —
+parity with the server within ~0.3 mph, all HIT, all <30 s.
+
+**On-device parity GAP (key finding).** Full 22-clip on-device Release gate: **within ±0.5 only 4/22**, 7
+plausible-but-wrong (IMG_8963 −7.5, 8970 −7.7, 8974 −5.4…), ~10 `BALL_TRACK_NOT_FOUND`/`TRACK_TOO_SPARSE`. The gap is
+NOT the changepoint (it HITs where the track is good, and the guard confirmed the wrongs survive without it) — it is
+that the **on-device CLASSICAL engine is much weaker than the server's**: it fails to track the ball on the hard
+portrait clips the server handled, and with only one on-device engine there is no ENGINE_DISAGREE to catch the
+resulting wrong speeds. Closing this needs the **learned CoreML ball/pins engine ported on-device** (rescue the failed
+tracks + provide the second estimate for an on-device ENGINE_DISAGREE) — a large Swift/CoreML port (the DEC-130 learned
+detection pipeline was never built on-device; on-device is classical-only). Models are exported + bundled
+(`ios/LaneSight/Models/Ball{Lane,Pins}Detector.mlpackage`, gitignored) as the foundation. This is the remaining work
+for on-device parity → deploy → install.
+
 ## v6 (2026-11-15) — DEC-131 visual pin-contact classifier BUILT + graded
 `ops/pin_contact.py`: `deck_motion_series` (foul-anchored window over the target-lane deck, bodies-above-bases,
 per-frame phase-correlation re-align) + `detect_contact` (changepoint = largest step into the sustained scatter →
