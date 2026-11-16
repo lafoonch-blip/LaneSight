@@ -361,7 +361,8 @@ struct ProcessingCover: View {
     }
 
     /// DEC-127: on-device-primary is on (its result renders once; the old upload checklist must not flash).
-    @AppStorage("ls.ondevice_primary") private var onDevicePrimary = false
+    /// DEC-126: default ON (2026-11-15) — the on-device switch shipped; the Dev Panel toggle still overrides.
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimary = true
     private var isCoachingStep: Bool {
         if case .analyzing(let s, _) = model.pipeline { return s == "coaching" }
         return false

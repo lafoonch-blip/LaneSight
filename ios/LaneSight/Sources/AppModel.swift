@@ -777,13 +777,13 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         #endif
     }
 
-    /// DEC-126: the on-device engine is the PRIMARY measurement for live shots. OFF until the switch ships; flip
-    /// per-device / on TestFlight via `ls.ondevice_primary` to validate. When on, a live shot's speed/rev come
-    /// from the on-device engine; the server stays the shadow/reference and remains authoritative for Score,
-    /// coaching, and the server-only metrics (boards/entry/loft).
+    /// DEC-126: the on-device engine is the PRIMARY measurement. The switch has SHIPPED — default ON (2026-11-15);
+    /// a live shot's/form's speed/rev/events come from the on-device engine, the server stays the shadow/reference
+    /// and remains authoritative for Score, coaching, and the server-only metrics (boards/entry/loft). The Dev Panel
+    /// `ls.ondevice_primary` toggle still overrides per device (set it false to force the server path).
     static var onDevicePrimary: Bool {
         if let v = UserDefaults.standard.object(forKey: "ls.ondevice_primary") as? Bool { return v }
-        return false
+        return true
     }
     /// DEC-126 guardrail: a live on-device result slower than this falls back to the server. The ONLY blockers are
     /// a crash or > 30 s — no accuracy gate. `nonisolated` so the off-main-actor measurement task can read it.

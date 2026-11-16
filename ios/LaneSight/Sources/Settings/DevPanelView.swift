@@ -11,7 +11,7 @@ struct DevPanelView: View {
     /// DEC-126: flip the on-device engine to PRIMARY for shots (live + upload here, for validation). When a shot's
     /// on-device run clears the 30 s guardrail, its speed/rev come from the iPhone; otherwise it falls back to the
     /// server. The "What worked" card shows "Measured on: iPhone/server".
-    @AppStorage("ls.ondevice_primary") private var onDevicePrimaryFlag = false
+    @AppStorage("ls.ondevice_primary") private var onDevicePrimaryFlag = true   // DEC-126: default ON (2026-11-15)
     /// DEC-127: allow the background clip upload on cellular (default OFF = Wi-Fi only). The result + coaching
     /// already landed via the metrics-only call; this only gates the afterward video upload.
     @AppStorage("ls.cellular_upload") private var cellularUpload = false

@@ -67,3 +67,26 @@ def test_apply_status_policy_backstop_rejects_implausible():
     assert metrics['ball_speed']['reason_code'] == IMPLAUSIBLE_VALUE
     assert metrics['arrows_board']['status'] == 'ok'                 # 14.5 in-band, keeps measured status
     assert metrics['rev_rate']['value'] == 370.0                    # in-band rev kept
+
+
+def test_helper_form_bounds():
+    # DEC-131: FORM timing/count bands — a mis-segmented delivery is unavailable, not a fast one.
+    ir = implausible_reason
+    assert ir('approach_time', 0.49)      # < 1.0 s  (the 01:03 UTC clip)
+    assert ir('approach_time', 4.0)       # > 3.5 s
+    assert ir('backswing_time', 0.04)     # far too short
+    assert ir('backswing_time', 0.08)     # server's value on the bad clip
+    assert ir('downswing_time', 0.1)
+    assert ir('swing_time', 0.23)         # server's value on the bad clip
+    assert ir('step_count', 2)            # < 3
+    assert ir('step_count', 8)            # > 7
+    assert ir('rhythm_ratio', 2.0)        # out of a sane tempo range
+    assert ir('finish_hold', -0.1)        # negative hold is impossible
+    # in-band values are fine
+    for k, v in [('approach_time', 1.5), ('backswing_time', 0.8), ('downswing_time', 0.4),
+                 ('swing_time', 1.2), ('step_count', 5), ('rhythm_ratio', 0.51), ('finish_hold', 0.9)]:
+        assert ir(k, v) is None, (k, v)
+    assert ir('step_count', None) is None
+    # metrics without a band aren't touched
+    assert ir('release_time', 0.017) is None
+    assert ir('ball_start_step', 2) is None

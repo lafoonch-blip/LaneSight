@@ -49,14 +49,45 @@ nonisolated enum OnDeviceFormEngine {
     /// the gate can pose ONCE then run the (pure, deterministic) engine many times instead of re-posing 10×.
     static func extractWindowed(clipURL: URL, modelPath: String? = nil, bundle: Bundle = .main,
                                 handed: String? = "right") throws -> FormPoseLandmarker.Landmarks {
-        let window0 = FormPoseLandmarker.prescanWindow(clipURL: clipURL)
-        var lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: window0)
-        if window0 != nil && !Self.deliveryWithEventsFound(lms, handed: handed) {
-            // The prescan window missed the delivery — widen to the FULL clip and retry (decision 2). This only
-            // fires for clips whose tight burst missed the delivery; the hard LONG clips (8825/8826) segment
-            // correctly inside the window so they never widen (staying <30 s), and the clips that DO miss here are
-            // short/30 fps, so a full-clip re-pose is still well under 30 s.
-            lms = try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle, window: nil)
+        func ex(_ window: (Double, Double)?, windows: [(Double, Double)]? = nil,
+                stride: Int = 1) throws -> FormPoseLandmarker.Landmarks {
+            try FormPoseLandmarker.extract(clipURL: clipURL, modelPath: modelPath, bundle: bundle,
+                                           window: window, windows: windows, poseStride: stride)
+        }
+        let lead = 1.6, tail = 0.9
+        guard let bursts = FormPoseLandmarker.prescanBursts(clipURL: clipURL, top: 3), !bursts.isEmpty else {
+            return try ex(nil)        // short clip / scan failed → pose the whole clip (DEC-129)
+        }
+        let windows = bursts.map { (Swift.max(0, $0.0 - lead), $0.1 + tail) }
+        var winner = windows[0]       // default: the highest-energy burst (the old single-window prescan pick)
+        if windows.count > 1 {
+            // DEC-131 swing-aware prescan: coarse-pose (every 2nd frame) ALL top-N candidate windows in ONE pass,
+            // then run the frozen selector (findDelivery) ONCE over the concatenated coarse landmarks. Scoring every
+            // burst in a single pass makes the scores COMPARABLE across candidates (per-window scoring is NOT — a
+            // far/small pre-shot or walk-back window inflates the shoulder-normalized swing in isolation, which
+            // regressed 8847/8848), so a high-energy walk-back or pre-shot pacing can't out-rank the real delivery's
+            // swing just by moving more. Full-rate pose then runs only on the winning burst's window. This fixes
+            // IMG_8847 (was widening to the whole clip, ~43 s → now ~17 s window) and segments IMG_8825/8826/01:03
+            // to the real delivery, staying under 30 s. Out-of-window gaps are dropped so they can't form spurious
+            // bursts. Stride 2 (not 4): finer sampling is both affordable here and kinder to the thin-margin clips.
+            let coarse = try ex(nil, windows: windows, stride: 2)
+            let rs = FormSignal.speed(FormSignal.point(coarse.frames, LM.rFootPts, axis: 0),
+                                      FormSignal.point(coarse.frames, LM.rFootPts, axis: 1), coarse.t)
+            let ls = FormSignal.speed(FormSignal.point(coarse.frames, LM.lFootPts, axis: 0),
+                                      FormSignal.point(coarse.frames, LM.lFootPts, axis: 1), coarse.t)
+            if let d = FormEngine.findDelivery(coarse.t, coarse.frames, rs, ls) {
+                let b0 = d.win.0 + 0.4, b1 = d.win.1 - 0.6     // recover the burst from the approach window
+                winner = (Swift.max(0, b0 - lead), b1 + tail)
+            }
+            if ProcessInfo.processInfo.environment["FORM_PRESCAN_DBG"] != nil {
+                let ws = windows.map { "[\(String(format: "%.1f", $0.0)),\(String(format: "%.1f", $0.1))]" }.joined(separator: " ")
+                print("FORM_PRESCAN cands \(ws) -> winner [\(String(format: "%.1f", winner.0)),\(String(format: "%.1f", winner.1))]")
+            }
+        }
+        var lms = try ex(winner)      // full-rate pose on the winning window
+        if !Self.deliveryWithEventsFound(lms, handed: handed) {
+            // The winner still didn't yield the delivery — widen to the FULL clip and retry (last resort, DEC-129).
+            lms = try ex(nil)
         }
         return lms
     }
@@ -120,7 +151,34 @@ nonisolated enum OnDeviceFormEngine {
         // slide stop
         let sfAnchor = E6 ?? slidePlant
         let (slideFootLab, slideSpeedArr) = FormEngine.slideFoot(t, Rs, Ls, t0: sfAnchor - 0.3, t1: holdEnd, handed: handed)
-        var slideStop = FormEngine.slideStop(t, slideSpeed: slideSpeedArr, anchor: sfAnchor, tTo: holdEnd) ?? holdStart
+        // E8 robust to a wrong/late anchor: the slide stop is ~0.3 s after the slide plant, never > SLIDE_MAX_S. The
+        // bottom-of-arc E6 is fragile on a windowed on-device pose (DEC-131); when it's mis-detected late it pushes
+        // the stop onto the trail-leg follow-through ~1.5 s later (8825/8826). Clamp the anchor toward the slide
+        // plant + bound the search — a no-op on a clean clip (E6 ≈ plant + 0.3-0.4 s). Keep the foot/speed from the
+        // original window so the slide-foot ID is unchanged.
+        let stopAnchor = Swift.min(sfAnchor, slidePlant + 0.5)
+        let stopTo = Swift.min(holdEnd, slidePlant + FormEngine.SLIDE_MAX_S)
+        // When no clear rest is found (a mis-identified slide foot on a noisy on-device pose), the slide stop is
+        // ~0.3 s after the slide plant — use that, NOT the posted-finish holdStart (~1.5 s later, the big 8825 E8
+        // error). DEC-131.
+        var slideStop = FormEngine.slideStop(t, slideSpeed: slideSpeedArr, anchor: stopAnchor, tTo: stopTo)
+            ?? Swift.min(holdStart, slidePlant + 0.3)
+
+        // E5 (slide START): slidePlant is a foot PLANT (a dip). When the SLIDE foot then slides — a clear speed peak
+        // in the 0.3 s AFTER the plant that exceeds 2× its speed at the plant AND dominates the 0.3 s BEFORE it — the
+        // labeled slide-start sits at that slide (~0.2 s later, e.g. IMG_8825). Snap E5 to the slide peak; it's a
+        // no-op when the last plant is the post-slide settle (motion before dominates), so rear clips are unchanged.
+        // slidePlant itself is kept for step timing, plant checks, and the E8 anchor. DEC-131.
+        var slideStart = slidePlant
+        let ssSmooth = FormSignal.smooth(FormSignal.nanToNum(slideSpeedArr, nan: 0.0), 3)
+        var pkA = 0.0, pkB = 0.0, atPlant = 0.0, bestAftT = slidePlant
+        var haveA = false, haveB = false
+        for k in 0..<t.count {
+            if t[k] >= slidePlant && t[k] <= slidePlant + 0.3 { haveA = true; if ssSmooth[k] > pkA { pkA = ssSmooth[k]; bestAftT = t[k] } }
+            if t[k] >= slidePlant - 0.3 && t[k] < slidePlant { haveB = true; pkB = Swift.max(pkB, ssSmooth[k]) }
+            if abs(t[k] - slidePlant) < 0.03 { atPlant = ssSmooth[k] }
+        }
+        if haveA && haveB && pkA > 2.0 * Swift.max(atPlant, 0.05) && pkA > pkB { slideStart = bestAftT }
 
         let rawFirstToRelease = E7.map { $0 - firstStep }
         var (isSlow, factor, slowNote) = FormEngine.detectSlowmo(stepIntervals: rawIntervals.map { Optional($0) },
@@ -215,9 +273,9 @@ nonisolated enum OnDeviceFormEngine {
         metrics["timing_at_slide"] = FormMeasurement("timing_at_slide", nil, "s", 0.0, "unavailable", note: FormEngine.validatingReason)
         metrics["slide_length"] = FormMeasurement("slide_length", nil, "inch", 0.0, "unavailable", note: FormEngine.validatingReason)
 
-        // events (E5 = slide plant; E8 = slide stop)
+        // events (E5 = slide start; E8 = slide stop)
         var events: [String: Double?] = [
-            "E2": E2, "E3": E3, "E4": E4, "E5": slidePlant, "E6": E6, "E7": E7, "E8": slideStop,
+            "E2": E2, "E3": E3, "E4": E4, "E5": slideStart, "E6": E6, "E7": E7, "E8": slideStop,
             "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
             "hold_start": holdStart, "hold_end": holdEnd,
         ]
@@ -228,7 +286,7 @@ nonisolated enum OnDeviceFormEngine {
 
         // measured positions from the GATED events
         let posEvents: [String: Double?] = [
-            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slidePlant,
+            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slideStart,
             "E6": events["E6"] ?? nil, "E7": events["E7"] ?? nil, "E8": slideStop,
             "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
             "hold_start": holdStart, "hold_end": holdEnd,
@@ -244,6 +302,17 @@ nonisolated enum OnDeviceFormEngine {
                 m.note = warn + (m.note ?? "")
                 metrics[k] = m
             }
+        }
+
+        // DEC-131 plausibility backstop (runs LAST, overrides slo-mo too): a delivery timing/count outside its
+        // physiological band is a mis-segmented delivery, not a real measurement → unavailable + IMPLAUSIBLE_VALUE,
+        // never best_effort. Same bands as the server (failures._FORM_BANDS).
+        for (k, m) in metrics {
+            guard let v = m.value, let reason = FormEngine.implausibleReason(k, v) else { continue }
+            var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: "implausible: " + reason,
+                                     id: m.id, viewRequired: m.viewRequired)
+            mm.reasonCode = "IMPLAUSIBLE_VALUE"
+            metrics[k] = mm
         }
 
         // stage report (DEC-122)

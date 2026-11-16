@@ -13,6 +13,7 @@ nonisolated struct FormMeasurement: Codable, Equatable {
     var uncertainty: Double?
     var id: String?                    // fundamentals M-id (M1..M7) when this is a measured position
     var viewRequired: String?
+    var reasonCode: String?            // DEC-131: IMPLAUSIBLE_VALUE when stamped unavailable by the plausibility gate
 
     init(_ metric: String, _ value: Double?, _ unit: String, _ confidence: Double, _ status: String,
          note: String? = nil, display: String? = nil, uncertainty: Double? = nil,
@@ -40,6 +41,7 @@ nonisolated struct FormMeasurement: Codable, Equatable {
         if let uncertainty { d["uncertainty"] = uncertainty }
         if let id { d["id"] = id }
         if let viewRequired { d["view_required"] = viewRequired }
+        if let reasonCode { d["reason_code"] = reasonCode }
         return d
     }
 }

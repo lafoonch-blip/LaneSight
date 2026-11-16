@@ -22,8 +22,13 @@ nonisolated enum FormEngine {
     static let BURST_MIN_S = 0.6
     static let BURST_MAX_S = 5.0
     static let FOOTVIS_MIN = 0.45
+    static let SWING_SHW_FLOOR = 0.015   // DEC-131: shoulder-width floor for the normalized swing (edge-on ~0.017)
+    static let WALKBACK_DY = 0.08        // body-center drop toward a rear/overhead camera above this = a walk-back …
+    static let WALKBACK_PENALTY = 4.0    // … divides that burst's score by (1 + gain·(dy − WALKBACK_DY))
+    static let HOLD_SEARCH_MAX_S = 1.5   // posted finish follows the slide within this; don't latch a later still run
     static let SLIDE_STOP_SPEED = 0.12
     static let SLIDE_STOP_HOLD_S = 0.10
+    static let SLIDE_MAX_S = 0.7     // DEC-131: a real slide never exceeds this; bounds the E8 search vs a late anchor
     static let RHYTHM_SPEEDS_UP_MAX = 0.85
     static let RHYTHM_SLOWS_DOWN_MIN = 1.15
     static let BACKSWING_ABOVE_MIN = 0.15
@@ -31,17 +36,46 @@ nonisolated enum FormEngine {
     static let RELEASE_VS_STOP_LO = -0.10, RELEASE_VS_STOP_HI = 0.15
     static let BALL_START_TO_RELEASE_LO = 1.3, BALL_START_TO_RELEASE_HI = 2.5
 
+    // DEC-131 FORM plausibility bands (seconds; step_count is a count). Must match failures._FORM_BANDS on the
+    // server. A value outside its band is a mis-segmented delivery, not a real measurement → unavailable +
+    // IMPLAUSIBLE_VALUE, never best_effort.
+    static let formBands: [String: (Double, Double)] = [
+        "approach_time": (1.0, 3.5), "backswing_time": (0.25, 1.2), "downswing_time": (0.2, 0.8),
+        "swing_time": (0.7, 2.0), "step_count": (3.0, 7.0), "finish_hold": (0.0, 10.0), "rhythm_ratio": (0.2, 1.8),
+    ]
+    static func implausibleReason(_ metric: String, _ value: Double) -> String? {
+        if value.isNaN || value.isInfinite { return "came out non-finite" }
+        guard let b = formBands[metric], !(b.0 <= value && value <= b.1) else { return nil }
+        if metric == "step_count" {
+            return "\(Int(value)) steps isn't a real approach (3–7) — the delivery wasn't segmented correctly"
+        }
+        if metric == "rhythm_ratio" {
+            return "swing tempo \(String(format: "%.2f", value)) is out of a plausible range — the delivery wasn't timed correctly"
+        }
+        let label = metric.replacingOccurrences(of: "_time", with: "").replacingOccurrences(of: "_", with: " ")
+        return "\(label) \(String(format: "%.2f", value))s is outside a real delivery "
+            + "(\(fmtg(b.0))–\(fmtg(b.1))s) — the delivery wasn't timed correctly"
+    }
+
     static let calibReason = "needs floor-plane calibration — unresolved, see TRAINING_VIDEOS_CALIBRATED_METRICS addenda"
     static let validatingReason = "still being validated — ball-vs-slide timing / slide length need 120 fps "
         + "slide-and-release tracking that is not yet verified on this view (FORM_ANALYSIS_SPEC §9)"
 
     // MARK: delivery segmentation
 
-    /// _find_delivery → (approachWin, (holdStart, holdEnd)) or nil.
-    static func findDelivery(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
-                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S,
-                             stillThr: Double = FOOT_STILL_FINISH) -> (win: (Double, Double), hold: (Double, Double))? {
+    /// Every motion burst scored by the frozen DEC-131 selector — parity with lanesight_core.form.pose
+    /// (`_find_delivery`'s scoring). score = footvis × (0.15·min(dur,2.5) + swingₙ) /
+    /// (1 + WALKBACK_PENALTY·max(0, bodyΔy − WALKBACK_DY)). swingₙ = the bowling-wrist arc amplitude measured in the
+    /// bowler's own SHOULDER-WIDTHS (a true swing is many shoulder-widths of wrist travel; a walk-back's arm-sway is
+    /// a fraction) — scale-free, so robust to apparent size/foreshortening (on-device landmarks match the Python
+    /// reference to ~1 px, FORM_LM_DUMP/form_lm_gap.py). A burst whose body-center drops toward a rear/overhead
+    /// camera (direction-of-travel) is a walk-back → penalized. Used by findDelivery (picks the max); the
+    /// swing-aware prescan runs findDelivery over the concatenated coarse candidate windows. Constants FROZEN (DEC-131).
+    static func scoredBursts(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
+                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S)
+                             -> [(t0: Double, t1: Double, footvis: Double, score: Double)] {
         let n = t.count
+        guard n > 0 else { return [] }
         // footvis = mean visibility of [L_ANKLE,R_ANKLE,L_FOOT,R_FOOT]
         var footvis = [Double](repeating: 0, count: n)
         for i in 0..<n {
@@ -66,14 +100,62 @@ nonisolated enum FormEngine {
                 i = j
             } else { i += 1 }
         }
-        let good = bursts.filter { $0.2 >= FOOTVIS_MIN }
-        let pick: (Double, Double, Double)?
-        if !good.isEmpty {
-            pick = good.max { ($0.2 * Swift.min($0.1 - $0.0, 2.5)) < ($1.2 * Swift.min($1.1 - $1.0, 2.5)) }
-        } else {
-            pick = bursts.max { $0.2 < $1.2 }
+        let wyL = FormSignal.smooth(FormSignal.point(frames, [LM.lWrist], axis: 1), 5)
+        let wyR = FormSignal.smooth(FormSignal.point(frames, [LM.rWrist], axis: 1), 5)
+        let shLx = FormSignal.point(frames, [LM.lShoulder], axis: 0)
+        let shRx = FormSignal.point(frames, [LM.rShoulder], axis: 0)
+        let shLy = FormSignal.point(frames, [LM.lShoulder], axis: 1)
+        let shRy = FormSignal.point(frames, [LM.rShoulder], axis: 1)
+        let hipLy = FormSignal.point(frames, [LM.lHip], axis: 1)
+        let hipRy = FormSignal.point(frames, [LM.rHip], axis: 1)
+        var shoulderW = [Double](repeating: Double.nan, count: n)
+        var bodyCy = [Double](repeating: Double.nan, count: n)
+        for k in 0..<n {
+            shoulderW[k] = abs(shLx[k] - shRx[k])
+            bodyCy[k] = (shLy[k] + shRy[k] + hipLy[k] + hipRy[k]) / 4.0
         }
-        guard let (b0, b1, _) = pick else { return nil }
+        func swingAmp(_ b0: Double, _ b1: Double) -> Double {
+            var raw = 0.0
+            for wy in [wyL, wyR] {
+                var vals: [Double] = []
+                for k in 0..<n where t[k] >= b0 - 1.5 && t[k] <= b1 + 1.0 && !wy[k].isNaN { vals.append(wy[k]) }
+                if vals.count >= 4 { raw = Swift.max(raw, vals.max()! - vals.min()!) }
+            }
+            var sw: [Double] = []
+            for k in 0..<n where t[k] >= b0 - 1.5 && t[k] <= b1 + 1.0 && !shoulderW[k].isNaN { sw.append(shoulderW[k]) }
+            let shw = sw.isEmpty ? SWING_SHW_FLOOR : FormSignal.median(sw)
+            return raw / Swift.max(shw, SWING_SHW_FLOOR)
+        }
+        func walkbackDy(_ b0: Double, _ b1: Double) -> Double {
+            var idx: [Int] = []
+            for k in 0..<n where t[k] >= b0 - 0.4 && t[k] <= b1 + 0.4 { idx.append(k) }
+            if idx.count < 4 { return 0.0 }
+            let kk = Swift.max(2, idx.count / 5)
+            func mean(_ sl: ArraySlice<Int>) -> Double {
+                var s = 0.0, c = 0
+                for i in sl where !bodyCy[i].isNaN { s += bodyCy[i]; c += 1 }
+                return c > 0 ? s / Double(c) : Double.nan
+            }
+            let y0 = mean(idx.prefix(kk)), y1 = mean(idx.suffix(kk))
+            return (y0.isNaN || y1.isNaN) ? 0.0 : (y1 - y0)
+        }
+        func score(_ b: (Double, Double, Double)) -> Double {
+            let base = b.2 * (0.15 * Swift.min(b.1 - b.0, 2.5) + swingAmp(b.0, b.1))
+            return base / (1.0 + WALKBACK_PENALTY * Swift.max(0.0, walkbackDy(b.0, b.1) - WALKBACK_DY))
+        }
+        return bursts.map { (t0: $0.0, t1: $0.1, footvis: $0.2, score: score($0)) }
+    }
+
+    /// _find_delivery → (approachWin, (holdStart, holdEnd)) or nil.
+    static func findDelivery(_ t: [Double], _ frames: [Frame], _ Rs: [Double], _ Ls: [Double],
+                             burstMotion: Double = BURST_MOTION, burstMaxS: Double = BURST_MAX_S,
+                             stillThr: Double = FOOT_STILL_FINISH) -> (win: (Double, Double), hold: (Double, Double))? {
+        let n = t.count
+        let sb = scoredBursts(t, frames, Rs, Ls, burstMotion: burstMotion, burstMaxS: burstMaxS)
+        let good = sb.filter { $0.footvis >= FOOTVIS_MIN }
+        let pool = good.isEmpty ? sb : good
+        guard let pick = pool.max(by: { $0.score < $1.score }) else { return nil }
+        let b0 = pick.t0, b1 = pick.t1
         let approachWin = (Swift.max(t[0], b0 - 0.4), b1 + 0.6)
         // still = both feet below stillThr
         let Rf = FormSignal.nanToNum(Rs, nan: 9.0), Lf = FormSignal.nanToNum(Ls, nan: 9.0)
@@ -81,7 +163,8 @@ nonisolated enum FormEngine {
         for k in 0..<n { still[k] = Rf[k] < stillThr && Lf[k] < stillThr }
         var hold: (Double, Double)? = nil
         var idx = FormSignal.searchsorted(t, b1 - 0.4)
-        while idx < n {
+        let holdDeadline = b1 + HOLD_SEARCH_MAX_S     // posted finish is right after the slide, not a later walk-back stop
+        while idx < n && t[idx] <= holdDeadline {
             if still[idx] {
                 var j = idx
                 while j < n && still[j] { j += 1 }

@@ -195,6 +195,15 @@ BURST_MOTION = 0.35       # combined foot speed (frame-heights/s) above this = t
 BURST_MIN_S = 0.6         # a real approach burst lasts at least this
 BURST_MAX_S = 5.0         # ... and (even stretched by slo-mo) no more than this
 FOOTVIS_MIN = 0.45        # the approach has the feet clearly in frame; bystander walk-backs do not
+# DEC-131 landmark-robust delivery selector (validated offline on all labeled clips + the 01:03 clip,
+# examples/form_selector_sim.py): the swing amplitude is measured in the bowler's own SHOULDER-WIDTHS (a real
+# bowling swing is many shoulder-widths of wrist travel; walking/pacing arm-sway is a small fraction), which cancels
+# the apparent-scale + foreshortening difference between iOS and server MediaPipe landmarks.
+SWING_SHW_FLOOR = 0.015   # shoulder-width floor (a legit edge-on side-view delivery reads ~0.017; guards shw→0)
+WALKBACK_DY = 0.08        # body-center drop (moving toward a rear/overhead camera) above this flags a walk-back …
+WALKBACK_PENALTY = 4.0    # … and divides that burst's score by (1 + gain·(dy − WALKBACK_DY)) — resolves 2-motion clips
+HOLD_SEARCH_MAX_S = 1.5   # the posted finish follows the slide within this; don't latch onto a later still run (a
+                          # walk-back's stop) — that would stretch the swing window onto the wrong motion (DEC-131)
 
 
 def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_MAX_S, still_thr=FOOT_STILL_FINISH):
@@ -221,9 +230,51 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
             i = j
         else:
             i += 1
+    # The delivery's signature is the bowling-arm SWING — one large, contiguous wrist arc — not the feet, which on
+    # a long clip (lots of pre-shot pacing, practice swings, a 30 s capture) break into many short step-bursts that
+    # tie with that non-delivery motion under a footvis×duration score. Weight each candidate by the wrist-arc
+    # amplitude, MEASURED IN THE BOWLER'S OWN SHOULDER-WIDTHS (handedness-agnostic: whichever wrist swings more).
+    # Normalizing by per-window shoulder width cancels the apparent-scale + foreshortening gap between iOS and
+    # server landmarks and separates a true swing (many shoulder-widths) from a walk-back's arm-sway (a fraction),
+    # even when the walk-back is closer / has more raw pixels. A burst whose body-center drops toward a rear/
+    # overhead camera (DEC-131 direction-of-travel) is a walk-back, not the delivery → penalized. With the wrists
+    # occluded this degrades toward the footvis×duration ranking. No per-clip tuning; see form_selector_sim.py.
+    wy_l = _smooth(_point(lms, (L_WRIST,), 1), 5)
+    wy_r = _smooth(_point(lms, (R_WRIST,), 1), 5)
+    shoulder_w = np.abs(_point(lms, (L_SHOULDER,), 0) - _point(lms, (R_SHOULDER,), 0))
+    body_cy = (_point(lms, (L_SHOULDER,), 1) + _point(lms, (R_SHOULDER,), 1)
+               + _point(lms, (L_HIP,), 1) + _point(lms, (R_HIP,), 1)) / 4.0
+
+    def _swing_amp(b):
+        m = (t >= b[0] - 1.5) & (t <= b[1] + 1.0)
+        amps = []
+        for wy in (wy_l, wy_r):
+            v = wy[m][~np.isnan(wy[m])]
+            if len(v) >= 4:
+                amps.append(float(np.max(v) - np.min(v)))
+        raw = max(amps) if amps else 0.0
+        sw = shoulder_w[m][~np.isnan(shoulder_w[m])]
+        shw = float(np.median(sw)) if len(sw) else SWING_SHW_FLOOR
+        return raw / max(shw, SWING_SHW_FLOOR)
+
+    def _edge_mean(a, lo, hi):           # mean over the first/last ~20 % of a window (robust endpoint)
+        idx = np.where((t >= lo) & (t <= hi))[0]
+        if len(idx) < 4:
+            return np.nan, np.nan
+        k = max(2, len(idx) // 5)
+        return float(np.nanmean(a[idx[:k]])), float(np.nanmean(a[idx[-k:]]))
+
+    def _walkback_dy(b):                 # body-center drop toward a rear/overhead camera over the burst
+        y0, y1 = _edge_mean(body_cy, b[0] - 0.4, b[1] + 0.4)
+        return 0.0 if (np.isnan(y0) or np.isnan(y1)) else (y1 - y0)
+
+    def _score(b):
+        base = b[2] * (0.15 * min(b[1] - b[0], 2.5) + _swing_amp(b))
+        return base / (1.0 + WALKBACK_PENALTY * max(0.0, _walkback_dy(b) - WALKBACK_DY))
+
     good = [b for b in bursts if b[2] >= FOOTVIS_MIN]
-    pick = (max(good, key=lambda b: b[2] * min(b[1] - b[0], 2.5)) if good
-            else (max(bursts, key=lambda b: b[2]) if bursts else None))
+    pick = (max(good, key=_score) if good
+            else (max(bursts, key=_score) if bursts else None))
     if pick is None:
         return None
     b0, b1, _ = pick
@@ -231,7 +282,8 @@ def _find_delivery(t, lms, Rs, Ls, burst_motion=BURST_MOTION, burst_max_s=BURST_
     still = (np.nan_to_num(Rs, nan=9.0) < still_thr) & (np.nan_to_num(Ls, nan=9.0) < still_thr)
     hold = None
     i = int(np.searchsorted(t, b1 - 0.4))
-    while i < n:
+    hold_deadline = b1 + HOLD_SEARCH_MAX_S            # the posted finish is right after the slide, not 5 s later
+    while i < n and t[i] <= hold_deadline:
         if still[i]:
             j = i
             while j < n and still[j]:
@@ -340,6 +392,8 @@ def _setup_hold_end(t, Rs, Ls, burst_start, max_lookback=1.5, still_thr=FOOT_STI
 # clips (form_labels.json): within ±1–4 frames vs the labeled E8 across rear and side views.
 SLIDE_STOP_SPEED = 0.12       # normalized foot-heights/s — below this (sustained) the slide foot is at rest
 SLIDE_STOP_HOLD_S = 0.10      # the low-speed run must persist this long (reject a momentary dip mid-slide)
+SLIDE_MAX_S = 0.7             # a real slide (plant → stop) never exceeds this; bounds the E8 search so a fragile /
+                              # mis-detected anchor can't put the stop on the trail-leg follow-through ~1.5 s later
 
 
 def _slide_foot(t, Rs, Ls, t0, t1, handed=None):
@@ -918,9 +972,34 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # old E8=hold_start, which was the (much later) both-feet-still posted finish.
     _sf_anchor = E6 if E6 is not None else slide_plant
     slide_foot_lab, slide_speed = _slide_foot(t, Rs, Ls, _sf_anchor - 0.3, hold_end, handed)
-    slide_stop = _slide_stop(t, slide_speed, _sf_anchor, hold_end)
+    # E8 is robust to a wrong/late anchor: the slide stop is ~0.3 s after the slide plant, never > SLIDE_MAX_S.
+    # The bottom-of-arc E6 anchor is fragile on a windowed on-device pose (DEC-131) — when it's mis-detected late it
+    # pushes the stop onto the trail-leg follow-through ~1.5 s later. Clamp the anchor toward the slide plant and
+    # bound the search; on a clean clip (E6 ≈ plant + 0.3–0.4 s) this is a no-op, so the server result is unchanged.
+    _stop_anchor = min(_sf_anchor, slide_plant + 0.5)
+    _stop_to = min(hold_end, slide_plant + SLIDE_MAX_S)
+    slide_stop = _slide_stop(t, slide_speed, _stop_anchor, _stop_to)
     if slide_stop is None:
-        slide_stop = hold_start
+        # The slide foot never clearly came to rest in the search window (e.g. a mis-identified slide foot on a
+        # noisy on-device pose). The slide stop is ~0.3 s after the slide plant — use that, NOT the posted finish
+        # hold_start (~1.5 s later, which produced the big 8825/8826 E8 errors). DEC-131.
+        slide_stop = min(hold_start, slide_plant + 0.3)
+
+    # E5 (slide START): `slide_plant` is a foot PLANT (a dip). When the SLIDE foot then slides — a clear speed peak
+    # in the 0.3 s AFTER the plant that both exceeds 2× its speed at the plant AND dominates the motion in the 0.3 s
+    # BEFORE it — the labeled slide-start sits at that slide (~0.2 s after the plant, e.g. IMG_8825 where the last
+    # detected plant is the trail foot and the slide foot slides right after). Snap E5 to the slide peak in that
+    # case. It is a no-op when the last plant is the post-slide settle (the motion before the plant dominates), so
+    # rear clips are unchanged. `slide_plant` itself is kept for the step timing, plant checks, and E8 anchor. DEC-131.
+    slide_start = slide_plant
+    _ss = _smooth(np.nan_to_num(slide_speed, nan=0.0), 3)
+    _aft = (t >= slide_plant) & (t <= slide_plant + 0.3)
+    _bef = (t >= slide_plant - 0.3) & (t < slide_plant)
+    if _aft.any() and _bef.any():
+        _pk_a, _pk_b = float(np.max(_ss[_aft])), float(np.max(_ss[_bef]))
+        _at = float(_ss[int(np.argmin(np.abs(t - slide_plant)))])
+        if _pk_a > 2.0 * max(_at, 0.05) and _pk_a > _pk_b:
+            slide_start = float(t[_aft][int(np.argmax(_ss[_aft]))])
 
     raw_first_to_release = (E7 - first_step) if (E7 is not None) else None
     is_slow, factor, slownote = detect_slowmo(raw_intervals, raw_first_to_release)
@@ -1060,7 +1139,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # (FORM_ANALYSIS_SPEC §3) — NOT the later posted-finish start (hold_start), which is kept separately for the
     # finish-hold metric. These feed the T3 (E4−E5) and T4 (E7−E8) timing checkpoints (DEC-057).
     extras['events'] = {k: (None if v is None else round(v, 3)) for k, v in
-                        dict(E2=E2, E3=E3, E4=E4, E5=slide_plant, E6=E6, E7=E7, E8=slide_stop,
+                        dict(E2=E2, E3=E3, E4=E4, E5=slide_start, E6=E6, E7=E7, E8=slide_stop,
                              first_step=first_step, slide_plant=slide_plant, slide_stop=slide_stop,
                              hold_start=hold_start, hold_end=hold_end).items()}
     # Sanity-gate the display events: an implausible one (e.g. release not at the slide stop, or a too-short
@@ -1086,7 +1165,7 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     # Use the GATED events (a dropped E2/E3/E4/E6/E7 is now None) so a fundamentals position built on an
     # untrustworthy event is not surfaced either — consistent with the thumbnails/timings.
     g = extras['events']
-    pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_plant, E6=g.get('E6'),
+    pos_events = dict(E2=g.get('E2'), E3=g.get('E3'), E4=g.get('E4'), E5=slide_start, E6=g.get('E6'),
                       E7=g.get('E7'), E8=slide_stop, first_step=first_step, slide_plant=slide_plant,
                       slide_stop=slide_stop, hold_start=hold_start, hold_end=hold_end)
     extras['measured_positions'] = _fund.measured_positions(t, lms, pos_events, torso, handed, out)
@@ -1125,6 +1204,21 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                 mm['status'] = 'low_confidence'
                 mm['confidence'] = min(mm.get('confidence', 0.0), 0.2)
                 mm['note'] = warn + (mm.get('note') or '')
+    # DEC-131 plausibility backstop: a delivery timing/count outside its physiological band is a mis-segmented
+    # delivery, not a real measurement — stamp it `unavailable` + IMPLAUSIBLE_VALUE (never best_effort/low_confidence),
+    # the same bands the on-device engine applies (parity). Runs LAST so it overrides the slo-mo downgrade too.
+    from ..failures import implausible_reason, IMPLAUSIBLE_VALUE
+    for k, mm in out.items():
+        if not isinstance(mm, dict) or mm.get('value') is None:
+            continue
+        reason = implausible_reason(k, mm.get('value'))
+        if reason:
+            mm['value'] = None
+            mm['status'] = 'unavailable'
+            mm['confidence'] = 0.0
+            mm['reason_code'] = IMPLAUSIBLE_VALUE
+            mm['note'] = f'implausible: {reason}'
+            mm['display'] = '—'
     out['_extras'] = extras
     return out
 
