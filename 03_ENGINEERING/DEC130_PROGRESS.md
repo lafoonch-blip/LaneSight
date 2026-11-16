@@ -26,6 +26,31 @@ detection pipeline was never built on-device; on-device is classical-only). Mode
 (`ios/LaneSight/Models/Ball{Lane,Pins}Detector.mlpackage`, gitignored) as the foundation. This is the remaining work
 for on-device parity → deploy → install.
 
+## v9 (2026-11-16) — PHASE 1 SHIPPED; on-device detector FIXED; learned track→speed tuning remains
+**Phase 1 DONE.** Merged `origin/feat/form-ondevice` (shot-side DEC-131 renumbered → **DEC-132**; form keeps DEC-131),
+pushed. **Deployed** `lanesight-api-47dfd3b` (golden gate 7/7 + smoke pass 18.675 vs 18.71±0.2; expected_rev bumped;
+serving 100%). **Installed Release on Shayne's iPhone** — classical + changepoint, on-device primary default ON
+(confirmed `AppModel.onDevicePrimary` returns true), learned fallback gated `LS_LEARNED_ONDEVICE`. NOTE: the deployed
+server runs CLASSICAL analyze + the form fixes (production_engine is eval-wired, not in `app.py`; and the image is
+torch-free) — the zero-wrong dual-engine is validated in eval + runs on-device once Phase 2 lands; activating it
+server-side needs torch-in-image (a separate careful deploy).
+
+**Phase 2 — on-device learned engine: DETECTOR NOW WORKS.** Root-caused the constant-peak bug: the CoreML model is
+exported **FLOAT16**, but the heatmap/lane outputs were read as Float32 → garbage ~1e34 constant peak. Fixed with a
+precision-aware reader. Plus the earlier fixes (normalised-zero letterbox border; vImage high-quality downsample;
+3-frame stride for memory/latency). The detector now produces REAL moving ball tracks on device (IMG_8751 learned
+18.57 / 58 pts, 8963 97 pts, 8966 67 pts).
+
+**OPEN (the Phase-2 gate):** the learned track→**speed** is still noisy (8751 +0.69, 8966 24.9) and fails on most of
+the classical-failure clips it should rescue (buildTrack/speed reject on the far portrait tracks); reconciliation is
+currently **fallback-only** (learned used when classical has no speed) because cross-checking a noisy learned speed
+withholds good classical clips. On-device full-22 = **4/22** (vs server 10/22). To reach the gate (iPhone↔server
+parity per event + speed, zero plausible-but-wrong, 10/10 deterministic, <30 s): (1) make the learned track→speed
+accurate on the detector tracks — foul-cross from a robust fit, changepoint impact with the learned deck, DEC-122-7b
+handling; (2) a reliable on-device ENGINE_DISAGREE to catch the classical wrongs (8963/8970/… ship wrong today).
+Shipping on-device engine stays classical + changepoint (installed) until this passes, then: remove the gate, install
+again, report the iPhone 22-clip table.
+
 ## v8 (2026-11-16) — on-device learned engine: built, detector decode diagnosed (WIP, opt-in)
 Built the on-device learned fallback end to end (`OnDeviceLearnedDetector`: CoreML ball/lane inference + RANSAC-linked
 track + lane-from-head; `OnDeviceShadow` learned fallback + ENGINE_DISAGREE; `OnDeviceTracker.impactTime` changepoint

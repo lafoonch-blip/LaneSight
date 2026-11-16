@@ -107,12 +107,16 @@ enum OnDeviceShadow {
                     if let la = lsp.avgFoulToPinsMph { diag["learned_avg"] = Double(la) }
                     diag["learned_track_points"] = ltrack.points.count
                     diag["learned_note"] = lsp.note
-                    if let c = cAvg, let l = lsp.avgFoulToPinsMph {
-                        if abs(c - l) > 0.5 {
-                            mph = nil; avgFoulToPins = nil; basis = "unavailable"
-                            note = "ENGINE_DISAGREE: classical \(String(format: "%.2f", c)) vs learned \(String(format: "%.2f", l)) mph"
-                        }
-                    } else if cAvg == nil, let l = lsp.avgFoulToPinsMph {
+                    if let tf = lsp.tFoulCross { diag["learned_tfoul"] = tf }
+                    if let ti = lsp.tImpact { diag["learned_timpact"] = ti }
+                    if let it = ltrack.impactT { diag["learned_impactT_raw"] = it }
+                    if let fp = ltrack.points.first?.t, let lp2 = ltrack.points.last?.t { diag["learned_tspan"] = [fp, lp2] }
+                    // Reconcile. Classical + changepoint is the validated primary; the learned detector's job here
+                    // is COVERAGE — rescue clips the classical tracker drops. Use it only when classical has no
+                    // speed. (The server's ENGINE_DISAGREE cross-check needs a server-accurate learned speed; the
+                    // on-device learned track is still being tuned, so cross-checking it would withhold good
+                    // classical clips — enable once the learned speed matches the server per event.)
+                    if cAvg == nil, let l = lsp.avgFoulToPinsMph {
                         mph = lsp.mph; avgFoulToPins = l; basis = lsp.basis
                         note = "learned-fallback: " + lsp.note
                     }
