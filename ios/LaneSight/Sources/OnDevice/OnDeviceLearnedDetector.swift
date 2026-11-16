@@ -24,6 +24,21 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
     private let mean: [Float] = [0.485, 0.456, 0.406]
     private let std: [Float] = [0.229, 0.224, 0.225]
 
+    /// A flat element reader for an MLMultiArray at its ACTUAL precision (the model is exported FLOAT16; reading
+    /// fp16 bits as fp32 yields garbage). Assumes a contiguous buffer (true for these dense detector outputs).
+    private static func reader(_ a: MLMultiArray) -> (Int) -> Float {
+        switch a.dataType {
+        case .float16:
+            let p = a.dataPointer.assumingMemoryBound(to: Float16.self); return { Float(p[$0]) }
+        case .float32:
+            let p = a.dataPointer.assumingMemoryBound(to: Float.self); return { p[$0] }
+        case .double:
+            let p = a.dataPointer.assumingMemoryBound(to: Double.self); return { Float(p[$0]) }
+        default:
+            return { a[$0].floatValue }
+        }
+    }
+
     init() throws {
         // The generated class exposes its compiled URL; load the bare MLModel so we can read named outputs.
         guard let url = Bundle.main.url(forResource: "BallLaneDetector", withExtension: "mlmodelc") else {
@@ -48,36 +63,43 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         // Letterbox border = the server's ZERO-padded canvas AFTER normalisation, i.e. (0-mean)/std — NOT raw 0.
         // (Raw-0 padding is out-of-distribution and makes the detector fire a constant peak on the border.)
         for c in 0..<3 { let v = -mean[c] / std[c]; let b = c * plane; for i in 0..<plane { ptr[b + i] = v } }
+        // High-quality (anti-aliased) BGRA downsample via vImage — matches the server's cv2.resize; nearest-neighbour
+        // drops the small, fast ball below the detector threshold, and a hand-rolled box filter is too slow.
+        var src = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: base), height: vImagePixelCount(H),
+                                width: vImagePixelCount(W), rowBytes: rb)
+        let dstRB = nw * 4
+        let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: dstRB * nh); defer { dst.deallocate() }
+        var dstBuf = vImage_Buffer(data: dst, height: vImagePixelCount(nh), width: vImagePixelCount(nw), rowBytes: dstRB)
+        guard vImageScale_ARGB8888(&src, &dstBuf, nil, vImage_Flags(kvImageHighQualityResampling)) == kvImageNoError else { return (nil, nil) }
         for yy in 0..<nh {
-            let sy = min(Int(Float(yy) / s), H - 1)
+            let row = yy * dstRB
             for xx in 0..<nw {
-                let sx = min(Int(Float(xx) / s), W - 1)
-                let p = sy * rb + sx * 4                            // BGRA
-                let r = Float(base[p + 2]) / 255, g = Float(base[p + 1]) / 255, b = Float(base[p]) / 255
+                let p = row + xx * 4                               // BGRA
                 let o = yy * input + xx
-                ptr[o] = (r - mean[0]) / std[0]                    // channel 0 = R
-                ptr[plane + o] = (g - mean[1]) / std[1]
-                ptr[2 * plane + o] = (b - mean[2]) / std[2]
+                ptr[o] = (Float(dst[p + 2]) / 255 - mean[0]) / std[0]        // channel 0 = R
+                ptr[plane + o] = (Float(dst[p + 1]) / 255 - mean[1]) / std[1]
+                ptr[2 * plane + o] = (Float(dst[p]) / 255 - mean[2]) / std[2]
             }
         }
         guard let out = try? model.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": arr])) else { return (nil, nil) }
         guard let hm = out.featureValue(for: "heatmap")?.multiArrayValue,
               let lane = out.featureValue(for: "lane")?.multiArrayValue else { return (nil, nil) }
-        // heatmap shape [1, C, O, O] (C>=1, ball = channel 0), stride-4 output
+        // heatmap shape [1, C, O, O] (C>=1, ball = channel 0), stride-4 output. The model is exported FLOAT16, so
+        // read the outputs at their actual precision (reading fp16 bits as fp32 yields garbage ~1e34 constants).
         let O = hm.shape[hm.shape.count - 1].intValue
         let st = input / O
-        let hp = hm.dataPointer.assumingMemoryBound(to: Float.self)
+        let readHM = Self.reader(hm), readLane = Self.reader(lane)
         var best: Float = thr; var bi = -1
-        for i in 0..<(O * O) { if hp[i] > best { best = hp[i]; bi = i } }   // ball channel is first O*O block
+        for i in 0..<(O * O) { let v = readHM(i); if v > best { best = v; bi = i } }   // ball channel = first O*O block
         var ball: ODBallDet? = nil
         if bi >= 0 {
             let hy = bi / O, hx = bi % O
             ball = ODBallDet(cx: Float(hx * st) / s, cy: Float(hy * st) / s, score: best)   // letterbox → full frame
         }
         // lane head: 6 params normalized by max(W,H) (match lane_from_params)
-        let lp = lane.dataPointer.assumingMemoryBound(to: Float.self)
         let m = Float(max(W, H))
-        let lane6 = ODLaneParams(foulL: (lp[0] * m, lp[1] * m), foulR: (lp[2] * m, lp[3] * m), vp: (lp[4] * m, lp[5] * m))
+        let lane6 = ODLaneParams(foulL: (readLane(0) * m, readLane(1) * m), foulR: (readLane(2) * m, readLane(3) * m),
+                                 vp: (readLane(4) * m, readLane(5) * m))
         return (ball, lane6)
     }
 
