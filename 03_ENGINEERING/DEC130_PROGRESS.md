@@ -26,6 +26,26 @@ detection pipeline was never built on-device; on-device is classical-only). Mode
 (`ios/LaneSight/Models/Ball{Lane,Pins}Detector.mlpackage`, gitignored) as the foundation. This is the remaining work
 for on-device parity → deploy → install.
 
+## v8 (2026-11-16) — on-device learned engine: built, detector decode diagnosed (WIP, opt-in)
+Built the on-device learned fallback end to end (`OnDeviceLearnedDetector`: CoreML ball/lane inference + RANSAC-linked
+track + lane-from-head; `OnDeviceShadow` learned fallback + ENGINE_DISAGREE; `OnDeviceTracker.impactTime` changepoint
+wrapper). Compiles + runs on device; fixed two real bugs found on device: (1) per-frame 3 MB MLMultiArray memory
+pressure → crash, fixed by running the detector every 3rd frame; (2) the letterbox border was raw-0 instead of the
+server's **(0−mean)/std** normalised zero — raw-0 is out-of-distribution and made the detector fire a constant border
+peak.
+
+**OPEN (the remaining on-device blocker):** after the padding fix the ball-peak response falls below the 0.30
+threshold (`raw=0`). Root cause isolated: the server detector runs on the **stabilised** frame with a **bilinear**
+letterbox resize, while the on-device port runs on the **raw** frame with a **nearest-neighbour** resize — which
+weakens the small-ball heatmap below threshold. Fix is a focused CV-parity pass (stabilised input + bilinear/area
+resize, confirm the heatmap is sigmoid-ed [0,1], re-tune the threshold) then finish the RANSAC-track → speed path.
+Gated behind `LS_LEARNED_ONDEVICE=1` so the shipping on-device engine stays the validated **classical + changepoint**
+path. Models compile on-device (`Models/Ball{Lane,Pins}Detector.mlpackage`).
+
+**On-device status (classical + changepoint, shipping):** 4/22 within ±0.5 — the changepoint HITs where the classical
+track is good (8751 +0.21, 8966 −0.29, 8967 −0.15, all <30 s); the rest are the weak on-device classical tracker,
+which the learned fallback closes once the decode pass above lands. (Server engine: 10/22, zero-wrong.)
+
 ## v6 (2026-11-15) — DEC-131 visual pin-contact classifier BUILT + graded
 `ops/pin_contact.py`: `deck_motion_series` (foul-anchored window over the target-lane deck, bodies-above-bases,
 per-frame phase-correlation re-align) + `detect_contact` (changepoint = largest step into the sustained scatter →

@@ -45,7 +45,9 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         guard let arr = try? MLMultiArray(shape: [1, 3, NSNumber(value: input), NSNumber(value: input)], dataType: .float32) else { return (nil, nil) }
         let ptr = arr.dataPointer.assumingMemoryBound(to: Float.self)
         let plane = input * input
-        memset(ptr, 0, plane * 3 * MemoryLayout<Float>.size)      // zero-pad the letterbox border
+        // Letterbox border = the server's ZERO-padded canvas AFTER normalisation, i.e. (0-mean)/std — NOT raw 0.
+        // (Raw-0 padding is out-of-distribution and makes the detector fire a constant peak on the border.)
+        for c in 0..<3 { let v = -mean[c] / std[c]; let b = c * plane; for i in 0..<plane { ptr[b + i] = v } }
         for yy in 0..<nh {
             let sy = min(Int(Float(yy) / s), H - 1)
             for xx in 0..<nw {
