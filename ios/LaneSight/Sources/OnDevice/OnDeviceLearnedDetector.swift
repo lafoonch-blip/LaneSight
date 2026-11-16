@@ -24,6 +24,19 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
     private let mean: [Float] = [0.485, 0.456, 0.406]
     private let std: [Float] = [0.229, 0.224, 0.225]
 
+    /// Least-squares quadratic fit y = a·x² + b·x + c (3×3 normal equations, Cramer). nil if degenerate.
+    private static func quadFit(_ x: [Double], _ y: [Double]) -> (Double, Double, Double)? {
+        var S0 = 0.0, S1 = 0.0, S2 = 0.0, S3 = 0.0, S4 = 0.0, T0 = 0.0, T1 = 0.0, T2 = 0.0
+        for i in 0..<x.count { let xi = x[i], yi = y[i], x2 = x[i] * x[i]
+            S0 += 1; S1 += xi; S2 += x2; S3 += x2 * xi; S4 += x2 * x2; T0 += yi; T1 += xi * yi; T2 += x2 * yi }
+        func det3(_ a: [[Double]]) -> Double {
+            a[0][0]*(a[1][1]*a[2][2]-a[1][2]*a[2][1]) - a[0][1]*(a[1][0]*a[2][2]-a[1][2]*a[2][0]) + a[0][2]*(a[1][0]*a[2][1]-a[1][1]*a[2][0]) }
+        let m = [[S4, S3, S2], [S3, S2, S1], [S2, S1, S0]], v = [T2, T1, T0]
+        let d = det3(m); guard abs(d) > 1e-9 else { return nil }
+        func col(_ a: [[Double]], _ ci: Int) -> [[Double]] { var r = a; for i in 0..<3 { r[i][ci] = v[i] }; return r }
+        return (det3(col(m, 0)) / d, det3(col(m, 1)) / d, det3(col(m, 2)) / d)
+    }
+
     /// A flat element reader for an MLMultiArray at its ACTUAL precision (the model is exported FLOAT16; reading
     /// fp16 bits as fp32 yields garbage). Assumes a contiguous buffer (true for these dense detector outputs).
     private static func reader(_ a: MLMultiArray) -> (Int) -> Float {
@@ -209,6 +222,18 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         if abs(den) > 1e-9 {
             let sl=(n*stu-st*su)/den, ic=(su-sl*st)/n
             if sl > 0 { inl = pts.filter { abs(Double(u($0.contactRow)) - (sl*$0.t+ic)) <= tol } }
+        }
+        guard inl.count >= 6 else { return nil }
+        // Constant-acceleration (quadratic) outlier rejection on ct(t): the ball decelerates smoothly, so a spurious
+        // far-down-lane detection (pin/reflection false positive) that the linear-u RANSAC admits stands off the
+        // quadratic. Removing it fixes the max-u "far point" that otherwise anchors the changepoint on a false event.
+        if inl.count >= 8, let (qa, qb, qc) = Self.quadFit(inl.map { $0.t }, inl.map { Double($0.contactRow) }) {
+            let res = inl.map { abs(Double($0.contactRow) - (qa*$0.t*$0.t + qb*$0.t + qc)) }
+            let sorted = res.sorted(); let med = sorted[sorted.count/2]
+            let mad = res.map { abs($0 - med) }.sorted()[res.count/2]
+            let cut = max(med + 4 * (1.4826 * mad), 10.0)
+            let kept = zip(inl, res).filter { $1 <= cut }.map { $0.0 }
+            if kept.count >= 6 { inl = kept }
         }
         guard inl.count >= 6 else { return nil }
         // robust foul-cross: interpolate t where u(t) crosses u(foulRow) between the two bracketing track points

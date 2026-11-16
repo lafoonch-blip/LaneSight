@@ -224,6 +224,24 @@ zero-wrong); held-out 6/6 and landscape 2/2 are clean. **NOT deployed** (3 plaus
 tightens 8968); (2) far/small-ball tiled detection (DEC-130 #3) to recover the 5 no-track + unlock foul on the
 no-foul portrait clips; both raise coverage toward the large-majority bar.
 
+## FOLLOW-UP (deferred by Shayne, 2026-11-16) — run production_engine on the server shadow
+The deployed `lanesight-api-47dfd3b` runs the CLASSICAL analyze path + the form fixes. To run the **zero-wrong dual
+engine** (`ops/production_engine.py`: classical-first + learned + ENGINE_DISAGREE) on the server shadow, these changes
+are needed (NOT done now — the server is the shadow, on-device is primary):
+1. **Torch on the image.** The Dockerfile is deliberately classical/OpenCV, no GPU. The learned path needs
+   `torch` + `torchvision` (CPU) in a pyproject extra, installed in the Dockerfile. Cloud Run is Linux → **CoreML
+   (.mlpackage) cannot run there**; `production_engine._load_detectors` must load the **torch** ckpts
+   (`ball_centernet.pt` + `detector_mc.pt`, 22 MB each) on non-Darwin, not the mlpackage.
+2. **Bundle the ckpts.** Fetch them in the Dockerfile like the pose model (they live in
+   `gs://project-fd28bc3f-…/dec130/`), set `LS_DEC130_DIR`.
+3. **Wire into the API.** `lanesight_api/app.py` calls `analyze_clip` (classical) at :496/:1967; route it through
+   `analyze_production` (which returns a dict, so adapt the `(rec, probe, timings)` unpacking) behind a flag that
+   degrades to classical if the detectors are absent.
+4. **Validate latency.** Both engines per request on CPU is slow (~2× classical); confirm within the 600 s sync
+   timeout and that the post-deploy smoke stays green (risk: OOM / latency → auto-rollback).
+Risk to the live API is real (torch image size, CPU latency), so this warrants its own careful, separately-gated
+deploy rather than bundling into the form-fix deploy.
+
 ## Done bar (per camera group)
 metrics on the large majority; speed within 0.5 mph of truth on labeled clips; zero plausible-but-wrong;
 IMG_8751-54 not worse; deterministic; <30 s on device.
