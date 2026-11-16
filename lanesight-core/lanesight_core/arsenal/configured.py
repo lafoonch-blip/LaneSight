@@ -64,12 +64,36 @@ class ConfiguredReaction:
     surface_polished: bool | None = None
     surface_source: str | None = None        # 'surface_event' | 'box_finish' | None
     layout_used: dict | None = None
+    bowler_used: dict | None = None           # bowler-level grip + PAP that informed this reaction (DEC-074/087)
     status: str = 'best_effort'
     notes: list[str] = field(default_factory=list)
     version: str = CONFIGURED_VERSION
 
     def to_dict(self):
         return asdict(self)
+
+
+# ---------- bowler-level drilling inputs (DEC-074/087) ----------
+# Grip (middle-finger pitch, span) and PAP (over, up) live on the BOWLER, not the ball — the same hand drills
+# every ball — so they flow into configured_reaction() as `bowler`, not the per-ball config.
+#
+# WHERE EACH PLUGS IN (honest status — no fabricated reaction numbers, per the project rule):
+#   • PAP (over/up): the layout a driller records (Dual-Angle / VLS) is ALREADY measured relative to this
+#     bowler's PAP — `pin_to_pap_in` et al. bake it in — so PAP is NOT re-applied here. It becomes load-bearing
+#     only for a layout entered pin-relative (pin distance from grip center), where pin-to-PAP must be derived
+#     from PAP; that derivation is the single plug-in point marked `# PAP-DERIVE` in layout_values().
+#   • Grip (pitch/span): affects fit/leverage, not the ball's published reaction axes; there is no sourced
+#     model mapping pitch/span → hook/length/backend yet, so it is stored and surfaced (bowler_used) but not
+#     turned into a numeric adjustment. When a cited model exists it plugs into layout_adjustments().
+def bowler_values(bowler: dict | None) -> dict:
+    if not bowler:
+        return {}
+    out = {}
+    for k in ('grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in'):
+        v = _num(bowler.get(k))
+        if v is not None:
+            out[k] = v
+    return out
 
 
 # ---------- layout parsing ----------
@@ -108,6 +132,8 @@ def layout_values(config: dict | None) -> dict:
         v = _num(config.get(k))
         out[k] = v if v is not None else parsed.get(k)
     out['pin_position'] = config.get('pin_position')
+    # PAP-DERIVE: if a future layout form gives pin distance from the grip center (not pin-to-PAP), derive
+    # pin_to_pap_in here from the bowler's PAP (over/up). No such layout form exists yet, so nothing to do.
     return {k: v for k, v in out.items() if v is not None}
 
 
@@ -258,12 +284,20 @@ def _shape(cover_type, hook, length, backend) -> str | None:
     return 'angular' if backend >= 6.5 else 'arc' if backend <= 4.0 else 'continuous'
 
 
-def configured_reaction(rec: dict, config: dict | None = None, surface_event: dict | None = None) -> ConfiguredReaction:
+def configured_reaction(rec: dict, config: dict | None = None, surface_event: dict | None = None,
+                        bowler: dict | None = None) -> ConfiguredReaction:
     """rec: catalog row with ls_* fields. config: the ball's current ball_configurations row (or None).
-    surface_event: its latest surface_events row (or None = still the box finish)."""
+    surface_event: its latest surface_events row (or None = still the box finish). bowler: the owner's
+    profile grip + PAP (DEC-074/087) — the same hand drills every ball, so it's bowler-level, not per-ball.
+    See `bowler_values` for exactly how/where PAP and grip plug in (and why they're not fabricated here)."""
     box = {k: rec.get(k) for k in ('ls_hook', 'ls_length', 'ls_backend', 'reaction_shape', 'reaction_confidence')}
     lv = layout_values(config)
+    bv = bowler_values(bowler)
     lay, notes = layout_adjustments(rec, lv)
+    if bv and lv.get('pin_to_pap_in') is not None and ('pap_over_in' in bv or 'pap_up_in' in bv):
+        notes.append('PAP on file; this layout already encodes pin-to-PAP, so PAP is not re-applied')
+    if bv.get('grip_middle_pitch_in') is not None or bv.get('grip_span_in') is not None:
+        notes.append('grip (pitch/span) recorded; no validated pitch/span→reaction model yet, so it is stored not applied')
     surf, grit, pol, ssrc = surface_adjustment(rec, surface_event)
     basis = {}
 
@@ -294,7 +328,7 @@ def configured_reaction(rec: dict, config: dict | None = None, surface_event: di
     for a in adjs:
         a.d_hook, a.d_length, a.d_backend = round(a.d_hook, 2), round(a.d_length, 2), round(a.d_backend, 2)
     return ConfiguredReaction(hook, length, backend, shape, box, adjs, basis, grit, pol, ssrc, lv or None,
-                              notes=notes)
+                              bowler_used=bv or None, notes=notes)
 
 
 def as_rankable(rec: dict, cr: ConfiguredReaction, **extra) -> dict:

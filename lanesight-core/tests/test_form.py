@@ -116,3 +116,98 @@ def test_key_frame_poses_overlay_is_cropnormalized_and_confident_only():
     # a centered joint maps to the crop centre (0.5 -> (0.5-0.2)/0.6 = 0.5)
     assert j[5] == [0.5, 0.5]
     assert sum(1 for p in j if p) >= 6
+
+
+# --- event sanity gates (form shot c9df6ca0: events landed ~1s late) -------------------------
+
+def test_gate_events_all_plausible_pass():
+    # a normal delivery: ball start 1.8s before release, release at the slide stop, in order
+    ev = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8, E8=11.75)
+    ok, reasons = pose.gate_events(ev)
+    assert ok == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons == {}
+
+
+def test_gate_events_release_not_at_slide_stop_drops_all():
+    # the real c9df6ca0 numbers: release 0.57s BEFORE the slide stop -> whole delivery untrusted
+    ev = dict(E2=17.418, E3=17.5, E4=18.1, E6=18.49, E7=18.503, E8=19.072)
+    ok, reasons = pose.gate_events(ev)
+    assert ok == set()                       # nothing survives
+    assert 'E7' in reasons and 'slide stop' in reasons['E7']
+
+
+def test_gate_events_short_ball_start_to_release_drops_start():
+    # release sits at the slide stop, but ball start -> release is only 1.0s (too short)
+    ev = dict(E2=11.0, E3=11.1, E4=11.6, E6=11.95, E7=12.0, E8=11.95)
+    ok, reasons = pose.gate_events(ev)
+    assert 'E2' in reasons and 'E3' in reasons and 'E2' not in ok
+    assert 'E4' in ok and 'E7' in ok         # the trusted back-half events survive
+
+
+def test_gate_events_out_of_order_drops_offender():
+    ev = dict(E2=10.0, E3=10.3, E4=9.9, E6=11.75, E7=11.8, E8=11.75)   # E4 before E3
+    ok, reasons = pose.gate_events(ev)
+    assert 'E4' in reasons and 'E4' not in ok
+
+
+def test_gate_events_missing_slide_stop_is_lenient():
+    # no E8 -> can't anchor release; keep ordering + duration checks only, never crash
+    ev = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8, E8=None)
+    ok, reasons = pose.gate_events(ev)
+    assert 'E7' in ok
+
+
+def test_gate_events_anchors_on_slide_stop_not_posted_finish():
+    """DEC-095 / Form baseline (2026-11-01): the gate anchors release to E8 = the slide-foot STOP (release
+    happens as the slide foot settles). E8 is now the slide stop itself — the detector no longer passes the much
+    later posted-finish start (hold_start) as E8, which created a ~0.85 s false gap that nulled EVERY real
+    delivery (IMG_8824/8846). Validated on form_labels.json: release sits within ±0.05 s of the labeled slide
+    stop. Same delivery, two E8 meanings:"""
+    base = dict(E2=10.0, E3=10.3, E4=11.2, E6=11.75, E7=11.8)
+    # E8 = the real slide stop (release sits right at it) -> all events trusted
+    ok, reasons = pose.gate_events(dict(base, E8=11.75))
+    assert ok == {'E2', 'E3', 'E4', 'E6', 'E7'} and reasons == {}
+    # E8 = the OLD bug (posted-finish start, 0.85 s after release) -> release reads far from the "stop" -> dropped.
+    # This is the shape the slide-stop detector fix removed; the gate still rejects it if it ever recurs.
+    ok_bug, reasons_bug = pose.gate_events(dict(base, E8=12.6))
+    assert ok_bug == set() and 'slide stop' in reasons_bug['E7']
+
+
+def test_slide_stop_is_slide_foot_settling_not_both_feet_still():
+    """Slide stop (E8) = the slide foot's OWN speed settling after its slide peak, searched from an anchor near
+    release (the bottom of the swing arc). The trail foot is still swinging in the follow-through, so a
+    both-feet-still test would land much later — _slide_stop must ignore the trail foot and must not fire on the
+    slow setup before the slide."""
+    import numpy as np
+    fps = 60.0
+    t = np.arange(0, 3.0, 1.0 / fps)
+    # slide foot: slow in the setup (~0.05), one fast slide peak ~1.5s, then settles to rest (~0.03) by ~1.6s.
+    slide = np.full_like(t, 0.05)
+    slide[(t >= 1.3) & (t < 1.6)] = 1.0            # the slide itself
+    slide[t >= 1.6] = 0.03                         # at rest at the line
+    stop = pose._slide_stop(t, slide, anchor=1.55, t_to=2.5)
+    assert stop is not None and abs(stop - 1.6) <= 2.0 / fps     # within ~2 frames of the true settle
+    # the earlier low-speed setup (t<1.3) must not win, because it precedes the slide peak
+    assert stop > 1.3
+    # _slide_foot picks the foot that comes to rest; trail foot keeps moving through the window
+    trail = np.full_like(t, 0.6)
+    foot, spd = pose._slide_foot(t, Rs=trail, Ls=slide, t0=1.2, t1=2.5, handed='right')
+    assert foot == 'L' and spd is slide
+
+
+def test_setup_hold_end_anchors_step_search_at_the_first_step():
+    """The step window must start where the setup stance ends (step 1 breaks the stillness), not inside the
+    motion burst — else steps 1–2 can never be found (DEC-120). Synthetic: both feet still until 1.0s, then the
+    approach moves; the motion-burst detector would only fire ~0.4s later, but _setup_hold_end returns ~1.0s."""
+    import numpy as np
+    fps = 60.0
+    t = np.arange(0, 3.0, 1.0 / fps)
+    both_still_until = 1.0
+    Rs = np.where(t < both_still_until, 0.02, 0.6)      # stance still, then walking
+    Ls = np.where(t < both_still_until, 0.02, 0.6)
+    burst_start = 1.4                                   # detector fires late (after step 1)
+    start = pose._setup_hold_end(t, Rs, Ls, burst_start)
+    assert abs(start - both_still_until) <= 3.0 / fps and start < burst_start
+    # no clear setup hold (rolling start: always moving) -> safe fallback near the burst, never crashes
+    moving = np.full_like(t, 0.6)
+    fb = pose._setup_hold_end(t, moving, moving, burst_start)
+    assert abs(fb - (burst_start - 0.4)) <= 3.0 / fps

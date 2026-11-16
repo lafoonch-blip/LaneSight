@@ -20,19 +20,25 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSAppPhase</key>
+	<string>$(LS_APP_PHASE)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>LaneSight records your delivery to analyze your shot.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>LaneSight saves a copy of your recordings to Photos when you turn on "Save recordings to my phone" in Settings.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>LaneSight uses a photo you choose as your profile picture.</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>RobotoCondensed-Regular.ttf</string>
 		<string>RobotoCondensed-SemiBold.ttf</string>
 	</array>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

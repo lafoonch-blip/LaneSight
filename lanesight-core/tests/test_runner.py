@@ -340,3 +340,20 @@ def test_stabilize_rejects_mismatched_timing_source(tmp_path):
     a = make_clip(str(tmp_path / 'a.mp4'), secs=1); b = make_clip(str(tmp_path / 'b.mp4'), secs=2)
     with pytest.raises(RuntimeError, match='timing source'):
         stabilize(a, log=lambda m: None, timing_path=b)
+
+
+def test_burst_downlane_progress_distinguishes_thrown_ball():
+    """2026-10-29 wrong-window fix: a thrown ball's motion centroid moves UP the frame (near->far) over its
+    burst (positive progress); a ball-return / pre-shot burst that stays put does not."""
+    from lanesight_runner.trim import burst_downlane_progress
+    # centroid normalized row 0=far/top .. 1=near/bottom; a throw goes 1.0 -> 0.2 (down the lane)
+    thrown = [0.95, 0.9, 0.8, 0.6, 0.45, 0.3, 0.2]
+    assert burst_downlane_progress(thrown) > 0.4
+    # a ball return / localized burst stays near the same row (no down-lane travel)
+    stuck = [0.8, 0.82, 0.79, 0.81, 0.80, 0.78]
+    assert abs(burst_downlane_progress(stuck)) < 0.06
+    # motion moving the WRONG way (toward the camera / approach) is not a throw
+    toward = [0.2, 0.3, 0.45, 0.6, 0.8]
+    assert burst_downlane_progress(toward) < 0
+    # too few finite samples -> 0.0 (no crash)
+    assert burst_downlane_progress([float('nan'), 0.5]) == 0.0

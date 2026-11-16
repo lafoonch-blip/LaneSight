@@ -2,26 +2,73 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
-    @State private var score: Loadable<ScoreResponse> = .idle
-    @State private var history: [ScoreResponse] = []
-    @State private var sessions: Loadable<[SessionRow]> = .idle
-    @State private var activity: Loadable<[ActivityItem]> = .idle
-    @State private var focus: FocusResponse?
+    // DEC-099: Home's data lives in the shared tab store — fetched in parallel, published at once, refreshed
+    // silently on revisit (no section-by-section pop-in).
+    @EnvironmentObject var tabs: TabDataStore
+    private var score: Loadable<ScoreResponse> { tabs.home.score }
+    private var history: [ScoreResponse] { tabs.home.history }
+    private var sessions: Loadable<[SessionRow]> { tabs.home.sessions }
+    private var activity: Loadable<[ActivityItem]> { tabs.home.activity }
+    private var focus: FocusResponse? { tabs.home.focus }
+
+    @State private var showFeedback = false      // DEC-124: Home Feedback button → general feedback sheet
+
+    /// "Shot analyzed while you were away · View" (2026-10-30). Shown on Home instead of presenting a result
+    /// sheet at launch. Tapping opens the result (or the friendly failure); the shot is also in Lab › Uploads /
+    /// the session list regardless.
+    private func awayBanner(_ a: AppModel.AwayResult) -> some View {
+        Button {
+            Task {
+                if a.failed {
+                    model.pipeline = .failed("We couldn't analyze that shot.")
+                } else if await model.loadShotResult(shotId: a.shotId, captureModeHint: a.mode) {
+                    model.pipeline = .done
+                }
+                model.uploadBusy = true          // present now — the user tapped (intentional, not at launch)
+                model.awayResult = nil
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: a.failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(a.failed ? LS.bestEffort : LS.positive)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(a.failed ? "A shot couldn't be analyzed while you were away"
+                                  : "Shot analyzed while you were away")
+                        .font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                    Text(a.failed ? "Tap for the reason · Retry from Lab" : "Tap to view")
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
+            }
+            .lsCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 homeHeader
                 ScrollView {
+                    if !tabs.homeReady {
+                        LSPageLoading()
+                    } else {
                     VStack(alignment: .leading, spacing: 18) {
-                        if showWelcome { welcomeStartCard }
-
-                        LoadableView(state: score, retry: { Task { await loadScore() } }) { s in
-                            if s.eligible == true {
-                                ScoreCard(score: s, history: history)
-                            } else {
-                                buildingScoreCard(s)
+                        // DEC-119: a session stays active until the user ends it → offer a way back in.
+                        if let s = model.activeSession {
+                            ActiveSessionBanner(startedAt: s.startedAt, shotCount: s.shotCount) {
+                                model.openActiveSessionRequest = true
                             }
+                        }
+                        if showWelcome { welcomeStartCard }
+                        if let away = model.awayResult { awayBanner(away) }   // analyzed/failed while the app was closed
+
+                        // DEC-083: Home keeps the real score card in both states — ScoreCard renders the
+                        // locked "BUILDING" treatment (greyed badge, "Score unlocks · N%", per-part progress)
+                        // until the score is eligible, so the switch to a live score feels seamless.
+                        LoadableView(state: score, retry: { Task { await loadAll() } }) { s in
+                            ScoreCard(score: s, history: history)
                         }
 
                         if let f = focus, f.status == "ok", let title = f.focus {
@@ -32,15 +79,25 @@ struct HomeView: View {
 
                         if hasSessions { recentSessions }
                         recentActivity
+                        feedbackCard
                         Spacer(minLength: 8)
                     }
                     .padding(16)
+                    }
                 }
                 .refreshable { await loadAll() }
             }
             .background(LSBackground())
             .navigationBarHidden(true)
             .task { await loadAll() }
+            .sheet(isPresented: $showFeedback) {
+                GeneralFeedbackSheet(currentScreen: "Home").environmentObject(model)
+            }
+            // DEC-119: "Continue" from the resume prompt / a banner tap pushes the Active Session here so the
+            // tab bar stays visible (amends DEC-099). RootTabs switches to Home first when the request fires.
+            .navigationDestination(isPresented: $model.openActiveSessionRequest) {
+                ActiveSessionScreen().environmentObject(model)
+            }
         }
     }
 
@@ -78,58 +135,10 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    // "Building your LaneSight Score" card (Figma 466:4123): shown until the score is eligible. The four
-    // rows are driven by the real GET /me/score eligibility (have/need) — never mock counts.
-    private func buildingScoreCard(_ s: ScoreResponse) -> some View {
-        let rows: [(key: String, label: String, green: Bool)] = [
-            ("s_perf", "Performance (pocket, entry angle)", false),
-            ("a_acc",  "Accuracy (shots with a target)", false),
-            ("c_cons", "Consistency (comparable shots)", false),
-            ("p_power", "Power (ball data)", true),
-        ]
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Building your LaneSight Score").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-            Text("Your score appears once each part has enough shots. Until then you still see every shot’s results.")
-                .font(.system(size: 11)).foregroundStyle(LS.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(rows, id: \.key) { r in
-                let e = s.eligibility?[r.key]
-                buildingRow(label: r.label, have: e?.have ?? 0, need: e?.need ?? 0, green: r.green)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16).padding(.vertical, 14)
-        .background(Color(hex: 0x051F3B), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.link.opacity(0.6), lineWidth: 1))
-    }
-
-    private func buildingRow(label: String, have: Int, need: Int, green: Bool) -> some View {
-        let tint = green ? Color(hex: 0x3DEB7C) : LS.link
-        let frac = need > 0 ? min(1, Double(have) / Double(need)) : 0
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 6) {
-                Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("\(have) of \(need) shots").font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(green ? Color(hex: 0x3DEB7C) : LS.textSecondary)
-                    .fixedSize()
-            }
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.12)).frame(height: 6)
-                GeometryReader { g in
-                    RoundedRectangle(cornerRadius: 3).fill(tint)
-                        .frame(width: max(6, g.size.width * CGFloat(frac)), height: 6)
-                }
-                .frame(height: 6)
-            }
-            .frame(height: 6)
-        }
-    }
-
     private var recentSessions: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("RECENT SESSIONS").lsEyebrow()
-            LoadableView(state: sessions, retry: { Task { await loadSessions() } }) { rows in
+            LoadableView(state: sessions, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("No sessions yet. Start a practice session to see it here.")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -166,7 +175,7 @@ struct HomeView: View {
     private var recentActivity: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("RECENT ACTIVITY").lsEyebrow()
-            LoadableView(state: activity, retry: { Task { await loadActivity() } }) { rows in
+            LoadableView(state: activity, retry: { Task { await loadAll() } }) { rows in
                 if rows.isEmpty {
                     Text("Your sessions, uploads and achievements will show here.")
                         .font(.lsCallout).foregroundStyle(LS.textSecondary)
@@ -229,43 +238,37 @@ struct HomeView: View {
         }
     }
 
+    // DEC-124: one obvious place to report a problem or idea. Opens the categorized general-feedback sheet;
+    // the row is tagged with the account's real app phase (dev / ff / beta / live).
+    private var feedbackCard: some View {
+        Button { showFeedback = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .foregroundStyle(LS.cyan)
+                    .frame(width: 32, height: 32)
+                    .background(LS.raised, in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Send feedback").font(.lsSubheadline.bold()).foregroundStyle(LS.textPrimary)
+                    Text("Found a bug, a wrong number, or have an idea? Tell us.")
+                        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.lsFootnote).foregroundStyle(LS.textFaint)
+            }
+            .lsCard(padding: 14)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Send feedback")
+    }
+
     private func loadAll() async {
-        await loadScore()
-        await loadFocus()
-        await loadSessions()
-        await loadActivity()
-        if model.avatarImage == nil { await model.refreshAvatar() }   // show the photo in the header
-        if !model.homeLoaded { withAnimation(.easeOut(duration: 0.35)) { model.homeLoaded = true } }
-    }
-
-    private func loadFocus() async {
-        focus = try? await model.makeClient().focus()
-    }
-
-    private func loadActivity() async {
-        activity = .loading
-        do {
-            activity = .loaded(try await model.makeClient().activity())
-        } catch { activity = .failed(error.localizedDescription) }
-    }
-
-    private func loadScore() async {
-        score = .loading
-        do {
-            let client = try model.makeClient()
-            async let s = client.score()
-            async let h = client.scoreHistory()
-            let (sv, hv) = try await (s, h)
-            history = hv
-            score = .loaded(sv)
-        } catch { score = .failed(error.localizedDescription) }
-    }
-
-    private func loadSessions() async {
-        sessions = .loading
-        do {
-            sessions = .loaded(try await model.makeClient().listSessions())
-        } catch { sessions = .failed(error.localizedDescription) }
+        await tabs.load(.home, model: model)
+        if !model.homeLoaded {
+            withAnimation(.easeOut(duration: 0.35)) { model.homeLoaded = true }
+            // Home is up — warm Stats + Lab in the background so their first visit is instant too.
+            Task { await tabs.prefetchOtherTabs(model: model) }
+        }
     }
 }
 

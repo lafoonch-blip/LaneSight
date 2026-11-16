@@ -45,16 +45,44 @@ def _video_info(path):
     return fps, int(s.get('nb_read_packets') or 0)
 
 
+# A burst where a large fraction of the lane strip is moving is a PERSON (the bowler walking into frame or
+# working at the ball return), not a ball. The ball is a small object, so its bursts have a LOW moving-area
+# fraction. We keep the original motion-energy burst detection (so windows on good clips are unchanged) and
+# only SKIP bursts whose moving area says "body" — that's what lets the trimmer ignore the bowler and pick the
+# real throw on a POV/behind-the-return clip (IMG_8929), without perturbing any already-correct clip.
+BODY_MAX_FRAC = 0.11      # mean moving-area fraction (of the down-lane strip) above this ⇒ a body, not a ball
+MOTION_THRESH = 22        # per-pixel abs-diff (after camera-motion removal) that counts as moving
+# A real throw's moving mass travels DOWN the lane (near→far); in the frame that's bottom→top, so over the burst
+# the motion centroid moves UP by at least this fraction of the lane ROI height. Bursts without this progression
+# are ball-return / pre-shot / near-camera motion and are rejected (2026-10-29: fixes wrong-window shots that
+# measured a burst seconds before the actual delivery, e.g. IMG_8815/8819).
+DOWNLANE_MIN = 0.06
+
+
+def burst_downlane_progress(cen_seg):
+    """Up-frame travel of the motion centroid over a burst: mean(near third) - mean(far third) of the normalized
+    ROI row (0=far/top … 1=near/bottom). Positive ⇒ the moving mass moved toward the far lane (a thrown ball).
+    NaN-safe; 0.0 when too few finite samples. Pure + unit-tested; detect_window acts on it."""
+    seg = np.asarray(cen_seg, dtype=float)
+    seg = seg[np.isfinite(seg)]
+    if len(seg) < 4:
+        return 0.0
+    n = max(1, len(seg) // 3)
+    return float(np.mean(seg[:n]) - np.mean(seg[-n:]))
+
+
 def detect_window(path, scale=0.2, step=2, lead=LEAD_S, tail=TAIL_S, log=print):
     """Return (t0, t1, info) for the shot window in seconds, or (None, None, info) if no clear shot was found
-    (caller should then analyse the whole clip). info carries fps, duration, the detected burst and timing."""
+    (caller then analyses the whole clip). Motion-energy burst detection is unchanged; bursts dominated by
+    large-area (body) motion are skipped so the bowler at the ball return isn't mistaken for the throw."""
     fps, nframes = _video_info(path)
     if not fps or nframes < 60:
         return None, None, dict(reason='too short or no fps', fps=fps, nframes=nframes)
     dur = nframes / fps
     import cv2
     cap = cv2.VideoCapture(path)
-    prev = None; energy = []; idxs = []; i = 0
+    if hasattr(cv2, "CAP_PROP_ORIENTATION_AUTO"): cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)  # DEC-092 orientation
+    prev = None; energy = []; body = []; cen = []; idxs = []; i = 0
     while True:
         if not cap.grab(): break
         if i % step == 0:
@@ -67,12 +95,20 @@ def detect_window(path, scale=0.2, step=2, lead=LEAD_S, tail=TAIL_S, log=print):
                 d = np.abs(warp - prev); h, w = d.shape
                 roi = d[int(h * 0.35):int(h * 0.95), int(w * 0.2):int(w * 0.8)]  # lane region; skip ceiling/edges
                 energy.append(float(roi.mean())); idxs.append(i)
+                body.append(float((roi > MOTION_THRESH).mean()))            # moving-area fraction (body vs ball)
+                # Row of the moving mass, normalised 0=top(far)…1=bottom(near). A thrown ball travels DOWN the
+                # lane (near→far = bottom→top), so over its burst this centroid MOVES UP the frame — the signal
+                # that distinguishes a real throw from a ball-return / pre-shot / near-camera burst that stays put.
+                ys = np.arange(roi.shape[0], dtype=np.float32)[:, None]
+                wt = np.maximum(roi - MOTION_THRESH, 0.0); tot = float(wt.sum())
+                cen.append(float((ys * wt).sum() / tot) / roi.shape[0] if tot > 1e-3 else np.nan)
             prev = sm
         i += 1
     cap.release()
     if len(energy) < 10:
         return None, None, dict(reason='no motion signal', fps=fps, nframes=nframes, dur=round(dur, 2))
     E = np.convolve(np.array(energy), np.ones(5) / 5, 'same'); idxs = np.array(idxs)
+    body = np.array(body)
     base = float(np.median(E)); thr = base * 3.0
     above = E > thr
     runs = []; s = None
@@ -86,7 +122,17 @@ def detect_window(path, scale=0.2, step=2, lead=LEAD_S, tail=TAIL_S, log=print):
     if not runs:
         info['reason'] = 'no sustained burst'
         return None, None, info
-    a, b = runs[0]                                           # earliest qualifying burst = the shot
+    # Skip bursts that are a PERSON (large-area motion); the earliest NON-body burst is the shot. If every
+    # burst looks like a body, fall through to the earliest (old behaviour) rather than give up.
+    ball_runs = [(a, b) for a, b in runs if float(body[a:b + 1].mean()) < BODY_MAX_FRAC]
+    info['nbursts_nonbody'] = len(ball_runs)
+    # Prefer the earliest burst whose moving mass actually travels down the lane (a thrown ball), not a
+    # ball-return / pre-shot / near-camera burst that stays put. Fall back to the old choice if none qualifies,
+    # so a view where the progression isn't observable is never worse than before (whole-clip fallback upstream).
+    cen = np.asarray(cen)
+    shot_runs = [(a, b) for a, b in ball_runs if burst_downlane_progress(cen[a:b + 1]) >= DOWNLANE_MIN]
+    info['nbursts_downlane'] = len(shot_runs)
+    a, b = (shot_runs or ball_runs or runs)[0]
     t_s = idxs[a] / fps; t_e = idxs[b] / fps
     t0 = max(0.0, t_s - lead); t1 = min(dur, t_e + tail)
     info['burst'] = (round(t_s, 2), round(t_e, 2)); info['window'] = (round(t0, 2), round(t1, 2))

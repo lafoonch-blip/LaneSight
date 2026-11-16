@@ -1,0 +1,154 @@
+"""Canonical frame decode (DEC-107 fix, Shayne 2026-10-31). The server-vs-Mac speed gap (16.0 vs 18.7) was
+localized to the YUV→BGR COLOUR CONVERSION: the raw YUV420P is bit-identical on both platforms, but the
+swscale/opencv conversion differs (Mac ffmpeg 9.0.2 vs container ffmpeg 5.1 / cv2 5.0) by ~1% per channel
+(red-biased), and the 2-point homography's impact anchor is sensitive enough that this shifts speed ~14%.
+
+Fix: decode the raw YUV420P via ffmpeg (bit-identical everywhere) and convert YUV→BGR in PURE NUMPY, driven by
+the clip's colour_space/range metadata — so the exact same bytes come out on the Mac and in the container. SDR
+(bt709/bt601) is handled here; HDR (HLG/PQ bt2020 — clips are tone-mapped to SDR by probe.convert_sdr before
+this) falls back to the cv2 path until canonicalised. Rotation is applied to match cv2's ORIENTATION_AUTO.
+"""
+from __future__ import annotations
+import os, subprocess, json
+import numpy as np
+
+# YUV(full-range)→RGB per BT.x: (Kr, Kb). Non-constant-luminance matrices.
+_KRKB = {'bt709': (0.2126, 0.0722), 'bt601': (0.299, 0.114), 'smpte170m': (0.299, 0.114),
+         'bt470bg': (0.299, 0.114), 'fcc': (0.30, 0.11), 'bt2020nc': (0.2627, 0.0593),
+         'bt2020_ncl': (0.2627, 0.0593), 'unknown': (0.2126, 0.0722), '': (0.2126, 0.0722)}
+# Transfers we decode canonically: SDR directly, plus HLG (iPhone HDR Video) via a deterministic numpy tone-map
+# (no zscale, no re-encode — both were version-dependent). PQ (smpte2084) is still left to convert_sdr.
+_SDR_TRANSFER = {'bt709', 'bt601', 'smpte170m', 'bt470bg', 'iec61966-2-1', 'srgb', 'unknown', '', None}
+_HLG = 'arib-std-b67'
+_BT2020_TO_709 = np.array([[1.6605, -0.5876, -0.0728],
+                           [-0.1246, 1.1329, -0.0083],
+                           [-0.0182, -0.1006, 1.1187]], np.float32)
+
+
+def _hlg_to_709(rgb_u8):
+    """HLG (BT.2020) R'G'B' u8 -> SDR BT.709 u8 (same curve as probe._hlg_to_709): invert the ARIB STD-B67
+    OETF to scene-linear, convert the gamut BT.2020->709, re-apply the BT.709 OETF. Pure numpy = deterministic."""
+    e = rgb_u8.astype(np.float32) / 255.0
+    a, b, c = 0.17883277, 0.28466892, 0.55991073
+    lin = np.where(e <= 0.5, e * e / 3.0, (np.exp((e - c) / a) + b) / 12.0)
+    lin = np.clip(lin @ _BT2020_TO_709.T, 0, 1)
+    v = np.where(lin < 0.018, 4.5 * lin, 1.099 * np.power(lin, 0.45) - 0.099)
+    return np.clip(v * 255, 0, 255).astype(np.uint8)
+
+
+def probe_meta(path):
+    pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                         'stream=width,height,color_space,color_range,color_transfer:stream_side_data=rotation',
+                         '-of', 'json', path], capture_output=True, text=True).stdout
+    st = (json.loads(pr).get('streams') or [{}])[0]
+    rot = 0
+    for sd in st.get('side_data_list', []) or []:
+        if 'rotation' in sd:
+            rot = int(sd['rotation'])
+    return {'w': int(st.get('width', 0)), 'h': int(st.get('height', 0)),
+            'cs': st.get('color_space') or 'bt709', 'range': st.get('color_range') or 'tv',
+            'transfer': st.get('color_transfer') or 'bt709', 'rotation': rot}
+
+
+def can_canonical(meta):
+    """SDR-ONLY partial rollout (2026-10-31, DEC-113): all live/upload captures are bt709 SDR, so canonical
+    decode covers 100% of real shots. HLG HDR has a deterministic path here too (canonical_frames), but it's
+    gated OFF until its decode-once/perf is fixed (step 2) — HDR stays on convert_sdr for now. Set
+    LANESIGHT_CANONICAL_HDR=1 to also canonicalise HLG once that's validated."""
+    import os
+    if meta['transfer'] == _HLG:
+        return os.environ.get('LANESIGHT_CANONICAL_HDR') == '1' and meta['cs'] in _KRKB
+    return meta['transfer'] in _SDR_TRANSFER and meta['cs'] in _KRKB
+
+
+def _up2x(p):
+    """Fast, deterministic 2x bilinear upsample of a chroma plane (4:2:0 -> 4:4:4), left-cosited (0.75/0.25).
+    Vectorised (no fancy indexing) so it's both quick and platform-stable — cv2.resize was version-dependent
+    (~0.08 mph Mac-vs-Linux residual), np.ix_ bilinear was too slow; this is both deterministic and fast."""
+    h, w = p.shape
+    hor = np.empty((h, 2 * w), np.float32)
+    hor[:, 0::2] = p * 0.75 + np.concatenate([p[:, :1], p[:, :-1]], 1) * 0.25
+    hor[:, 1::2] = p * 0.75 + np.concatenate([p[:, 1:], p[:, -1:]], 1) * 0.25
+    out = np.empty((2 * h, 2 * w), np.float32)
+    out[0::2] = hor * 0.75 + np.concatenate([hor[:1], hor[:-1]], 0) * 0.25
+    out[1::2] = hor * 0.75 + np.concatenate([hor[1:], hor[-1:]], 0) * 0.25
+    return out
+
+
+def yuv420p_to_bgr(buf, w, h, cs='bt709', rng='tv'):
+    """Planar YUV420P bytes → HxWx3 BGR uint8. DEFAULT = the numba FLOAT kernel (DEC-116), which reproduces the
+    pure-numpy float conversion EXACTLY (maxdiff 0 — same float32 ops, same 0.75/0.25 upsample), so it's a no-op
+    downstream (the earlier INTEGER kernel's maxdiff-2 was amplified by the server's fragile impact anchor into
+    15.6 — fixed by matching numpy exactly). ~2.4× serial / ~19× parallel vs numpy. Set LANESIGHT_YUV_NUMPY=1 to
+    force the pure-numpy path (identical output). Verified bit-identical arm64==x86 by per-frame md5 in the Job."""
+    if os.environ.get('LANESIGHT_YUV_NUMPY') != '1':
+        ysz = w * h; cw, ch = w // 2, h // 2
+        Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.int32)
+        U = np.frombuffer(buf[ysz:ysz + cw * ch], np.uint8).reshape(ch, cw).astype(np.int32)
+        V = np.frombuffer(buf[ysz + cw * ch:ysz + 2 * cw * ch], np.uint8).reshape(ch, cw).astype(np.int32)
+        Kr, Kb = _KRKB.get(cs, _KRKB['bt709'])
+        from . import _yuv_nb
+        return _yuv_nb.convert(Y, U, V, Kr, Kb, rng)
+    ysz = w * h
+    Y = np.frombuffer(buf[:ysz], np.uint8).reshape(h, w).astype(np.float32)
+    cw, ch = w // 2, h // 2
+    U = np.frombuffer(buf[ysz:ysz + cw * ch], np.uint8).reshape(ch, cw).astype(np.float32)
+    V = np.frombuffer(buf[ysz + cw * ch:ysz + 2 * cw * ch], np.uint8).reshape(ch, cw).astype(np.float32)
+    U = _up2x(U)[:h, :w]
+    V = _up2x(V)[:h, :w]
+    Kr, Kb = _KRKB.get(cs, _KRKB['bt709']); Kg = 1.0 - Kr - Kb
+    if rng in ('pc', 'jpeg', 'full'):
+        Yl, Cb, Cr = Y, U - 128.0, V - 128.0
+    else:
+        Yl = (Y - 16.0) * (255.0 / 219.0)
+        Cb = (U - 128.0) * (255.0 / 224.0)
+        Cr = (V - 128.0) * (255.0 / 224.0)
+    R = Yl + (2.0 - 2.0 * Kr) * Cr
+    B = Yl + (2.0 - 2.0 * Kb) * Cb
+    G = Yl - (Kb * (2.0 - 2.0 * Kb) / Kg) * Cb - (Kr * (2.0 - 2.0 * Kr) / Kg) * Cr
+    return np.clip(np.stack([B, G, R], -1) + 0.5, 0, 255).astype(np.uint8)
+
+
+def _apply_rotation(img, rot):
+    """Match cv2 ORIENTATION_AUTO: apply the display rotation. ffprobe rotation is the clockwise angle to apply
+    for display; the stream side-data convention is negative for a phone held rotated. -90 → rotate 90° CW."""
+    import cv2 as _cv
+    r = rot % 360
+    if r == 90 or r == -270:
+        return _cv.rotate(img, _cv.ROTATE_90_COUNTERCLOCKWISE)
+    if r == 270 or r == -90:
+        return _cv.rotate(img, _cv.ROTATE_90_CLOCKWISE)
+    if r == 180:
+        return _cv.rotate(img, _cv.ROTATE_180)
+    return img
+
+
+def canonical_frames(path, meta, nexp):
+    """Stream canonical BGR frames (SDR). yuv420p decode (bit-identical) + numpy conversion + rotation. Capped to
+    `nexp` frames so the stream length matches the timestamp array."""
+    w, h = meta['w'], meta['h']
+    fsz = w * h * 3 // 2
+    proc = subprocess.Popen(['ffmpeg', '-v', 'error', '-noautorotate', '-i', path,
+                             '-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-'],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=fsz)
+    count = 0
+    try:
+        while count < nexp:
+            buf = proc.stdout.read(fsz)
+            if not buf or len(buf) < fsz:
+                break
+            count += 1
+            bgr = yuv420p_to_bgr(buf, w, h, meta['cs'], meta['range'])
+            if meta['transfer'] == _HLG:   # HLG: the above gave HLG-encoded R'G'B'; tone-map to SDR BT.709
+                bgr = _hlg_to_709(bgr[..., ::-1])[..., ::-1]
+            yield _apply_rotation(bgr, meta['rotation'])
+    finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()

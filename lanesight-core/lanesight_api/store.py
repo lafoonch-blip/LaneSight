@@ -5,6 +5,8 @@ service must enforce ownership itself).
 """
 from __future__ import annotations
 import csv
+import hashlib
+import hmac
 import io
 import os
 import time
@@ -35,17 +37,149 @@ def _new_id():
     return uuid.uuid4().hex
 
 
+# DEC-098 §2 (M4): pseudonymous user id. A server-held salt turns the raw auth user_id into a stable
+# opaque ref the ops layer and exports key on, so the raw id never leaves the owner boundary. The fixed
+# dev fallback keeps MemoryStore/tests deterministic; live sets LANESIGHT_USER_REF_SALT.
+_USER_REF_SALT = os.environ.get('LANESIGHT_USER_REF_SALT') or 'lanesight-dev-user-ref-salt'
+
+
+def _user_ref(user_id):
+    if not user_id:
+        return None
+    return hmac.new(_USER_REF_SALT.encode(), str(user_id).encode(), hashlib.sha256).hexdigest()
+
+
+# DEC-122 §6: map the engine's Measurement.status vocabulary to metric_catalog's metric_outcome_status enum.
+# 'ok' reads as 'measured' in an outcome table; the rest pass through. value-presence is the source of truth:
+# no value -> 'unavailable' (honest; satisfies analysis_metric_outcome_value_chk), regardless of a stray status.
+_OUTCOME_STATUS = {'ok': 'measured', 'measured': 'measured', 'best_effort': 'best_effort',
+                   'low_confidence': 'low_confidence', 'calibrated_estimate': 'calibrated_estimate',
+                   'unavailable': 'unavailable'}
+
+
+def _uniform_rows(rows):
+    """Normalise a list of row dicts to the UNION of their keys (missing -> None). PostgREST bulk insert requires
+    every object in the array to have the same keys (PGRST102 otherwise)."""
+    rows = [r for r in (rows or []) if r]
+    if not rows:
+        return rows
+    keys = set()
+    for r in rows:
+        keys.update(r.keys())
+    return [{k: r.get(k) for k in keys} for r in rows]
+
+
+def _metric_cell(meas):
+    """Normalise one metric (a Measurement dict {value,status,...} OR a raw scalar from the on-device payload)
+    into (status, value, confidence, reason_detail) for an analysis_metric_outcome row."""
+    if isinstance(meas, dict):
+        v, st, conf, note = meas.get('value'), meas.get('status'), meas.get('confidence'), meas.get('note')
+    else:
+        v, st, conf, note = meas, None, None, None
+    mapped = _OUTCOME_STATUS.get(st, 'measured')
+    # Honesty invariant: an 'unavailable' metric carries NO value. The form engine marks unavailable metrics with
+    # a 0.0 placeholder (not None), so map by STATUS first — else a 0.0 would slip through as a measured value and
+    # an unavailable row would violate analysis_metric_outcome_value_chk (seen on live form attempts).
+    if mapped == 'unavailable' or v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
+        return 'unavailable', None, conf, note
+    return mapped, float(v), conf, note
+
+
+# DEC-122 §6: metrics that are unavailable for a STRUCTURAL reason (not a stage failure), independent of the
+# attempt outcome — spin/grip metrics are never read from a plain video today, so they win over any attempt-level
+# code. (key -> (reason_code, failed_stage).)
+_ALWAYS_STRUCTURAL = {'axis_rotation': ('AXIS_NOT_MEASURED_FROM_VIDEO', 'rev'),
+                      'axis_tilt': ('AXIS_NOT_MEASURED_FROM_VIDEO', 'rev'),
+                      'pap': ('PAP_NEEDS_GRIP_REFERENCE', 'rev')}
+# Far-lane metrics are gated until the Phase-2 camera validation (DEC-065) when the attempt itself succeeded.
+_FAR_LANE_METRICS = {'speed_late', 'breakpoint_board', 'breakpoint_distance',
+                     'entry_board', 'entry_angle', 'entry_angle_52_55'}
+
+
+def _unavailable_reason(metric_key, meas, note, attempt_reason_code, attempt_failed_stage):
+    """DEC-122 §6: every unavailable metric row carries a non-null (reason_code, failed_stage) — never both null.
+    Precedence: a per-metric code the engine set -> always-structural metrics (spin/grip) -> the attempt-level
+    cause (a stage that failed and blanked downstream metrics) -> structural note (far-lane gate) -> a last-resort
+    non-null fallback."""
+    if isinstance(meas, dict) and meas.get('reason_code'):
+        return meas.get('reason_code'), meas.get('failed_stage') or attempt_failed_stage or 'compute'
+    if metric_key in _ALWAYS_STRUCTURAL:
+        return _ALWAYS_STRUCTURAL[metric_key]
+    if attempt_reason_code or attempt_failed_stage:
+        return attempt_reason_code or 'METRIC_UNAVAILABLE', attempt_failed_stage or 'compute'
+    n = (note or '').lower()
+    if 'far-lane' in n or metric_key in _FAR_LANE_METRICS:
+        return 'FAR_LANE_UNVALIDATED', 'compute'
+    if 'not yet measured from video' in n:
+        return 'NOT_MEASURED_FROM_VIDEO', 'rev'
+    if 'grip reference' in n:
+        return 'PAP_NEEDS_GRIP_REFERENCE', 'rev'
+    return 'METRIC_UNAVAILABLE', 'compute'
+
+
+def outcome_rows_from_record(attempt_id, engine, engine_version, capture_mode, metrics, stage_report,
+                             camera_view=None, camera_group=None, context=None,
+                             reason_code=None, failed_stage=None):
+    """DEC-122 §6: build (metric_rows, stage_rows) for one analysis attempt. One metric row per EVERY catalog
+    metric for the capture mode (incl. the ones left unavailable); one stage row per entry in the stage report.
+    `reason_code`/`failed_stage` are the attempt-level cause, stamped on metrics that came out unavailable."""
+    from lanesight_core.cv.pipeline import _METRIC_CATALOG as _SHOT
+    from lanesight_core.form import FORM_P1 as _FORM
+    catalog = _SHOT if capture_mode == 'shot' else _FORM
+    metrics = metrics or {}
+    mrows = []
+    for key, unit in catalog:
+        meas = metrics.get(key)
+        st, v, conf, note = _metric_cell(meas)
+        rc, fs = (None, None)
+        if st == 'unavailable':
+            rc, fs = _unavailable_reason(key, meas, note, reason_code, failed_stage)
+        mrows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
+                      'capture_mode': capture_mode, 'metric_key': key, 'unit': unit, 'status': st, 'value': v,
+                      'confidence': conf, 'reason_detail': (str(note)[:500] if note else None),
+                      'reason_code': rc, 'failed_stage': fs,
+                      'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
+    srows = []
+    for stage, info in (stage_report or {}).items():
+        if not isinstance(info, dict):
+            continue
+        dur = info.get('duration_ms')
+        try:
+            dur = int(round(float(dur))) if dur is not None else None   # the column is INTEGER; stage timings are float ms
+        except (TypeError, ValueError):
+            dur = None
+        srows.append({'attempt_id': attempt_id, 'engine': engine, 'engine_version': engine_version,
+                      'capture_mode': capture_mode, 'stage': stage,
+                      'status': info.get('status') if info.get('status') in ('ok', 'failed', 'skipped') else 'ok',
+                      'reason_code': info.get('reason_code'), 'duration_ms': dur,
+                      'diagnostics': info.get('diagnostics'),
+                      'camera_view': camera_view, 'camera_group': camera_group, 'context': context})
+    return mrows, srows
+
+
 # Home Recent activity scope (DEC-055): only completed practice sessions, achievement unlocks, and
 # LaneSight tier (rank) changes. Anything else (e.g. personal_best score milestones, and never uploads)
 # is excluded from the feed. Enforced in both stores' list_activity.
 _ACTIVITY_KINDS = ('session_completed', 'achievement_unlocked', 'tier_promotion', 'tier_demotion')
 
 
-# profiles has columns display_name/handed/style/units/usbc_id/dob/delivery_style/approach_steps. The app
-# speaks name/handedness/location/dob(datetime); normalize inbound (map aliases, drop unknowns incl. a
-# location with no column) so a key mismatch can't 500, and echo the app's aliases back on read.
-_PROFILE_COLS = {'display_name', 'handed', 'style', 'units', 'usbc_id', 'dob', 'delivery_style',
-                 'approach_steps', 'form_baseline', 'location', 'is_staged', 'staged_kind'}
+# profiles has columns display_name/first_name/last_name/phone/handed/style/units/usbc_id/dob/delivery_style/
+# approach_steps + grip/PAP (DEC-087). The app speaks name/handedness/location/dob(datetime); normalize
+# inbound (map aliases, drop unknowns incl. a location with no column) so a key mismatch can't 500, and echo
+# the app's aliases back on read. Email is NEVER a profile column — it lives in auth (DEC-087 §3).
+_PROFILE_COLS = {'display_name', 'first_name', 'last_name', 'phone', 'handed', 'style', 'units', 'usbc_id',
+                 'dob', 'delivery_style', 'approach_steps', 'form_baseline', 'location', 'is_staged',
+                 'staged_kind', 'grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in',
+                 # DEC-123 F&F: account test phase + the F&F consent accepted (owner/staged forced to 'dev'
+                 # by migration 037's guard trigger; mirrored in MemoryStore.put_profile).
+                 'cohort', 'ff_consent_version', 'ff_consent_at'}
+
+# Bowler-level grip + PAP, stored in inches (DEC-074/087). Coerced to float on the way in.
+_PROFILE_NUMERIC = ('grip_middle_pitch_in', 'grip_span_in', 'pap_over_in', 'pap_up_in')
+
+
+def _compose_display_name(first, last) -> str:
+    return ' '.join(p for p in (first, last) if p and str(p).strip()).strip()
 
 
 def _profile_in(data: dict) -> dict:
@@ -53,16 +187,28 @@ def _profile_in(data: dict) -> dict:
     out = {}
     if d.get('display_name') is not None or d.get('name') is not None:
         out['display_name'] = d.get('display_name', d.get('name'))
+    for k in ('first_name', 'last_name'):
+        if d.get(k) is not None:
+            out[k] = str(d[k]).strip() or None
+    if d.get('phone') is not None:
+        out['phone'] = str(d['phone']).strip() or None      # "" clears the phone
     h = d.get('handed', d.get('handedness'))
     if h is not None:
         out['handed'] = {'right': 'R', 'left': 'L', 'r': 'R', 'l': 'L'}.get(str(h).strip().lower())
     if d.get('dob'):
         out['dob'] = str(d['dob'])[:10]          # ISO datetime -> YYYY-MM-DD for the date column
+    for k in _PROFILE_NUMERIC:
+        if d.get(k) is not None:
+            out[k] = float(d[k])
     for k in ('style', 'units', 'usbc_id', 'delivery_style', 'approach_steps', 'form_baseline', 'location',
-              'is_staged', 'staged_kind'):
+              'is_staged', 'staged_kind', 'cohort', 'ff_consent_version', 'ff_consent_at'):
         if d.get(k) is not None:
             out[k] = d[k]
-    return {k: v for k, v in out.items() if v is not None and k in _PROFILE_COLS}
+    if 'form_baseline' in d and d['form_baseline'] is None:
+        out['form_baseline'] = None              # DEC-099: an explicit null clears the Form baseline
+    # keep only known columns; a cleared field (phone='' / form_baseline=null) is intentionally kept as None
+    return {k: v for k, v in out.items()
+            if k in _PROFILE_COLS and (v is not None or k in ('phone', 'form_baseline'))}
 
 
 def _profile_out(row: dict | None) -> dict | None:
@@ -71,6 +217,11 @@ def _profile_out(row: dict | None) -> dict | None:
     r = dict(row)
     r['handedness'] = {'R': 'right', 'L': 'left'}.get(r.get('handed'))   # alias the app reads
     r.setdefault('name', r.get('display_name'))
+    # Older rows (pre-020) may have only display_name — derive first/last the same way the migration does.
+    if r.get('first_name') is None and r.get('display_name'):
+        parts = str(r['display_name']).split(' ', 1)
+        r['first_name'] = parts[0]
+        r['last_name'] = parts[1] if len(parts) > 1 else None
     r['has_avatar'] = bool(r.get('avatar_path'))                         # the app shows the photo when set
     return r
 
@@ -79,6 +230,8 @@ class MemoryStore:
     def __init__(self):
         self.sessions, self.shots, self.snapshots, self.feedback = {}, {}, {}, {}
         self.feedback_rows = []       # the one retained feedback store (DEC-059); survives shot/session/account deletion
+        # DEC-125 Feedback Insights: AI-consolidated proposals, their evidence links, and analyst-run audit log.
+        self.insights, self.insight_links, self.insight_runs = [], [], []
         self.profiles, self.sensors, self.arsenal = {}, {}, {}
         # score/tier/achievement/benchmark engine state (SCORE_TIERS §7, BENCHMARKS §6)
         self.tier_state = {}          # user_id -> state dict
@@ -98,15 +251,28 @@ class MemoryStore:
     def add_ball(self, user_id, data):
         d = dict(data or {})
         make_current = bool(d.pop('make_current', False) or d.pop('is_current', False))
+        make_default = bool(d.pop('make_default', False) or d.pop('is_default', False))
         name = d.get('nickname') or d.get('name')
         b = dict(id=_new_id(), user_id=user_id, ball_configuration_id=_new_id(), is_current=False, retired=False,
+                 is_default=False,
                  ball_model_id=d.get('ball_model_id'), nickname=name, name=name,
                  weight_lb=d.get('weight_lb'), color_desc=d.get('color_desc'),
                  layout_system=d.get('layout_system'), layout=d.get('layout'), surface=d.get('surface'))
         self.arsenal[b['id']] = b
         if make_current:
             self.set_current_ball(user_id, b['id'])
+        if make_default:
+            self.set_default_ball(user_id, b['id'])
         return self.arsenal[b['id']]
+
+    def set_default_ball(self, user_id, ball_id):
+        """DEC-099: the one default ball (what a new session starts with). None clears it."""
+        if ball_id is not None and not (self.arsenal.get(ball_id) or {}).get('user_id') == user_id:
+            return None
+        for b in self.arsenal.values():
+            if b.get('user_id') == user_id:
+                b['is_default'] = (b['id'] == ball_id)
+        return self.arsenal.get(ball_id) if ball_id else None
 
     def set_current_ball(self, user_id, ball_id):
         if not (self.arsenal.get(ball_id) or {}).get('user_id') == user_id:
@@ -123,6 +289,13 @@ class MemoryStore:
         p = dict(patch or {})
         if p.pop('is_current', False) or p.pop('make_current', False):
             self.set_current_ball(user_id, ball_id)
+        if 'is_default' in p or 'make_default' in p:
+            if p.pop('is_default', False) or p.pop('make_default', False):
+                self.set_default_ball(user_id, ball_id)
+            else:
+                b['is_default'] = False
+        if p.get('retired'):
+            b['is_default'] = False                   # a retired ball can't stay the default
         if p.get('name') is not None:
             b['nickname'] = b['name'] = p['name']
         for k in ('nickname', 'weight_lb', 'color_desc', 'ball_model_id', 'layout_system', 'layout', 'surface', 'retired'):
@@ -150,7 +323,9 @@ class MemoryStore:
         sess = self.sessions.get(shot.get('session_id')) or {}
         return {'user_ball_id': shot.get('user_ball_id'),
                 'ball_configuration_id': shot.get('ball_configuration_id'),
-                'oil_pattern_id': sess.get('oil_pattern_id'),
+                # DEC-097: recommendations/ball-reaction read the oil stored ON the shot (fallback: the session's,
+                # for shots recorded before per-shot oil existed) — never the session's current value.
+                'oil_pattern_id': shot.get('oil_pattern_id') or sess.get('oil_pattern_id'),
                 'intent': self.get_shot_intent(user_id, shot['id'])}
 
     # profile / sensors / catalog (MemoryStore: in-memory; catalog/oil are empty offline)
@@ -158,9 +333,34 @@ class MemoryStore:
         return _profile_out(self.profiles.get(user_id))
 
     def put_profile(self, user_id, data):
-        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **_profile_in(data))
+        patch = _profile_in(data)
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id, **patch)
+        # Keep display_name = "First Last" for existing readers whenever either name changes (DEC-087).
+        if 'first_name' in patch or 'last_name' in patch:
+            dn = _compose_display_name(p.get('first_name'), p.get('last_name'))
+            if dn:
+                p['display_name'] = dn
+        # Mirror migration 037's cohort default + guard trigger: cohort defaults to 'dev', and the owner and
+        # every staged account are ALWAYS 'dev' whatever the client sent (DEC-123).
+        from lanesight_core.owner import OWNER_USER_ID
+        if not p.get('cohort'):
+            p['cohort'] = 'dev'
+        if p.get('is_staged') or user_id == OWNER_USER_ID:
+            p['cohort'] = 'dev'
         self.profiles[user_id] = p
         return _profile_out(p)
+
+    def get_notify_prefs(self, user_id):
+        p = self.profiles.get(user_id) or {}
+        return {'coaching_launch': bool(p.get('notify_coaching_launch'))}      # DEC-084
+
+    def set_notify_pref(self, user_id, key, value):
+        if key != 'coaching_launch':
+            return self.get_notify_prefs(user_id)
+        p = dict(self.profiles.get(user_id, {}), user_id=user_id,
+                 notify_coaching_launch=bool(value), notify_coaching_launch_at=time.time())
+        self.profiles[user_id] = p
+        return self.get_notify_prefs(user_id)
 
     def set_avatar(self, user_id, path, updated_at):
         self.profiles[user_id] = dict(self.profiles.get(user_id, {}), user_id=user_id,
@@ -198,8 +398,8 @@ class MemoryStore:
         return []
 
     # Storage (clip upload path). MemoryStore simulates a bucket on local disk so the endpoints can be
-    # exercised offline; PgStore talks to real Supabase Storage. The clip never persists — it's downloaded,
-    # analyzed, then deleted.
+    # exercised offline; PgStore talks to real Supabase Storage. Clips are kept for the DEC-100 diagnostic window
+    # (default 7 days, newest 40 per user), then purged.
     def _local_storage_path(self, bucket, path):
         import tempfile
         return os.path.join(tempfile.gettempdir(), 'ls_storage', bucket, path)
@@ -218,6 +418,22 @@ class MemoryStore:
             os.remove(self._local_storage_path(bucket, path))
         except OSError:
             pass
+
+    def purge_old_clips(self, bucket, user_id, days, keep_max):
+        """DEC-100: delete this user's clips older than `days`, and any beyond the newest `keep_max`."""
+        root = os.path.dirname(self._local_storage_path(bucket, f'{user_id}/x'))
+        if not os.path.isdir(root):
+            return 0
+        files = sorted((os.path.join(root, f) for f in os.listdir(root)), key=os.path.getmtime, reverse=True)
+        cutoff = time.time() - days * 86400
+        gone = 0
+        for i, f in enumerate(files):
+            if i >= keep_max or os.path.getmtime(f) < cutoff:
+                try:
+                    os.remove(f); gone += 1
+                except OSError:
+                    pass
+        return gone
 
     def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
         p = self._local_storage_path(bucket, path)
@@ -249,16 +465,120 @@ class MemoryStore:
 
     # shots
     def create_shot(self, user_id, session_id, meta):
+        meta = dict(meta)
+        # DEC-097: lock the oil pattern on the shot at record time. Prefer the value the app sent for THIS clip;
+        # otherwise backfill from the session's current oil so the shot keeps a concrete pattern.
+        if meta.get('oil_pattern_id') is None and session_id:
+            meta['oil_pattern_id'] = (self.sessions.get(session_id) or {}).get('oil_pattern_id')
         sh = dict(id=_new_id(), user_id=user_id, session_id=session_id, created_at=time.time(),
                   record=None, result=None, **meta)
         self.shots[sh['id']] = sh
         return sh
 
-    def save_shot_result(self, shot_id, record, result):
+    def save_shot_result(self, shot_id, record, result, algo_version=None):
         sh = self.shots.get(shot_id)
         if sh:
             sh['record'] = record
             sh['result'] = result
+            sh['analysis_status'] = 'analyzed'      # DEC-086
+            sh['failure_code'] = None
+            sh['failure_stage'] = None
+            sh['algorithm_version'] = algo_version
+            sh['analyzed_at'] = time.time()
+
+    def mark_shot_failed(self, shot_id, code, stage):
+        """DEC-086: record a failed analysis on the shot row (so Lab › Uploads can show 'Couldn't analyze')."""
+        sh = self.shots.get(shot_id)
+        if sh:
+            sh['analysis_status'] = 'failed'
+            sh['failure_code'] = code
+            sh['failure_stage'] = stage
+            sh['result'] = {'ok': False, 'failure_code': code}
+            sh['analyzed_at'] = time.time()
+
+    def log_analysis_attempt(self, row):
+        """DEC-086: append one analysis-attempt row (success or failure). Retained, never FK-cascaded.
+        DEC-098 §2: fills user_ref (pseudonym) from user_id when the caller didn't."""
+        if not hasattr(self, 'analysis_attempts'):
+            self.analysis_attempts = []
+        r = dict(row); r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+        if r.get('user_ref') is None and r.get('user_id'):
+            r['user_ref'] = _user_ref(r.get('user_id'))
+        self.analysis_attempts.append(r)
+        return r
+
+    def log_outcomes(self, metric_rows, stage_rows):
+        """DEC-122 §6: in-memory sink for per-metric + per-stage outcome rows (tests + the memory backend)."""
+        if not hasattr(self, 'metric_outcomes'):
+            self.metric_outcomes = []
+        if not hasattr(self, 'stage_outcomes'):
+            self.stage_outcomes = []
+        self.metric_outcomes.extend(metric_rows or [])
+        self.stage_outcomes.extend(stage_rows or [])
+
+    # ----------------------------------------------------------------- durable jobs (Part 3a)
+    def save_job(self, row: dict):
+        """Upsert one durable job row (id, user_id, shot_id, kind, state, reason, result, failure, timings).
+        In-memory here; PgStore writes through so GET /jobs/:id resolves cross-instance / after a restart."""
+        if not hasattr(self, 'jobs'):
+            self.jobs = {}
+        r = dict(row); r['updated_at'] = time.time()
+        r.setdefault('created_at', time.time())
+        existing = self.jobs.get(r['id'])
+        if existing:
+            r['created_at'] = existing.get('created_at', r['created_at'])
+        self.jobs[r['id']] = r
+        return r
+
+    def get_job(self, job_id: str) -> dict | None:
+        """Return the stored job row (public shape) or None. The caller scopes it to the user."""
+        return (getattr(self, 'jobs', None) or {}).get(job_id)
+
+    # ----------------------------------------------------------------- §2 instrumentation (DEC-098)
+    def log_api_request(self, row):
+        """DEC-098 §2 (M2): record one API request. Best-effort; pseudonymises user_id -> user_ref and never
+        stores the raw id, bodies or tokens (the caller already excludes those)."""
+        if not hasattr(self, 'api_requests'):
+            self.api_requests = []
+        r = dict(row)
+        if r.get('user_id') is not None:
+            r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+        r.pop('user_id', None)
+        r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+        self.api_requests.append(r)
+        return r
+
+    def log_events(self, rows):
+        """DEC-098 §2 (M3): ingest product events, idempotent on client_event_id (a retried batch never
+        double-counts). Pseudonymises user_id. Returns the number of NEW rows inserted."""
+        if not hasattr(self, 'product_events'):
+            self.product_events = []
+        seen = {e.get('client_event_id') for e in self.product_events if e.get('client_event_id')}
+        inserted = 0
+        for row in (rows or []):
+            cid = row.get('client_event_id')
+            if cid and cid in seen:
+                continue
+            r = dict(row)
+            if r.get('user_id') is not None:
+                r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+            r.pop('user_id', None)
+            r.setdefault('id', _new_id()); r.setdefault('created_at', time.time())
+            self.product_events.append(r)
+            if cid:
+                seen.add(cid)
+            inserted += 1
+        return inserted
+
+    def record_storage_snapshot(self, rows):
+        """DEC-098 §2 (M5): record storage/DB size snapshot rows (written by ops/storage_snapshot.py)."""
+        if not hasattr(self, 'storage_snapshots'):
+            self.storage_snapshots = []
+        out = []
+        for row in (rows or []):
+            r = dict(row); r.setdefault('id', _new_id()); r.setdefault('captured_at', time.time())
+            self.storage_snapshots.append(r); out.append(r)
+        return out
 
     def get_shot(self, user_id, shot_id):
         sh = self.shots.get(shot_id)
@@ -338,9 +658,14 @@ class MemoryStore:
         and start at their defaults."""
         d = dict(data or {})
         tags = d.get('tags')
+        # app_phase is authoritative from the author's account cohort (DEC-124) — mirrors migration 037's
+        # feedback_set_app_phase trigger: a profile cohort wins over whatever the client sent; with no profile
+        # the client value (or 'dev') stands. Keeps Shayne's/staged data from ever mixing into F&F/beta/live.
+        _prof = self.profiles.get(user_id) or {}
+        _phase = _prof.get('cohort') or d.get('app_phase') or 'dev'
         row = dict(
             id=d.get('id') or _new_id(), user_id=user_id, user_ref=d.get('user_ref'),
-            source=d.get('source') or 'general', app_phase=d.get('app_phase') or 'dev',
+            source=d.get('source') or 'general', app_phase=_phase,
             app_version=d.get('app_version'), core_version=d.get('core_version'),
             rules_version=d.get('rules_version'), formula_version=d.get('formula_version'),
             session_id=d.get('session_id'), shot_id=d.get('shot_id'),
@@ -349,6 +674,7 @@ class MemoryStore:
             tags=list(tags) if tags else [], text=d.get('text'), context=d.get('context'),
             diagnostics=d.get('diagnostics'), triage_status='new', owner_notes=None, action_ref=None,
             anonymized_at=None, created_at=time.time(), updated_at=time.time(),
+            insight_considered_at=None,     # DEC-125: set once an analyst run has grouped this row
             # mirror migration 018's trigger: staged feedback is flagged from the author's profile so it is
             # excluded from feedback review/analytics (DEC-063).
             is_staged=bool((self.profiles.get(user_id) or {}).get('is_staged')))
@@ -357,6 +683,63 @@ class MemoryStore:
 
     def list_feedback(self, user_id):
         return [r for r in self.feedback_rows if r.get('user_id') == user_id]
+
+    # Feedback Insights (DEC-125) -----------------------------------------------------------------------
+    # Owner/analyst surface — not per-bowler. The analyst job (service role) reads unconsidered REAL
+    # feedback, writes proposals + evidence links, and records a per-run audit row for the cost cap.
+    _INSIGHT_OPEN_STATUSES = ('proposed', 'approved', 'queued', 'in_progress', 'pr_open')
+
+    def list_unconsidered_feedback(self, limit=200):
+        """REAL feedback (staged excluded, DEC-063) not yet grouped by an analyst run, oldest first."""
+        rows = [r for r in self.feedback_rows
+                if not r.get('is_staged') and r.get('insight_considered_at') is None]
+        rows.sort(key=lambda r: r.get('created_at') or 0)
+        return rows[:limit]
+
+    def mark_feedback_considered(self, feedback_ids, at=None):
+        at = at if at is not None else time.time()
+        ids = set(feedback_ids)
+        for r in self.feedback_rows:
+            if r.get('id') in ids:
+                r['insight_considered_at'] = at
+
+    def list_open_insights(self):
+        return [dict(i) for i in self.insights if i.get('status') in self._INSIGHT_OPEN_STATUSES]
+
+    def create_insight(self, data):
+        d = dict(data or {})
+        row = dict(
+            id=d.get('id') or _new_id(), title=d.get('title'), type=d.get('type'),
+            summary=d.get('summary'), proposed_change=d.get('proposed_change'),
+            affected_area=d.get('affected_area'), priority=d.get('priority'), effort=d.get('effort'),
+            related_decs=list(d.get('related_decs') or []), status=d.get('status') or 'proposed',
+            founder_notes=None, reject_reason=None, merged_into=None, github_issue_number=None,
+            pr_url=None, approved_at=None, created_at=time.time(), updated_at=time.time())
+        self.insights.append(row)
+        return row
+
+    def link_insight_feedback(self, insight_id, feedback_id):
+        if not any(l for l in self.insight_links
+                   if l['insight_id'] == insight_id and l['feedback_id'] == feedback_id):
+            self.insight_links.append({'insight_id': insight_id, 'feedback_id': feedback_id,
+                                       'added_at': time.time()})
+
+    def record_insight_run(self, data):
+        row = dict(id=_new_id(), created_at=time.time(), **(data or {}))
+        self.insight_runs.append(row)
+        return row
+
+    def month_insight_cost_usd(self, year, month):
+        """Sum analyst cost for runs started in the given calendar month (for the DEC-043/DEC-125 cap)."""
+        total = 0.0
+        for r in self.insight_runs:
+            ts = r.get('started_at') or r.get('created_at')
+            if ts is None:
+                continue
+            t = time.gmtime(ts)
+            if t.tm_year == year and t.tm_mon == month:
+                total += float(r.get('cost_usd') or 0)
+        return total
 
     def save_feedback(self, user_id, session_id, fb):
         row = dict(id=_new_id(), user_id=user_id, session_id=session_id, created_at=time.time(), **fb)
@@ -426,7 +809,7 @@ class MemoryStore:
             sess = self.sessions.get(sh.get('session_id')) or {}
             out.append(dict(shot_id=sh['id'], created_at=sh.get('created_at'), session_id=sh.get('session_id'),
                             ball=sh.get('ball_configuration_id') or sh.get('user_ball_id'),
-                            pattern=sess.get('oil_pattern_id'), record=rec))
+                            pattern=sh.get('oil_pattern_id') or sess.get('oil_pattern_id'), record=rec))  # DEC-097 per-shot oil
         return out
 
     def read_form_records(self, user_id, window_days=None):
@@ -474,8 +857,22 @@ class MemoryStore:
     def arsenal_count(self, user_id):
         return len(self.list_arsenal(user_id))
 
+    def _ball_oil_names(self, user_id):
+        """(ball_names, oil_names): id -> display name, for annotating shot rows with the ball/oil used
+        (DEC-097). Ball keyed by both user_ball_id and ball_configuration_id; oil by pattern id."""
+        oil = {p['id']: p.get('name') for p in (self.oil_patterns() or []) if p.get('id')}
+        ball = {}
+        for b in (self.list_arsenal(user_id) or []):
+            label = b.get('name') or b.get('nickname') or b.get('model_name')
+            for k in (b.get('ball_configuration_id'), b.get('id')):
+                if k:
+                    ball[k] = label
+        return ball, oil
+
     def session_shots(self, user_id, session_id):
-        """Rows for the live Session screen: id, state, key metrics, status."""
+        """Rows for the live Session screen: id, state, key metrics, status, and the ball/oil used (DEC-097)."""
+        ball_names, oil_names = self._ball_oil_names(user_id)
+        sess_oil = (self.sessions.get(session_id) or {}).get('oil_pattern_id')
         out = []
         for sh in sorted(self.shots_for_session(session_id), key=lambda s: s.get('created_at') or 0):
             if sh.get('user_id') != user_id:
@@ -490,9 +887,13 @@ class MemoryStore:
                 state = 'failed'
             else:
                 state = 'pending'
+            ball_id = sh.get('user_ball_id') or sh.get('ball_configuration_id')
+            oil_id = sh.get('oil_pattern_id') or sess_oil          # pre-DEC-097 shots fall back to the session oil
             out.append(dict(id=sh['id'], state=state, created_at=sh.get('created_at'),
                             classification=(rec.get('insights') or {}).get('classification'),
-                            source=sh.get('source'), metrics=key))
+                            source=sh.get('source'), metrics=key,
+                            user_ball_id=sh.get('user_ball_id'), oil_pattern_id=oil_id,
+                            ball_name=ball_names.get(ball_id), oil_name=oil_names.get(oil_id)))
         return out
 
     def session_records(self, user_id, session_id):
@@ -585,17 +986,25 @@ class MemoryStore:
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
-            if rec and metrics:
-                state = 'analyzed'
-            elif (sh.get('result') or {}).get('ok') is False:
-                state = 'failed'
-            else:
-                state = 'pending'
-            out.append(dict(id=sh['id'], state=state, created_at=sh.get('created_at'),
-                            capture_mode=sh.get('capture_mode') or 'shot',
-                            classification=(rec.get('insights') or {}).get('classification'),
-                            source='upload', metrics=key))
+            state = sh.get('analysis_status') or (                         # DEC-086; legacy fallback
+                'analyzed' if (rec and metrics)
+                else ('failed' if (sh.get('result') or {}).get('ok') is False else 'pending'))
+            out.append(self._upload_row(sh, state, key, (rec.get('insights') or {}).get('classification')))
         return out
+
+    @staticmethod
+    def _upload_row(sh, state, key, classification):
+        """Shared Lab › Uploads row shape (identical types in both stores — the ISO/epoch drift broke this)."""
+        from lanesight_core.failures import failure_block
+        row = dict(id=sh['id'], state=state, created_at=_ts_epoch(sh.get('created_at')),
+                   capture_mode=sh.get('capture_mode') or 'shot', classification=classification,
+                   source='upload', metrics=key,
+                   failure_code=sh.get('failure_code'), failure_stage=sh.get('failure_stage'),
+                   failure_title=None, failure_message=None, tip=None)
+        if state == 'failed':
+            fb = failure_block(sh.get('failure_code') or 'UNKNOWN_LEGACY', sh.get('failure_stage') or 'internal')
+            row['failure_title'], row['failure_message'], row['tip'] = fb['user_title'], fb['user_message'], fb.get('tip')
+        return row
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):
         rows = self.notifications.setdefault(user_id, [])
@@ -694,6 +1103,22 @@ class MemoryStore:
         return True
 
 
+def _json_safe(obj):
+    """Recursively replace non-finite floats (NaN/Infinity) with None so every PostgREST write is valid JSON.
+    Python's json.dumps emits the non-standard `NaN`/`Infinity` tokens (allow_nan=True by default), which
+    PostgREST/Postgres reject as PGRST102 'Empty or invalid json' — the crash that failed a DEC-109 partial
+    whose rev measurement carried a NaN sigma/confidence (2026-10-30). A non-finite number is 'no value', so
+    None is the honest substitute (no fabricated number)."""
+    import math
+    if isinstance(obj, float):
+        return None if not math.isfinite(obj) else obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 class PgStore(MemoryStore):
     """Writes through to Supabase via PostgREST (the service_role key over the REST base in `rest_url`),
     keeping the same interface. The service role bypasses RLS, so ownership is enforced here in code.
@@ -705,7 +1130,7 @@ class PgStore(MemoryStore):
 
     def _post(self, table, row):
         import json, urllib.request
-        body = json.dumps(row).encode()
+        body = json.dumps(_json_safe(row), allow_nan=False).encode()
         req = urllib.request.Request(self._rest + table, data=body, method='POST', headers={
             'apikey': self._key, 'Authorization': f'Bearer {self._key}',
             'Content-Type': 'application/json', 'Prefer': 'return=minimal'})
@@ -767,10 +1192,87 @@ class PgStore(MemoryStore):
                       'recommendation_id', 'capture_mode', 'is_upload', 'rating', 'thumbs', 'tags',
                       'text', 'context', 'diagnostics')
 
+    def _profile_cohort(self, user_id):
+        """The author's account cohort (dev|ff|beta|live), or None if there's no profile row yet."""
+        rows = self._get('profiles', f'user_id=eq.{user_id}&select=cohort')
+        return (rows[0].get('cohort') if rows else None) or None
+
     def add_feedback(self, user_id, data):
+        # Resolve app_phase from the account cohort here too (DEC-124), so the row returned to the client
+        # matches what migration 037's feedback_set_app_phase trigger will stamp in the DB.
+        data = dict(data or {})
+        cohort = self._profile_cohort(user_id)
+        if cohort:
+            data['app_phase'] = cohort
         row = super().add_feedback(user_id, data)      # mirror in memory + normalize
         self._post('feedback', {k: row.get(k) for k in self._FEEDBACK_COLS})
         return row
+
+    # Feedback Insights (DEC-125) — PostgREST-backed; the analyst job runs as the service role. --------
+    @staticmethod
+    def _iso(ts):
+        import datetime
+        if ts is None:
+            return None
+        if isinstance(ts, str):
+            return ts
+        return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat()
+
+    def list_unconsidered_feedback(self, limit=200):
+        q = (f'is_staged=eq.false&insight_considered_at=is.null'
+             f'&order=created_at.asc&limit={int(limit)}&select=*')
+        return self._get('feedback', q)
+
+    def mark_feedback_considered(self, feedback_ids, at=None):
+        ids = [i for i in (feedback_ids or []) if i]
+        if not ids:
+            return
+        at_iso = self._iso(at if at is not None else time.time())
+        self._req(f"feedback?id=in.({','.join(ids)})", 'PATCH', {'insight_considered_at': at_iso})
+
+    def list_open_insights(self):
+        statuses = ','.join(self._INSIGHT_OPEN_STATUSES)
+        return self._get('feedback_insight', f'status=in.({statuses})&select=*')
+
+    _INSIGHT_COLS = ('id', 'title', 'type', 'summary', 'proposed_change', 'affected_area', 'priority',
+                     'effort', 'related_decs', 'status')
+
+    def create_insight(self, data):
+        d = dict(data or {})
+        row = {'id': d.get('id') or _new_id(), 'title': d.get('title'), 'type': d.get('type'),
+               'summary': d.get('summary'), 'proposed_change': d.get('proposed_change'),
+               'affected_area': d.get('affected_area'), 'priority': d.get('priority'),
+               'effort': d.get('effort'), 'related_decs': list(d.get('related_decs') or []),
+               'status': d.get('status') or 'proposed'}
+        self._post('feedback_insight', {k: row.get(k) for k in self._INSIGHT_COLS})
+        return row
+
+    def link_insight_feedback(self, insight_id, feedback_id):
+        # Idempotent: a re-link is a no-op via the (insight_id, feedback_id) unique constraint (migration 038).
+        self._req('feedback_insight_link?on_conflict=insight_id,feedback_id', 'POST',
+                  {'insight_id': insight_id, 'feedback_id': feedback_id},
+                  prefer='resolution=ignore-duplicates,return=minimal')
+
+    _INSIGHT_RUN_COLS = ('id', 'started_at', 'finished_at', 'rows_considered', 'insights_created',
+                         'insights_updated', 'model', 'tokens_in', 'tokens_out', 'cost_usd',
+                         'status', 'error')
+
+    def record_insight_run(self, data):
+        d = dict(data or {})
+        d.setdefault('id', _new_id())
+        for k in ('started_at', 'finished_at'):
+            if d.get(k) is not None:
+                d[k] = self._iso(d[k])
+        self._post('feedback_insight_run', {k: d.get(k) for k in self._INSIGHT_RUN_COLS if d.get(k) is not None})
+        return d
+
+    def month_insight_cost_usd(self, year, month):
+        start = f'{year:04d}-{month:02d}-01'
+        ny, nm = (year + 1, 1) if month == 12 else (year, month + 1)
+        end = f'{ny:04d}-{nm:02d}-01'
+        rows = self._get('feedback_insight_run',
+                         f'started_at=gte.{start}&started_at=lt.{end}&select=cost_usd')
+        return sum(float(r.get('cost_usd') or 0) for r in rows)
 
     def save_feedback(self, user_id, session_id, fb):
         # super() mirrors memory AND routes a 'session_feedback' row into feedback via self.add_feedback
@@ -781,6 +1283,19 @@ class PgStore(MemoryStore):
                    'diagnostics': fb.get('diagnostics'), 'app_version': fb.get('app_version'),
                    'core_version': fb.get('core_version'), 'formula_version': fb.get('formula_version')})
         return row
+
+    def score_history(self, user_id):
+        # Cloud Run is stateless (the in-memory snapshots from MemoryStore don't survive a cold start), so
+        # the durable history lives in the score_snapshot table. Return it oldest→newest with computed_at as
+        # an epoch float, matching MemoryStore (used by the Score trend and the DEC-083 30-day part deltas).
+        rows = self._get('score_snapshot', f'user_id=eq.{user_id}&order=computed_at.asc'
+                         '&select=id,computed_at,eligible,score,s_perf,a_acc,c_cons,p_power,eligibility,tier,inputs')
+        return [dict(r, computed_at=_ts_epoch(r.get('computed_at'))) for r in rows]
+
+    def latest_score(self, user_id):
+        rows = self._get('score_snapshot', f'user_id=eq.{user_id}&order=computed_at.desc&limit=1'
+                         '&select=id,computed_at,eligible,score,s_perf,a_acc,c_cons,p_power,eligibility,tier,inputs')
+        return dict(rows[0], computed_at=_ts_epoch(rows[0].get('computed_at'))) if rows else None
 
     def save_snapshot(self, user_id, snapshot):
         super().save_snapshot(user_id, snapshot)
@@ -799,7 +1314,8 @@ class PgStore(MemoryStore):
                   'record': {}, 'handed': meta.get('handed'), 'capture_mode': meta.get('capture_mode'),
                   'source': meta.get('source', 'live'), 'sensor_used': meta.get('sensor_used'),
                   'sensor_id': meta.get('sensor_id'),
-                  'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id')})
+                  'ball_configuration_id': meta.get('ball_configuration_id'), 'user_ball_id': meta.get('user_ball_id'),
+                  'oil_pattern_id': sh.get('oil_pattern_id')})     # DEC-097 per-shot oil (backfilled from session above)
         # per-shot intent actually USED (feet/laydown/arrows/breakpoint) + the SUGGESTED boards it came from
         # (if "Apply this move" was used, before any edit). created_at defaults so the Accuracy engine can
         # require "intent set before the shot".
@@ -841,12 +1357,16 @@ class PgStore(MemoryStore):
             return None
         return rows[0] if rows else None
 
-    def save_shot_result(self, shot_id, record, result):
-        MemoryStore.save_shot_result(self, shot_id, record, result)
+    def save_shot_result(self, shot_id, record, result, algo_version=None):
+        MemoryStore.save_shot_result(self, shot_id, record, result, algo_version)
         insights = record.get('insights') or {}
+        import datetime as _dt
         self._req(f'shots?id=eq.{shot_id}', 'PATCH', {
             'record': record, 'trajectory': record.get('trajectory'), 'key_points': record.get('key_points'),
-            'classification': insights.get('classification')})
+            'classification': insights.get('classification'),
+            'analysis_status': 'analyzed', 'failure_code': None, 'failure_stage': None,   # DEC-086
+            'algorithm_version': algo_version,
+            'analyzed_at': _dt.datetime.now(_dt.timezone.utc).isoformat()})
         rows = [{'shot_id': shot_id, 'metric': name, 'value': mm.get('value'), 'unit': mm.get('unit'),
                  'confidence': mm.get('confidence'), 'status': mm.get('status'),
                  'source': mm.get('source', 'lanesight_video'),
@@ -854,6 +1374,83 @@ class PgStore(MemoryStore):
                 for name, mm in (record.get('metrics') or {}).items()]
         if rows:
             self._req('measurements', 'POST', rows, prefer='resolution=merge-duplicates,return=minimal')
+
+    def mark_shot_failed(self, shot_id, code, stage):
+        MemoryStore.mark_shot_failed(self, shot_id, code, stage)
+        import datetime as _dt
+        self._req(f'shots?id=eq.{shot_id}', 'PATCH', {
+            'analysis_status': 'failed', 'failure_code': code, 'failure_stage': stage,
+            'analyzed_at': _dt.datetime.now(_dt.timezone.utc).isoformat()})
+
+    def log_analysis_attempt(self, row):
+        """DEC-086: one row per analysis attempt (success + failure) in the retained analysis_attempt table.
+        Best-effort — the caller swallows errors so logging can never fail an analysis.
+        DEC-098 §2: fills user_ref (pseudonym) and carries the cost jsonb the API computed."""
+        body = {k: v for k, v in (row or {}).items() if v is not None}
+        body.setdefault('id', _new_id())
+        if body.get('user_ref') is None and body.get('user_id'):
+            body['user_ref'] = _user_ref(body.get('user_id'))
+        self._req('analysis_attempt', 'POST', body, prefer='return=minimal')
+        return body
+
+    def log_outcomes(self, metric_rows, stage_rows):
+        """DEC-122 §6: write per-metric + per-stage outcome rows (migration 036). Best-effort — the caller
+        swallows errors so this can never fail an analysis. Upsert on the natural keys so a re-run of the same
+        attempt is idempotent. Rows in a batch are normalised to a COMMON key set (nulls included): PostgREST
+        rejects a bulk insert whose objects have differing keys (PGRST102), and an unavailable row's explicit
+        `value: null` satisfies the table's honesty check."""
+        if metric_rows:
+            self._req('analysis_metric_outcome?on_conflict=attempt_id,metric_key', 'POST',
+                      _uniform_rows(metric_rows), prefer='resolution=merge-duplicates,return=minimal')
+        if stage_rows:
+            self._req('analysis_stage_outcome?on_conflict=attempt_id,stage', 'POST',
+                      _uniform_rows(stage_rows), prefer='resolution=merge-duplicates,return=minimal')
+
+    def save_job(self, row: dict):
+        """Part 3a: upsert the durable analysis_job row (PK=id). Lets the DB default created_at/updated_at on
+        insert and bump updated_at on conflict. jsonb columns (result/failure/timings) go through as-is."""
+        # Omit the timestamps: created_at defaults on insert, updated_at is bumped by the table trigger
+        # (migration 034) on every upsert — so a long-running job's row stays fresh.
+        body = {k: v for k, v in (row or {}).items() if v is not None and k not in ('created_at', 'updated_at')}
+        self._req('analysis_job?on_conflict=id', 'POST', body,
+                  prefer='resolution=merge-duplicates,return=minimal')
+        return body
+
+    def get_job(self, job_id: str) -> dict | None:
+        rows = self._get('analysis_job', f'id=eq.{job_id}&select=*&limit=1')
+        return rows[0] if rows else None
+
+    def log_api_request(self, row):
+        """DEC-098 §2 (M2): POST one api_request row (pseudonymised, no raw user_id/bodies/tokens)."""
+        r = {k: v for k, v in (row or {}).items() if v is not None}
+        if r.get('user_id'):
+            r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+        r.pop('user_id', None)
+        r.setdefault('id', _new_id())
+        self._req('api_request', 'POST', r, prefer='return=minimal')
+        return r
+
+    def log_events(self, rows):
+        """DEC-098 §2 (M3): POST product_event rows, idempotent on client_event_id (ignore-duplicates)."""
+        batch = []
+        for row in (rows or []):
+            r = {k: v for k, v in (row or {}).items() if v is not None}
+            if r.get('user_id'):
+                r['user_ref'] = r.get('user_ref') or _user_ref(r.pop('user_id'))
+            r.pop('user_id', None)
+            r.setdefault('id', _new_id())
+            batch.append(r)
+        if batch:
+            self._req('product_event', 'POST', batch, prefer='resolution=ignore-duplicates,return=minimal')
+        return len(batch)
+
+    def record_storage_snapshot(self, rows):
+        """DEC-098 §2 (M5): POST storage_snapshot rows."""
+        batch = [{**{k: v for k, v in r.items() if v is not None}, 'id': r.get('id') or _new_id()}
+                 for r in (rows or [])]
+        if batch:
+            self._req('storage_snapshot', 'POST', batch, prefer='return=minimal')
+        return batch
 
     # --- reads / profile / sensors / catalog (PostgREST) ---
     def _get(self, table, query=''):
@@ -870,7 +1467,7 @@ class PgStore(MemoryStore):
 
     def _req(self, path, method, body=None, prefer='return=minimal'):
         import json, urllib.request, urllib.error
-        data = json.dumps(body).encode() if body is not None else None
+        data = json.dumps(_json_safe(body), allow_nan=False).encode() if body is not None else None
         req = urllib.request.Request(self._rest + path, data=data, method=method, headers={
             'apikey': self._key, 'Authorization': f'Bearer {self._key}',
             'Content-Type': 'application/json', 'Prefer': prefer})
@@ -886,9 +1483,36 @@ class PgStore(MemoryStore):
         return _profile_out(rows[0]) if rows else None
 
     def put_profile(self, user_id, data):
-        row = {'user_id': user_id, **_profile_in(data)}
+        patch = _profile_in(data)
+        row = {'user_id': user_id, **patch}
+        # Maintain display_name = "First Last" from the merged (existing + patch) names (DEC-087).
+        if 'first_name' in patch or 'last_name' in patch:
+            existing = self.get_profile(user_id) or {}
+            dn = _compose_display_name(patch.get('first_name', existing.get('first_name')),
+                                       patch.get('last_name', existing.get('last_name')))
+            if dn:
+                row['display_name'] = dn
         self._req('profiles', 'POST', row, prefer='resolution=merge-duplicates,return=minimal')
         return self.get_profile(user_id)
+
+    def get_notify_prefs(self, user_id):                                       # DEC-084
+        try:
+            rows = self._get('profiles', f'user_id=eq.{user_id}&select=notify_coaching_launch')
+            return {'coaching_launch': bool(rows and rows[0].get('notify_coaching_launch'))}
+        except Exception:                 # column lands in migration 021; tolerate its absence
+            return {'coaching_launch': False}
+
+    def set_notify_pref(self, user_id, key, value):
+        if key == 'coaching_launch':
+            import datetime as _dt
+            try:
+                self._req('profiles', 'POST',
+                          {'user_id': user_id, 'notify_coaching_launch': bool(value),
+                           'notify_coaching_launch_at': _dt.datetime.now(_dt.timezone.utc).isoformat()},
+                          prefer='resolution=merge-duplicates,return=minimal')
+            except Exception:
+                pass
+        return self.get_notify_prefs(user_id)
 
     def set_avatar(self, user_id, path, updated_at):
         self._req('profiles', 'POST', {'user_id': user_id, 'avatar_path': path, 'avatar_updated_at': updated_at},
@@ -940,10 +1564,11 @@ class PgStore(MemoryStore):
                 'coverstock': model.get('coverstock'), 'core_type': model.get('core_type'),
                 'rg': model.get('rg'), 'diff': model.get('diff'), 'factory_finish': model.get('factory_finish'),
                 'is_current': b.get('is_current', False), 'retired': b.get('retired', False),
+                'is_default': b.get('is_default', False),
                 'ball_configuration_id': cfg.get('id'), 'layout_system': cfg.get('layout_system'),
                 'layout': cfg.get('layout'), 'surface': cfg.get('surface')}
 
-    _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,retired,ball_model_id,created_at,'
+    _ARSENAL_SELECT = ('select=id,nickname,weight_lb,color_desc,is_current,is_default,retired,ball_model_id,created_at,'
                        'ball_models(manufacturer,name,image_url,coverstock,core_type,rg,diff,factory_finish),'
                        'ball_configurations(id,version,layout_system,layout,surface)')
 
@@ -966,6 +1591,16 @@ class PgStore(MemoryStore):
                   'layout_system': d.get('layout_system'), 'layout': d.get('layout'), 'surface': d.get('surface')})
         if make_current:
             self.set_current_ball(user_id, ball_id)
+        if d.get('make_default') or d.get('is_default'):
+            self.set_default_ball(user_id, ball_id)
+        return self._arsenal_one(user_id, ball_id)
+
+    def set_default_ball(self, user_id, ball_id):
+        """DEC-099: unset the old default first (the partial unique index allows only one), then set this one."""
+        if not self._get('user_balls', f'id=eq.{ball_id}&user_id=eq.{user_id}&select=id'):
+            return None
+        self._req(f'user_balls?user_id=eq.{user_id}&is_default=is.true', 'PATCH', {'is_default': False})
+        self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', {'is_default': True})
         return self._arsenal_one(user_id, ball_id)
 
     def set_current_ball(self, user_id, ball_id):
@@ -981,7 +1616,14 @@ class PgStore(MemoryStore):
         p = dict(patch or {})
         if p.pop('is_current', False) or p.pop('make_current', False):
             self.set_current_ball(user_id, ball_id)
+        if 'is_default' in p or 'make_default' in p:
+            if p.pop('is_default', False) or p.pop('make_default', False):
+                self.set_default_ball(user_id, ball_id)
+            else:
+                self._req(f'user_balls?id=eq.{ball_id}&user_id=eq.{user_id}', 'PATCH', {'is_default': False})
         ball_cols = {k: p[k] for k in ('nickname', 'serial', 'weight_lb', 'color_desc', 'ball_model_id', 'retired') if k in p}
+        if p.get('retired'):
+            ball_cols['is_default'] = False           # a retired ball can't stay the default
         if p.get('name') is not None:
             ball_cols['nickname'] = p['name']
         if ball_cols:
@@ -1062,8 +1704,11 @@ class PgStore(MemoryStore):
         if not shots:
             return [], {}, 'R'
         ids = [s['id'] for s in shots]
+        # DEC-103/DEC-113: exclude engine-quarantined ("legacy") measurements — e.g. speeds from the pre-0.7.0
+        # cv2 decode that ran ~14% low — so personal baselines / consistency / score / achievements never mix
+        # incompatible engine versions. legacy defaults false, so current (0.7.0+) measurements are unaffected.
         meas = self._get_in('measurements', 'shot_id', ids,
-                            'source=eq.lanesight_video&select=shot_id,metric,value,status,confidence,note')
+                            'source=eq.lanesight_video&legacy=is.false&select=shot_id,metric,value,status,confidence,note')
         ints = self._get_in('shot_intents', 'shot_id', ids, 'select=shot_id,arrows_board,breakpoint_board')
         by_shot = {}
         for m in meas:
@@ -1145,16 +1790,24 @@ class PgStore(MemoryStore):
 
     def session_shots(self, user_id, session_id):
         rows = self._get('shots', f'user_id=eq.{user_id}&session_id=eq.{session_id}'
-                                  '&select=id,created_at,classification,source,record&order=created_at')
+                                  '&select=id,created_at,classification,source,record,user_ball_id,'
+                                  'ball_configuration_id,oil_pattern_id&order=created_at')
+        ball_names, oil_names = self._ball_oil_names(user_id)       # DEC-097: ball/oil used, per shot
+        sess = self._get('sessions', f'id=eq.{session_id}&select=oil_pattern_id') or [{}]
+        sess_oil = (sess[0] or {}).get('oil_pattern_id')
         out = []
         for sh in rows:
             rec = sh.get('record') or {}
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
+            ball_id = sh.get('user_ball_id') or sh.get('ball_configuration_id')
+            oil_id = sh.get('oil_pattern_id') or sess_oil           # pre-DEC-097 rows fall back to the session oil
             out.append(dict(id=sh['id'], state='analyzed' if metrics else 'pending',
                             created_at=sh.get('created_at'), classification=sh.get('classification'),
-                            source=sh.get('source'), metrics=key))
+                            source=sh.get('source'), metrics=key,
+                            user_ball_id=sh.get('user_ball_id'), oil_pattern_id=oil_id,
+                            ball_name=ball_names.get(ball_id), oil_name=oil_names.get(oil_id)))
         return out
 
     def session_records(self, user_id, session_id):
@@ -1249,7 +1902,8 @@ class PgStore(MemoryStore):
 
     def list_uploads(self, user_id):
         rows = self._get('shots', f'user_id=eq.{user_id}&source=eq.upload'
-                                  '&select=id,created_at,capture_mode,classification,source,record'
+                                  '&select=id,created_at,capture_mode,classification,source,record,'
+                                  'analysis_status,failure_code,failure_stage'
                                   '&order=created_at.desc')
         out = []
         for sh in rows:
@@ -1257,9 +1911,8 @@ class PgStore(MemoryStore):
             metrics = rec.get('metrics') or {}
             key = {k: (metrics.get(k) or {}).get('value')
                    for k in ('ball_speed', 'rev_rate', 'entry_board', 'entry_angle', 'arrows_board')}
-            out.append(dict(id=sh['id'], state='analyzed' if metrics else 'pending',
-                            created_at=sh.get('created_at'), capture_mode=sh.get('capture_mode') or 'shot',
-                            classification=sh.get('classification'), source='upload', metrics=key))
+            state = sh.get('analysis_status') or ('analyzed' if metrics else 'pending')   # legacy fallback
+            out.append(self._upload_row(sh, state, key, sh.get('classification')))
         return out
 
     def add_notification(self, user_id, kind, ref_id, priority, payload):
@@ -1355,7 +2008,7 @@ class PgStore(MemoryStore):
             return r.read()
 
     def storage_delete(self, bucket, path):
-        """Delete a clip after analysis (clips are never retained — DEC-019 replay deferred)."""
+        """Delete a clip (dedupe hits, retention off, or purge). Retention window: DEC-100."""
         import urllib.request
         url = f'{self._storage_base()}/object/{bucket}/{path}'
         req = urllib.request.Request(url, method='DELETE', headers=self._storage_headers())
@@ -1363,6 +2016,49 @@ class PgStore(MemoryStore):
             urllib.request.urlopen(req, timeout=30)
         except Exception as e:
             print(f'storage_delete {path} skipped ({e})')
+
+    def storage_list(self, bucket, prefix, limit=1000):
+        """List objects under `prefix/` (service role), newest first: [{name, created_at, ...}]."""
+        import json, urllib.request
+        url = f'{self._storage_base()}/object/list/{bucket}'
+        body = json.dumps({'prefix': prefix, 'limit': limit, 'offset': 0,
+                           'sortBy': {'column': 'created_at', 'order': 'desc'}}).encode()
+        req = urllib.request.Request(url, method='POST', data=body,
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read()) or []
+
+    def purge_old_clips(self, bucket, user_id, days, keep_max):
+        """DEC-100: delete this user's retained clips older than `days`, and any beyond the newest `keep_max`."""
+        import json, urllib.request, datetime as _dt
+        items = [it for it in self.storage_list(bucket, user_id) if it.get('id')]   # folders have no id
+        cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
+        doomed = []
+        for i, it in enumerate(items):
+            created = it.get('created_at') or ''
+            try:
+                ts = _dt.datetime.fromisoformat(created.replace('Z', '+00:00'))
+            except ValueError:
+                ts = None
+            if i >= keep_max or (ts is not None and ts < cutoff):
+                doomed.append(f"{user_id}/{it['name']}")
+        if not doomed:
+            return 0
+        req = urllib.request.Request(f'{self._storage_base()}/object/{bucket}', method='DELETE',
+                                     data=json.dumps({'prefixes': doomed}).encode(),
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        urllib.request.urlopen(req, timeout=30)
+        return len(doomed)
+
+    def storage_signed_download_url(self, bucket, path, expires_in=3600):
+        """Short-lived signed GET URL for a retained clip (owner diagnostics)."""
+        import json, urllib.request
+        url = f'{self._storage_base()}/object/sign/{bucket}/{path}'
+        req = urllib.request.Request(url, method='POST', data=json.dumps({'expiresIn': expires_in}).encode(),
+                                     headers={**self._storage_headers(), 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            rel = json.loads(r.read())['signedURL'].lstrip('/')
+        return f'{self._storage_base()}/{rel}'
 
     def storage_upload(self, bucket, path, data, content_type='application/octet-stream'):
         """Upload bytes to Storage with the service role (create-or-overwrite via x-upsert). For durable images

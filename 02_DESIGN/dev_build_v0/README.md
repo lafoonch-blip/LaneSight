@@ -1,5 +1,5 @@
-# Dev Build v0 — Screen designs (SOURCE OF TRUTH)
-Status: APPROVED · kept in sync with the build
+# Dev Build v0 — Screen designs (FROZEN 2026-10-26)
+Status: FROZEN · superseded as the design source by DEC-091 → Figma "Target state – v3.7" + `03_ENGINEERING/APP_DESIGN_CHANGES.md`. Kept for history; not updated.
 Version: 3.8
 Last Updated: 2026-10-26
 

@@ -1,0 +1,98 @@
+{
+  "task": "early_lane_speed_truth",
+  "updated_at": "2026-11-01T20:56:48-05:00",
+  "clips": {
+    "IMG_8751": {
+      "events": {
+        "shadow_at_foul": {
+          "frame": 1601,
+          "t_s": 26.6948,
+          "status": "set"
+        },
+        "shadow_at_dots": {
+          "frame": 1601,
+          "t_s": 26.6948,
+          "status": "set"
+        },
+        "shadow_at_arrows": {
+          "frame": 1633,
+          "t_s": 27.2284,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.97423541199485,
+      "complete": true
+    },
+    "IMG_8752": {
+      "events": {
+        "shadow_at_foul": {
+          "frame": 1114,
+          "t_s": 18.5755,
+          "status": "set"
+        },
+        "shadow_at_dots": {
+          "frame": 1114,
+          "t_s": 18.5755,
+          "status": "set"
+        },
+        "shadow_at_arrows": {
+          "frame": 1147,
+          "t_s": 19.1257,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.971509971509974,
+      "complete": true
+    },
+    "IMG_8753": {
+      "events": {
+        "shadow_at_foul": {
+          "frame": 559,
+          "t_s": 9.3209,
+          "status": "set"
+        },
+        "shadow_at_dots": {
+          "frame": 559,
+          "t_s": 9.3209,
+          "status": "set"
+        },
+        "shadow_at_arrows": {
+          "frame": 592,
+          "t_s": 9.8711,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.972893607409084,
+      "complete": true
+    },
+    "IMG_8754": {
+      "events": {
+        "shadow_at_foul": {
+          "frame": 1543,
+          "t_s": 25.7281,
+          "status": "set"
+        },
+        "shadow_at_dots": {
+          "frame": 1543,
+          "t_s": 25.7281,
+          "status": "set"
+        },
+        "shadow_at_arrows": {
+          "frame": 1575,
+          "t_s": 26.2616,
+          "status": "set"
+        }
+      },
+      "fields": {},
+      "done": false,
+      "fps": 59.9734369619755,
+      "complete": true
+    }
+  }
+}

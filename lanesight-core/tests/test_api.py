@@ -31,6 +31,25 @@ def test_spot_check_never_blocks():
     r = client.post('/spot-check', json={'framing': {'lane_visible_fraction': 0.2, 'foul_line_visible': True}}, headers=H)
     assert r.status_code == 200 and r.json()['blocks'] is False
 
+def test_get_job_falls_back_to_durable_row():
+    """Part 3a: GET /jobs/:id must resolve a job this instance never ran (not in the in-memory queue) from the
+    durable store — the fix for the lost-session 404. Also scopes the row to its owner."""
+    store = get_store()
+    # A job persisted by "another instance" (direct store write; the live queue has no memory of it).
+    store.save_job({'id': 'job-away-1', 'user_id': 'u1', 'shot_id': 'shot-away', 'kind': 'analyze',
+                    'state': 'done', 'result': {'shot_id': 'shot-away'}, 'timings': {'total': 42.0}})
+    r = client.get('/jobs/job-away-1', headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert body['state'] == 'done' and body['result']['shot_id'] == 'shot-away'
+
+    # A job owned by someone else is not visible (404, not another user's result).
+    store.save_job({'id': 'job-other', 'user_id': 'someone-else', 'kind': 'analyze', 'state': 'done'})
+    assert client.get('/jobs/job-other', headers=H).status_code == 404
+    # A truly unknown job still 404s.
+    assert client.get('/jobs/does-not-exist', headers=H).status_code == 404
+
+
 def test_report_pins_recomputes_state():
     from lanesight_core.insights.adjust import STATES
     sid = client.post('/sessions', json={'mode': 'practice'}, headers=H).json()['id']
@@ -94,20 +113,28 @@ def test_avatar_rejects_oversize_and_garbage():
     assert client.put('/me/avatar', files={'file': ('x.jpg', b'not-an-image', 'image/jpeg')}, headers=Hp).status_code == 415
 
 
-def test_upload_dedupe_returns_existing_shot():
+def test_upload_dedupe_flag(monkeypatch):
+    # DEC-086: upload de-duplication is behind LANESIGHT_UPLOAD_DEDUPE (default OFF) so the same clip can be
+    # uploaded and analyzed repeatedly for testing.
     import hashlib
     store = get_store()
     data = b'fake-clip-bytes-for-dedupe'
     h = hashlib.sha256(data).hexdigest()
-    # seed a prior standalone upload with this content hash
     prior = store.create_shot('u1', None, {'source': 'upload'})
     store.set_content_hash(prior['id'], h)
-    # an identical re-upload short-circuits to the existing shot (never runs analysis)
+    # Flag ON -> an identical re-upload short-circuits to the existing shot (never runs analysis).
+    monkeypatch.setenv('LANESIGHT_UPLOAD_DEDUPE', '1')
     r = client.post('/uploads', files={'file': ('clip.mov', data, 'video/quicktime')},
                     data={'metadata': '{}'}, headers=H)
     assert r.status_code == 200
     body = r.json()
     assert body.get('duplicate') is True and body['shot_id'] == prior['id'] and 'job_id' not in body
+    # Flag OFF (default) -> the identical clip makes a brand-new shot + runs a fresh analysis.
+    monkeypatch.delenv('LANESIGHT_UPLOAD_DEDUPE', raising=False)
+    r = client.post('/uploads', files={'file': ('clip.mov', data, 'video/quicktime')},
+                    data={'metadata': '{}'}, headers=H)
+    body = r.json()
+    assert body.get('duplicate') is not True and body['shot_id'] != prior['id'] and 'job_id' in body
 
 
 def test_live_shot_dedupe_is_session_scoped():
@@ -243,6 +270,161 @@ def test_profile_put_get():
     client.put('/me/profile', json={'handed': 'R', 'delivery_style': 'one_handed_thumb', 'approach_steps': 4}, headers=H)
     p = client.get('/me/profile', headers=H).json()
     assert p['handed'] == 'R' and p['delivery_style'] == 'one_handed_thumb' and p['user_id'] == 'u1'
+
+def test_me_score_parts_delta_30d():
+    """DEC-083: /me/score reports each part's 30-day change from history; only parts present in both the
+    current and the ~30-day-old reference snapshot get a delta — nothing is fabricated."""
+    import time as _t
+    st = get_store()
+    uid = 'u_delta'
+    now = _t.time()
+    # a reference snapshot 40 days ago, then today's — the endpoint reads the most recent >=30-day-old one
+    st.snapshots[uid] = [
+        {'eligible': True, 'score': 600, 's_perf': 60, 'a_acc': 50, 'c_cons': 70, 'p_power': None,
+         'computed_at': now - 40 * 86400},
+        {'eligible': True, 'score': 640, 's_perf': 64, 'a_acc': 48, 'c_cons': 70, 'p_power': 71,
+         'computed_at': now},
+    ]
+    d = client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d']
+    assert d['s_perf'] == 4.0 and d['a_acc'] == -2.0 and d['c_cons'] == 0.0
+    assert 'p_power' not in d          # no reference value 40 days ago → no delta (shown as "New")
+
+
+def test_me_score_parts_delta_30d_absent_for_new_account():
+    st = get_store()
+    uid = 'u_delta_new'
+    st.snapshots[uid] = [{'eligible': True, 'score': 500, 's_perf': 50, 'a_acc': 50, 'c_cons': 50,
+                          'p_power': 50, 'computed_at': __import__('time').time()}]
+    assert client.get('/me/score', headers={'X-Dev-User': uid}).json()['parts_delta_30d'] == {}
+
+
+def test_attempt_clip_and_quality_capture():
+    """DEC-086: the attempt log captures camera/recording facts (clip) and, on success, capture-quality +
+    geometry (so framing can be correlated with outcomes), with missing fields omitted (never fabricated)."""
+    from lanesight_api.app import _clip_info, _quality
+    probe = {'measured_fps': 59.94, 'nominal_fps': 60, 'width': 1920, 'height': 1080, 'short_side_px': 1080,
+             'rotation': 90, 'hdr': True, 'variable_frame_rate': False, 'duration_s': 7.2, 'frames': 432,
+             'codec': 'hevc', 'color_transfer': 'arib-std-b67'}
+    ci = _clip_info(probe)
+    assert ci['width'] == 1920 and ci['rotation'] == 90 and ci['hdr'] is True and ci['fps'] == 59.94
+    assert 'bytes' not in ci                                   # omitted when absent, not null/0
+
+    q = _quality({'capture_quality': {'far_lane': 'limited', 'reason': 'camera too close'},
+                  'metrics': {'ball_speed': {'value': 17.2}, 'entry_board': {'value': 18.0},
+                              'rev_rate': {'value': None}}})
+    assert q['far_lane'] == 'limited' and q['capture_reason'] == 'camera too close'
+    assert q['ball_speed'] == 17.2 and q['entry_board'] == 18.0 and q['n_measured'] == 2
+    assert 'rev_rate' not in q                                 # None metric omitted
+    assert _quality(None) is None and _quality({}) is None     # nothing measured → None
+
+
+def test_shot_card_enrichment_on_get_shot():
+    """DEC-088/090: GET /shots/{id} enriches a ball shot with path_fit, impact_energy_j, baseline and
+    insights.throw/lane/coach — the fields the redesigned shot card renders."""
+    h = {'X-Dev-User': 'u_card'}
+    sid = client.post('/sessions', json={'mode': 'practice'}, headers=h).json()['id']
+    store = get_store()
+    rec = json.loads(_VAL.read_text())
+    shot = store.create_shot('u_card', sid, {'handed': 'R'})
+    rec['shot_id'] = shot['id']
+    store.save_shot_result(shot['id'], rec, {'ok': True})
+    body = client.get(f"/shots/{shot['id']}", headers=h).json()
+    r = body['record']
+    assert r.get('path_fit') and r['path_fit']['points']            # the fitted lane path for the 3D view
+    assert r.get('impact_energy_j') is not None                     # Power ring (DEC-024)
+    ins = r.get('insights') or {}
+    assert ins.get('coach', {}).get('action') in ('keep', 'lane_move', 'no_move', 'no_move_yet')
+    assert ins.get('throw', {}).get('status') in ('good', 'off', 'building')
+    assert ins.get('lane', {}).get('status') in ('good', 'miss', 'not_read')
+    assert r.get('baseline', {}).get('n') is not None
+
+
+def test_precheck_is_safe_on_a_bad_path():
+    """DEC-092 P0: the framing precheck never raises — an unreadable clip yields ok=None so the caller
+    falls through to the full pipeline (shadow mode must never block analysis)."""
+    from lanesight_core.cv.precheck import precheck
+    r = precheck('/no/such/clip.mov')
+    assert r['ok'] is None and 'seconds' in r
+
+
+def test_decode_stats_counts_passes():
+    """DEC-092 P0 counters + P1 decode-once: the first pass decodes and populates the bounded frame cache; a
+    second pass over a clip that fits the budget is served from the cache (no decode) with byte-identical frames."""
+    from lanesight_core.cv import stabilize as _stab
+    from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats, frames
+    import numpy as np, cv2, tempfile, os
+    _stab._FRAME_CACHE_MB = 100          # enough for the tiny clip regardless of the prod default
+    reset_decode_stats()
+    s0 = decode_stats()
+    assert s0['passes'] == 0 and s0['frames'] == 0 and s0['cached_passes'] == 0
+    # write a tiny 6-frame clip with distinct content per frame, then decode it twice
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, 't.mp4')
+        w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 10, (32, 32))
+        for k in range(6):
+            w.write(np.full((32, 32, 3), k * 20, np.uint8))
+        w.release()
+        if not os.path.exists(p) or os.path.getsize(p) == 0:
+            return  # no mp4 encoder available in this env; the counter contract is still covered above
+        first = [f.copy() for _, f in frames(p)]      # pass 1: decodes + populates cache
+        second = [f.copy() for _, f in frames(p)]      # pass 2: served from cache (fits the budget)
+    s = decode_stats()
+    assert s['passes'] == 1, f"second pass should be cached, not decoded: {s}"
+    assert s['cached_passes'] == 1 and s['cache_complete'] is True
+    assert len(first) == len(second) and len(first) >= 2
+    for a, b in zip(first, second):                    # decode-once must be byte-identical (accuracy unchanged)
+        assert np.array_equal(a, b)
+
+
+def test_shadow_attempt_records_ios():
+    """DEC-106: the on-device shadow result is logged as a platform='ios' attempt (never shown/scored);
+    metrics land in diagnostics, device perf under diagnostics.device; 'unavailable' maps to failed."""
+    from lanesight_api.app import get_store
+    h = {'X-Dev-User': 'uShadow'}
+    r = client.post('/analysis/shadow', json={
+        'source': 'live', 'capture_mode': 'shot', 'basis': 'best_effort',
+        'metrics': {'ball_speed': 17.9, 'entry_board': 9.5},
+        'device_perf': {'latency_s': 14.2, 'peak_mem_mb': 68.0, 'thermal_state': 'nominal'},
+        'algorithm_version': 'ios-ondevice-0.1', 'app_version': 'ios-build-123'}, headers=h)
+    assert r.status_code == 200 and r.json() == {'logged': True, 'platform': 'ios', 'status': 'analyzed'}
+    att = [a for a in getattr(get_store(), 'analysis_attempts', [])
+           if a.get('platform') == 'ios' and a.get('user_id') == 'uShadow']
+    assert att, 'shadow attempt not logged'
+    last = att[-1]
+    assert last['status'] == 'analyzed' and last['diagnostics']['ball_speed'] == 17.9
+    assert last['diagnostics']['device']['peak_mem_mb'] == 68.0 and last['duration_ms'] == 14200
+    # a shot the on-device engine couldn't measure → failed, not a fake number
+    r2 = client.post('/analysis/shadow', json={'basis': 'unavailable', 'metrics': {}}, headers=h)
+    assert r2.json()['status'] == 'failed'
+    assert client.post('/analysis/shadow', json={'basis': 'best_effort'}).status_code == 401  # auth required
+
+
+def test_shadow_attempt_form_mode():
+    """DEC-106: a Form shadow records event TIMES + pose confidence under platform='ios', capture_mode='form'."""
+    from lanesight_api.app import get_store
+    h = {'X-Dev-User': 'uShadowForm'}
+    r = client.post('/analysis/shadow', json={
+        'source': 'live', 'capture_mode': 'form', 'basis': 'best_effort',
+        'events': {'ball_start_s': 1.1, 'top_of_swing_s': 1.9, 'slide_stop_s': 2.3, 'release_s': 2.45},
+        'metrics': {'backswing_time': 0.4, 'downswing_time': 0.22, 'step_count': 5},
+        'device_perf': {'latency_s': 3.1, 'peak_mem_mb': 90.0, 'pose_confidence': 0.82},
+        'algorithm_version': 'ios-form-0.1'}, headers=h)
+    assert r.status_code == 200 and r.json()['status'] == 'analyzed'
+    att = [a for a in getattr(get_store(), 'analysis_attempts', [])
+           if a.get('platform') == 'ios' and a.get('user_id') == 'uShadowForm']
+    assert att and att[-1]['capture_mode'] == 'form'
+    d = att[-1]['diagnostics']
+    assert d['events']['release_s'] == 2.45 and d['metrics']['step_count'] == 5
+    assert d['device']['pose_confidence'] == 0.82 and 'ball_speed' not in d
+
+
+def test_coaching_notify_flag():
+    """DEC-084: PUT /me/notify records the coaching-launch interest flag; GET reads it back."""
+    h = {'X-Dev-User': 'u_notify'}
+    assert client.get('/me/notify', headers=h).json()['coaching_launch'] is False
+    assert client.put('/me/notify', json={'coaching_launch': True}, headers=h).json()['coaching_launch'] is True
+    assert client.get('/me/notify', headers=h).json()['coaching_launch'] is True
+
 
 def test_sensors_crud():
     s = client.post('/me/sensors', json={'name': 'My blue sensor', 'is_default': True}, headers=H).json()
@@ -383,3 +565,169 @@ def test_score_breakdown_shape_building():
     assert b['accuracy']['n_total'] == 0
     assert b['accuracy']['avg_arrow_miss'] is None
     assert b['consistency']['spreads'] == {}
+
+
+# --- DEC-097: ball + oil locked per shot at record time; mid-session changes affect only later shots ---
+
+def test_oil_backfills_from_session_and_locks_on_the_shot():
+    store = get_store()
+    sid = store.create_session('u_oilA', {'mode': 'practice', 'oil_pattern_id': 'oilA'})['id']
+    s1 = store.create_shot('u_oilA', sid, {'source': 'live', 'user_ball_id': 'ballA'})
+    assert s1['oil_pattern_id'] == 'oilA'                       # backfilled from the session at record time
+
+
+def test_explicit_per_shot_oil_wins_over_session():
+    store = get_store()
+    sid = store.create_session('u_oilB', {'mode': 'practice', 'oil_pattern_id': 'oilSession'})['id']
+    sh = store.create_shot('u_oilB', sid, {'source': 'live', 'oil_pattern_id': 'oilExplicit'})
+    assert sh['oil_pattern_id'] == 'oilExplicit'
+
+
+def test_mid_session_oil_change_affects_only_later_shots():
+    store = get_store()
+    sid = store.create_session('u_oilC', {'mode': 'practice', 'oil_pattern_id': 'oil1'})['id']
+    s1 = store.create_shot('u_oilC', sid, {'source': 'live', 'user_ball_id': 'ball1'})
+    store.sessions[sid]['oil_pattern_id'] = 'oil2'              # bowler switches oil mid-session
+    s2 = store.create_shot('u_oilC', sid, {'source': 'live', 'user_ball_id': 'ball2', 'oil_pattern_id': 'oil2'})
+    assert store.shots[s1['id']]['oil_pattern_id'] == 'oil1'   # earlier shot keeps what it was thrown with
+    assert store.shots[s2['id']]['oil_pattern_id'] == 'oil2'
+    assert store.shots[s1['id']]['user_ball_id'] == 'ball1' and store.shots[s2['id']]['user_ball_id'] == 'ball2'
+
+
+def test_last_setup_reads_per_shot_oil_not_session_current():
+    # DEC-097/044: recommendations/ball-reaction read the oil ON the shot, never the session's current value.
+    store = get_store()
+    sid = store.create_session('u_oilD', {'mode': 'practice', 'oil_pattern_id': 'oilThrown'})['id']
+    store.create_shot('u_oilD', sid, {'source': 'live', 'user_ball_id': 'ballThrown'})
+    store.sessions[sid]['oil_pattern_id'] = 'oilLater'         # session changes AFTER the shot was thrown
+    ctx = store.last_setup('u_oilD')
+    assert ctx['oil_pattern_id'] == 'oilThrown' and ctx['user_ball_id'] == 'ballThrown'
+
+
+def test_old_shot_without_per_shot_oil_falls_back_to_session():
+    store = get_store()
+    sid = store.create_session('u_oilE', {'mode': 'practice', 'oil_pattern_id': 'oilSess'})['id']
+    sh = store.create_shot('u_oilE', sid, {'source': 'live', 'user_ball_id': 'ballE'})
+    store.shots[sh['id']]['oil_pattern_id'] = None             # simulate a pre-DEC-097 row
+    ctx = store.last_setup('u_oilE')
+    assert ctx['oil_pattern_id'] == 'oilSess'                  # read-time fallback to the session's oil
+
+
+def test_session_shots_carry_per_shot_ball_and_oil():
+    # DEC-097 follow-up: each shot row carries the ball + oil it was thrown with (for the list + dividers).
+    store = get_store()
+    sid = store.create_session('u_rows', {'mode': 'practice', 'oil_pattern_id': 'oilR1'})['id']
+    a = store.create_shot('u_rows', sid, {'source': 'live', 'user_ball_id': 'ballR1'})
+    store.shots[a['id']]['record'] = {'metrics': {'ball_speed': {'value': 17.0, 'status': 'ok'}}}
+    store.sessions[sid]['oil_pattern_id'] = 'oilR2'              # switch oil mid-session
+    b = store.create_shot('u_rows', sid, {'source': 'live', 'user_ball_id': 'ballR2', 'oil_pattern_id': 'oilR2'})
+    store.shots[b['id']]['record'] = {'metrics': {'ball_speed': {'value': 16.0, 'status': 'ok'}}}
+    rows = store.session_shots('u_rows', sid)
+    assert [r['user_ball_id'] for r in rows] == ['ballR1', 'ballR2']
+    assert [r['oil_pattern_id'] for r in rows] == ['oilR1', 'oilR2']   # first backfilled to the session oil at record
+    assert all('ball_name' in r and 'oil_name' in r for r in rows)     # name fields present (None offline)
+
+
+def test_arsenal_default_ball_is_separate_from_current():
+    # DEC-099: one default ball per bowler (what a new session starts with), independent of is_current.
+    hh = {'X-Dev-User': 'ars_def'}
+    a = client.post('/me/arsenal', json={'name': 'Phaze II', 'make_current': True, 'make_default': True},
+                    headers=hh).json()
+    assert a['is_default'] is True and a['is_current'] is True
+    b = client.post('/me/arsenal', json={'name': 'Spare Ball'}, headers=hh).json()
+    assert b['is_default'] is False
+    # picking another ball for the session moves CURRENT, never the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_current': True}, headers=hh)
+    by_id = {x['id']: x for x in client.get('/me/arsenal', headers=hh).json()}
+    assert by_id[b['id']]['is_current'] and by_id[a['id']]['is_default'] and not by_id[b['id']]['is_default']
+    # setting a new default unsets the old one
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': True}, headers=hh)
+    lst = client.get('/me/arsenal', headers=hh).json()
+    assert [x['id'] for x in lst if x['is_default']] == [b['id']]
+    # clearing / retiring removes the default
+    client.patch(f"/me/arsenal/{b['id']}", json={'is_default': False}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+    client.patch(f"/me/arsenal/{a['id']}", json={'is_default': True}, headers=hh)
+    client.patch(f"/me/arsenal/{a['id']}", json={'retired': True}, headers=hh)
+    assert not any(x['is_default'] for x in client.get('/me/arsenal', headers=hh).json())
+
+
+def test_clips_are_retained_and_linked_to_the_attempt(monkeypatch):
+    # DEC-100: an analyzed clip stays in Storage for the diagnostic window and its path is on the attempt row.
+    from lanesight_api.store import get_store
+    store = get_store()
+    hh = {'X-Dev-User': 'keep1'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    with open(up['upload_url'][len('file://'):], 'wb') as f:
+        f.write(b'not-a-video')                            # the job fails; retention must still hold
+    r = client.post('/shots/analyze', headers=hh,
+                    json={'storage_path': up['path'], 'metadata': {'capture_mode': 'shot'}})
+    assert r.status_code == 200
+    assert store.storage_download('shot-clips', up['path']) == b'not-a-video'      # NOT deleted
+    import time as _t
+    for _ in range(100):                                    # the job may run on the serial worker
+        if client.get(f"/jobs/{r.json()['job_id']}", headers=hh).json().get('state') in ('done', 'failed'):
+            break
+        _t.sleep(0.1)
+    att = [a for a in getattr(store, 'analysis_attempts', []) if a.get('user_id') == 'keep1']
+    assert att and att[-1]['clip']['storage_path'] == up['path']
+
+
+def test_clip_retention_zero_deletes(monkeypatch):
+    monkeypatch.setenv('LANESIGHT_CLIP_RETENTION_DAYS', '0')
+    from lanesight_api.store import get_store
+    import os as _os
+    hh = {'X-Dev-User': 'keep0'}
+    up = client.post('/uploads/signed-url', headers=hh).json()
+    p = up['upload_url'][len('file://'):]
+    with open(p, 'wb') as f:
+        f.write(b'x')
+    client.post('/shots/analyze', headers=hh, json={'storage_path': up['path'], 'metadata': {}})
+    assert not _os.path.exists(p)
+
+
+def test_purge_keeps_only_newest(tmp_path):
+    from lanesight_api.store import MemoryStore
+    import os as _os, time as _t
+    s = MemoryStore()
+    for i in range(5):
+        s.storage_upload('shot-clips', f'purge_u/{i}.mov', b'x')
+        p = s._local_storage_path('shot-clips', f'purge_u/{i}.mov')
+        _os.utime(p, (_t.time() - (100 - i), _t.time() - (100 - i)))
+    assert s.purge_old_clips('shot-clips', 'purge_u', days=7, keep_max=2) == 3
+    left = sorted(_os.listdir(_os.path.dirname(s._local_storage_path('shot-clips', 'purge_u/x'))))
+    assert left == ['3.mov', '4.mov']
+
+
+def test_client_failure_is_logged():
+    from lanesight_api.store import get_store
+    r = client.post('/analysis/client-failure', headers={'X-Dev-User': 'cf1'},
+                    json={'stage': 'upload', 'error': 'The request timed out.', 'source': 'upload',
+                          'capture_mode': 'shot', 'clip_bytes': 51000000})
+    assert r.status_code == 200
+    att = [a for a in getattr(get_store(), 'analysis_attempts', []) if a.get('user_id') == 'cf1']
+    assert att[-1]['failure_code'] == 'CLIENT_UPLOAD' and att[-1]['failure_stage'] == 'client'
+
+
+def test_form_record_with_every_event_gated_is_a_failure():
+    # DEC-100: tonight's form uploads came back "analyzed" with every swing event dropped (empty card).
+    from lanesight_api.app import _form_not_isolated
+    gated = {'events': {'E2': None, 'E4': None, 'E5': 4.1, 'E7': None, 'E8': 5.3}, 'key_frames': [],
+             'metrics': {'swing_time': {'value': 1.135}, 'step_count': {'value': 3}}, 'view': 'down_lane'}
+    d = _form_not_isolated(gated)
+    assert d and d['swing_time_s'] == 1.135 and d['step_count'] == 3
+    ok = {'events': {'E2': 1.0, 'E4': 1.6, 'E7': 2.6}, 'key_frames': ['release']}
+    assert _form_not_isolated(ok) is None
+
+
+def test_snapshot_frames_from_a_real_video(tmp_path):
+    import cv2, numpy as np
+    from lanesight_api.app import _snapshot_frames
+    p = str(tmp_path / 'c.mp4')
+    w = cv2.VideoWriter(p, cv2.VideoWriter_fourcc(*'mp4v'), 30, (640, 360))
+    for i in range(60):
+        w.write(np.full((360, 640, 3), i * 4, np.uint8))
+    w.release()
+    fr = _snapshot_frames(p, n=4)
+    assert len(fr) == 4 and all(f.get('jpg_b64') for f in fr)
+    assert _snapshot_frames(str(tmp_path / 'missing.mp4')) == []

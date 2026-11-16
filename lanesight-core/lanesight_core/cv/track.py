@@ -3,8 +3,28 @@ import cv2, numpy as np
 from .stabilize import frames
 from .lanes import lane_x, foul_corners
 from ._parallel import pmap_frames
+from ..failures import AnalysisFailure
 
 BALL_IN, LANE_IN = 8.59, 41.5
+
+# Foreground threshold is made brightness-RELATIVE (DEC-117 robustness). The background-diff `d` scales linearly
+# with a global gain `g` applied to the whole clip (a clip and a g× brighter copy share the same bg, so d→g·d);
+# a FIXED absolute threshold then over/under-segments the darker/brighter copy, which shifts the ball track tail
+# → `far`/`t_impact` → the impact-anchored depth scale → the headline speed (the maxdiff-2 colour change that
+# swung 18.7↔15.6). Scaling the threshold by the clip's OWN ROI background level L makes thr track g, so a clip
+# and any gain-scaled copy segment IDENTICALLY (gain-invariant). L_NOMINAL ≈ the IMG_8751-54 mean ROI level, so
+# the baseline threshold stays ≈ its historical 35; THR_MIN/MAX bound pathological lanes.
+THR_L_NOMINAL = 165.0
+THR_MIN, THR_MAX = 25.0, 55.0
+
+def _roi_bg_level(bgc_maxc, roic):
+    """Robust clip background level = median of the max-channel background over the lane ROI (the diff basis)."""
+    vals = bgc_maxc[roic]
+    return float(np.median(vals)) if vals.size else THR_L_NOMINAL
+
+def _adaptive_thr(thr, level):
+    """Brightness-relative threshold: thr·(clip level / nominal), clamped. Gain-invariant across copies of a clip."""
+    return float(np.clip(thr * level / THR_L_NOMINAL, THR_MIN, THR_MAX))
 
 def exp_diam(lane, y):
     xa, xb = lane_x(lane, y); return BALL_IN / LANE_IN * (xb - xa)
@@ -25,10 +45,19 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
     roi = lane_roi(lane, vp, bg.shape)
     ys, xs = np.where(roi)
     if ys.size == 0:          # degenerate lane geometry (VP/foul inverted the ROI): no region to search
-        raise RuntimeError("lane geometry unusable: the detected lane produced an empty search region "
-                           "(awkward camera angle). Reshoot with the camera behind the lane, square to it.")
+        raise AnalysisFailure(
+            'LANE_GEOMETRY_UNUSABLE',
+            "lane geometry unusable: the detected lane produced an empty search region (awkward camera angle)",
+            stage='track',
+            diagnostics={'roi_pixels': int(ys.size),
+                         'vp': [round(float(vp[0]), 1), round(float(vp[1]), 1)] if vp is not None else None})
     y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
     roic = roi[y0:y1, x0:x1]; bgc = bg[y0:y1, x0:x1].astype(np.int16)
+    # brightness-relative threshold (DEC-117): scale thr by this clip's own ROI background level so a clip and
+    # any gain-scaled (brighter/darker) copy segment identically — removes the colour-sensitivity that moved
+    # the track tail / impact anchor / headline speed. A no-op at the nominal level (thr stays ≈35).
+    thr_eff = _adaptive_thr(thr, _roi_bg_level(bgc.max(axis=2), roic))
+    log(f'foreground thr {thr}->{thr_eff:.1f} (ROI bg level {_roi_bg_level(bgc.max(axis=2), roic):.0f}, nominal {THR_L_NOMINAL:.0f})')
     Hs = S['Hs']; ts = S['ts']
     # Each frame is processed independently (warp + background diff + connected components), so fan the per-frame
     # work across cores with decode kept sequential and results reassembled in frame order (pure speed-up; the
@@ -37,7 +66,7 @@ def extract_blobs(path, S, lane, vp, thr=35, log=print):
         wf = cv2.warpPerspective(f, Hs[i], (w, h))[y0:y1, x0:x1]
         valid = wf.max(axis=2) > 0                                  # outside warped frame = no data
         d = np.abs(wf.astype(np.int16) - bgc).max(axis=2)
-        m = ((d > thr) & roic & valid).astype(np.uint8)
+        m = ((d > thr_eff) & roic & valid).astype(np.uint8)
         m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         n, lab, st, cen = cv2.connectedComponentsWithStats(m)
         bl = [dict(x=int(st[k, 0] + x0), y=int(st[k, 1] + y0), w=int(st[k, 2]), h=int(st[k, 3]), a=int(st[k, 4]))
@@ -164,7 +193,12 @@ def detect_impact(path, S, lane, track, log=print):
         if t > far['t'] + 0.6: break
         G = cv2.cvtColor(cv2.warpPerspective(f, S['Hs'][i], (w, h))[y_a:y_b, xa:xb], cv2.COLOR_BGR2GRAY).astype(np.float32)
         if t < t_enter - 0.05: refs.append(G); continue
-        if isinstance(refs, list): refs = np.median(np.stack(refs), 0).astype(np.float32)
+        # No pre-arrival reference frame was collected (the ball is already in the ROI at the window start, e.g. a
+        # tight trim on IMG_8975) — we can't build a motion baseline, so impact is simply not detectable here.
+        # Return no impact (→ the coded PIN_IMPACT_NOT_DETECTED partial path) instead of crashing on np.stack([]).
+        if isinstance(refs, list):
+            if not refs: return None, np.array([])
+            refs = np.median(np.stack(refs), 0).astype(np.float32)
         (dx, dy), _ = cv2.phaseCorrelate(refs, G)
         G = cv2.warpAffine(G, np.float32([[1, 0, -dx], [0, 1, -dy]]), (G.shape[1], G.shape[0]))
         dif = np.abs(G - refs)
@@ -189,7 +223,12 @@ def detect_impact(path, S, lane, track, log=print):
     # which would truncate the track mid-lane and shrink the distance scale (~2.5x on shot 5). The ball cannot
     # strike before it arrives, so never place impact before far['t']. On well-tracked clips far['t'] already
     # equals the hotness time (impact lands at 0.0 diameters from far), so this is a no-op there.
-    if t_imp is not None and far['t'] > t_imp: t_imp = float(far['t'])
+    # Never place impact before the ball arrives: if the hotness fired BEFORE the ball entered the pin ROI
+    # (t_imp < t_enter) it is an early false trigger (a glossy-lane reflection ahead of the ball), so defer to the
+    # ball's farthest tracked point `far`. But once the ball is IN the ROI, a sustained hotness IS the pin contact
+    # — do NOT drag it late to a `far` that sits past the pins (a strike's ball tracked on into the pit, e.g.
+    # IMG_8752 where d47bc12 extended the tail 0.35 s past impact and the old unconditional clamp read −2.5 mph).
+    if t_imp is not None and far['t'] > t_imp and t_imp < t_enter: t_imp = float(far['t'])
     log(f'impact t={t_imp} (ROI rows {y_a}-{y_b}, ball enters ROI {t_enter:.2f}s, baseline {base:.4f}±{sd:.4f})')
     return t_imp, E
 

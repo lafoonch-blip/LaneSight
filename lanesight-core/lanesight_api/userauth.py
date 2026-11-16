@@ -67,3 +67,24 @@ def refresh(refresh_token: str) -> dict:
     if st >= 400:
         raise AuthError(401, tok)
     return _session(tok)
+
+
+def update_email(access_token: str, new_email: str):
+    """Start a confirmed email change (DEC-087). GoTrue `PUT /auth/v1/user` with the USER's own bearer
+    emails a confirmation link and leaves the address unchanged until the user clicks it. Returns
+    (status, body); the caller maps errors. Never admin-sets the email (that would skip confirmation)."""
+    s = settings()
+    if not s.supabase_base:
+        raise AuthError(503, 'live auth not configured (no Supabase db_url) — this build is misconfigured')
+    headers = {'apikey': s.service_role or '', 'Authorization': f'Bearer {access_token}',
+               'Content-Type': 'application/json'}
+    req = urllib.request.Request(s.supabase_base + '/auth/v1/user',
+                                 data=json.dumps({'email': new_email}).encode(), method='PUT', headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, json.loads(r.read().decode() or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode() or '{}')
+        except Exception:
+            return e.code, {}

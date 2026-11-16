@@ -7,3 +7,6 @@
 Training Videos/
 Component Mocks/
 Login screen mocks.png
+
+# Per-worktree Xcode DerivedData (feat/ff-feedback, parallel-session isolation)
+.build-dd/

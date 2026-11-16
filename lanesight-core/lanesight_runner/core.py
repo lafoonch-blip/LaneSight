@@ -12,8 +12,19 @@ def default_analyzer(video, out_prefix, handed=None, log=print, timing_video=Non
     """Real analysis: lanesight-core pipeline. Returns the JSON-safe ShotRecord dict.
     cv_timings: optional dict that receives CV sub-stage wall times (profiling only; no effect on results)."""
     from lanesight_core.cv.pipeline import analyze, _json_default
-    rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s,
-                  timings=cv_timings)
+    import numpy as np
+    from lanesight_core.failures import AnalysisFailure
+    try:
+        rec = analyze(video, out_prefix, handed=handed, log=log, timing_video=timing_video, core_end_s=core_end_s,
+                      timings=cv_timings)
+    except np.linalg.LinAlgError as e:
+        # Backstop (IMG_8930): a degenerate low-angle / off-axis geometry can make a least-squares or SVD fit
+        # diverge anywhere in the pipeline (lane VP, homography, loess). Never let it escape as an uncaught
+        # crash that hangs the job — convert it to a coded, user-friendly failure.
+        raise AnalysisFailure('LANE_GEOMETRY_UNUSABLE',
+                              f'numerical geometry fit failed ({type(e).__name__}: {e}); the lane geometry in '
+                              f'this clip is degenerate for analysis', stage='internal',
+                              diagnostics={'exception': type(e).__name__})
     return json.loads(json.dumps(rec.to_dict(), default=_json_default))
 
 
@@ -37,7 +48,13 @@ def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer,
         except Exception as e:
             log(f"windowing skipped: {e}")
     timing_src = analysis_src; video = analysis_src
-    if p.get('hdr'):
+    # DEC-107/113: with the canonical decoder on, HLG HDR can be tone-mapped deterministically INSIDE stabilize
+    # (cv/decode.py, no zscale/re-encode) — but only when LANESIGHT_CANONICAL_HDR=1 (its decode-once/perf is still
+    # pending, step 2). Otherwise HLG stays on convert_sdr (the current path). PQ always uses convert_sdr.
+    _canon_hlg = (os.environ.get('LANESIGHT_FFMPEG_DECODE') == '1'
+                  and os.environ.get('LANESIGHT_CANONICAL_HDR') == '1'
+                  and p.get('color_transfer') == 'arib-std-b67')
+    if p.get('hdr') and not _canon_hlg:
         t = time.time(); video = os.path.splitext(analysis_src)[0] + '_sdr.mov'
         conv = convert_sdr(analysis_src, video); p['sdr_conversion'] = conv
         p['decoded_frames'] = probe(video, check_decoder=check_decoder).get('decoded_frames')
@@ -58,8 +75,18 @@ def analyze_once(src, out_prefix, p, handed, log, timings, use_window, analyzer,
             kw['cv_timings'] = timings.setdefault('cv', {})
     except (TypeError, ValueError):
         pass
-    rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
-    timings['analyze_s'] = round(time.time() - t, 2)
+    # DEC-092 P0: count clip decodes across the whole analyze (confirms repeated decode is the bottleneck).
+    try:
+        from lanesight_core.cv.stabilize import reset_decode_stats, decode_stats
+        reset_decode_stats()
+    except Exception:
+        decode_stats = None
+    try:
+        rec = analyzer(video, os.path.splitext(video)[0], handed=handed, log=log, **kw)
+    finally:
+        timings['analyze_s'] = round(time.time() - t, 2)
+        if decode_stats:
+            timings['decode'] = decode_stats()        # {passes, frames, seconds} even on failure
     return rec
 
 

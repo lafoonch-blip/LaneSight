@@ -2,6 +2,27 @@
 Lane surface = saturated wood (approach wood is paler, so the foul line is the lane mask's near boundary).
 Edges come from per-row wood runs tracked across rows; all lanes share one vanishing point."""
 import cv2, numpy as np
+from ..failures import AnalysisFailure
+
+def _vp_solve(A, b, wt=None, single=False):
+    """Solve the vanishing point from the edge-line system, guarding the least-squares/SVD against degenerate
+    (low-angle / off-axis) geometry that would otherwise raise an uncaught LinAlgError (IMG_8930). Returns a
+    finite vp, or raises a coded AnalysisFailure the app can show."""
+    AA = A if wt is None else A * wt[:, None]
+    bb = b if wt is None else b * wt
+    def _fail(why):
+        raise AnalysisFailure('LANE_GEOMETRY_UNUSABLE',
+                              f'vanishing point unsolvable ({why}): the lane edges are degenerate for this '
+                              f'camera angle', stage='lane', diagnostics={'n_edges': int(len(b))})
+    if not (np.all(np.isfinite(AA)) and np.all(np.isfinite(bb))):
+        _fail('non-finite edge fit')
+    try:
+        vp = np.linalg.solve(AA, bb) if single else np.linalg.lstsq(AA, bb, rcond=None)[0]
+    except np.linalg.LinAlgError as e:
+        _fail(str(e))
+    if not np.all(np.isfinite(vp)):
+        _fail('non-finite solution')
+    return vp
 
 def lane_mask(bgr, s_min=105):
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
@@ -53,7 +74,15 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
         if lanes:
             E = [(l['left'], l['res'][0]) for l in lanes] + [(l['right'], l['res'][1]) for l in lanes]
             A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
-            vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]   # x - a*y = b
+            AA = A * wt[:, None]; bb = b * wt                              # x - a*y = b
+            if not (np.all(np.isfinite(AA)) and np.all(np.isfinite(bb))):
+                return lanes, [], None                                     # degenerate edges this pass; try another floor/fallback
+            try:
+                vp = np.linalg.lstsq(AA, bb, rcond=None)[0]
+            except np.linalg.LinAlgError:
+                return lanes, [], None
+            if not np.all(np.isfinite(vp)):
+                return lanes, [], None
             # keep only lanes whose edges agree with the common VP (rejects ball returns / caps / glare)
             for l in lanes:
                 dl = abs(vp[0] - np.polyval(l['left'], vp[1])); dr = abs(vp[0] - np.polyval(l['right'], vp[1]))
@@ -86,11 +115,16 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
             good = fb; foul_mask = lane_mask(bg, s_min=60)
     if not good:
         if not lanes:
-            raise RuntimeError(f"lane not detected: no lane-colored wood found in the background "
-                               f"({100 * m.mean():.1f}% of pixels matched). Check that the lane is in frame and lit, "
-                               "and that the clip isn't HDR (HDR colors look washed out to the decoder)")
-        raise RuntimeError(f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges "
-                           "meeting at a common vanishing point. Check framing: camera behind the approach, whole lane in view")
+            raise AnalysisFailure(
+                'LANE_NOT_DETECTED_NO_WOOD',
+                f"lane not detected: no lane-colored wood found in the background "
+                f"({100 * m.mean():.1f}% of pixels matched)",
+                stage='lane', diagnostics={'pct_pixels_matched': round(100 * float(m.mean()), 1)})
+        raise AnalysisFailure(
+            'LANE_NOT_DETECTED_NO_EDGES',
+            f"lane not detected: {len(lanes)} wood region(s) found but none had straight edges meeting at a "
+            f"common vanishing point",
+            stage='lane', diagnostics={'wood_regions': len(lanes)})
     if used_s != 105 and not any(l.get('fallback') for l in good):
         log(f"pale lane: detected at saturation floor s_min={used_s} (wood below the default 105)")
     loose = lane_mask(bg, s_min=min(60, used_s))
@@ -100,8 +134,7 @@ def find_lanes(bg, log=print, min_run=40, min_rows=120):
     if good:   # re-solve VP with refined edges
         E = [(l['left'], l['res'][0]) for l in good] + [(l['right'], l['res'][1]) for l in good]
         A = np.array([[1, -p[0]] for p, _ in E]); b = np.array([p[1] for p, _ in E]); wt = np.array([1 / (r + 0.5) for _, r in E])
-        if len(good) == 1: vp = np.linalg.solve(A, b)
-        else: vp = np.linalg.lstsq(A * wt[:, None], b * wt, rcond=None)[0]
+        vp = _vp_solve(A, b, single=True) if len(good) == 1 else _vp_solve(A, b, wt)
     for l in good:   # (re)measure edge agreement with the final VP (fallback lanes have none yet)
         l['vp_miss'] = (abs(vp[0] - np.polyval(l['left'], vp[1])), abs(vp[0] - np.polyval(l['right'], vp[1])))
     log(f"VP ({vp[0]:.0f},{vp[1]:.0f}); {len(good)}/{len(lanes)} lanes consistent: " +
@@ -221,8 +254,10 @@ def _foul(l, m):
         if last and last[1] < h - 3: pts.append(last)
     P = np.array(pts, float)
     if len(P) < 6:          # no foul line in view: the lane runs off the bottom of the frame (camera too low/close).
-        raise RuntimeError("lane not detected: foul line not found — the lane runs off the bottom of the frame "
-                           "(the foul line must be in view; raise or pull back the camera)")
+        raise AnalysisFailure(
+            'FOUL_LINE_NOT_IN_VIEW',
+            "foul line not found — the lane runs off the bottom of the frame",
+            stage='lane', diagnostics={'points_found': int(len(P))})
     keep = np.ones(len(P), bool)
     for _ in range(8):
         c = np.polyfit(P[keep, 0], P[keep, 1], 1); r = P[:, 1] - np.polyval(c, P[:, 0])

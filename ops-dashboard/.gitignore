@@ -1,0 +1,13 @@
+# deps / build
+node_modules/
+.next/
+out/
+# env (secrets)
+.env
+.env.local
+.env*.local
+# misc
+*.tsbuildinfo
+next-env.d.ts.timestamp
+.DS_Store
+__pycache__/

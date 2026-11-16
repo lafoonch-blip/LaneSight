@@ -1,0 +1,134 @@
+{
+  "title": "Speed truth: 11/1 clips (foul line + pin contact)",
+  "instructions": "18 shot clips from 11/1, several camera spots. For each, mark the ball's shadow crossing the foul line and the first head-pin contact. Scrub with the slider to find the shot, then step frame by frame with ← → and press Enter on the exact frame. Click to zoom. If the foul line or pins aren't visible from that camera spot, press X (not visible).",
+  "clips": [
+    {
+      "id": "IMG_8963",
+      "static": {
+        "camera_group": "angled from the side"
+      }
+    },
+    {
+      "id": "IMG_8964",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    },
+    {
+      "id": "IMG_8965",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    },
+    {
+      "id": "IMG_8966",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    },
+    {
+      "id": "IMG_8967",
+      "static": {
+        "camera_group": "lower/wider, ball return lower-right"
+      }
+    },
+    {
+      "id": "IMG_8968",
+      "static": {
+        "camera_group": "lower/wider, ball return lower-right"
+      }
+    },
+    {
+      "id": "IMG_8969",
+      "static": {
+        "camera_group": "lower/wider, ball return lower-right"
+      }
+    },
+    {
+      "id": "IMG_8970",
+      "static": {
+        "camera_group": "lower/wider, ball return lower-right"
+      }
+    },
+    {
+      "id": "IMG_8971",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    },
+    {
+      "id": "IMG_8972",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    },
+    {
+      "id": "IMG_8973",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8974",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8975",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8976",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8977",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8978",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8979",
+      "static": {
+        "camera_group": "centered behind ball return (mounted POV)"
+      }
+    },
+    {
+      "id": "IMG_8981",
+      "static": {
+        "camera_group": "behind ball return, offset right"
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "foul_cross",
+      "label": "Ball crosses the foul line",
+      "help": "First frame the ball's SHADOW (its contact point on the lane) is over the foul line (the line nearest the camera).",
+      "export_key": "foul_cross_frame",
+      "export_unit": "frame"
+    },
+    {
+      "id": "first_pin_contact",
+      "label": "Ball touches the head pin",
+      "help": "First frame the ball touches the head pin (or the first frame the head pin moves, if contact is hidden).",
+      "export_key": "first_pin_contact_frame",
+      "export_unit": "frame"
+    }
+  ],
+  "export": {
+    "path": "lanesight-core/validation/speed_truth_1101_labels.json",
+    "add_fps": true
+  }
+}

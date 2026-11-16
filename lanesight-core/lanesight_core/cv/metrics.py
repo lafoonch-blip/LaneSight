@@ -13,20 +13,52 @@ def _edge_point_on_line(edge, p, q):
     y = -B / A; return np.array([a * y + b, y])
 
 def lane_homography(lane, vp, impact_px):
+    """image -> lane plane (X inches from LEFT edge, Z feet from foul line), anchored on the ball contact point
+    at impact (Z = Z_IMPACT). Kept for the normal path; see `lane_homography_at` for an arbitrary-Z anchor."""
+    return lane_homography_at(lane, vp, impact_px, Z_IMPACT)
+
+
+def lane_homography_at(lane, vp, anchor_px, anchor_z):
     """image -> lane plane (X inches from LEFT edge, Z feet from foul line).
-    Far cross-line: through the ball contact point at impact, parallel (in 3D) to the foul line;
-    its image passes through the foul line's vanishing point on the horizon (assumed through VP, horizontal)."""
+    Far cross-line: through `anchor_px` at depth `anchor_z` ft, parallel (in 3D) to the foul line; its image
+    passes through the foul line's vanishing point on the horizon (assumed through VP, horizontal).
+    `anchor_z` is what decouples the depth scale from the pin impact: pass the detected arrow row (Z=15, DEC-110
+    metric-independence) instead of the impact point and the near-lane scale no longer rides the far anchor."""
     F = foul_corners(lane)
     fl = np.cross([*F[0], 1], [*F[1], 1]); hz = np.cross([0, vp[1], 1], [1, vp[1], 1])
     xv = np.cross(fl, hz)
-    if abs(xv[2]) < 1e-9 * np.abs(xv).max(): far2 = impact_px + (F[1] - F[0])     # parallel in image
+    if abs(xv[2]) < 1e-9 * np.abs(xv).max(): far2 = anchor_px + (F[1] - F[0])     # parallel in image
     else: xv = xv[:2] / xv[2]; far2 = xv
-    P0 = _edge_point_on_line(lane['left'], impact_px, far2); P1 = _edge_point_on_line(lane['right'], impact_px, far2)
-    img = np.float32([F[0], F[1], P1, P0]); world = np.float32([[0, 0], [LANE_IN, 0], [LANE_IN, Z_IMPACT], [0, Z_IMPACT]])
+    P0 = _edge_point_on_line(lane['left'], anchor_px, far2); P1 = _edge_point_on_line(lane['right'], anchor_px, far2)
+    img = np.float32([F[0], F[1], P1, P0]); world = np.float32([[0, 0], [LANE_IN, 0], [LANE_IN, anchor_z], [0, anchor_z]])
     return cv2.getPerspectiveTransform(img, world)
 
 def to_lane(H, x, y):
     p = H @ np.array([x, y, np.ones_like(x)]); return p[0] / p[2], p[1] / p[2]
+
+
+def early_speed_from_H(track, t_impact, H):
+    """Early-lane (release) speed in mph using homography `H`, over the same ~4–24 ft window compute() uses.
+    Isolated so a SHADOW anchor (e.g. the Z=15 arrow row, DEC-110) can be measured against the production
+    impact-anchored H on the identical track. Returns (mph or None, diag)."""
+    T = [c for c in track if c['t'] <= t_impact + 0.01 and not c.get('airborne_candidate')]
+    if len(T) < 6:
+        return None, {'reason': 'track too short', 'pts': len(T)}
+    t = np.array([c['t'] for c in T]); cx = np.array([c['cx'] for c in T]); ct = np.array([c['ct'] for c in T])
+    X, Z = to_lane(H, cx, ct)
+    keep = (Z > -3) & (Z < 61) & np.isfinite(X) & np.isfinite(Z)
+    t, Z = t[keep], Z[keep]
+    def seg(a, b):
+        mm = (Z >= a) & (Z < b)
+        if mm.sum() < 5 or np.ptp(t[mm]) < 0.08: return None
+        return np.polyfit(t[mm], Z[mm], 1)
+    p = seg(4, 24)
+    if p is None: p = seg(4, 30)
+    if p is None: p = seg(2, max(32.0, float(Z.max()) if Z.size else 32.0))
+    if p is None:
+        return None, {'reason': 'early window too sparse', 'on_lane_pts': int(Z.size)}
+    return float(mph(p[0])), {'on_lane_pts': int(Z.size), 'z_min': round(float(Z.min()), 1),
+                              'z_max': round(float(Z.max()), 1)}
 
 def mph(fps): return fps * 3600 / 5280
 
@@ -73,11 +105,22 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
         mm = (Z >= a) & (Z < b)
         if mm.sum() < 5 or np.ptp(t[mm]) < 0.08: return None
         return np.polyfit(t[mm], Z[mm], 1)
+    def _win(a, b):                                         # diagnostics: how many points / seconds each window had
+        mm = (Z >= a) & (Z < b)
+        return {'pts': int(mm.sum()), 'span_s': round(float(np.ptp(t[mm])), 3) if mm.sum() else 0.0}
+    hi = max(32.0, float(Z.max()))
     early = seg(4, 24)                                      # widen the window if the early lane is sparse
     if early is None: early = seg(4, 30)
-    if early is None: early = seg(2, max(32.0, float(Z.max())))
+    if early is None: early = seg(2, hi)
     if early is None:
-        raise RuntimeError('ball not tracked enough to measure speed (the rolling track is too short or sparse)')
+        from ..failures import AnalysisFailure
+        raise AnalysisFailure(
+            'TRACK_TOO_SPARSE_FOR_SPEED',
+            'ball not tracked enough to measure speed (the rolling track is too short or sparse)',
+            stage='metrics',
+            diagnostics={'on_lane_pts': int(len(Z)),
+                         'window_4_24ft': _win(4, 24), 'window_4_30ft': _win(4, 30), 'window_2_maxft': _win(2, hi),
+                         'track_first_ft': round(float(Z.min()), 2), 'track_last_ft': round(float(Z.max()), 2)})
     late = seg(Z_IMPACT - 15, Z_IMPACT + 2)
     t_foul = float(-early[1] / early[0])
     prof = {}
@@ -101,10 +144,23 @@ def compute(track, lane, vp, t_impact, release_t=None, t_touch=None, anchor_trac
     # half of the track -- so it is immune to back-half fade that otherwise inflates a fixed 60 ft / interval by up
     # to ~12% when the track stops short of the pins (DEC-022r). The 60 ft average (foul->pins) is kept as a
     # secondary metric; it varies with ball/friction and needs the ball tracked to the pins.
-    out['ball_speed_mph'] = mph(60.0 / (t_impact - release_t))     # 60 ft foul->pins average; reliable again now
-    out['speed_release_mph'] = mph(early[0])                       # that far-lane recovery (extend_forward) tracks
-    # the ball to the pins. speed_release is the front-half skid speed: robust when the back half is lost, but it
-    # reads ~9% low from a near-field homography Z-scale residual, to be settled against Specto (DEC-030r).
+    # Headline = EARLY-LANE (release) speed: a regression fit of velocity over the skid (~4-24 ft) through ALL
+    # observed front-lane positions, where the ball is big, sharp and seen in many frames. Unlike the 60 ft
+    # average it does NOT need the ball tracked to the pins / the pin impact, so it is AVAILABLE on exactly the
+    # clips the average fails (BALL_TRACK_NOT_FOUND / TRACK_TOO_SPARSE / PIN_IMPACT_NOT_DETECTED). The 60 ft
+    # foul->pins average is kept as a LABELED SECONDARY when the pins are reached. (Shayne 2026-10-29 — reverses
+    # DEC-064's 60-ft-average headline back to DEC-030's release-speed headline; a DEC follows.) KNOWN ISSUE: a
+    # systematic ~12% server-vs-local speed-scale gap (container ffmpeg/decode vs Mac) affects ALL definitions
+    # equally — tracked separately; switching the headline neither causes nor fixes it.
+    out['ball_speed_mph'] = mph(early[0])                          # headline = early-lane / release speed (always available)
+    out['speed_release_mph'] = mph(early[0])                       # same value; explicit name kept for existing callers
+    # DEC-112 definition note: the TRUTH-comparable full-lane average is `speed_avg_foul_to_pins_mph` above —
+    # foul_cross (ball contact point at the foul line, Z=0) -> ball centre at first head-pin contact (Z_IMPACT=
+    # 59.44 ft). THIS number is a separate RELEASE-anchored secondary over a NOMINAL 60.0 ft (release precedes the
+    # foul crossing by RELEASE_OFFSET_S); it is intentionally a different interval/anchor, NOT the 59.44 ft truth
+    # metric — do not compare it to Shayne's foul->pin labels.
+    out['speed_avg_60ft_mph'] = (mph(60.0 / (t_impact - release_t))
+                                 if (t_impact is not None and release_t is not None) else None)  # secondary (needs pins)
     # loft: release -> touchdown (blob h/w step), times early-lane speed. 60 fps limits this to about +/-0.45 ft
     if src == 'first_free_ball_detection' and t_touch is not None and t_touch > release_t:
         out['loft_ft'] = float(early[0] * (t_touch - release_t)); out['t_touchdown'] = float(t_touch)

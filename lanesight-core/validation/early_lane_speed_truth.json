@@ -1,0 +1,35 @@
+{
+  "_source": "LaneSight Labeler task 'early_lane_speed_truth' (lanesight-core/validation/labels/early_lane_speed_truth.json); null = not labeled or not visible",
+  "IMG_8751": {
+    "shadow_at_foul_frame": 1601,
+    "shadow_at_dots_frame": 1601,
+    "shadow_at_arrows_frame": 1633,
+    "foul_to_dots_in": null,
+    "foul_to_arrows_in": null,
+    "fps": 59.97423541199485
+  },
+  "IMG_8752": {
+    "shadow_at_foul_frame": 1114,
+    "shadow_at_dots_frame": 1114,
+    "shadow_at_arrows_frame": 1147,
+    "foul_to_dots_in": null,
+    "foul_to_arrows_in": null,
+    "fps": 59.971509971509974
+  },
+  "IMG_8753": {
+    "shadow_at_foul_frame": 559,
+    "shadow_at_dots_frame": 559,
+    "shadow_at_arrows_frame": 592,
+    "foul_to_dots_in": null,
+    "foul_to_arrows_in": null,
+    "fps": 59.972893607409084
+  },
+  "IMG_8754": {
+    "shadow_at_foul_frame": 1543,
+    "shadow_at_dots_frame": 1543,
+    "shadow_at_arrows_frame": 1575,
+    "foul_to_dots_in": null,
+    "foul_to_arrows_in": null,
+    "fps": 59.9734369619755
+  }
+}

@@ -18,6 +18,10 @@ struct SessionView: View {
     @State private var showFeedback = false
     @State private var showSummary = false
     @State private var showLatestCard = false
+    // DEC-097: in-session ball + oil pickers (reuse Setup's views; a change applies to the NEXT shot only).
+    @State private var showBallSheet = false
+    @State private var showOilSheet = false
+    @State private var oilPatterns: [OilPattern] = []
 
     var reviewSessionId: String? = nil
     var readOnly: Bool = false
@@ -53,10 +57,12 @@ struct SessionView: View {
                 }
                 sessionStatsHeading
                 ringRow
-                // Target line is only adjustable during a live session — hide it in the ended-session review.
+                // Target line + ball/oil are only adjustable during a live session (DEC-071/097) — hidden in review.
                 if !readOnly {
                     sectionHeading("Target Line", action: "Why it matters")
                     targetSteppers
+                    sectionHeading("Ball and oil")
+                    ballOilRows
                 }
                 collapsedRow(title: "Shot history (\(rows.count))", subtitle: historySubtitle)
                 collapsedRow(title: "Lane transition", subtitle: "Inferred from your line, not measured oil")
@@ -71,6 +77,8 @@ struct SessionView: View {
         .background(LSBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        // DEC-119 amends DEC-099: the tab bar is NO LONGER hidden on the Active Session — the user can switch
+        // tabs mid-session and return via the "Session in progress" banner.
         .toolbar { ToolbarItem(placement: .principal) { header } }
         .navigationDestination(isPresented: $showLatestCard) {
             if let r = model.result { ShotCardView(result: r) }
@@ -83,6 +91,50 @@ struct SessionView: View {
         .fullScreenCover(isPresented: $showSummary) {
             SummaryView(summary: model.endSummary).environmentObject(model)
         }
+        // DEC-096: the record → analyze → result flow runs as a cover OVER the Active Session; every exit
+        // inside it returns here. Reload the shot list when it closes so the new shot (or a failed row) shows.
+        .fullScreenCover(isPresented: $model.inLiveCapture, onDismiss: { Task { await load() } }) {
+            CaptureView().environmentObject(model)
+        }
+        // DEC-097: ball + oil pickers reuse Setup's views; selections apply to the next shot (locked per clip).
+        .sheet(isPresented: $showBallSheet) {
+            NavigationStack { BallPickerSheet() }.environmentObject(model).presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showOilSheet) {
+            OilPatternSheet(patterns: oilPatterns,
+                            selectedName: $model.selectedOilPatternName, selectedId: $model.selectedOilPatternId)
+                .presentationDetents([.medium, .large])
+        }
+        .task { if oilPatterns.isEmpty { oilPatterns = (try? await model.makeClient().oilPatterns()) ?? [] } }
+    }
+
+    // DEC-097: current ball + oil, each with a Change control, next to the target line. A change applies to the
+    // NEXT shot only — the clip already recorded/analyzing keeps the ball/oil it was thrown with (server-locked).
+    private var ballOilRows: some View {
+        VStack(spacing: 8) {
+            changeRow(kind: "Ball", value: model.currentBall?.displayName ?? model.currentBallName ?? "Choose a ball") {
+                showBallSheet = true
+            }
+            changeRow(kind: "Oil pattern", value: model.selectedOilPatternName ?? "Choose a pattern") {
+                showOilSheet = true
+            }
+        }
+    }
+
+    private func changeRow(kind: String, value: String, _ action: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(kind.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(0.4).foregroundStyle(LS.textSecondary)
+                Text(value).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Button("Change", action: action)
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
+        }
+        .padding(.horizontal, 14).frame(height: 54)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     // MARK: header + context
@@ -102,11 +154,8 @@ struct SessionView: View {
             if let ball = model.currentBall?.displayName ?? model.currentBallName { chip(ball) }
             if let pat = model.selectedOilPatternName { chip(pat) }
             Spacer()
-            if !readOnly {
-                NavigationLink { SetupView() } label: {
-                    Text("Change").font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link)
-                }
-            }
+            // DEC-096: the session never returns to Session Setup. The target is edited in place via the
+            // Target Line steppers below; changing ball/oil mid-session is a follow-up in-session picker.
         }
     }
 
@@ -282,7 +331,7 @@ struct SessionView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            Button { dismiss() } label: {
+            Button { model.inLiveCapture = true } label: {       // DEC-096: open the camera over the Active Session
                 HStack(spacing: 8) {
                     Image(systemName: "circle.fill").font(.system(size: 13))
                     Text(latest?.seq.map { "Record Shot \($0 + 1)" } ?? "Record shot")

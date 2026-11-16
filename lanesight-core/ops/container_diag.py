@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""In-CONTAINER CV diagnostic (2026-10-29) — runs inside the production image (Cloud Run Job) to root-cause the
+server-vs-Mac lane-geometry gap (DEC-107) and to be the seed of the in-container cv_eval Gate A.
+
+Mac dev (opencv macOS wheel + ffmpeg 9) reads IMG_8753 early-speed ~18.7 / z@9.82≈13.28; the server reads
+~16.04 / z≈11.40 — a ~0.858× down-lane scale. We RULED OUT opencv VERSION (4.10 == 5.0 on the Mac) and the
+system ffprobe (identical pts). This dumps the SAME facts from inside the Linux container so we can confirm the
+remaining suspect: the Linux opencv wheel's bundled decoder produces different pixels → different geometry.
+
+No DB/secrets needed (analyze_clip is DB-free). The clip is fetched from CLIP_URL (a signed/public URL; set
+CLIP_AUTH to send an Authorization header). Prints one JSON blob to stdout → Cloud Run logs.
+"""
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+
+def frame_decode_diag(clip, n=300):
+    """Decode frame `n` of `clip` three ways and return hashes + per-channel stats so a Mac vs Linux run can be
+    diffed to LOCALIZE the gap (DEC-107): (1) raw YUV420P via ffmpeg (native decode, NO colour conversion —
+    should be bit-identical cross-platform), (2) BGR24 via ffmpeg swscale, (3) BGR via cv2.VideoCapture. If the
+    YUV hashes match but the BGR hashes/means differ, the divergence is the YUV->BGR colour conversion."""
+    import hashlib, numpy as np, cv2, json as _json
+    d = {'frame': n}
+    # clip colour metadata (matrix/range/transfer drive the YUV->RGB conversion)
+    try:
+        pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                             'stream=width,height,color_space,color_range,color_transfer,color_primaries,pix_fmt',
+                             '-of', 'json', clip], capture_output=True, text=True).stdout
+        d['meta'] = (_json.loads(pr).get('streams') or [{}])[0]
+    except Exception as e:
+        d['meta'] = f'err {e}'
+
+    def _ff(pixfmt):
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-i', clip, '-vf', f"select=eq(n\\,{n})",
+                            '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', pixfmt, '-'], capture_output=True)
+        return r.stdout
+    try:
+        yuv = _ff('yuv420p')
+        d['yuv420p'] = {'bytes': len(yuv), 'md5': hashlib.md5(yuv).hexdigest(),
+                        'mean': round(float(np.frombuffer(yuv, np.uint8).mean()), 4) if yuv else None}
+    except Exception as e:
+        d['yuv420p'] = f'err {e}'
+    try:
+        bgr = _ff('bgr24')
+        a = np.frombuffer(bgr, np.uint8) if bgr else np.array([])
+        d['bgr_ffmpeg'] = {'bytes': len(bgr), 'md5': hashlib.md5(bgr).hexdigest(),
+                           'mean_bgr': [round(float(a[i::3].mean()), 3) for i in range(3)] if a.size else None}
+    except Exception as e:
+        d['bgr_ffmpeg'] = f'err {e}'
+    try:
+        cap = cv2.VideoCapture(clip)
+        if hasattr(cv2, 'CAP_PROP_ORIENTATION_AUTO'):
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, n)
+        ok, f = cap.read(); cap.release()
+        if ok:
+            d['bgr_cv2'] = {'shape': list(f.shape), 'md5': hashlib.md5(np.ascontiguousarray(f)).hexdigest(),
+                            'mean_bgr': [round(float(f[..., i].mean()), 3) for i in range(3)]}
+        else:
+            d['bgr_cv2'] = 'read failed'
+    except Exception as e:
+        d['bgr_cv2'] = f'err {e}'
+    return d
+
+
+
+def _emit(out):
+    """Print the diag JSON to stdout AND (DEC-116: Cloud Run Job logs are unreliable to read) upload it to GCS
+    at DIAG_OUT_GCS=gs://bucket/object via the Job SA (metadata token), so it can be gsutil-cat'd reliably."""
+    import json as _j
+    print(_j.dumps(out, indent=2))
+    dest = os.environ.get('DIAG_OUT_GCS')
+    if dest and dest.startswith('gs://'):
+        try:
+            import urllib.request as _u
+            bkt, _, obj = dest[5:].partition('/')
+            mreq = _u.Request('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                              headers={'Metadata-Flavor': 'Google'})
+            tok = _j.loads(_u.urlopen(mreq, timeout=10).read())['access_token']
+            url = f'https://storage.googleapis.com/upload/storage/v1/b/{bkt}/o?uploadType=media&name={obj}'
+            req = _u.Request(url, data=_j.dumps(out).encode(), method='POST',
+                             headers={'Authorization': f'Bearer {tok}', 'Content-Type': 'application/json'})
+            _u.urlopen(req, timeout=20).read()
+            print(f'[diag] uploaded result to {dest}')
+        except Exception as e:
+            print(f'[diag] GCS upload failed: {type(e).__name__}: {e}')
+
+
+def main():
+    out = {'python': sys.version.split()[0]}
+    try:
+        import cv2, numpy as np
+        out['cv2'] = cv2.__version__
+        out['numpy'] = np.__version__
+        # opencv's bundled ffmpeg/backends (the decode path is cv2.VideoCapture, NOT system ffmpeg)
+        bi = cv2.getBuildInformation()
+        for line in bi.splitlines():
+            if 'FFMPEG' in line and ':' in line and 'YES' in line.upper():
+                out.setdefault('cv2_ffmpeg', line.strip()); break
+    except Exception as e:
+        print(json.dumps({'error': f'import cv2/numpy: {e}'})); return
+    try:
+        out['system_ffmpeg'] = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True).stdout.splitlines()[0]
+    except Exception as e:
+        out['system_ffmpeg'] = f'err {e}'
+
+    url = os.environ.get('CLIP_URL')
+    if not url:
+        print(json.dumps({**out, 'error': 'set CLIP_URL'})); return
+    headers = {}
+    auth = os.environ.get('CLIP_AUTH')
+    if auth == 'metadata':   # fetch a GCS access token from the Cloud Run metadata server (Job's service account)
+        mreq = urllib.request.Request('http://metadata.google.internal/computeMetadata/v1/instance/'
+                                      'service-accounts/default/token', headers={'Metadata-Flavor': 'Google'})
+        tok = json.loads(urllib.request.urlopen(mreq, timeout=10).read())['access_token']
+        headers['Authorization'] = f'Bearer {tok}'
+    elif auth:
+        headers['Authorization'] = auth
+    clip = '/tmp/diag_clip.mov'
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=120) as r, open(clip, 'wb') as f:
+        f.write(r.read())
+    out['clip_bytes'] = os.path.getsize(clip)
+
+    # frame-level facts (compare to the Mac: nb_frames=885, pts 880@16.67ms + 4@18.33ms, cv2 FRAME_COUNT=885)
+    try:
+        pr = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-count_packets',
+                             '-show_entries', 'stream=r_frame_rate,avg_frame_rate,nb_read_packets,duration',
+                             '-of', 'json', clip], capture_output=True, text=True)
+        out['ffprobe'] = (json.loads(pr.stdout).get('streams') or [{}])[0]
+    except Exception as e:
+        out['ffprobe'] = f'err {e}'
+    cap = cv2.VideoCapture(clip)
+    out['cv2_frame_count'] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    out['cv2_fps'] = round(cap.get(cv2.CAP_PROP_FPS), 4)
+    cap.release()
+    try:
+        from lanesight_core.cv.stabilize import pts
+        ts = np.array(pts(clip)); d = np.diff(ts)
+        u, c = np.unique(np.round(d, 5), return_counts=True)
+        out['pts'] = {'n': len(ts), 'span': round(float(ts[-1] - ts[0]), 4),
+                      'intervals': sorted([(int(cc), float(uu)) for cc, uu in zip(c, u)], reverse=True)[:3]}
+    except Exception as e:
+        out['pts'] = f'err {e}'
+
+    # STEP 1 (DEC-107 localize): per-frame YUV/BGR decode diff (run the SAME on Mac + container, diff the output).
+    # DIAG_FRAME=0 skips it (it does 3 extra full decodes — exclude from a pure analyze-timing run).
+    _nfd = int(os.environ.get('DIAG_FRAME', '300'))
+    if _nfd > 0:
+        try:
+            out['frame_diag'] = frame_decode_diag(clip, _nfd)
+        except Exception as e:
+            out['frame_diag'] = f'err {type(e).__name__}: {e}'
+
+    # DEC-116 numba cross-platform check: md5 of numpy vs numba conversion of the first frames + maxdiff, so a
+    # Mac(arm64)-vs-server(x86) mismatch is localized exactly. DIAG_YUV_HASH=1.
+    if os.environ.get('DIAG_YUV_HASH') == '1':
+        try:
+            import hashlib, subprocess as _sp
+            from lanesight_core.cv import decode as _dec, _yuv_nb as _nb
+            m = _dec.probe_meta(clip); w, h = m['w'], m['h']; fsz = w * h * 3 // 2
+            pr = _sp.Popen(['ffmpeg', '-v', 'error', '-noautorotate', '-i', clip, '-f', 'rawvideo',
+                            '-pix_fmt', 'yuv420p', '-'], stdout=_sp.PIPE, stderr=_sp.DEVNULL, bufsize=fsz)
+            rows = []
+            for k in range(3):
+                b = pr.stdout.read(fsz)
+                npf = _dec.yuv420p_to_bgr(b, w, h, m['cs'], m['range'])
+                ysz = w * h; cw, cc = w // 2, h // 2
+                Y = np.frombuffer(b[:ysz], np.uint8).reshape(h, w).astype(np.int32)
+                U = np.frombuffer(b[ysz:ysz + cw * cc], np.uint8).reshape(cc, cw).astype(np.int32)
+                V = np.frombuffer(b[ysz + cw * cc:ysz + 2 * cw * cc], np.uint8).reshape(cc, cw).astype(np.int32)
+                Kr, Kb = _dec._KRKB[m['cs']]
+                nbf = _nb.convert(Y, U, V, Kr, Kb, m['range'])
+                d = np.abs(npf.astype(int) - nbf.astype(int))
+                rows.append({'frame': k, 'numpy_md5': hashlib.md5(npf.tobytes()).hexdigest()[:12],
+                             'numba_md5': hashlib.md5(nbf.tobytes()).hexdigest()[:12],
+                             'maxdiff': int(d.max()), 'mean': round(float(d.mean()), 3)})
+            pr.terminate()
+            import numba as _nbm
+            out['yuv_hash'] = {'numba_version': _nbm.__version__, 'rows': rows}
+        except Exception as e:
+            import traceback
+            out['yuv_hash'] = {'err': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-500:]}
+        _emit(out); return
+
+    # run the pipeline + dump the geometry signal (z@t≈9.82 is the key: Mac 13.28 vs server 11.40)
+    try:
+        import tempfile, time as _t
+        from lanesight_runner.core import analyze_clip
+        from lanesight_core.cv import stabilize as _stab
+
+        def _one(tag):
+            """One analyze with per-stage timings captured. Prints the 'stabilize sub:' line to stdout."""
+            _stab.reset_decode_stats()
+            tm = {}
+            _t0 = _t.time()
+            rec, _, _ = analyze_clip(clip, os.path.join(tempfile.mkdtemp(), 'x'),
+                                     log=(print if os.environ.get('DIAG_STABSUB') == '1' else (lambda *a: None)),
+                                     timings=tm)
+            d = rec.to_dict() if hasattr(rec, 'to_dict') else rec
+            m = d.get('metrics') or {}; ev = d.get('events') or {}
+            cv = tm.get('cv', {})
+            return {'tag': tag, 'analyze_s': round(_t.time() - _t0, 1), 'ball_speed': (m.get('ball_speed') or {}).get('value'),
+                    'stabilize_s': cv.get('stabilize_s'), 'extract_blobs_s': cv.get('extract_blobs_s'),
+                    'read_pins_s': cv.get('read_pins_s'), 'stab_split': dict(_stab.STAB_TIMING),
+                    'decode': _stab.decode_stats(), 'canonical': os.environ.get('LANESIGHT_FFMPEG_DECODE')}
+
+        # DEC-116: repeat N times in ONE container to profile per-stage (prime vs passA vs solveB vs bg) and its
+        # variance. Toggle canonical on/off via the Job's LANESIGHT_FFMPEG_DECODE env across executions.
+        if os.environ.get('DIAG_ORB_AB') == '1':
+            runs = []
+            for tag, scale, feat in [('orb_0.5_4000', '0.5', '4000'), ('orb_0.35_1500', '0.35', '1500')]:
+                os.environ['LANESIGHT_ORB_SCALE'] = scale; os.environ['LANESIGHT_ORB_FEATURES'] = feat
+                runs.append(_one(tag))
+            out['orb_ab'] = runs
+        else:
+            n = int(os.environ.get('DIAG_REPEAT', '1'))
+            out['runs'] = [_one(f'run{i+1}') for i in range(n)]
+    except Exception as e:
+        import traceback
+        out['result'] = f'err {type(e).__name__}: {e}'; out['tb'] = traceback.format_exc()[-800:]
+    _emit(out)
+
+
+if __name__ == '__main__':
+    main()
