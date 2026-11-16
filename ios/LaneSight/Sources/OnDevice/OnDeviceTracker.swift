@@ -36,6 +36,8 @@ struct BallTrack: Equatable {
     let candidateFrames: Int
     let seconds: Double
     var impactT: Double? = nil          // detected pin-deck arrival time (preferred t_impact)
+    var foulCrossOverride: Double? = nil  // DEC-132: robust bracket-interpolated foul time (learned track); if set,
+                                          // speed() uses it instead of the global-fit foul (small-ball noise skews it)
     // DEC-128 port-parity diagnostics (compared against the server dump to find where the Swift port diverges).
     var thrEff: Int = 0
     var bgLevel: Float = 0
@@ -98,7 +100,7 @@ enum OnDeviceTracker {
         let slope = (n * stu - st * su) / den
         let intc = (su - slope * st) / n
         guard slope > 0 else { return fail("non-monotonic track (ball not clearly moving toward the pins)") }
-        let tFoulCross = (Double(u(Float(foulY))) - intc) / slope     // ball crosses the foul line
+        let tFoulCross = track.foulCrossOverride ?? ((Double(u(Float(foulY))) - intc) / slope)   // ball crosses the foul line
         // t_impact = ball-at-pins ("ball centre at first head-pin contact"). Use the pin-deck MOTION detector
         // (track.impactT), which marks the pin location directly, MINUS the pin-fall latency: a struck pin takes
         // ~0.15 s to move visibly, so the motion spike lags ball-contact by that much (measured +0.17/+0.18 s on
@@ -398,17 +400,19 @@ enum OnDeviceTracker {
     /// frame maximising mean(E after) − mean(E before), walk back to the rise start, subtract the calibrated offset.
     /// NOISY (handheld residual) / WEAK (far/small deck) decks return nil → the caller withholds rather than guesses.
     nonisolated private static func contactChangepoint(url: URL, track: [TrackPoint], lane: ODDetectedLane,
-                                                       vpY: Float, foulY: Float, rot: ODRotation) -> Double? {
+                                                       vpY: Float, foulY: Float, rot: ODRotation,
+                                                       foulTOverride: Double? = nil) -> Double? {
         let pts = track.sorted { $0.t < $1.t }
         guard pts.count >= 6 else { return nil }
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
-        // foul-cross time from the least-squares u = slope·t + intc fit (same as speed())
+        // foul-cross time from the least-squares u = slope·t + intc fit (same as speed()), or the caller's robust
+        // bracket-interpolated foul when provided (the learned track's global fit is small-ball-noise skewed).
         var n = 0.0, st = 0.0, su = 0.0, stt = 0.0, stu = 0.0
         for p in pts { let t = Double(p.t), uu = Double(u(p.contactRow)); n += 1; st += t; su += uu; stt += t*t; stu += t*uu }
         let den = n*stt - st*st; guard abs(den) > 1e-9 else { return nil }
         let slope = (n*stu - st*su)/den, intc = (su - slope*st)/n
         guard slope > 0 else { return nil }
-        let tFoul = (Double(u(foulY)) - intc) / slope
+        let tFoul = foulTOverride ?? ((Double(u(foulY)) - intc) / slope)
         // deck ROI: head-pin row ≈ the ball's farthest tracked row; width from the lane geometry there
         let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
         let head = far.contactRow, farD = expDiam(lane, head)
@@ -483,14 +487,17 @@ enum OnDeviceTracker {
     /// otherwise a sustained hotness IS the contact (do NOT drag it to a far point sitting past the pins).
     /// Public wrapper: pin-contact time (changepoint, else 5σ) for a track built OUTSIDE track() — the DEC-131
     /// learned fallback uses it so its track gets the same frame-accurate t_impact as the classical path.
-    nonisolated static func impactTime(url: URL, track: [TrackPoint], geo: ODLaneGeometry, rot: ODRotation) -> Double? {
+    nonisolated static func impactTime(url: URL, track: [TrackPoint], geo: ODLaneGeometry, rot: ODRotation,
+                                       foulTOverride: Double? = nil) -> Double? {
         guard let lane = geo.lanes.first, let vp = geo.vanishingPoint, let first = track.min(by: { $0.t < $1.t }) else { return nil }
         let foulY = Float(geo.foulLineY ?? Int(lane.yNear))
-        return detectImpact(url: url, track: track, lane: lane, vpY: vp.y, afterT: first.t, foulY: foulY, rot: rot)
+        return detectImpact(url: url, track: track, lane: lane, vpY: vp.y, afterT: first.t, foulY: foulY, rot: rot,
+                            foulTOverride: foulTOverride)
     }
 
     nonisolated private static func detectImpact(url: URL, track: [TrackPoint], lane: ODDetectedLane,
-                                                 vpY: Float, afterT: Double, foulY: Float, rot: ODRotation = .r0) -> Double? {
+                                                 vpY: Float, afterT: Double, foulY: Float, rot: ODRotation = .r0,
+                                                 foulTOverride: Double? = nil) -> Double? {
         let pts = track.sorted { $0.t < $1.t }
         guard pts.count >= 4 else { return nil }
         // DEC-131: the frame-diff CHANGEPOINT is the primary pin-contact timer (frame-accurate on a clean deck).
@@ -499,7 +506,7 @@ enum OnDeviceTracker {
         // on-device track) and it would emit a plausible-but-wrong speed — reject and fall through / withhold.
         func uu(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
         let farT = Double(pts.max(by: { uu($0.contactRow) < uu($1.contactRow) })!.t)
-        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot),
+        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot, foulTOverride: foulTOverride),
            cp >= farT - 0.1, cp <= farT + 0.5 {
             return cp
         }

@@ -100,7 +100,8 @@ enum OnDeviceShadow {
                 let cAvg = sp.avgFoulToPinsMph
                 if let (ltrack, lgeo) = stage("learned") { () -> (BallTrack, ODLaneGeometry)? in
                     guard var r = det.buildTrack(url: clipURL, rot: rot, baseGeo: geo) else { return nil }
-                    r.0.impactT = OnDeviceTracker.impactTime(url: clipURL, track: r.0.points, geo: r.1, rot: rot)
+                    r.0.impactT = OnDeviceTracker.impactTime(url: clipURL, track: r.0.points, geo: r.1, rot: rot,
+                                                             foulTOverride: r.0.foulCrossOverride)
                     return r
                 } {
                     let lsp = OnDeviceTracker.speed(track: ltrack, geo: lgeo)
@@ -111,6 +112,12 @@ enum OnDeviceShadow {
                     if let ti = lsp.tImpact { diag["learned_timpact"] = ti }
                     if let it = ltrack.impactT { diag["learned_impactT_raw"] = it }
                     if let fp = ltrack.points.first?.t, let lp2 = ltrack.points.last?.t { diag["learned_tspan"] = [fp, lp2] }
+                    if let vp = lgeo.vanishingPoint, let fy = lgeo.foulLineY {
+                        let cts = ltrack.points.map { $0.contactRow }
+                        let nearFoul = ltrack.points.filter { abs($0.contactRow - Float(fy)) < 120 }.count
+                        diag["learned_geo"] = ["foulY": fy, "vpY": Double(vp.y), "ctMin": Double(cts.min() ?? 0),
+                                               "ctMax": Double(cts.max() ?? 0), "nearFoul": nearFoul, "npts": ltrack.points.count]
+                    }
                     // Reconcile. Classical + changepoint is the validated primary; the learned detector's job here
                     // is COVERAGE — rescue clips the classical tracker drops. Use it only when classical has no
                     // speed. (The server's ENGINE_DISAGREE cross-check needs a server-accurate learned speed; the

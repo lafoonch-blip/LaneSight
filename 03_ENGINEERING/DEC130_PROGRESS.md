@@ -26,6 +26,20 @@ detection pipeline was never built on-device; on-device is classical-only). Mode
 (`ios/LaneSight/Models/Ball{Lane,Pins}Detector.mlpackage`, gitignored) as the foundation. This is the remaining work
 for on-device parity → deploy → install.
 
+## v10 (2026-11-16) — learned track→speed root-caused to track NOISE (needs Priority-2 robust linking)
+Priority-1 tuning (robust bracket foul-cross + arrival-guarded changepoint) improved but did not fix the learned
+speed (8966 24.9→20.7, still +3.4). Root cause, fully traced: the on-device learned track carries **spurious
+far-down-lane detections** (a false positive — pin/reflection — at u higher than the real ball). That spurious point
+becomes the max-u "far point", so (a) the arrival guard anchors the changepoint there and (b) the changepoint locks
+onto a false early deck-motion event (8966 impact 10.36 vs true 11.54). The foul is separately noisy (global linear
+u-fit skewed by sparse small-ball down-lane positions). Added: a learned-lane sanity guard (rejects the garbage VP
+e.g. −141764), a bracket-interpolated foul-cross threaded into speed() + the changepoint, reconciliation set to
+fallback-only. The real fix is **Priority 2**: tiled native-res crops along the lane ROI (accurate small/far-ball
+positions) + **constant-acceleration linking** (reject spurious points, densify sparse tracks) — i.e. port the
+server's `detect_in_crop` + a quadratic trajectory model. Then a reliable changepoint, then on-device ENGINE_DISAGREE.
+On-device full-22 = 4/22 (vs server 10/22). Detector itself is solid (real tracks, 58–97 pts). Gated LS_LEARNED_ONDEVICE;
+shipping = classical + changepoint (installed).
+
 ## v9 (2026-11-16) — PHASE 1 SHIPPED; on-device detector FIXED; learned track→speed tuning remains
 **Phase 1 DONE.** Merged `origin/feat/form-ondevice` (shot-side DEC-131 renumbered → **DEC-132**; form keeps DEC-131),
 pushed. **Deployed** `lanesight-api-47dfd3b` (golden gate 7/7 + smoke pass 18.675 vs 18.71±0.2; expected_rev bumped;

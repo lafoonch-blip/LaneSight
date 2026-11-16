@@ -120,8 +120,11 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         }
         guard let le = edge(p.foulL, p.vp), let re = edge(p.foulR, p.vp) else { return nil }
         let yNear = Int(max(p.foulL.1, p.foulR.1)), yFar = Int(p.vp.1)
-        guard yNear > yFar + 20 else { return nil }
+        // Sanity: the VP must be a plausible up-screen point (the lane head sometimes regresses garbage, e.g.
+        // vpY -141764). A bogus VP makes every contactRow/u wrong → a plausible-but-wrong speed; reject instead.
+        guard yNear > yFar + 60, yFar > -4000, p.vp.1 > -4000 else { return nil }
         let w = (re.a*Float(yNear)+re.b) - (le.a*Float(yNear)+le.b)
+        guard abs(w) > 20, abs(w) < 4000 else { return nil }
         return ODDetectedLane(left: le, right: re, yNear: yNear, yFar: yFar, widthNearPx: abs(w))
     }
 
@@ -208,7 +211,19 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
             if sl > 0 { inl = pts.filter { abs(Double(u($0.contactRow)) - (sl*$0.t+ic)) <= tol } }
         }
         guard inl.count >= 6 else { return nil }
-        let bt = BallTrack(points: inl, framesScanned: scanned, candidateFrames: raw.count, seconds: 0)
+        // robust foul-cross: interpolate t where u(t) crosses u(foulRow) between the two bracketing track points
+        // (the global linear fit is skewed by noisy down-lane small-ball positions; the near-foul ball is big and
+        // well-located, so the bracket is accurate). u increases foul→pins, so find u0 < uf <= u1.
+        let uf = u(Float(L.yNear))
+        var foulOv: Double? = nil
+        for k in 1..<inl.count {
+            let u0 = u(inl[k - 1].contactRow), u1 = u(inl[k].contactRow)
+            if u0 < uf, u1 >= uf, u1 != u0 {
+                foulOv = inl[k - 1].t + Double((uf - u0) / (u1 - u0)) * (inl[k].t - inl[k - 1].t); break
+            }
+        }
+        var bt = BallTrack(points: inl, framesScanned: scanned, candidateFrames: raw.count, seconds: 0)
+        bt.foulCrossOverride = foulOv
         let geo = ODLaneGeometry(lanes: [L], vanishingPoint: SIMD2<Float>(0, vpY), foulLineY: L.yNear,
                                  satFloorUsed: 0, imageSize: baseGeo.imageSize)
         return (bt, geo)
