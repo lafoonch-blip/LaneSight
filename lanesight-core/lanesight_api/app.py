@@ -1384,7 +1384,10 @@ def _process_avatar(data: bytes) -> bytes:
             src, dst = _os.path.join(td, 'in'), _os.path.join(td, 'out.jpg')
             with open(src, 'wb') as f:
                 f.write(data)
-            r = subprocess.run(['sips', '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+            try:
+                r = subprocess.run(['sips', '-s', 'format', 'jpeg', src, '--out', dst], capture_output=True)
+            except OSError:                                 # no `sips` (Linux / Cloud Run): treat as unreadable
+                raise ValueError('unsupported image format')
             if r.returncode != 0 or not _os.path.exists(dst):
                 raise ValueError('unsupported image format')
             img = Image.open(dst); img.load()
