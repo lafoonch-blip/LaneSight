@@ -1,7 +1,49 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-15 (DEC-131: audio REMOVED, no mic; building the visual pin-contact classifier — see v5).
+**Last updated:** 2026-11-16 (v11: DEC-132 staged port — Stage 1 detector parity PASSED; speed gate root-caused to missing on-device stabilization — see v11).
+
+## v11 (2026-11-16) — DEC-132 staged port: Stage 1 PASSED; gate root-caused to on-device stabilization
+Porting the server learned pipeline to on-device piece-by-piece, each validated vs the server golden JSON on the 22
+clips (per-stage parity harness: `scratchpad/detector_parity.py` + `dump_server_golden.py`; golden in
+`~/LaneSightData/dec130/golden/`).
+
+**Stage 1 (detector input parity) — PASSED, committed 97d27df.** Ported the server offset-head sub-cell refinement
+(`cx=(px+ox)*st/s`) into on-device `detect()` + `detectInCrop()`. Without it the bare stride-4 cell quantises ball
+position to ~15 px. Parity harness (device `learned_dets` vs server golden, time-aligned per clip to absorb the
+device/server trim offset): **median-of-medials 2.6 px over 16 aligned clips; 11 ≤10 px, 15 ≤25 px.** 8966 156
+matched @2.9px, 8964 150 @1.0px, 8974 82 @1.1px. Only 8977 (moving camera) at 292px.
+
+**Stage 3 (robust linking) — committed (faithful port), but does NOT move the gate.** Added static-artifact
+rejection + lateral-fraction consistency + min-depth seed gate + segment trimming (server `link()` lines 120-173) to
+`buildTrack`. Builds, links on 3 more clips. **But the reported `speed_avg_foul_to_pins` was byte-identical before
+and after** → proof the metric is the CLASSICAL engine's; the learned engine never influences it (reconciliation is
+fallback-only, classical always emits something).
+
+**GROUND-TRUTH accuracy (true speed = 60 ft / (pin_f−foul_f)/fps, all 22 clips):**
+| engine | n speeds | MAE | max err |
+|---|---|---|---|
+| server (learned path) | 5 | **0.27 mph** | 0.51 |
+| on-device (reconciled = classical) | 12–13 | **2.75–2.89 mph** | **7.81** |
+
+The device's extra numbers are **plausible-but-wrong**: 8970 says 9.6 mph for a 17.4 mph ball, 8963 10.3 for 17.9.
+
+**ROOT CAUSE of the speed gate (numbers-backed):** every wrong clip is **handheld** (IMG_8963–8981); the accurate
+ones are **tripod** (8751/8966/8967, err 0.04–0.45). The on-device detector + classical tracker run on **RAW frames**
+— the server runs on **STABILIZED** frames. On handheld, camera motion corrupts the track: classical UNDER-estimates
+(9–15 mph), learned OVER-estimates (23–30 mph) — opposite directions, so not a scale bug, it's event-timing drift
+from camera motion. Tripod clips are correct because raw≈stabilized there.
+
+**ENGINE_DISAGREE (Stage 5) alone cannot reach zero-wrong** (modeled from `learned_avg` vs classical): withholds the
+2 worst (8963, 8970) but 6 wrong survive — 8969/8972/8973 **agree-wrong** (both engines ~14/15/13), and 8964/8974/8978
+are classical-only (no cross-check) — and it wrongly kills good classical on 8752.
+
+**THE missing piece = Stage 1's other half: stabilized frames on-device.** `OnDeviceStabilizer.swift` exists
+(`VNHomographicImageRegistrationRequest`, per-frame homography) but `buildTrack` never applies it. NEXT: integrate
+register→warp→detect per frame in `buildTrack` (and the classical tracker), re-validate handheld. RISK: Vision
+registration may not lock onto low-texture lanes (server uses ORB+RANSAC, which Vision doesn't expose). If Vision
+registration is too weak, fall back to a **camera-stability gate** (withhold when `meanTranslationPx` is high) which
+guarantees zero-wrong by reporting only tripod clips — safe, but sacrifices the handheld coverage DEC-130 targets.
 
 ## v7 (2026-11-16) — production dual-engine + iOS changepoint; on-device parity gap found
 **Server production path** (`ops/production_engine.py`): classical `analyze_clip` + learned `analyze_learned`
