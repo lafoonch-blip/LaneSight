@@ -1,7 +1,36 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-16 (v12: DEC-132 Stage 4 withholding — on-device WRONG 9→2; remaining 2 need the pin-detector port — see v12).
+**Last updated:** 2026-11-16 (v13: pin-detector head-pin anchor wired — 5 correct, pin infra working; 2 remain; device locked mid-refinement — see v13).
+
+## v13 (2026-11-16) — pin detector wired on-device: 5 correct, head-pin anchor working
+Wired the bundled **BallPinsDetector** (same CenterNet arch; pins = heatmap ch1) into the impact timer (committed
+**8746e70**). `pinsHeadRow` decodes the pins channel on an early frame (pins static pre-impact), target-lane filters
++ y-clusters, takes the nearest pin row; `detectImpact` anchors to the GEOMETRIC head-pin arrival (track time the ball
+reaches that row) instead of the ball's farthest tracked point (which overshoots ~0.5 s into the pit). Pins present but
+none found → withhold (server parity).
+
+**On-device, all 22 vs ground truth — progression this session:**
+| build | correct (≤1 mph) | wrong (>1 mph) | notes |
+|---|---|---|---|
+| start | 4 | 9 | far-extent fabricated impacts |
+| S4 withhold (b657426) | 4 | 2 (8969,8973) | withhold when no measured impact |
+| head-pin anchor (8746e70) | **5** | 2 (8968 1.05, 8969 3.8) | **recovers 8964** (server withholds it!), **fixes 8973** |
+
+Correct: 8751 .04, 8752 .64, **8964 .47**, 8966 .45, 8967 .42. MAE 0.98.
+
+**UNCOMMITTED (built, NOT yet validated — device auto-locked mid-run):** a crossing-required guard — if the head pin
+is detected but the ball's (sparse) track never REACHES that row, there is no geometric contact time, so withhold
+(targets 8969, whose 41-pt track never crosses the head-pin row → `anchorT` fell back to the overshoot). Expected to
+drop 8969 → **5 correct / 1 borderline (8968 1.05)**. Needs the iPhone UNLOCKED to validate + commit (OnDeviceGateTests
+can't launch on a locked device). 8968 (1.05) and strict zero-wrong likely need the motion-vs-geom cross-check and/or
+the trained pin-contact classifier (a bigger port).
+
+**NEXT:** (1) device unlocked → re-run the crossing-required build, validate, commit; (2) motion-vs-geom cross-check to
+withhold 8968; (3) when 0 wrong on 22 → remove `LS_LEARNED_ONDEVICE`, install Release, report the iPhone table. All
+commits local on feat/ios-lane-parity (gate not passed → not pushed).
+
+## v12 (2026-11-16) — DEC-132 Stage 4 (withholding): on-device WRONG 9→2, 4 correct kept
 
 ## v12 (2026-11-16) — DEC-132 Stage 4 (withholding): on-device WRONG 9→2, 4 correct kept
 **The gate blocker was WITHHOLDING discipline, and the fix is a single faithful change.** `speed()` fell back to
