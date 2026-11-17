@@ -38,12 +38,23 @@ from camera motion. Tripod clips are correct because raw≈stabilized there.
 2 worst (8963, 8970) but 6 wrong survive — 8969/8972/8973 **agree-wrong** (both engines ~14/15/13), and 8964/8974/8978
 are classical-only (no cross-check) — and it wrongly kills good classical on 8752.
 
-**THE missing piece = Stage 1's other half: stabilized frames on-device.** `OnDeviceStabilizer.swift` exists
-(`VNHomographicImageRegistrationRequest`, per-frame homography) but `buildTrack` never applies it. NEXT: integrate
-register→warp→detect per frame in `buildTrack` (and the classical tracker), re-validate handheld. RISK: Vision
-registration may not lock onto low-texture lanes (server uses ORB+RANSAC, which Vision doesn't expose). If Vision
-registration is too weak, fall back to a **camera-stability gate** (withhold when `meanTranslationPx` is high) which
-guarantees zero-wrong by reporting only tripod clips — safe, but sacrifices the handheld coverage DEC-130 targets.
+**STABILISATION TRIED AND DISPROVEN (2026-11-16).** Integrated per-frame `VNHomographicImageRegistrationRequest` into
+`buildTrack` (register each rotated frame to the first, map the ball centre through the homography into reference
+space) and re-ran all 22 on-device. Result: **learned speeds byte-identical** (8963 30.20 vs 30.21, 8970 25.52 vs
+25.55) and detector parity slightly WORSE (2.6→3.1 px). Reason: the detector positions **already match the server
+(stabilised) golden to ~1-2 px on RAW frames** (8963 0.8px) — these validation clips are near-static, so the camera
+-motion theory was wrong. Reverted the stabilisation loop (it only adds Vision latency + registration noise); kept the
+harmless `detectRotated` refactor. Camera motion is NOT the blocker.
+
+**CORRECTED ROOT CAUSE = WITHHOLDING discipline (not positions, not stabilisation).** On 8963 the positions are perfect
+(1px) yet the device emits 10.26 (classical) / 30.20 (learned) while the server **withholds** (PIN_IMPACT_NOT_DETECTED).
+The error is in EVENT TIMING / the best-effort fallback: both on-device engines force a speed where the server returns
+unavailable. The server's `detect_impact` returns None when pin motion isn't confidently detected; the device's
+classical impact path + the learned "best_effort: trajectory anchors" fallback emit a number anyway.
+**NEXT: port the server's withholding to BOTH on-device speed paths** — make the impact/changepoint confidence gate
+return unavailable (no best-effort trajectory-anchor fallback) so the device withholds exactly where the server does.
+Target: match the server's 5-speed / MAE-0.27 / zero-wrong profile. This is the gate lever; Stages 2-3 (detector,
+linker) are done and correct but cannot move a classical-dominated, over-producing output.
 
 ## v7 (2026-11-16) — production dual-engine + iOS changepoint; on-device parity gap found
 **Server production path** (`ops/production_engine.py`): classical `analyze_clip` + learned `analyze_learned`

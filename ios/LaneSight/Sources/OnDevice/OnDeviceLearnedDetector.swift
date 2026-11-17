@@ -65,6 +65,12 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
     /// Run the detector on one BGRA frame. Returns the ball peak (full-frame coords) over `thr`, and the lane params.
     func detect(_ px: CVPixelBuffer, rot: ODRotation, thr: Float = 0.3) -> (ball: ODBallDet?, lane: ODLaneParams?) {
         guard let buf = OnDeviceDecode.rotated(px, rot) else { return (nil, nil) }
+        return detectRotated(buf, thr: thr)
+    }
+
+    /// detect() on an ALREADY rotation-corrected buffer. Split out so buildTrack can rotate once, register the frame
+    /// for stabilisation, and detect — all in the same (rotated) coordinate space — without rotating twice.
+    func detectRotated(_ buf: CVPixelBuffer, thr: Float = 0.3) -> (ball: ODBallDet?, lane: ODLaneParams?) {
         CVPixelBufferLockBaseAddress(buf, .readOnly); defer { CVPixelBufferUnlockBaseAddress(buf, .readOnly) }
         let W = CVPixelBufferGetWidth(buf), H = CVPixelBufferGetHeight(buf)
         let rb = CVPixelBufferGetBytesPerRow(buf)
@@ -194,6 +200,12 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         var raw: [(t: Double, cx: Float, cy: Float)] = []; var laneAcc: [ODLaneParams] = []; var idx = 0; var scanned = 0
         let STRIDE = 3           // run the detector on every 3rd frame — enough points for the fit, and bounds the
                                  // per-frame 3 MB MLMultiArray allocation (memory + latency) on long/120fps clips.
+        // NOTE: per-frame homographic stabilisation was TRIED here (register each rotated frame to the first via
+        // VNHomographicImageRegistrationRequest, map the ball centre into reference space) on the theory that camera
+        // motion corrupted the trajectory. It did NOT help: the detector positions already match the SERVER (stabilised)
+        // golden to ~1-2 px on RAW frames — the validation clips are near-static, so stabilisation is a near-identity
+        // map that only adds Vision latency and a little registration noise (parity 2.6->3.1 px). The real speed gap is
+        // WITHHOLDING discipline (event timing / best-effort fallback), not positions — so we detect on raw frames.
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return nil }
             defer { idx += 1 }
@@ -203,7 +215,7 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
                 let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb)); scanned += 1
                 let (ball, lane) = detect(raw0, rot: rot)
                 if let l = lane { laneAcc.append(l) }
-                if let b = ball { raw.append((t, b.cx, b.cy)) }   // (crop-refine needs a 2-pass over a validated track)
+                if let b = ball { raw.append((t, b.cx, b.cy)) }
             }
         }
         Self.lastRaw = raw.map { [$0.t, Double($0.cx), Double($0.cy)] }   // parity harness
