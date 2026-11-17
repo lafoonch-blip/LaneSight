@@ -230,12 +230,33 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         }
         pts.sort { $0.t < $1.t }
         guard pts.count >= 6 else { return nil }
+        // STATIC-ARTIFACT REJECTION (server link() lines 127-131): a detection that reappears at the SAME spot over
+        // 0.25–1.5 s is a stationary false positive (lane reflection, a pin, a floor mark the detector fires on), not
+        // a rolling ball. Drop any point with >=6 such near-in-space, spread-in-time neighbours BEFORE the RANSAC —
+        // these are the detections that corrupt the fit into a "non-monotonic track".
+        do {
+            let cxA = pts.map { Double($0.cx) }, ctA = pts.map { Double($0.contactRow) }
+            let tA = pts.map { $0.t }, dA = pts.map { Double(expDiam(L, $0.contactRow)) }
+            var keep: [TrackPoint] = []
+            for k in 0..<pts.count {
+                var near = 0
+                for j in 0..<pts.count {
+                    let dt = abs(tA[j] - tA[k])
+                    if dt > 0.25, dt < 1.5, hypot(cxA[j]-cxA[k], ctA[j]-ctA[k]) < 0.25*dA[k] { near += 1 }
+                }
+                if near < 6 { keep.append(pts[k]) }
+            }
+            if keep.count >= 6 { pts = keep }
+        }
         // The detector fires on EVERY frame (pins, neighbour balls, non-shot frames too), so a plain fit over all
         // points is garbage. RANSAC the ball's u(t)=1/(ct−vpY) line: the shot is the largest set of detections on a
         // single straight, increasing-u (down-lane), positive-slope track. tol scales with the u range.
         let U = pts.map { Double(u($0.contactRow)) }
+        let F = pts.map { Double($0.frac) }                                   // lateral fraction, smooth along a real track
+        let Dp = pts.map { Double(expDiam(L, $0.contactRow)) }
         let uSpan = max((U.max() ?? 0) - (U.min() ?? 0), 1e-4)
         let tol = max(0.06 * uSpan, 0.0015)
+        let fracTol = 0.12                                                    // server link() lateral gate (coarse)
         var bestInl: [TrackPoint] = []
         let N = pts.count
         // cap the RANSAC SEED pairs to a uniform subsample (≤160) so it stays O(seeds²·N) on long clips; inliers are
@@ -249,9 +270,14 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
                 let dt = pts[j].t - pts[i].t
                 guard dt > 0.1 else { continue }
                 let sl = (U[j] - U[i]) / dt; guard sl > 0 else { continue }
+                // server seed gate: the two seed frames must span real depth (>=1.5 ball diameters), else a pair of
+                // near-coincident detections defines a near-flat line that admits everything.
+                guard Double(pts[i].contactRow) - Double(pts[j].contactRow) >= 1.5 * Dp[j] else { continue }
                 let ic = U[i] - sl * pts[i].t
+                let fsl = (F[j] - F[i]) / dt, fic = F[i] - fsl * pts[i].t     // lateral model from the seed pair
                 var inl: [TrackPoint] = []
-                for k in 0..<N where abs(U[k] - (sl*pts[k].t + ic)) <= tol { inl.append(pts[k]) }
+                for k in 0..<N where abs(U[k] - (sl*pts[k].t + ic)) <= tol
+                                  && abs(F[k] - (fsl*pts[k].t + fic)) <= fracTol { inl.append(pts[k]) }
                 if inl.count > bestInl.count { bestInl = inl }
             }
         }
@@ -276,6 +302,26 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
             let cut = max(med + 4 * (1.4826 * mad), 10.0)
             let kept = zip(inl, res).filter { $1 <= cut }.map { $0.0 }
             if kept.count >= 6 { inl = kept }
+        }
+        guard inl.count >= 6 else { return nil }
+        // SEGMENT TRIM (server link() lines 164-172): split the inliers into runs separated by >0.25 s gaps, then
+        // drop a trailing run that is tiny or that follows a long (>0.4 s) gap and is small next to the main track
+        // (post-impact pit debris the detector fires on) — it otherwise owns the max-u "far point" that anchors the
+        // changepoint/impact at the wrong frame. Also drop a stray <2-point leading run (pre-roll false positive).
+        if !inl.isEmpty {
+            inl.sort { $0.t < $1.t }
+            var segs: [[TrackPoint]] = [[inl[0]]]
+            for c in inl.dropFirst() {
+                if c.t - segs[segs.count-1].last!.t < 0.25 { segs[segs.count-1].append(c) } else { segs.append([c]) }
+            }
+            func rest(_ k: Int) -> Int { segs[0..<k].reduce(0) { $0 + $1.count } }
+            while segs.count > 1,
+                  segs.last!.count < 4 || (segs.last!.first!.t - segs[segs.count-2].last!.t > 0.4
+                                           && Double(segs.last!.count) < 0.25 * Double(rest(segs.count-1))) {
+                segs.removeLast()
+            }
+            while segs.count > 1, segs[0].count < 2 { segs.removeFirst() }
+            inl = segs.flatMap { $0 }
         }
         guard inl.count >= 6 else { return nil }
         // robust foul-cross: interpolate t where u(t) crosses u(foulRow) between the two bracketing track points
