@@ -9,7 +9,7 @@ import Foundation
 /// events that fail the honesty gate are withheld, but step count / approach duration / tempo still return.
 nonisolated enum OnDeviceFormEngine {
     static let backendVersion = "ios-form-pose-0.1.0"   // mirrors pose.POSE_BACKEND_VERSION "form-pose-0.1.0"
-    static let formVersion = "form-0.0.0"
+    static let formVersion = "form-1.0.0"   // DEC-131: pose backend implemented (server + on-device parity)
     typealias LM = FormPoseLandmarker.LM
 
     /// Does a windowed pose pass actually contain the delivery AND yield swing events? Mirrors analyze's own
@@ -348,12 +348,15 @@ nonisolated enum OnDeviceFormEngine {
         ]
         _ = intervals; _ = ballHipToRelease; _ = firstToRelease   // diagnostics parity (surfaced server-side)
 
-        // analyze_form_clip layer: detected view + view gating of positions
-        let view = FormEngine.classifyViewFromPose(t, frames).view
+        // analyze_form_clip layer: detected view + view gating of positions. Refine the view now the clean
+        // approach window (firstStep → holdStart) is known — the full posed span alone mis-reads a real rear clip
+        // as side when the bowler walked around a lot (DEC-131). Mirrors pose.analyze's re-classification.
+        let refinedView = FormEngine.classifyViewFromPose(t, frames, approach: (firstStep, holdStart))
+        let view = refinedView.view
         positions = FormFundamentals.gatePositions(positions, view: view)
 
         return FormAnalysis(
-            formVersion: formVersion, view: view, viewInfo: viewInfo, status: "ok", handed: handed, fps: fps,
+            formVersion: formVersion, view: view, viewInfo: refinedView, status: "ok", handed: handed, fps: fps,
             metrics: metrics, measuredPositions: positions, events: events, eventsGateReasons: evReasons,
             strikes: plants, stepIntervals: intervals, swingSource: swSrc,
             slowmo: (isSlow, factor, slowNote), stageReport: stage)

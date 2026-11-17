@@ -70,7 +70,9 @@ struct FormCardView: View {
 
     /// Slim honest note that v1 form metrics are early (the view/fps now live in the nav subtitle).
     private var contextHeader: some View {
-        Text("Early form analysis (\(result.formFooter?.form_version ?? result.formVersion ?? "form-0.0.0")). Treat these as directional, not exact.")
+        let ver = result.formFooter?.form_version ?? result.formVersion
+        let verPart = ver.map { " (\($0))" } ?? ""   // show the real engine version, never a fabricated 0.0.0
+        return Text("Early form analysis\(verPart). Treat these as directional, not exact.")
             .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -564,7 +566,11 @@ private struct TimingCheckpointRow: View {
     private enum Verdict: Equatable {
         case early, onTime, late, unavailable
         init(_ raw: String?, status: String?) {
-            if (status ?? "").lowercased() == "unavailable" { self = .unavailable; return }
+            // A verdict is only shown when the checkpoint was actually measured. A missing/empty status, an
+            // "unavailable" status, or a nil verdict all collapse to UNAVAILABLE — never a stale "early"/"late"
+            // leaking through when its underlying event (E4 top-of-swing, E7 release, …) wasn't located.
+            let ok = ["measured", "ok", "best_effort", "low_confidence"].contains((status ?? "").lowercased())
+            guard ok else { self = .unavailable; return }
             switch raw?.lowercased() {
             case "early": self = .early
             case "late": self = .late

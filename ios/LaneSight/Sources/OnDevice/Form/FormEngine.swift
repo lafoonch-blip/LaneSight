@@ -444,30 +444,48 @@ nonisolated enum FormEngine {
         return "Shoulder"
     }
 
-    /// classify_view_from_pose → {view, confidence, reason} (MVP-03).
-    static func classifyViewFromPose(_ t: [Double], _ frames: [Frame]) -> (view: String, confidence: Double, reason: String) {
-        var okMask = [Bool](repeating: false, count: frames.count)
-        var okCount = 0
+    /// dy/dx of the hip centroid over [lo,hi] (or the whole track), with ok-fraction. ratio is nil if too few
+    /// clear frames or the bowler barely moves. Mirrors pose._hip_travel_ratio.
+    private static func hipTravelRatio(_ t: [Double], _ frames: [Frame], _ lo: Double? = nil,
+                                       _ hi: Double? = nil) -> (ratio: Double?, frac: Double, tooFew: Bool) {
+        var hipX = [Double](), hipY = [Double](), okCount = 0, total = 0
         for i in 0..<frames.count {
+            if let lo, let hi, !(t[i] >= lo && t[i] <= hi) { continue }
+            total += 1
             let r = frames[i].lm
             let ok = Double(r[LM.lShoulder][3]) > MIN_VIS && Double(r[LM.rShoulder][3]) > MIN_VIS
                 && Double(r[LM.lHip][3]) > MIN_VIS && Double(r[LM.rHip][3]) > MIN_VIS
-            okMask[i] = ok; if ok { okCount += 1 }
+            if ok {
+                okCount += 1
+                hipX.append((Double(r[LM.lHip][0]) + Double(r[LM.rHip][0])) / 2)
+                hipY.append((Double(r[LM.lHip][1]) + Double(r[LM.rHip][1])) / 2)
+            }
         }
-        if okCount < 8 { return ("unknown", 0.0, "Not enough clear pose frames to tell the camera view.") }
-        var hipX = [Double](), hipY = [Double]()
-        for i in 0..<frames.count where okMask[i] {
-            let r = frames[i].lm
-            hipX.append((Double(r[LM.lHip][0]) + Double(r[LM.rHip][0])) / 2)
-            hipY.append((Double(r[LM.lHip][1]) + Double(r[LM.rHip][1])) / 2)
-        }
+        if okCount < 8 { return (nil, 0.0, true) }
         let dx = FormSignal.nanmax(hipX) - FormSignal.nanmin(hipX)
         let dy = FormSignal.nanmax(hipY) - FormSignal.nanmin(hipY)
-        if Swift.max(dx, dy) < 0.08 {
+        let frac = Double(okCount) / Double(Swift.max(total, 1))
+        if Swift.max(dx, dy) < 0.08 { return (nil, frac, false) }
+        return (dy / Swift.max(dx, 1e-3), frac, false)
+    }
+
+    /// classify_view_from_pose → {view, confidence, reason} (MVP-03). When the delivery's `approach`=(firstStep,
+    /// holdStart) window is known, takes the MAX of the full (posed-span) and approach-window hip dy/dx so a rear
+    /// camera is caught whichever phase shows the toward-pins / toward-camera vertical travel (DEC-131). Parity
+    /// with pose.classify_view_from_pose.
+    static func classifyViewFromPose(_ t: [Double], _ frames: [Frame],
+                                     approach: (Double, Double)? = nil) -> (view: String, confidence: Double, reason: String) {
+        let full = hipTravelRatio(t, frames)
+        if full.tooFew { return ("unknown", 0.0, "Not enough clear pose frames to tell the camera view.") }
+        guard var ratio = full.ratio else {
             return ("unknown", 0.1, "The bowler barely moves in frame — the camera view is unclear (check framing).")
         }
-        let frac = Double(okCount) / Double(frames.count)
-        if dy / Swift.max(dx, 1e-3) < 0.30 {
+        if let approach {
+            let appr = hipTravelRatio(t, frames, approach.0, approach.1)
+            if let ra = appr.ratio { ratio = Swift.max(ratio, ra) }
+        }
+        let frac = full.frac
+        if ratio < 0.30 {
             return ("down_lane", round2(0.5 + 0.2 * frac), "The bowler moves across the frame — a side (profile) view.")
         }
         return ("rear", round2(0.4 + 0.2 * frac), "The bowler moves up the frame toward the pins — a rear view.")

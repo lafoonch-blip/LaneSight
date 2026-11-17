@@ -850,29 +850,54 @@ def export_key_frames(video, out_prefix, events, crops=None, log=print) -> list:
     return [key for key, _ in KEY_FRAME_EVENTS if key in written]
 
 
-def classify_view_from_pose(t, lms) -> dict:
-    """Detect the capture view from the pose track (MVP-03). Returns {view, confidence, reason} with view in
-    down_lane (side profile) / rear / unknown. Discriminator: the bowler's TRAVEL DIRECTION in frame — a side
-    camera sees the approach move ACROSS the frame (horizontal); a rear camera sees it move UP the frame toward
-    the pins (vertical). Validated on IMG_8905 (side, dy/dx≈0.14) vs IMG_8907 (rear, dy/dx≈0.56); threshold 0.30
-    separates them. Front (bowler_facing) is NOT separately detected — it's advisory-only for MVP and would read
-    as 'rear' (documented limitation; needs a front clip to validate). Confidence stays modest until more
-    bowlers are validated (FORM_ANALYSIS_SPEC §6)."""
+def _hip_travel_ratio(t, lms, lo=None, hi=None):
+    """dy/dx of the hip centroid over [lo,hi] (or the whole track), with (dx, dy, ok_fraction). Returns
+    (None, 0, 0, 0) if too few clear frames or the bowler barely moves."""
+    if lo is not None:
+        m = (t >= lo) & (t <= hi)
+        t, lms = t[m], lms[m]
     vis = lms[:, :, 3]
     ok = ((vis[:, L_SHOULDER] > MIN_VIS) & (vis[:, R_SHOULDER] > MIN_VIS)
           & (vis[:, L_HIP] > MIN_VIS) & (vis[:, R_HIP] > MIN_VIS))
     if ok.sum() < 8:
-        return dict(view='unknown', confidence=0.0, reason='Not enough clear pose frames to tell the camera view.')
+        return None, 0.0, 0.0, 0.0
     f = lms[ok]
     hip_x = (f[:, L_HIP, 0] + f[:, R_HIP, 0]) / 2
     hip_y = (f[:, L_HIP, 1] + f[:, R_HIP, 1]) / 2
     dx = float(np.nanmax(hip_x) - np.nanmin(hip_x))
     dy = float(np.nanmax(hip_y) - np.nanmin(hip_y))
     if max(dx, dy) < 0.08:
+        return None, dx, dy, float(ok.mean())
+    return dy / max(dx, 1e-3), dx, dy, float(ok.mean())
+
+
+def classify_view_from_pose(t, lms, approach=None) -> dict:
+    """Detect the capture view from the pose track (MVP-03). Returns {view, confidence, reason} with view in
+    down_lane (side profile) / rear / unknown. Discriminator: the bowler's TRAVEL DIRECTION in frame — a side
+    camera sees the approach move ACROSS the frame (horizontal); a rear camera sees it move UP the frame toward
+    the pins (vertical). Threshold 0.30 on hip dy/dx separates them.
+
+    DEC-131: on a long real upload the FULL-clip dy/dx is polluted by the bowler walking around between shots
+    (dx balloons) which flips a real rear clip to down_lane (e.g. b6cfd17c: full 0.25 → wrongly side, but the
+    approach alone is 0.58 → rear). Conversely a tight approach window alone understates the toward-pins travel on
+    some rear clips (8846-48). So when the delivery's `approach`=(first_step, hold_start) window is known we take
+    the MAX of the full-clip and approach-window ratios: a rear camera reveals vertical travel in at least one
+    phase (walking toward the pins, or walking back toward the camera), while a true side camera stays horizontal
+    in both. Validated 9/9 across the labeled clips + both real uploads (examples/form_view_window_probe.py); no
+    labeled-clip detected-view change. Front (bowler_facing) is not separately detected — advisory-only for MVP,
+    reads as 'rear' (needs a front clip to validate). Confidence stays modest (FORM_ANALYSIS_SPEC §6)."""
+    r_full, dx, dy, frac = _hip_travel_ratio(t, lms)
+    if frac == 0.0 and r_full is None and dx == 0.0:
+        return dict(view='unknown', confidence=0.0, reason='Not enough clear pose frames to tell the camera view.')
+    if r_full is None:
         return dict(view='unknown', confidence=0.1,
                     reason='The bowler barely moves in frame — the camera view is unclear (check framing).')
-    frac = float(ok.mean())
-    if dy / max(dx, 1e-3) < 0.30:
+    ratio = r_full
+    if approach is not None:
+        r_appr, _, _, _ = _hip_travel_ratio(t, lms, approach[0], approach[1])
+        if r_appr is not None:
+            ratio = max(r_full, r_appr)
+    if ratio < 0.30:
         return dict(view='down_lane', confidence=round(0.5 + 0.2 * frac, 2),
                     reason='The bowler moves across the frame — a side (profile) view.')
     return dict(view='rear', confidence=round(0.4 + 0.2 * frac, 2),
@@ -965,6 +990,11 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
     raw_intervals = [strike_t[i + 1] - strike_t[i] for i in range(len(strike_t) - 1)]
     slide_plant = strike_t[-1]
     first_step = strike_t[0]
+
+    # Refine the capture view now the clean approach window (first_step → hold_start) is known: the full-clip
+    # ratio alone mis-reads a real rear clip as side when the bowler walked around a lot (DEC-131). Takes the max
+    # of full-clip + approach-window hip travel; re-stamps view_info used for all downstream gating.
+    extras['view_info'] = classify_view_from_pose(t, lms, approach=(first_step, hold_start))
 
     # Slide STOP (E8): the slide foot settles at the line. Anchor the search on the bottom of the swing arc (E6 ≈
     # release) — more reliable than the last foot plant, which can land after the stop on a noisy slide. Falls
