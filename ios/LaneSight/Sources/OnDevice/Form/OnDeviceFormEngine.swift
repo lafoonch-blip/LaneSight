@@ -16,6 +16,14 @@ nonisolated enum OnDeviceFormEngine {
     /// delivery + swing-event logic so a too-tight prescan window (one that dropped the delivery) triggers the
     /// widen-to-full retry (decision 2: "widen and retry if events aren't found").
     private static func deliveryWithEventsFound(_ lms: FormPoseLandmarker.Landmarks, handed: String?) -> Bool {
+        return deliveryProbe(lms, handed: handed).hasEvents
+    }
+
+    /// Quick delivery probe over an already-posed window: does any gated swing event survive, and how many foot
+    /// plants are in the approach? Used both for the widen-to-full retry (no events) and the widen-the-lead retry
+    /// (events but a truncated approach — step count < 3 because findDelivery anchored b0 late on a short lead).
+    private static func deliveryProbe(_ lms: FormPoseLandmarker.Landmarks, handed: String?)
+        -> (hasEvents: Bool, stepCount: Int) {
         let fr = lms.frames, tt = lms.t
         let rs = FormSignal.speed(FormSignal.point(fr, LM.rFootPts, axis: 0),
                                   FormSignal.point(fr, LM.rFootPts, axis: 1), tt)
@@ -25,12 +33,17 @@ nonisolated enum OnDeviceFormEngine {
         let delivery = slow
             ? FormEngine.findDelivery(tt, fr, rs, ls, burstMotion: 0.11, burstMaxS: 9.0, stillThr: 0.06)
             : FormEngine.findDelivery(tt, fr, rs, ls)
-        guard let d = delivery else { return false }
+        guard let d = delivery else { return (false, 0) }
         let torso = FormSignal.torso(fr)
         let b0 = d.win.0 + 0.4
         let swingWin = (Swift.max(tt[0], b0 - 0.8), Swift.min(d.hold.0 + 0.3, tt[tt.count - 1]))
         let ev = FormEngine.swingEvents(tt, fr, ball: [:], win: swingWin, torso: torso)
-        return ev.E4 != nil || ev.E6 != nil || ev.E7 != nil
+        let hasEvents = ev.E4 != nil || ev.E6 != nil || ev.E7 != nil
+        let relBound = (ev.E7 ?? d.hold.0) + 0.12
+        let stepStart = FormEngine.setupHoldEnd(tt, rs, ls, burstStart: b0)
+        let plants = FormEngine.footStrikes(tt, fr, win: (stepStart, relBound + 0.1), rs, ls)
+            .filter { $0.0 >= stepStart && $0.0 <= relBound }
+        return (hasEvents, plants.count)
     }
 
     /// Analyze a form clip end to end. `trackBall` runs the ball-colour release confirmation. It defaults OFF:
@@ -85,9 +98,21 @@ nonisolated enum OnDeviceFormEngine {
             }
         }
         var lms = try ex(winner)      // full-rate pose on the winning window
-        if !Self.deliveryWithEventsFound(lms, handed: handed) {
+        let probe = Self.deliveryProbe(lms, handed: handed)
+        if !probe.hasEvents {
             // The winner still didn't yield the delivery — widen to the FULL clip and retry (last resort, DEC-129).
             lms = try ex(nil)
+        } else if probe.stepCount < 3 && winner.0 > 0.01 {
+            // Events found but the approach came out truncated (< 3 plants): on a short lead findDelivery anchors b0
+            // on the fast final steps and the step search misses the slow early steps, so step_count is banded
+            // implausible (b6cfd17c: first_step 15.76, 2 steps on device vs 6 on the full clip). Re-pose with a
+            // bigger lead so findDelivery has the context to anchor the whole approach; keep it only if it recovers
+            // more steps and still finds the delivery. Fires only on the truncation case, so clean clips are
+            // untouched. DEC-131.
+            let wider = (Swift.max(0, winner.0 - 2.0), winner.1)
+            let l2 = try ex(wider)
+            let p2 = Self.deliveryProbe(l2, handed: handed)
+            if p2.hasEvents && p2.stepCount > probe.stepCount { lms = l2 }
         }
         return lms
     }

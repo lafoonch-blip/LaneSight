@@ -173,7 +173,9 @@ struct FormCardView: View {
                         label: pos.label,
                         timeText: eventTimeText(pos.event),
                         available: result.keyFrames.contains(pos.key),
-                        poseJoints: result.keyFramePoses[pos.key],      // skeleton overlay (DEC-082); nil → plain still
+                        // skeleton overlay (DEC-082) is normalized to the server's CROPPED still — suppress it on an
+                        // on-device local (full-frame) still so the joints don't land off the body. nil → plain still.
+                        poseJoints: result.localKeyFrames[pos.key] != nil ? nil : result.keyFramePoses[pos.key],
                         loader: { await fetchFrame(pos.key) })
                     if result.keyFrames.contains(pos.key) {
                         // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
@@ -194,6 +196,8 @@ struct FormCardView: View {
     }
 
     private func fetchFrame(_ key: String) async -> UIImage? {
+        // Prefer the still extracted on-device from the local clip (no server round-trip, works offline). DEC-131.
+        if let local = result.localKeyFrames[key], let img = UIImage(data: local) { return img }
         guard let client = try? model.makeClient(),
               let data = try? await client.shotFrame(shotId: result.shotId, key: key) else { return nil }
         return UIImage(data: data)

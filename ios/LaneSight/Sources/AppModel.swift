@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import UIKit
 import Photos
+import AVFoundation
 
 /// Progress of the capture -> upload -> analyze -> result pipeline.
 enum PipelineState: Equatable {
@@ -76,6 +77,10 @@ struct ShotResult: Equatable {
     /// Display-only pose-skeleton overlay joints per key frame (visibility-gated, crop-normalized). Each
     /// value is 33 joints, [x,y] in the cropped still or nil for a joint the pose wasn't confident about.
     var keyFramePoses: [String: [[Double]?]] = [:]
+    /// DEC-131: key-position stills extracted ON-DEVICE from the local clip (JPEG), keyed by position key
+    /// (ball_start/end_pushaway/top_of_swing/release). When present the UI shows these immediately without a
+    /// server round-trip; the server frame is only fetched when a local one isn't available.
+    var localKeyFrames: [String: Data] = [:]
     var events: [String: Double] = [:]
     var timingCheckpoints: [String: TimingCheckpoint] = [:]
     var measuredPositions: [String: MeasuredPosition] = [:]
@@ -1094,10 +1099,33 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                            recommendation: nil, insightsState: nil, insightsConfidence: nil, insightsNote: nil,
                            captureFarLaneLimited: false, captureReason: nil, isUpload: isUpload, isForm: true,
                            formView: m?.view, formStatus: m?.status ?? "unavailable",
-                           formVersion: m?.formVersion ?? "form-0.0.0")
+                           formVersion: m?.formVersion ?? OnDeviceFormEngine.formVersion)
         r.engine = "iphone"
         r.coachingPendingOffline = true
         return r
+    }
+
+    /// DEC-131: extract the key-position stills ON-DEVICE from the local clip at the measured event times, so they
+    /// show without a server round-trip. Keyed by position key (ball_start E2 / end_pushaway E3 / top_of_swing E4 /
+    /// release E7). Only events the engine actually located are extracted — never a guessed frame.
+    nonisolated static func extractFormKeyFrames(clipURL: URL, events: [String: Double]) -> [String: Data] {
+        let map: [(ev: String, key: String)] = [("E2", "ball_start"), ("E3", "end_pushaway"),
+                                                 ("E4", "top_of_swing"), ("E7", "release")]
+        let gen = AVAssetImageGenerator(asset: AVURLAsset(url: clipURL))
+        gen.appliesPreferredTrackTransform = true
+        gen.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 60)
+        gen.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 60)
+        gen.maximumSize = CGSize(width: 720, height: 720)
+        var out: [String: Data] = [:]
+        for (ev, key) in map {
+            guard let t = events[ev], t.isFinite, t >= 0 else { continue }
+            let cmt = CMTime(seconds: t, preferredTimescale: 600)
+            if let cg = try? gen.copyCGImage(at: cmt, actualTime: nil),
+               let jpg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.85) {
+                out[key] = jpg
+            }
+        }
+        return out
     }
 
     /// DEC-129: run the on-device Form engine on the durable clip and show the result ONCE (Complete online /
@@ -1144,10 +1172,29 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                 built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")   // Offline
                 enqueueMetricsCall(detailed: od.metricsJSON, sessionId: (source == "upload" ? nil : sid),
                                    metadata: metadata, shotId: newShotId)
+                // Offline: the queued metrics call creates the shot with THIS id (server honors client shot_id), so
+                // still target the server VIDEO shadow at it — otherwise an offline form upload silently loses the
+                // server comparison (DEC-131: the shadow target was previously set only on the online path).
+                onDeviceShadowTargets[recId] = newShotId
                 track("ondevice_form_offline_shown", props: ["ondevice_s": ct["ondevice_s"] ?? 0])
             }
         } else {
             built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")       // engine couldn't measure
+            // No metrics to submit here (engine produced nothing / offline before the engine ran), so no shot is
+            // created and there's nothing for the server shadow to attach to — leave the target unset.
+        }
+        // DEC-131: extract the key-position stills from the LOCAL clip at the on-device event times and attach them,
+        // so the Key positions tiles render immediately with no server fetch. Only located events produce a frame.
+        if let od, let ej = od.eventsJSON,
+           let evObj = (try? JSONSerialization.jsonObject(with: ej)) as? [String: Any] {
+            var evTimes: [String: Double] = [:]
+            for (k, v) in evObj { if let d = (v as? NSNumber)?.doubleValue { evTimes[k] = d } }
+            let clip = URL(fileURLWithPath: clipPath)
+            let frames = await Task.detached { Self.extractFormKeyFrames(clipURL: clip, events: evTimes) }.value
+            if !frames.isEmpty {
+                built.localKeyFrames = frames
+                built.keyFrames = Array(Set(built.keyFrames).union(frames.keys))
+            }
         }
         result = built
         onDevicePrimaryRecords.insert(recId)
