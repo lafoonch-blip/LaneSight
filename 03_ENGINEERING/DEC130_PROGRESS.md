@@ -1,7 +1,31 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-16 (v13: pin-detector head-pin anchor wired — 5 correct, pin infra working; 2 remain; device locked mid-refinement — see v13).
+**Last updated:** 2026-11-17 (v14: ZERO plausible-but-wrong on 22 clips — device reports 4 @ MAE 0.39, matches server where it reports — see v14).
+
+## v14 (2026-11-17) — ZERO plausible-but-wrong achieved on-device
+The crossing-required guard (committed; withhold when the head pin is detected but the ball's track never REACHES that
+row → no geometric contact → unavailable) takes the on-device engine to **0 wrong** on the 22 clips.
+
+**Final on-device result (gate path, LS_LEARNED_ONDEVICE=1), vs ground truth:**
+| clips reported | wrong | MAE | max err | latency |
+|---|---|---|---|---|
+| **4** (8751 .04, 8752 .64, 8966 .45, 8967 .42) | **0** | 0.39 mph | 0.64 | all <30 s (median 7.3, max 22.3) |
+
+vs **server** 5 clips @ MAE 0.27. The device matches the server on every clip it reports and NEVER emits a plausible-
+but-wrong speed. Progression: 9 wrong → (S4) 2 → (head-pin) 2 → (crossing-required) **0**.
+
+**Gate status:** zero-plausible-but-wrong ✓, latency <30 s ✓, determinism ✓ (byte-identical speeds across repeated
+runs). **Coverage: 4 vs server 5** — the device additionally withholds 8754, 8964, 8969 (8964 was correct ONLY via the
+far-point coincidence; withholding is the honest, generalising call). So it is a zero-wrong PASS but not full coverage
+parity. Recovering 8754/8964/8969 needs denser far-ball tracks (Stage 2 native-res crop, which the server disables) or
+the trained pin-contact classifier on-device — both ADDITIVE and cannot re-introduce a wrong number.
+
+**DECISION POINT (Shayne):** ship at 4-correct / 0-wrong (remove `LS_LEARNED_ONDEVICE`, install Release, report), or
+first pursue 8754/8964/8969 coverage recovery. Not shipped unilaterally — installing over the test build + enabling the
+learned engine by default is Shayne's call. All commits local on feat/ios-lane-parity (not pushed).
+
+## v13 (2026-11-16) — pin detector wired on-device: 5 correct, head-pin anchor working
 
 ## v13 (2026-11-16) — pin detector wired on-device: 5 correct, head-pin anchor working
 Wired the bundled **BallPinsDetector** (same CenterNet arch; pins = heatmap ch1) into the impact timer (committed
