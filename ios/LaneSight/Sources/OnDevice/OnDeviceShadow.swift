@@ -98,6 +98,7 @@ enum OnDeviceShadow {
             // on-device engine stays the validated classical + changepoint path. Enable with LS_LEARNED_ONDEVICE=1.
             if ProcessInfo.processInfo.environment["LS_LEARNED_ONDEVICE"] == "1", let det = OnDeviceLearnedDetector.shared {
                 let cAvg = sp.avgFoulToPinsMph
+                OnDeviceLearnedDetector.lastRaw = []
                 if let (ltrack, lgeo) = stage("learned") { () -> (BallTrack, ODLaneGeometry)? in
                     guard var r = det.buildTrack(url: clipURL, rot: rot, baseGeo: geo) else { return nil }
                     r.0.impactT = OnDeviceTracker.impactTime(url: clipURL, track: r.0.points, geo: r.1, rot: rot,
@@ -106,6 +107,7 @@ enum OnDeviceShadow {
                 } {
                     let lsp = OnDeviceTracker.speed(track: ltrack, geo: lgeo)
                     if let la = lsp.avgFoulToPinsMph { diag["learned_avg"] = Double(la) }
+                    diag["learned_dets"] = OnDeviceLearnedDetector.lastRaw   // parity harness (per-frame [t,cx,cy])
                     diag["learned_track_points"] = ltrack.points.count
                     diag["learned_note"] = lsp.note
                     if let tf = lsp.tFoulCross { diag["learned_tfoul"] = tf }

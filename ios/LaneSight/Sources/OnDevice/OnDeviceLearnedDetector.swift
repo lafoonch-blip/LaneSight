@@ -19,6 +19,7 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         return d
     }()
 
+    nonisolated(unsafe) static var lastRaw: [[Double]] = []   // parity harness: per-frame [t, cx, cy] of the last buildTrack
     private let model: MLModel
     private let input = 512
     private let mean: [Float] = [0.485, 0.456, 0.406]
@@ -107,7 +108,13 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         var ball: ODBallDet? = nil
         if bi >= 0 {
             let hy = bi / O, hx = bi % O
-            ball = ODBallDet(cx: Float(hx * st) / s, cy: Float(hy * st) / s, score: best)   // letterbox → full frame
+            // SUB-CELL offset refinement (matches the server: cx=(px+ox)*st/s). Without it the bare stride-4 cell
+            // quantises the position to ~15 px at full res → a noisy trajectory. offset shape [1,2,O,O] (ox,oy).
+            var ox: Float = 0, oy: Float = 0
+            if let off = out.featureValue(for: "offset")?.multiArrayValue {
+                let r = Self.reader(off); ox = r(hy * O + hx); oy = r(O * O + hy * O + hx)
+            }
+            ball = ODBallDet(cx: (Float(hx) + ox) * Float(st) / s, cy: (Float(hy) + oy) * Float(st) / s, score: best)
         }
         // lane head: 6 params normalized by max(W,H) (match lane_from_params)
         let m = Float(max(W, H))
@@ -142,7 +149,12 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         var best: Float = thr; var bi = -1
         for i in 0..<(O * O) { let v = read(i); if v > best { best = v; bi = i } }
         guard bi >= 0 else { return nil }
-        return ODBallDet(cx: Float(x0 + (bi % O) * st), cy: Float(y0 + (bi / O) * st), score: best)   // crop → full frame
+        let hy = bi / O, hx = bi % O
+        var ox: Float = 0, oy: Float = 0
+        if let off = out.featureValue(for: "offset")?.multiArrayValue {
+            let r = Self.reader(off); ox = r(hy * O + hx); oy = r(O * O + hy * O + hx)   // sub-cell offset (no scale in crop)
+        }
+        return ODBallDet(cx: Float(x0) + (Float(hx) + ox) * Float(st), cy: Float(y0) + (Float(hy) + oy) * Float(st), score: best)
     }
 
     // --- lane helpers (match OnDeviceTracker) ---
@@ -194,6 +206,7 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
                 if let b = ball { raw.append((t, b.cx, b.cy)) }   // (crop-refine needs a 2-pass over a validated track)
             }
         }
+        Self.lastRaw = raw.map { [$0.t, Double($0.cx), Double($0.cy)] }   // parity harness
         guard raw.count >= 6 else { return nil }
         // lane: prefer the classical solve; else the median learned lane
         var lane = baseGeo.lanes.first ?? baseGeo.rawLanes.first
