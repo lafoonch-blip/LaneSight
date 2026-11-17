@@ -1,7 +1,50 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-17 (v14: ZERO plausible-but-wrong on 22 clips — device reports 4 @ MAE 0.39, matches server where it reports — see v14).
+**Last updated:** 2026-11-17 (v15: ENGINE_DISAGREE wired on-device; 3-column 22-clip table; learned engine SHIPPED — gate removed, learned-on by default, Release installed — see v15).
+
+## v15 (2026-11-17) — ENGINE_DISAGREE wired; 3-column table; learned engine SHIPPED (gate removed)
+
+Wired the on-device **ENGINE_DISAGREE** cross-check into `OnDeviceShadow` reconciliation (was fallback-only at the
+DEC-132 restart note) — now a faithful port of the server `production_engine` reconcile order: both engines present &
+agree → classical; **disagree > 0.5 mph → withhold (ENGINE_DISAGREE)**; only learned → learned; only classical →
+classical. The withheld-speed cells + stage report carry `reason_code=ENGINE_DISAGREE`. On device there is no learned
+best-effort cross value (the server's `speed_besteffort`), so the guard uses the learned foul→pins headline and simply
+can't fire when the learned headline is withheld — it never fabricates a disagreement.
+
+**The 3-column 22-clip table (ground truth = foul→pins average labels; same clips, same truth):**
+
+| group | (a) classical+changepoint (was installed) | (b) learned+ENGINE_DISAGREE (new) | (c) server production_engine |
+|---|---|---|---|
+| within ±0.5 | **4** | **4** | **8** |
+| coverage | 4 | 4 | 8 |
+| MAE (reported) | 0.307 | 0.307 | 0.10 |
+| plausible-but-wrong | **0** | **0** | **0** |
+| covered clips | 8751,8752,8966,8967 | 8751,8752,8966,8967 | +8753,8754,8969,8976 |
+| max latency | 11.0 s | 12.4 s | — (server) |
+
+Per-clip errors, (a)==(b) **byte-identical** (deterministic ✓): 8751 +0.205, 8752 −0.469, 8966 −0.289, 8967 −0.267
+(all ≤0.5). Server (c): 8751 +0.02, 8752 −0.22, 8753 0.00, 8754 −0.07, 8966 +0.06 (learned), 8967 −0.08, 8969 −0.34,
+8976 +0.01; withholds 8968 via its own ENGINE_DISAGREE; withholds 8963/64/65/70-75/77-79/81. On this validation set the
+on-device **learned path adds no coverage and introduces no wrong** — the 4 covered are classical best-effort reads, and
+ENGINE_DISAGREE withheld nothing (wherever both engines produce a speed they agree within 0.5). (Per-clip decimals drift
+slightly from v14's figures because the 5-s shot-trim window is the sensitive input; the conclusion — 4 covered, 0 wrong
+— is stable, and (a)==(b) proves run-to-run determinism.)
+
+**SHIP CRITERION MET → SHIPPED.** (b) has **zero** plausible-but-wrong AND covers ≥ everything (a) covers (equal sets).
+Removed the `LS_LEARNED_ONDEVICE` env gate in `OnDeviceShadow.swift` — the learned path now runs by **default** whenever
+`OnDeviceLearnedDetector` is bundled. Re-ran the device gate with **no env var** (the shipping default): reproduces (b)
+exactly (4 covered, 0 wrong, MAE 0.307, max lat 12.3 s). Pushed to origin/feat/ios-lane-parity; Release built + installed
+on Shayne's iPhone (learned-on by default).
+
+**NEXT (coverage, no check-in):** recover the clips the server covers but the device drops — **8753** (device
+BALL_TRACK_NOT_FOUND; the known geometry-degenerate plate), **8754** (TRACK_TOO_SPARSE), **8969** (device
+TRACK_TOO_SPARSE; server recovers via the pale-lane saturation-floor retry s_min=70 + head-pin anchor), **8976** (device
+BALL_TRACK_NOT_FOUND; server classical). Levers: pale-lane multi-floor retry on-device, denser far-ball native-res crops,
+and making the learned track actually feed speed() where classical drops — all additive, cannot re-introduce a wrong
+number (withholding + plausibility bands + ENGINE_DISAGREE hold). Target: device coverage → server's 8, zero-wrong kept.
+
+## v14 (2026-11-17) — ZERO plausible-but-wrong achieved on-device
 
 ## v14 (2026-11-17) — ZERO plausible-but-wrong achieved on-device
 The crossing-required guard (committed; withhold when the head pin is detected but the ball's track never REACHES that

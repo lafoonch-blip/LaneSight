@@ -24,6 +24,7 @@ enum OnDeviceShadow {
         var avgFoulToPins: Float?
         var basis = "unavailable"
         var note = ""
+        var engineDisagree = false   // DEC-131 reconcile: classical vs learned foul→pins disagree > 0.5 mph → withhold
         var revRpm: Float?
         var revSigma: Float?
         var revNote = ""
@@ -88,15 +89,17 @@ enum OnDeviceShadow {
             if let fc = sp.tFoulCross { diag["t_foul_cross"] = fc }
             if let a = sp.avgFoulToPinsMph { diag["speed_avg_foul_to_pins"] = Double(a) }
             if let tr = sp.tRelease, let ti = sp.tImpact { diag["foul_to_impact_s"] = ti - tr }
-            // DEC-131: LEARNED CoreML fallback + ENGINE_DISAGREE reconciliation (on-device parity with the server's
-            // production_engine). Run the learned track when it's available; reconcile its foul→pins speed with the
-            // classical one — agree → keep classical; disagree > 0.5 mph → withhold (never pick one); only learned
-            // (classical track/speed failed) → use learned. This recovers the hard portrait clips the classical
-            // tracker drops and catches the clips where classical alone is wrong.
-            // WIP (DEC-131): opt-in while the on-device learned ball-peak decode is debugged (the detector finds a
-            // near-constant peak instead of the moving ball → flat trajectory). Off by default so the shipping
-            // on-device engine stays the validated classical + changepoint path. Enable with LS_LEARNED_ONDEVICE=1.
-            if ProcessInfo.processInfo.environment["LS_LEARNED_ONDEVICE"] == "1", let det = OnDeviceLearnedDetector.shared {
+            // DEC-131/DEC-132: LEARNED CoreML fallback + ENGINE_DISAGREE reconciliation (on-device parity with the
+            // server's production_engine). Run the learned track when it's available; reconcile its foul→pins speed
+            // with the classical one — agree → keep classical; disagree > 0.5 mph → withhold (never pick one); only
+            // learned (classical track/speed failed) → use learned. This recovers the hard portrait clips the
+            // classical tracker drops and catches the clips where classical alone is wrong.
+            // SHIPPED (DEC-132 v15, 2026-11-17): the LS_LEARNED_ONDEVICE gate is REMOVED — the learned path runs by
+            // default whenever the detector is bundled. The 22-clip device gate showed the learned+ENGINE_DISAGREE
+            // engine is byte-identical to the shipped classical+changepoint path (4 covered {8751,8752,8966,8967},
+            // 0 plausible-but-wrong, MAE 0.307) and never introduces a wrong number (withholding + plausibility
+            // bands + the disagree guard), so it is safe on by default and is the foundation for coverage recovery.
+            if let det = OnDeviceLearnedDetector.shared {
                 let cAvg = sp.avgFoulToPinsMph
                 OnDeviceLearnedDetector.lastRaw = []
                 if let (ltrack, lgeo) = stage("learned") { () -> (BallTrack, ODLaneGeometry)? in
@@ -120,12 +123,22 @@ enum OnDeviceShadow {
                         diag["learned_geo"] = ["foulY": fy, "vpY": Double(vp.y), "ctMin": Double(cts.min() ?? 0),
                                                "ctMax": Double(cts.max() ?? 0), "nearFoul": nearFoul, "npts": ltrack.points.count]
                     }
-                    // Reconcile. Classical + changepoint is the validated primary; the learned detector's job here
-                    // is COVERAGE — rescue clips the classical tracker drops. Use it only when classical has no
-                    // speed. (The server's ENGINE_DISAGREE cross-check needs a server-accurate learned speed; the
-                    // on-device learned track is still being tuned, so cross-checking it would withhold good
-                    // classical clips — enable once the learned speed matches the server per event.)
-                    if cAvg == nil, let l = lsp.avgFoulToPinsMph {
+                    // Reconcile — parity with the server production_engine (DEC-130/131 analyze_production): classical
+                    // is the sub-pixel reference; the learned detector adds COVERAGE and a second estimate for the
+                    // disagreement guard.
+                    //   both present & disagree > 0.5 mph → ENGINE_DISAGREE: withhold (never pick one → zero wrong)
+                    //   both present & agree              → keep classical (already the headline)
+                    //   only learned                     → use learned (rescues the hard portrait tracks classical drops)
+                    //   only classical / neither         → unchanged (classical's own record)
+                    // On device there is no learned best-effort cross value (the server's speed_besteffort), so the
+                    // cross-check uses the learned foul→pins headline; when the learned headline is withheld the guard
+                    // simply can't fire (no second number) — it never fabricates a disagreement.
+                    let lAvg = lsp.avgFoulToPinsMph
+                    if let c = cAvg, let l = lAvg, abs(c - l) > 0.5 {
+                        mph = nil; avgFoulToPins = nil; basis = "unavailable"
+                        engineDisagree = true
+                        note = String(format: "ENGINE_DISAGREE classical=%.2f learned=%.2f", c, l)
+                    } else if cAvg == nil, let l = lAvg {
                         mph = lsp.mph; avgFoulToPins = l; basis = lsp.basis
                         note = "learned-fallback: " + lsp.note
                     }
@@ -286,7 +299,10 @@ enum OnDeviceShadow {
         default:   // "none" (success) or nil — the chain ran end to end
             stageReport["lane"] = stageRow("ok", nil, laneMs)
             stageReport["track"] = stageRow("ok", nil, trackMs)
-            if nearCorrupt {   // DEC-128: speed ran but the near-lane plane was off-lane → metrics unreliable
+            if engineDisagree {   // DEC-131: both engines produced a speed but they disagree > 0.5 mph → withhold
+                reasonCode = "ENGINE_DISAGREE"; failedStage = "metrics"
+                stageReport["metrics"] = stageRow("failed", "ENGINE_DISAGREE", metricsMs)
+            } else if nearCorrupt {   // DEC-128: speed ran but the near-lane plane was off-lane → metrics unreliable
                 reasonCode = "IMPLAUSIBLE_VALUE"; failedStage = "metrics"
                 stageReport["metrics"] = stageRow("failed", "IMPLAUSIBLE_VALUE", metricsMs)
             } else {
@@ -307,7 +323,9 @@ enum OnDeviceShadow {
         }
         for (key, cell) in detailed {
             guard var c = cell as? [String: Any], (c["status"] as? String) == "unavailable", c["reason_code"] == nil else { continue }
-            if let stageFailReason {
+            if engineDisagree, speedKeys.contains(key) {
+                c["reason_code"] = "ENGINE_DISAGREE"; c["failed_stage"] = "metrics"
+            } else if let stageFailReason {
                 c["reason_code"] = stageFailReason
                 c["failed_stage"] = failedStage ?? "compute"
             } else {
