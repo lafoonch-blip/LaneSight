@@ -21,6 +21,7 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
 
     nonisolated(unsafe) static var lastRaw: [[Double]] = []   // parity harness: per-frame [t, cx, cy] of the last buildTrack
     private let model: MLModel
+    private let pinsModel: MLModel?           // BallPinsDetector (multi-class: heatmap ch1 = pins); nil if absent
     private let input = 512
     private let mean: [Float] = [0.485, 0.456, 0.406]
     private let std: [Float] = [0.229, 0.224, 0.225]
@@ -60,6 +61,97 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         }
         let cfg = MLModelConfiguration(); cfg.computeUnits = .all
         self.model = try MLModel(contentsOf: url, configuration: cfg)
+        // BallPinsDetector (same CenterNet arch, 4-class heatmap) — OPTIONAL: when present it supplies the head-pin
+        // row so impact anchors to the pins, not the ball's farthest tracked point (which overshoots into the pit).
+        if let purl = Bundle.main.url(forResource: "BallPinsDetector", withExtension: "mlmodelc") {
+            self.pinsModel = try? MLModel(contentsOf: purl, configuration: cfg)
+        } else { self.pinsModel = nil }
+    }
+
+    /// Head-pin row (frame-y of the NEAREST target-lane pin) from the pins detector, run on ONE frame (pins are static
+    /// pre-impact). Port of ops/mc_detect.pins_boxes + pin_detect.detect_pins head-pin logic: local-maxima of heatmap
+    /// channel 1 (pins) → full-frame peaks → keep peaks inside the target lane's x-extent → dense y-cluster → head pin
+    /// = the NEAREST (max-y) box of the cluster. Returns the frame row, or nil (no pins model / none found).
+    func pinsHeadRow(_ px: CVPixelBuffer, rot: ODRotation, lane: ODDetectedLane, thr: Float = 0.18) -> Float? {
+        guard let pm = pinsModel, let buf = OnDeviceDecode.rotated(px, rot) else { return nil }
+        CVPixelBufferLockBaseAddress(buf, .readOnly); defer { CVPixelBufferUnlockBaseAddress(buf, .readOnly) }
+        let W = CVPixelBufferGetWidth(buf), H = CVPixelBufferGetHeight(buf), rb = CVPixelBufferGetBytesPerRow(buf)
+        guard let base = CVPixelBufferGetBaseAddress(buf)?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        let s = Float(input) / Float(max(W, H))
+        let nw = Int((Float(W) * s).rounded()), nh = Int((Float(H) * s).rounded())
+        guard let arr = try? MLMultiArray(shape: [1, 3, NSNumber(value: input), NSNumber(value: input)], dataType: .float32) else { return nil }
+        let ptr = arr.dataPointer.assumingMemoryBound(to: Float.self); let plane = input * input
+        for c in 0..<3 { let v = -mean[c] / std[c]; let b = c * plane; for i in 0..<plane { ptr[b + i] = v } }
+        var src = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: base), height: vImagePixelCount(H),
+                                width: vImagePixelCount(W), rowBytes: rb)
+        let dstRB = nw * 4
+        let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: dstRB * nh); defer { dst.deallocate() }
+        var dstBuf = vImage_Buffer(data: dst, height: vImagePixelCount(nh), width: vImagePixelCount(nw), rowBytes: dstRB)
+        guard vImageScale_ARGB8888(&src, &dstBuf, nil, vImage_Flags(kvImageHighQualityResampling)) == kvImageNoError else { return nil }
+        for yy in 0..<nh { let row = yy * dstRB
+            for xx in 0..<nw { let p = row + xx * 4; let o = yy * input + xx
+                ptr[o] = (Float(dst[p + 2]) / 255 - mean[0]) / std[0]
+                ptr[plane + o] = (Float(dst[p + 1]) / 255 - mean[1]) / std[1]
+                ptr[2 * plane + o] = (Float(dst[p]) / 255 - mean[2]) / std[2] } }
+        guard let out = try? pm.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": arr])),
+              let hm = out.featureValue(for: "heatmap")?.multiArrayValue else { return nil }
+        let O = hm.shape[hm.shape.count - 1].intValue      // heatmap [1,4,O,O]; pins = channel 1
+        let st = input / O
+        let rd = Self.reader(hm); let pinBase = O * O       // channel 1 offset
+        // local maxima (3x3 max-pool NMS) of the pins channel above thr → full-frame peaks
+        var pins: [(cx: Float, cy: Float)] = []
+        for y in 0..<O { for x in 0..<O {
+            let v = rd(pinBase + y * O + x)
+            if v < thr { continue }
+            var isMax = true
+            for dy in -1...1 { for dx in -1...1 {
+                let ny = y + dy, nx = x + dx
+                if ny < 0 || ny >= O || nx < 0 || nx >= O { continue }
+                if rd(pinBase + ny * O + nx) > v { isMax = false } } }
+            if isMax { pins.append((Float(x) * Float(st) / s, Float(y) * Float(st) / s)) }
+        } }
+        guard !pins.isEmpty else { return nil }
+        // target-lane filter: keep peaks whose x sits within the lane's x-extent (padded) at their row
+        let inLane = pins.filter { p in
+            let (xa, xb) = laneX(lane, p.cy); let pad = 0.35 * (xb - xa)
+            return p.cx >= xa - pad && p.cx <= xb + pad
+        }
+        let cand = inLane.isEmpty ? pins : inLane
+        guard !cand.isEmpty else { return nil }
+        // dense y-cluster (the pins sit tightly at the deck); reject a lone spurious far/near peak. Then the head pin
+        // = the NEAREST (max cy) of that cluster. With one pin, that one is the head.
+        let ys = cand.map { $0.cy }.sorted(); let my = ys[ys.count / 2]
+        let band = Float(0.12) * Float(max(H, W))
+        let cluster = cand.filter { abs($0.cy - my) <= band }
+        let headCy = (cluster.isEmpty ? cand : cluster).map { $0.cy }.max()!
+        return headCy
+    }
+
+    /// True when the pins detector model loaded — callers withhold (server parity) if it finds no pins rather than
+    /// falling back to the ball's farthest tracked point.
+    var hasPinsModel: Bool { pinsModel != nil }
+
+    /// Head-pin row for a clip: runs the pins detector on ONE early frame (pins are static until impact; the bowler
+    /// is at the foul line near the camera and never occludes the far deck). nil if no pins model / none found.
+    func pinsHeadRow(url: URL, rot: ODRotation, lane: ODDetectedLane) -> Float? {
+        guard pinsModel != nil else { return nil }
+        let asset = AVURLAsset(url: url)
+        guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
+        var row: Float? = nil
+        // average a few early frames' head-pin row for robustness (static pins ⇒ consistent), take the median.
+        var rows: [Float] = []; var seen = 0
+        while reader.status == .reading, seen < 5, let sb = out.copyNextSampleBuffer() {
+            seen += 1
+            autoreleasepool {
+                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                if let r = pinsHeadRow(px, rot: rot, lane: lane) { rows.append(r) }
+            }
+        }
+        reader.cancelReading()
+        if !rows.isEmpty { row = rows.sorted()[rows.count / 2] }
+        return row
     }
 
     /// Run the detector on one BGRA frame. Returns the ball peak (full-frame coords) over `thr`, and the lane params.

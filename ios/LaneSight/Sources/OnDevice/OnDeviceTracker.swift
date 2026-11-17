@@ -502,22 +502,44 @@ enum OnDeviceTracker {
         // Sanity guard (on-device has no learned cross-engine check): the contact must sit near the ball's farthest
         // tracked point (arrival). If the changepoint lands far from it the deck ROI/window is unreliable (weak
         // on-device track) and it would emit a plausible-but-wrong speed — reject and fall through / withhold.
-        func uu(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
-        let farT = Double(pts.max(by: { uu($0.contactRow) < uu($1.contactRow) })!.t)
-        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot, foulTOverride: foulTOverride),
-           cp >= farT - 0.1, cp <= farT + 0.5 {
-            return cp
-        }
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
         let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
-        let farD = expDiam(lane, far.contactRow)
-        let yA = max(0, Int(far.contactRow - 4 * farD)), yB = Int(far.contactRow + 4 * farD)
-        let (xaF, xbF) = laneX(lane, far.contactRow); let padX = 0.4 * (xbF - xaF)
+        // ANCHOR impact to the DETECTED head-pin row (pins detector), not the ball's farthest tracked point: on a
+        // strike the ball rolls ~0.5 s PAST the pins into the pit, so `far` overshoots and the impact reads late/slow
+        // (IMG_8969 14.5 mph for an 18 mph ball). anchorT = the geometric head-pin arrival (track time the ball's
+        // contactRow reaches the head-pin row). When no pins model/row is available, degrade exactly to the old
+        // `far`-anchored behaviour (anchorRow = far.contactRow, anchorT = far.t) — no regression.
+        let det = OnDeviceLearnedDetector.shared
+        let headRow = det?.pinsHeadRow(url: url, rot: rot, lane: lane)
+        // WITHHOLD when the pins model is present but finds no pins (server parity: no pins deck → no t_geom / no
+        // classifier → PIN_IMPACT_NOT_DETECTED). This is the honest answer on the hard clips where the pin deck can't
+        // be located (8969/8973) — far better than anchoring to the ball's farthest point, which overshoots into the
+        // pit and reads slow. Degrades to the old far-anchored behaviour only if no pins model is bundled at all.
+        if det?.hasPinsModel == true && headRow == nil { return nil }
+        let anchorRow: Float = headRow ?? far.contactRow
+        var anchorT = Double(far.t)
+        if headRow != nil {
+            for k in 1..<pts.count {
+                let a = pts[k-1].contactRow, b = pts[k].contactRow
+                if (a - anchorRow) * (b - anchorRow) <= 0, a != b {
+                    anchorT = pts[k-1].t + Double((anchorRow - a) / (b - a)) * (pts[k].t - pts[k-1].t); break
+                }
+            }
+        }
+        // changepoint path (frame-accurate on a clean deck): accept only if it AGREES with the geometric head-pin
+        // arrival (server t_motion vs t_geom cross-check), then clamp so a late changepoint can't overshoot the pins.
+        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot, foulTOverride: foulTOverride),
+           cp >= anchorT - 0.1, cp <= anchorT + 0.5 {
+            return min(cp, anchorT + 0.1)
+        }
+        let farD = expDiam(lane, anchorRow)
+        let yA = max(0, Int(anchorRow - 4 * farD)), yB = Int(anchorRow + 4 * farD)
+        let (xaF, xbF) = laneX(lane, anchorRow); let padX = 0.4 * (xbF - xaF)
         let xA = max(0, Int(xaF - padX)), xB = Int(xbF + padX)
         guard yB > yA + 8, xB > xA + 8 else { return nil }
         let roiW = xB - xA, roiH = yB - yA
         // t_enter: first track time the ball's top enters the ROI (ct − D < yB)
-        var tEnter = far.t - 0.5
+        var tEnter = anchorT - 0.5
         for p in pts where Double(p.contactRow) - Double(expDiam(lane, p.contactRow)) < Double(yB) { tEnter = p.t; break }
         // ball interpolation arrays
         let tt = pts.map { Double($0.t) }, cxA = pts.map { $0.cx }, ctA = pts.map { $0.contactRow }
@@ -536,7 +558,7 @@ enum OnDeviceTracker {
             autoreleasepool {
                 guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
                 let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
-                if t < tEnter - 0.5 || t > far.t + 0.6 { return }
+                if t < tEnter - 0.5 || t > anchorT + 0.6 { return }
                 CVPixelBufferLockBaseAddress(px, .readOnly); defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
                 let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
                 guard let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return }
@@ -575,12 +597,13 @@ enum OnDeviceTracker {
             if series[k].v > thr && series[k..<min(k+4, series.count)].filter({ $0.v > thr }).count >= 3 { hotness = series[k].t; break }
         }
         guard let h = hotness else { return nil }
-        // clamp (DEC-117): a hotness BEFORE the ball entered the ROI is an early reflection → defer to far.t.
-        if Double(far.t) > h && h < tEnter { return Double(far.t) }
+        // clamp (DEC-117): a hotness BEFORE the ball entered the ROI is an early reflection → defer to the head-pin
+        // geometric arrival.
+        if anchorT > h && h < tEnter { return anchorT }
         // Otherwise both estimates tend to OVERSHOOT the true contact — the pin-motion hotness by the pin-fall
-        // latency, the farthest tracked point by the ball continuing into the pit on a strike — so take the
-        // EARLIER of the two as the best contact estimate (recovers 8754's late hotness without re-overshooting).
-        return min(h, Double(far.t))
+        // latency, the geometric anchor is the ball AT the head-pin row (not past it) — so take the EARLIER of the
+        // two as the best contact estimate (recovers 8754's late hotness without re-overshooting into the pit).
+        return min(h, anchorT)
     }
 
     // MARK: foreground blobs — diff vs bg, threshold, 3x3 open, connected components (union-find)
