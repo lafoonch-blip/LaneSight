@@ -18,25 +18,31 @@ struct FormCardView: View {
     /// is unavailable; otherwise the per-section honest states carry the story.
     private var topUnavailable: Bool { (result.formStatus ?? "").lowercased() == "unavailable" }
 
+    /// The scrollable card content (no nav chrome), extracted so a render harness can snapshot it at a fixed
+    /// width for the design comparison (02_DESIGN/target_state/compare/form).
+    @ViewBuilder var formContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            contextHeader
+            if topUnavailable {
+                unavailableCard
+            } else {
+                if result.formFocus != nil { focusCard }
+                keyPositionsSection
+                if !orderedCheckpoints.isEmpty { timingCheckpointsSection }
+                if result.swingTiming != nil { swingTimingSection }
+                if !approachTiles.isEmpty { approachSection }
+                if !postureTiles.isEmpty { positionsSection }
+                if let cues = result.coachingCues, let list = cues.cues, !list.isEmpty { coachingCuesSection(cues) }
+            }
+            footer
+        }
+        .padding(16)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    contextHeader
-                    if topUnavailable {
-                        unavailableCard
-                    } else {
-                        if result.formFocus != nil { focusCard }
-                        keyPositionsSection
-                        if !orderedCheckpoints.isEmpty { timingCheckpointsSection }
-                        if result.swingTiming != nil { swingTimingSection }
-                        if !approachMetrics.isEmpty { approachSection }
-                        if !orderedPositions.isEmpty { positionsSection }
-                        if let cues = result.coachingCues, let list = cues.cues, !list.isEmpty { coachingCuesSection(cues) }
-                    }
-                    footer
-                }
-                .padding(16)
+                formContent
             }
             .background(LSBackground())
             .navigationBarTitleDisplayMode(.inline)
@@ -82,6 +88,17 @@ struct FormCardView: View {
         var parts = [viewLabel]
         if let fps = result.formFPS { parts.append("\(Int(fps.rounded())) fps") }
         return parts.joined(separator: " · ")
+    }
+
+    /// Design 3.4: the timing card's right label pairs the measurement status with the view
+    /// ("Measured · side view" / "Best effort · rear view").
+    private var timingStatusLabel: String {
+        let statuses = orderedCheckpoints.map { MetricStatus($0.status) }
+        let word: String
+        if statuses.contains(.measured) && !statuses.contains(.bestEffort) { word = "Measured" }
+        else if statuses.contains(.measured) || statuses.contains(.bestEffort) { word = "Best effort" }
+        else { return viewLabel }
+        return "\(word) · \(viewLabel)"
     }
 
     private var viewLabel: String {
@@ -165,7 +182,7 @@ struct FormCardView: View {
             HStack {
                 Text("Key positions").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
-                Text("tap to open the frame").font(.lsCaption).foregroundStyle(LS.textSecondary)
+                Text("Tap a position to see the full frame").font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(Self.positions, id: \.key) { pos in
@@ -176,6 +193,7 @@ struct FormCardView: View {
                         // skeleton overlay (DEC-082) is normalized to the server's CROPPED still — suppress it on an
                         // on-device local (full-frame) still so the joints don't land off the body. nil → plain still.
                         poseJoints: result.localKeyFrames[pos.key] != nil ? nil : result.keyFramePoses[pos.key],
+                        initialImage: result.localKeyFrames[pos.key].flatMap { UIImage(data: $0) },
                         loader: { await fetchFrame(pos.key) })
                     if result.keyFrames.contains(pos.key) {
                         // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
@@ -214,7 +232,7 @@ struct FormCardView: View {
             HStack {
                 Text("Timing vs your baseline").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
-                Text(viewLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                Text(timingStatusLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             .padding(.bottom, 4)
             ForEach(Array(orderedCheckpoints.enumerated()), id: \.offset) { idx, cp in
@@ -330,23 +348,41 @@ struct FormCardView: View {
 
     /// The measured P1 approach metrics (the design's Approach & balance tiles that aren't M-positions).
     /// Swing-phase splits live in the swing-timing bar; foul line / finish hold / posture live in M1–M7.
+    /// Design 3.4 groups the tiles by MEANING, not data type: "Approach & balance" carries the approach + ball +
+    /// slide + finish metrics (9), "Posture & finish" carries only the body-position metrics. `finish_hold`,
+    /// `foul_line_distance` and `slide_length` live here even though some are MeasuredPositions server-side.
     private static let approachKeys: [String] = [
-        "step_count", "approach_time", "rhythm_ratio", "ball_start_step", "backswing_height_rel", "drift_boards",
+        "step_count", "approach_time", "rhythm_ratio", "finish_hold", "backswing_height_rel", "ball_start_step",
+        "foul_line_distance", "drift_boards", "slide_length",
     ]
+    private static let postureKeys: [String] = ["spine_tilt", "follow_through", "balance_arm", "shoulder_tilt", "pendulum"]
 
-    private var approachMetrics: [(String, Metric)] {
-        Self.approachKeys.compactMap { key in result.metrics.first { $0.0 == key } }
+    /// One tile's data, resolved from whichever source holds the key (a Metric, else a MeasuredPosition).
+    private struct FormTileData: Identifiable { let id: String; let label: String; let value: String; let status: MetricStatus; let reason: String? }
+
+    private func formTile(_ key: String) -> FormTileData? {
+        if let (_, m) = result.metrics.first(where: { $0.0 == key }) {
+            return FormTileData(id: key, label: FormMetricDisplay.label(key), value: approachValueText(key, m),
+                                status: MetricStatus(m.status), reason: m.value == nil ? m.note : nil)
+        }
+        if let pos = result.measuredPositions.values.first(where: { ($0.metric ?? "") == key }) ?? result.measuredPositions[key] {
+            let st = MetricStatus(pos.status)
+            return FormTileData(id: key, label: Self.positionLabels[key] ?? MetricDisplay.humanize(key),
+                                value: pos.display ?? "—", status: st,
+                                reason: st != .measured ? pos.note : nil)   // best_effort + unavailable → surfaced below
+        }
+        return nil
     }
+
+    private var approachTiles: [FormTileData] { Self.approachKeys.compactMap(formTile) }
+    private var postureTiles: [FormTileData] { Self.postureKeys.compactMap(formTile) }
 
     private var approachSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Approach & balance").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                ForEach(approachMetrics, id: \.0) { key, metric in
-                    FormTile(label: FormMetricDisplay.label(key),
-                             value: approachValueText(key, metric),
-                             status: MetricStatus(metric.status),
-                             reason: metric.value == nil ? metric.note : nil)
+                ForEach(approachTiles) { t in
+                    FormTile(label: t.label, value: t.value, status: t.status, reason: t.reason)
                 }
             }
         }
@@ -361,10 +397,6 @@ struct FormCardView: View {
 
     // MARK: POSTURE & POSITIONS (M1–M7, design 3.4)
 
-    private var orderedPositions: [MeasuredPosition] {
-        result.measuredPositions.values.sorted { ($0.id ?? "") < ($1.id ?? "") }
-    }
-
     private static let positionLabels: [String: String] = [
         "foul_line_distance": "Foul line", "spine_tilt": "Spine tilt", "balance_arm": "Balance arm",
         "shoulder_tilt": "Shoulders", "follow_through": "Follow-through", "finish_hold": "Finish hold",
@@ -375,18 +407,14 @@ struct FormCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Posture & finish").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                ForEach(orderedPositions, id: \.id) { pos in
-                    FormTile(label: Self.positionLabels[pos.metric ?? ""] ?? MetricDisplay.humanize(pos.metric ?? "—"),
-                             value: pos.display ?? "—",
-                             status: MetricStatus(pos.status),
-                             reason: MetricStatus(pos.status) == .unavailable ? pos.note : nil)
+                ForEach(postureTiles) { t in
+                    FormTile(label: t.label, value: t.value, status: t.status, reason: t.reason)
                 }
             }
             // Honest reasons for anything best-effort / unavailable (targets + why a view can't measure it).
-            let reasons = orderedPositions.compactMap { pos -> String? in
-                guard MetricStatus(pos.status) != .measured, let note = pos.note, !note.isEmpty else { return nil }
-                let label = Self.positionLabels[pos.metric ?? ""] ?? (pos.metric ?? "")
-                return "\(label): \(note)"
+            let reasons = postureTiles.compactMap { t -> String? in
+                guard t.status != .measured, let note = t.reason, !note.isEmpty else { return nil }
+                return "\(t.label): \(note)"
             }
             if !reasons.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -420,13 +448,35 @@ struct FormCardView: View {
     // MARK: footer
 
     private var footer: some View {
-        HStack {
-            Text(analyzedText)
-            Spacer()
-            Text(versionsLine)
+        VStack(alignment: .leading, spacing: 8) {
+            if let note = viewCapabilityNote {
+                Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Text(analyzedText)
+                Spacer()
+                Text(versionsLine)
+            }
+            .font(.lsCaption2).foregroundStyle(LS.textSecondary)
         }
-        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Design 3.4: an honest, view-aware note of what this camera angle can and can't measure. Mirrors the
+    /// position view-gating (`gate_positions`) so the bowler knows why "— SIDE VIEW" / "— REAR VIEW" appear.
+    private var viewCapabilityNote: String? {
+        switch (result.formView ?? "").lowercased() {
+        case "down_lane":
+            return "This clip was recorded from the side, so timing, steps, posture and foul line are measured. "
+                + "Drift and balance arm need a view from behind."
+        case "rear":
+            return "This clip was recorded from behind, so drift and balance arm are measured. Spine tilt and "
+                + "foul-line distance need a side view; record from the side to add them."
+        default:
+            return nil
+        }
     }
 
     private var analyzedText: String {
@@ -452,11 +502,15 @@ private struct KeyPositionTile: View {
     let timeText: String?
     let available: Bool
     var poseJoints: [[Double]?]? = nil
+    /// On-device still decoded from the local clip — shown synchronously (no async flash) and lets the view
+    /// render in a single pass (ImageRenderer screenshots). When set, the server loader is skipped. DEC-131.
+    var initialImage: UIImage? = nil
     let loader: () async -> UIImage?
 
     @State private var image: UIImage?
     @State private var loaded = false
 
+    private var shown: UIImage? { image ?? initialImage }
     // Skeleton is drawn only when the pose found confident joints for this still (never guessed).
     private var hasSkeleton: Bool { (poseJoints?.contains { $0 != nil }) ?? false }
 
@@ -465,7 +519,7 @@ private struct KeyPositionTile: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(LS.raised)
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1)
-                if let image {
+                if let image = shown {
                     // scaledToFit (not fill) so the skeleton overlay's aspect-fit mapping lines up with the
                     // bowler-cropped still, matching KeyPositionFullView (DEC-082: thumbnails carry the skeleton).
                     Image(uiImage: image).resizable().scaledToFit()
@@ -485,7 +539,7 @@ private struct KeyPositionTile: View {
                         }
                     }
                 }
-                if image != nil, let timeText {
+                if shown != nil, let timeText {
                     VStack { Spacer()
                         Text(timeText).font(.lsCaption2).foregroundStyle(LS.textPrimary)
                             .padding(.horizontal, 5).padding(.vertical, 2)
@@ -500,7 +554,7 @@ private struct KeyPositionTile: View {
                 .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
         }
         .task {
-            guard available, !loaded else { return }
+            guard available, !loaded, initialImage == nil else { return }   // local still already shown → no fetch
             image = await loader()
             loaded = true
         }

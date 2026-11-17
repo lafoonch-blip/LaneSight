@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.6 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-17 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -235,3 +235,40 @@ confirm against a render):**
 **Blocked:** the side-by-side montage (the way the shot card was done) needs `FormCardView` rendered with a REAL
 form result — the key-position tiles are frames from the bowler's own clip, so a synthetic render is blank. Will
 capture + montage + apply verified fixes from Shayne's next on-device Form upload (ties into the 60 fps check).
+
+### Progress — 2026-11-17 · Form result vs target-state design (section-by-section compared; mismatches fixed)
+Completed the comparison against `design_form_results_{side,rear}.png` and **applied the fixes in `FormCardView`**
+(all BUILT this commit). The section order already matched; the mismatches were in grouping, labels and the footer:
+- **Metric grouping (biggest fix).** The design's **"Approach & balance"** carries **9** tiles in this order —
+  Steps · Approach · Rhythm · **Finish hold** · Backswing · Ball start · **Foul line** · Drift · **Slide** — and
+  **"Posture & finish"** carries only Spine tilt · Follow-through · Balance arm. Code had grouped by data type
+  (6 metrics in Approach; all MeasuredPositions in Posture). Now a `formTile(key)` helper resolves each tile from
+  whichever source holds it (Metric → else MeasuredPosition), driven by explicit `approachKeys` (9, design order)
+  and `postureKeys`, so `finish_hold`/`foul_line_distance`/`slide_length` sit under Approach & balance as designed.
+- **Timing card right label** → status + view ("Measured · side view" / "Best effort · rear view"), was view only.
+- **Key-positions subtitle** → "Tap a position to see the full frame" (was "tap to open the frame").
+- **Footer** → added the view-aware capability note ("recorded from the side, so timing/steps/posture/foul line are
+  measured; drift and balance arm need a view from behind" — and the rear mirror), matching the design's footer.
+- **Key-position stills now render on-device** (DEC-131): local JPEGs decode synchronously (no async flash / no
+  server round-trip), and the server skeleton overlay is suppressed on a local full-frame still.
+
+**DIFFERS (documented — NOT built; building them would fabricate data or is out of scope):**
+- **Key-position sub-labels** ("Arm 14°", "Step 2", "Shoulders 41°", "Beside right leg", "No overlay / low
+  confidence"). The design annotates each key-position tile with a per-position measured value; the engine produces
+  **no arm-angle / per-key annotation data**, so these can't be shown without fabricating numbers (DEC rule). Needs
+  engine support (per-key-frame arm angle + a confidence note) before it can be built.
+- **"Record delivery N" bottom CTA.** The design shows an inline primary button; the app uses the nav **Done** + the
+  live-session flow (`ProcessingCover` / `exitToSession`). Session-contextual; left to the session wiring.
+- **Context line.** Design puts "Form Analysis · {view} (detected) · {fps} fps" as a body line; code keeps the
+  DEC-086 honesty disclaimer ("Early form analysis …") as the body line and the view/fps as the nav subtitle.
+  Intentional honesty DIFFERS.
+- **Swing-timing badge casing.** Code uses the app-wide uppercase status chip ("MEASURED"); design shows
+  "● Measured" (dot + title case). App-wide badge style — left as-is to stay consistent across the app.
+
+**Side-by-side montage: still from the REAL upload, not synthetic.** A synthetic render was attempted (a simulator
+`FormCardView` snapshot harness with real key-position stills) and **abandoned** — headless SwiftUI snapshotting of
+this screen can't be made faithful: `ImageRenderer` renders the "failed" placeholder because it doesn't satisfy
+`FormCardView`'s `@EnvironmentObject model` (the key-positions `NavigationLink` destination needs it), and a
+`UIHostingController` + `drawHierarchy` snapshot comes out blank in a unit test (no live scene). Don't retry that
+path. The authentic side-by-side will be captured from Shayne's re-upload result (full scene + real data + real
+frames) and dropped into `02_DESIGN/target_state/compare/form/`.
