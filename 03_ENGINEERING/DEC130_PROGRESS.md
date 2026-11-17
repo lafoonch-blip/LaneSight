@@ -1,7 +1,38 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-16 (v11: DEC-132 staged port — Stage 1 detector parity PASSED; speed gate root-caused to missing on-device stabilization — see v11).
+**Last updated:** 2026-11-16 (v12: DEC-132 Stage 4 withholding — on-device WRONG 9→2; remaining 2 need the pin-detector port — see v12).
+
+## v12 (2026-11-16) — DEC-132 Stage 4 (withholding): on-device WRONG 9→2, 4 correct kept
+**The gate blocker was WITHHOLDING discipline, and the fix is a single faithful change.** `speed()` fell back to
+`tImpact = argmax(u)` (the ball's farthest tracked point) when the measured pin-motion impact (`track.impactT`) was
+nil — fabricating an impact and emitting a plausible-but-wrong foul→pins speed on every clip the server withholds.
+Replaced with a guard: **no measured impact → unavailable (PIN_IMPACT_NOT_DETECTED)**, exactly the server's rule
+(`analyze_learned`: the classifier is the authority; the ball-following `detect_impact` is OFF by default because it
+"produced plausible-but-wrong speeds"). One change, both engines (both go through `speed()`). Committed b657426.
+
+**On-device, all 22 clips, vs ground truth (60 ft / (pin_f−foul_f)/fps):**
+| | correct | withheld (server also withholds) | WRONG | MAE(reported) |
+|---|---|---|---|---|
+| before (v11) | 4 | — | 9 | 2.75 |
+| **after Stage 4** | **4** (8751 .04, 8752 .64, 8966 .45, 8967 .31) | 8963 8964 8968 8970 8972 8974 8978 | **2** (8969 3.8, 8973 4.6) | — |
+
+**The 2 remaining wrong (8969, 8973) need the on-device PIN DETECTOR (task #40).** Both have a *measured* impact that
+OVERSHOOTS: the device anchors impact to the ball's farthest TRACKED point, but the ball rolls ~0.5 s PAST the pins
+into the pit (8969 far.t 5.04 vs true contact ~4.38) → span too long → 14.5/13.3 mph for 18/18 mph balls. The server
+avoids this with its DETECTED head-pin row (`t_geom` stops AT the pins) + the trained pin-contact classifier as the
+authority — neither is on-device yet. No clean non-overfit guard separates 8969/8973 from the 4 correct clips using
+the signals the device has now (checked arrival time, track-end, past-impact tail — none separate; ENGINE_DISAGREE
+fails too, both engines agree-wrong). STABILISATION and linker robustness are NOT the issue (detector positions match
+the golden to ~2 px; v11).
+
+**NEXT (gate-closing): port the pin detector / head-pin row to device** (task #40) so impact anchors to the pins, not
+the ball's farthest point — then re-run the 22-clip gate (target: 0 wrong), remove `LS_LEARNED_ONDEVICE`, install
+Release, report the iPhone table. Commits this session: 97d27df (S1 detector parity), 7583249 (S3 linking), 84485a4
+(stabilisation disproven), b657426 (S4 withholding). On feat/ios-lane-parity, local only (gate not yet passed → not
+pushed).
+
+## v11 (2026-11-16) — DEC-132 staged port: Stage 1 PASSED; gate root-caused to on-device stabilization
 
 ## v11 (2026-11-16) — DEC-132 staged port: Stage 1 PASSED; gate root-caused to on-device stabilization
 Porting the server learned pipeline to on-device piece-by-piece, each validated vs the server golden JSON on the 22
