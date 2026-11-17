@@ -25,6 +25,34 @@ the trained pin-contact classifier on-device — both ADDITIVE and cannot re-int
 first pursue 8754/8964/8969 coverage recovery. Not shipped unilaterally — installing over the test build + enabling the
 learned engine by default is Shayne's call. All commits local on feat/ios-lane-parity (not pushed).
 
+### RESTART NOTE (2026-11-17, Mac restart) — safe point
+**State:** working tree clean; all DEC-132 commits pushed to origin/feat/ios-lane-parity. HEAD = the zero-wrong
+on-device engine. No background job was mid-flight (the determinism re-run finished: byte-identical). Nothing lost.
+
+**KEY FINDING mid-task (do NOT lose):** the on-device reconciliation is **FALLBACK-ONLY, NOT ENGINE_DISAGREE yet.**
+`OnDeviceShadow.swift:128` uses the learned speed ONLY when classical has none (`if cAvg == nil`); the disagree>0.5→
+withhold cross-check is deliberately OFF (comment lines 123-131: "enable once the learned speed matches the server per
+event"). So "(b)" is classical-first + learned-coverage-fallback WITHOUT the ENGINE_DISAGREE cross-check. Wiring it is
+part of the next step.
+
+**What was running when stopped:** building Shayne's requested 3-column 22-clip comparison — (a) currently-installed
+classical+changepoint, (b) new classical-first+learned (+ENGINE_DISAGREE to-be-wired), (c) server production_engine
+(the 10/22 ±0.5 one — NOT the learned-path-alone "5" I mis-cited). Columns: per-clip speed, err vs truth,
+status/reason; totals: within±0.5, coverage, MAE, plausible-but-wrong.
+
+**NEXT STEP (resume here):**
+1. Run (a) LS_LEARNED_ONDEVICE OFF, (b) flag ON (prior: 4 correct / 0 wrong — re-run for per-clip status/reason), all
+   22; (c) server `production_engine.py` on the 22. Build the 3-column table + totals.
+2. SHIP CRITERION (no check-in): if (b) has 0 plausible-but-wrong AND covers ≥ everything (a) covers → remove the
+   `LS_LEARNED_ONDEVICE` gate (learned-on by default), push (verify ls-remote), install Release.
+3. Then continue coverage (8754/8964/8969 + rest of the server's clips) until device matches the server or a stage
+   can't get there; report then.
+
+**Restart the jobs (all killed by restart; none persistent):**
+- On-device 22-clip gate (iPhone UNLOCKED + idle; REINSTALLS the app): `cd ios/LaneSight && TEST_RUNNER_LS_LEARNED_ONDEVICE=1 TEST_RUNNER_LS_GATE_CLIPS=<22 clip stems> xcodebuild test -scheme LaneSight -configuration Release ENABLE_TESTABILITY=YES -destination "id=00008150-000651C10138401C" -only-testing:LaneSightTests/OnDeviceGateTests -derivedDataPath /tmp/ls_dd_rel` (drop the env var for column (a)).
+- Server baseline: `cd lanesight-core && source .venv/bin/activate && python3 -m ops.production_engine` on the 22 labeled clips.
+- Scripts: `scratchpad/detector_parity.py`, `dump_server_golden.py`; golden in `~/LaneSightData/dec130/golden/`.
+
 ## v13 (2026-11-16) — pin detector wired on-device: 5 correct, head-pin anchor working
 
 ## v13 (2026-11-16) — pin detector wired on-device: 5 correct, head-pin anchor working
