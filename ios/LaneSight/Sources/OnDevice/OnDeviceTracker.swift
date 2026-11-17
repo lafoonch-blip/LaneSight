@@ -518,13 +518,18 @@ enum OnDeviceTracker {
         if det?.hasPinsModel == true && headRow == nil { return nil }
         let anchorRow: Float = headRow ?? far.contactRow
         var anchorT = Double(far.t)
+        var crossed = false
         if headRow != nil {
             for k in 1..<pts.count {
                 let a = pts[k-1].contactRow, b = pts[k].contactRow
                 if (a - anchorRow) * (b - anchorRow) <= 0, a != b {
-                    anchorT = pts[k-1].t + Double((anchorRow - a) / (b - a)) * (pts[k].t - pts[k-1].t); break
+                    anchorT = pts[k-1].t + Double((anchorRow - a) / (b - a)) * (pts[k].t - pts[k-1].t); crossed = true; break
                 }
             }
+            // The head pin is detected but the ball's track never REACHES it (sparse/short track, e.g. IMG_8969's
+            // 41-pt track) — so there is no geometric contact time, only the far point, which overshoots into the pit.
+            // Honest answer: withhold (we cannot time the contact), rather than emit a slow far-anchored speed.
+            if !crossed { return nil }
         }
         // changepoint path (frame-accurate on a clean deck): accept only if it AGREES with the geometric head-pin
         // arrival (server t_motion vs t_geom cross-check), then clamp so a late changepoint can't overshoot the pins.
