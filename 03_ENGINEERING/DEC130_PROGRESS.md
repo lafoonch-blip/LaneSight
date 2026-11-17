@@ -26,9 +26,14 @@ the signals the device has now (checked arrival time, track-end, past-impact tai
 fails too, both engines agree-wrong). STABILISATION and linker robustness are NOT the issue (detector positions match
 the golden to ~2 px; v11).
 
-**NEXT (gate-closing): port the pin detector / head-pin row to device** (task #40) so impact anchors to the pins, not
+**NEXT (gate-closing): wire the on-device pin detector → head-pin row** (task #40) so impact anchors to the pins, not
 the ball's farthest point — then re-run the 22-clip gate (target: 0 wrong), remove `LS_LEARNED_ONDEVICE`, install
-Release, report the iPhone table. Commits this session: 97d27df (S1 detector parity), 7583249 (S3 linking), 84485a4
+Release, report the iPhone table. **DE-RISKED:** `ios/LaneSight/Models/BallPinsDetector.mlpackage` is already bundled
+and is the SAME architecture as BallLaneDetector (image[1,3,512,512] → heatmap[1,**4**,128,128]/wh/offset/lane) — a
+4-channel multi-class heatmap (ball/pins/dots/arrows). So this reuses the existing `detect()` letterbox+fp16-read
+pipeline: load the second model, multi-peak-decode the PINS channel (several pins, not argmax), take the head-pin row
+(nearest-camera pin row), and (a) stop `detectImpact`'s ROI AT that row and (b) reject an impact whose implied contact
+sits past it. Determine the pins channel index from the mc label order (DEC-130 task #35). Commits this session: 97d27df (S1 detector parity), 7583249 (S3 linking), 84485a4
 (stabilisation disproven), b657426 (S4 withholding). On feat/ios-lane-parity, local only (gate not yet passed → not
 pushed).
 
