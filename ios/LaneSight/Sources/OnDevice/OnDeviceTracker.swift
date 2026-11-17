@@ -106,16 +106,14 @@ enum OnDeviceTracker {
         // ~0.15 s to move visibly, so the motion spike lags ball-contact by that much (measured +0.17/+0.18 s on
         // 8751/8754). The lane far extent is NOT the pin row (the ball tracks past it; the true pin depth needs the
         // gated metric plane), so a trajectory extrapolation undershoots — only used as a fallback when no spike.
-        let tImpact: Double
-        if let it = track.impactT { tImpact = it }   // ball-masked pin-motion ≈ true contact (no pin-fall offset)
-        else {
-            // No pin-motion spike (e.g. a weak strike on IMG_8752). Fall back to the ball's FARTHEST-down-lane
-            // tracked point (max u = nearest the pins), mirroring the server's `far = track[argmax(u)]`. This is
-            // the turning point: once the ball contacts the pins it deflects/slows and its down-lane u stops
-            // increasing, so argmax(u) ≈ ball-at-pins — better than the last-by-time point, which can be the ball
-            // continuing into the pit.
-            let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
-            tImpact = far.t
+        // t_impact = ball-at-pins, from the pin-deck MOTION detector (track.impactT). WITHHOLD when it is nil —
+        // server parity (analyze_learned returns PIN_IMPACT_NOT_DETECTED; detect_impact → None when no sustained pin
+        // motion). The former far-down-lane fallback (tImpact = argmax(u)) FABRICATED an impact and produced a
+        // plausible-but-wrong foul→pins speed on EVERY clip the server withholds — the validation set is unambiguous:
+        // measured impact → correct (8751/8752/8966/8967), no measured impact → wrong (8963/8964/8968/8970/8972/
+        // 8973/8974/8978). No correct clip relied on the fallback, so it is pure over-production. No fabricated impact.
+        guard let tImpact = track.impactT else {
+            return fail("pin contact not detected — no pin-deck motion changepoint (PIN_IMPACT_NOT_DETECTED); speed unavailable")
         }
         let release = tFoulCross - 0.068                              // RELEASE_OFFSET_S (cv/metrics.py)
         let dt = tImpact - release
