@@ -160,6 +160,16 @@ _FORM_BANDS = {
     'step_count': (3.0, 7.0),
     'finish_hold': (0.0, 10.0),
     'rhythm_ratio': (0.2, 1.8),
+    # every other P1 form metric gets a physiological band too, so a mis-segmented delivery can't surface an absurd
+    # value (e.g. backswing_height_rel −5.75 on a rear mis-segmentation). Bands are generous (catch the impossible,
+    # not the merely unusual).
+    'pushaway_time': (0.05, 1.2),           # E2→E3; a real pushaway
+    'release_time': (0.0, 0.35),            # E6→E7; roughly one-to-a-few frames
+    'backswing_height_rel': (-2.0, 3.0),    # wrist apex vs shoulder in torso-lengths (ref ≈ shoulder height = 0)
+    'ball_start_step': (1.0, 7.0),          # which step the ball starts down on
+    'drift_boards': (-25.0, 25.0),          # lateral drift across the approach, boards
+    'timing_at_slide': (-1.0, 1.0),         # ball-vs-slide-stop timing, seconds
+    'slide_length': (0.0, 60.0),            # inches
 }
 
 
@@ -186,6 +196,15 @@ def implausible_reason(metric_key: str, value) -> str | None:
             return f"{v:.0f} steps isn't a real approach (3–7) — the delivery wasn't segmented correctly"
         if metric_key == 'rhythm_ratio':
             return f"swing tempo {v:.2f} is out of a plausible range — the delivery wasn't timed correctly"
+        if metric_key == 'backswing_height_rel':
+            return (f"backswing height {v:.2f} torso-lengths vs the shoulder is off the body — "
+                    f"the swing wasn't tracked correctly")
+        if metric_key == 'ball_start_step':
+            return f"ball start on step {v:.0f} isn't a real approach step — the delivery wasn't segmented correctly"
+        if metric_key == 'drift_boards':
+            return f"drift {v:.1f} boards is off the lane — the approach wasn't tracked correctly"
+        if metric_key == 'slide_length':
+            return f"slide length {v:.0f} in is not physically possible — the slide wasn't tracked correctly"
         label = metric_key.replace('_time', '').replace('_', ' ')
         return (f"{label} {v:.2f}s is outside a real delivery ({band[0]:g}–{band[1]:g}s) — "
                 f"the delivery wasn't timed correctly")

@@ -1204,6 +1204,25 @@ def analyze(video, out_prefix=None, handed=None, model_path=POSE_MODEL_PATH, log
                 mm['status'] = 'low_confidence'
                 mm['confidence'] = min(mm.get('confidence', 0.0), 0.2)
                 mm['note'] = warn + (mm.get('note') or '')
+    # When the delivery couldn't be isolated (no gated swing event survived the DEC-095 sanity gates), EVERY
+    # window-derived timing/count was measured off an unreliable window — withhold them all as `unavailable` +
+    # FORM_DELIVERY_NOT_ISOLATED, never best_effort/low_confidence. The user sees "we couldn't time this", not a
+    # wrong number from a mis-segmented delivery (DEC-131). Mirrored on-device.
+    if not _iso_ok:
+        _iso_reason = ('the delivery could not be isolated on this clip (no reliable swing events), so these '
+                       'timings could not be measured — record with your full approach and swing in frame')
+        for _k in ('approach_time', 'swing_time', 'pushaway_time', 'backswing_time', 'downswing_time',
+                   'release_time', 'rhythm_ratio', 'backswing_height_rel', 'finish_hold', 'step_count',
+                   'ball_start_step', 'timing_at_slide', 'slide_length'):
+            _mm = out.get(_k)
+            if isinstance(_mm, dict) and _mm.get('status') not in ('unavailable',):
+                _mm['value'] = None
+                _mm['status'] = 'unavailable'
+                _mm['confidence'] = 0.0
+                _mm['reason_code'] = 'FORM_DELIVERY_NOT_ISOLATED'
+                _mm['note'] = _iso_reason
+                _mm['display'] = '—'
+
     # DEC-131 plausibility backstop: a delivery timing/count outside its physiological band is a mis-segmented
     # delivery, not a real measurement — stamp it `unavailable` + IMPLAUSIBLE_VALUE (never best_effort/low_confidence),
     # the same bands the on-device engine applies (parity). Runs LAST so it overrides the slo-mo downgrade too.

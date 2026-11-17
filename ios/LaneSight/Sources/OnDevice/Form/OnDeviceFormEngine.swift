@@ -304,6 +304,26 @@ nonisolated enum OnDeviceFormEngine {
             }
         }
 
+        // When the delivery couldn't be isolated (no gated swing event survived the DEC-095 gates), every
+        // window-derived timing/count was measured off an unreliable window → withhold them all as unavailable +
+        // FORM_DELIVERY_NOT_ISOLATED, never best_effort. The user sees "we couldn't time this", not a wrong number.
+        // Parity with the server (pose.analyze). DEC-131.
+        let gk = ["E2", "E3", "E4", "E6", "E7"].map { events[$0] ?? nil }
+        let isoOk = gk.contains { $0 != nil }
+        if !isoOk {
+            let isoReason = "the delivery could not be isolated on this clip (no reliable swing events), so these "
+                + "timings could not be measured — record with your full approach and swing in frame"
+            for k in ["approach_time", "swing_time", "pushaway_time", "backswing_time", "downswing_time",
+                      "release_time", "rhythm_ratio", "backswing_height_rel", "finish_hold", "step_count",
+                      "ball_start_step", "timing_at_slide", "slide_length"] {
+                guard let m = metrics[k], m.status != "unavailable" else { continue }
+                var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: isoReason,
+                                         id: m.id, viewRequired: m.viewRequired)
+                mm.reasonCode = "FORM_DELIVERY_NOT_ISOLATED"
+                metrics[k] = mm
+            }
+        }
+
         // DEC-131 plausibility backstop (runs LAST, overrides slo-mo too): a delivery timing/count outside its
         // physiological band is a mis-segmented delivery, not a real measurement → unavailable + IMPLAUSIBLE_VALUE,
         // never best_effort. Same bands as the server (failures._FORM_BANDS).
@@ -316,8 +336,6 @@ nonisolated enum OnDeviceFormEngine {
         }
 
         // stage report (DEC-122)
-        let gk = ["E2", "E3", "E4", "E6", "E7"].map { events[$0] ?? nil }
-        let isoOk = gk.contains { $0 != nil }
         var stage: [String: FormStageOutcome] = [
             "decode": FormStageOutcome(status: "ok"),
             "pose": FormStageOutcome(status: "ok", frames: t.count),

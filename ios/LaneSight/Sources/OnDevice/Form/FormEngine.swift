@@ -42,6 +42,11 @@ nonisolated enum FormEngine {
     static let formBands: [String: (Double, Double)] = [
         "approach_time": (1.0, 3.5), "backswing_time": (0.25, 1.2), "downswing_time": (0.2, 0.8),
         "swing_time": (0.7, 2.0), "step_count": (3.0, 7.0), "finish_hold": (0.0, 10.0), "rhythm_ratio": (0.2, 1.8),
+        // every other P1 metric gets a band too, so a mis-segmented delivery can't surface an absurd value
+        // (e.g. backswing_height_rel −5.75 on a rear mis-segmentation). Parity with failures._FORM_BANDS.
+        "pushaway_time": (0.05, 1.2), "release_time": (0.0, 0.35), "backswing_height_rel": (-2.0, 3.0),
+        "ball_start_step": (1.0, 7.0), "drift_boards": (-25.0, 25.0), "timing_at_slide": (-1.0, 1.0),
+        "slide_length": (0.0, 60.0),
     ]
     static func implausibleReason(_ metric: String, _ value: Double) -> String? {
         if value.isNaN || value.isInfinite { return "came out non-finite" }
@@ -51,6 +56,18 @@ nonisolated enum FormEngine {
         }
         if metric == "rhythm_ratio" {
             return "swing tempo \(String(format: "%.2f", value)) is out of a plausible range — the delivery wasn't timed correctly"
+        }
+        if metric == "backswing_height_rel" {
+            return "backswing height \(String(format: "%.2f", value)) torso-lengths vs the shoulder is off the body — the swing wasn't tracked correctly"
+        }
+        if metric == "ball_start_step" {
+            return "ball start on step \(Int(value)) isn't a real approach step — the delivery wasn't segmented correctly"
+        }
+        if metric == "drift_boards" {
+            return "drift \(String(format: "%.1f", value)) boards is off the lane — the approach wasn't tracked correctly"
+        }
+        if metric == "slide_length" {
+            return "slide length \(Int(value)) in is not physically possible — the slide wasn't tracked correctly"
         }
         let label = metric.replacingOccurrences(of: "_time", with: "").replacingOccurrences(of: "_", with: " ")
         return "\(label) \(String(format: "%.2f", value))s is outside a real delivery "
