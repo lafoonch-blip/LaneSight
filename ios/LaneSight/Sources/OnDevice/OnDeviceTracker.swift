@@ -68,6 +68,10 @@ private nonisolated(unsafe) let THR_MAX: Float = 55
 
 enum OnDeviceTracker {
 
+    // DEC-132 coverage diag: detectImpact records WHY it returned (withhold reason or the accepted path), surfaced
+    // in the shadow diag so the 22-clip gate shows the exact impact-stage blocker per clip. Debug-only; no behavior.
+    nonisolated(unsafe) static var lastImpactDebug: String = ""
+
     // geometry helpers (ports of track.py exp_diam / contact_row; lane_x from the stage-2 edges)
     nonisolated private static func laneX(_ l: ODDetectedLane, _ y: Float) -> (Float, Float) {
         (l.left.a * y + l.left.b, l.right.a * y + l.right.b)
@@ -511,11 +515,12 @@ enum OnDeviceTracker {
         // `far`-anchored behaviour (anchorRow = far.contactRow, anchorT = far.t) — no regression.
         let det = OnDeviceLearnedDetector.shared
         let headRow = det?.pinsHeadRow(url: url, rot: rot, lane: lane)
+        lastImpactDebug = "pins=\(det?.hasPinsModel == true) headRow=\(headRow.map { String(format: "%.0f", $0) } ?? "nil") far.ct=\(String(format: "%.0f", far.contactRow)) far.t=\(String(format: "%.2f", far.t)) ctRange=[\(String(format: "%.0f", pts.map{$0.contactRow}.min()!))..\(String(format: "%.0f", pts.map{$0.contactRow}.max()!))]"
         // WITHHOLD when the pins model is present but finds no pins (server parity: no pins deck → no t_geom / no
         // classifier → PIN_IMPACT_NOT_DETECTED). This is the honest answer on the hard clips where the pin deck can't
         // be located (8969/8973) — far better than anchoring to the ball's farthest point, which overshoots into the
         // pit and reads slow. Degrades to the old far-anchored behaviour only if no pins model is bundled at all.
-        if det?.hasPinsModel == true && headRow == nil { return nil }
+        if det?.hasPinsModel == true && headRow == nil { lastImpactDebug += " -> WITHHOLD:headRow_nil"; return nil }
         let anchorRow: Float = headRow ?? far.contactRow
         var anchorT = Double(far.t)
         var crossed = false
@@ -529,19 +534,32 @@ enum OnDeviceTracker {
             // The head pin is detected but the ball's track never REACHES it (sparse/short track, e.g. IMG_8969's
             // 41-pt track) — so there is no geometric contact time, only the far point, which overshoots into the pit.
             // Honest answer: withhold (we cannot time the contact), rather than emit a slow far-anchored speed.
-            if !crossed { return nil }
+            if !crossed { lastImpactDebug += " -> WITHHOLD:track_no_cross_headRow"; return nil }
+            lastImpactDebug += " crossed@t=\(String(format: "%.2f", anchorT))"
+        }
+        // DEC-132 v16 — TRIED AND REVERTED: falling back to the geometric head-pin CROSSING time (anchorT) when the
+        // pin-deck motion changepoint can't time the contact. Rationale was that the crossing is the ball-at-head-pin
+        // moment (not the overshoot `far` point v12 rejected). On the 22-clip gate it REGRESSED zero→3 plausible-but-
+        // wrong (8963 −4.79, 8968 +3.50, 8969 +2.29): the crossing is NOT a frame-accurate contact anchor — head-pin
+        // row localisation + sparse portrait tracks make it over/under-shoot. The pin-deck MOTION changepoint is
+        // REQUIRED; when it can't collect frames (deck_series_sparse — the real on-device blocker, see the impact
+        // trace in diag) the honest answer is to WITHHOLD. Kept as one withhold+trace point for the next session.
+        func geomFallback(_ why: String) -> Double? {
+            lastImpactDebug += " -> WITHHOLD:\(why)"
+            return nil
         }
         // changepoint path (frame-accurate on a clean deck): accept only if it AGREES with the geometric head-pin
         // arrival (server t_motion vs t_geom cross-check), then clamp so a late changepoint can't overshoot the pins.
         if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot, foulTOverride: foulTOverride),
            cp >= anchorT - 0.1, cp <= anchorT + 0.5 {
+            lastImpactDebug += " -> OK:changepoint_agree cp=\(String(format: "%.2f", cp))"
             return min(cp, anchorT + 0.1)
         }
         let farD = expDiam(lane, anchorRow)
         let yA = max(0, Int(anchorRow - 4 * farD)), yB = Int(anchorRow + 4 * farD)
         let (xaF, xbF) = laneX(lane, anchorRow); let padX = 0.4 * (xbF - xaF)
         let xA = max(0, Int(xaF - padX)), xB = Int(xbF + padX)
-        guard yB > yA + 8, xB > xA + 8 else { return nil }
+        guard yB > yA + 8, xB > xA + 8 else { return geomFallback("deck_roi_too_small") }
         let roiW = xB - xA, roiH = yB - yA
         // t_enter: first track time the ball's top enters the ROI (ct − D < yB)
         var tEnter = anchorT - 0.5
@@ -589,10 +607,10 @@ enum OnDeviceTracker {
                 series.append((t, pct95))
             }
         }
-        guard series.count > 6 else { return nil }
+        guard series.count > 6 else { return geomFallback("deck_series_sparse(\(series.count))") }
         // baseline + MAD over pre-arrival frames (server: E[:,0] < t_enter+0.6)
         let pre = series.filter { $0.t < tEnter + 0.6 }.map { $0.v }
-        guard !pre.isEmpty else { return nil }
+        guard !pre.isEmpty else { return geomFallback("deck_no_baseline") }
         let med = pre.sorted()[pre.count/2]
         let mad = pre.map { abs($0 - med) }.sorted()[pre.count/2]
         let base = med, sd = 1.4826 * mad + 2
@@ -601,7 +619,8 @@ enum OnDeviceTracker {
         for k in 0..<(series.count - 3) {
             if series[k].v > thr && series[k..<min(k+4, series.count)].filter({ $0.v > thr }).count >= 3 { hotness = series[k].t; break }
         }
-        guard let h = hotness else { return nil }
+        guard let h = hotness else { return geomFallback("no_deck_hotness(thr=\(String(format: "%.0f", thr)))") }
+        lastImpactDebug += " -> OK:deck_hotness h=\(String(format: "%.2f", h)) anchorT=\(String(format: "%.2f", anchorT))"
         // clamp (DEC-117): a hotness BEFORE the ball entered the ROI is an early reflection → defer to the head-pin
         // geometric arrival.
         if anchorT > h && h < tEnter { return anchorT }

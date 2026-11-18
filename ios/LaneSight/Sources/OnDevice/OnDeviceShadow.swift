@@ -82,6 +82,7 @@ enum OnDeviceShadow {
             diag["gate_reject"] = track.gateReject
             if let it = track.impactT { diag["impact_t_detected"] = it }
             let sp = stage("speed") { OnDeviceTracker.speed(track: track, geo: geo) }
+            diag["classical_impact_debug"] = OnDeviceTracker.lastImpactDebug   // DEC-132 coverage diag
             mph = sp.mph; basis = sp.basis; note = sp.note
             avgFoulToPins = sp.avgFoulToPinsMph
             if let tr = sp.tRelease { diag["t_release"] = tr }
@@ -106,6 +107,7 @@ enum OnDeviceShadow {
                     guard var r = det.buildTrack(url: clipURL, rot: rot, baseGeo: geo) else { return nil }
                     r.0.impactT = OnDeviceTracker.impactTime(url: clipURL, track: r.0.points, geo: r.1, rot: rot,
                                                              foulTOverride: r.0.foulCrossOverride)
+                    diag["learned_impact_debug"] = OnDeviceTracker.lastImpactDebug   // DEC-132 coverage diag
                     return r
                 } {
                     let lsp = OnDeviceTracker.speed(track: ltrack, geo: lgeo)

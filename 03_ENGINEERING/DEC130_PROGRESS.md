@@ -1,7 +1,38 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-17 (v15: ENGINE_DISAGREE wired on-device; 3-column 22-clip table; learned engine SHIPPED — gate removed, learned-on by default, Release installed — see v15).
+**Last updated:** 2026-11-17 (v16: coverage attempt — geometric head-pin-crossing fallback TRIED + REVERTED (regressed
+0→3 wrong); on-device blocker is the pin-deck motion changepoint frame-collection; impact-trace diagnostics added. v15:
+ENGINE_DISAGREE wired; learned engine SHIPPED — see below).
+
+## v16 (2026-11-17) — coverage: geometric-crossing fallback TRIED + REVERTED; real blocker isolated
+
+Goal (post-ship): recover the 4 clips the server covers but the device drops — 8753, 8754, 8969, 8976. Added an
+**impact-path trace** (`OnDeviceTracker.lastImpactDebug`, surfaced in the shadow diag as `classical_impact_debug` /
+`learned_impact_debug`) and ran the 4 clips. Exact per-clip blockers:
+- **8969**: learned track **crosses the detected head-pin row** (`crossed@4.24`) → only blocker `deck_series_sparse(0)`
+  (the pin-deck motion-changepoint ROI collected 0 usable frames).
+- **8976**: classical crosses (`crossed@4.24`) then `deck_series_sparse(0)`; learned `headRow=nil`.
+- **8753**: track never crosses the head-pin row (degenerate geometry — learned VP −141764; the known 8753 plate issue).
+- **8754**: `headRow=nil` (pin deck not located) + sparse 18-pt track.
+
+**Attempt (reverted):** when the ball track geometrically crosses the detected head-pin row but the deck-motion
+changepoint can't time it, fall back to the **crossing time** (anchorT) as the impact anchor (reasoning: the crossing is
+the ball AT the head-pin row, not the overshoot `far` point v12 rejected). **Result on the 22-clip gate: REGRESSED 0 → 3
+plausible-but-wrong** — 8963 −4.79, 8968 +3.50, 8969 +2.29. The geometric crossing is NOT a frame-accurate contact
+anchor: head-pin-row localisation error + sparse portrait tracks make it over/under-shoot. **Reverted to withhold**
+(zero-wrong restored: back to 4 covered / 0 wrong). Kept the diagnostics + one `geomFallback` withhold point.
+
+**Conclusion (the stage that can't get there with a cheap lever):** on-device coverage recovery REQUIRES the pin-deck
+**MOTION changepoint** to actually run — the blocker is its frame-collection (`deck_series_sparse`), not the ball track
+(8969's track reaches the pins) and not the geometry. Next levers, in order: (1) fix the deck-motion ROI frame-collection
+so the changepoint produces a `series` on portrait clips (the 0-frame window bug — likely `tEnter`/time-window vs the
+5-s trim) → times 8969 frame-accurately; (2) port the server's deterministic `PinContactDetector` deck-crop changepoint
+(the authoritative timer); (3) 8753/8754 need denser far-ball native-res crops + the 8753 plate-geometry fix. All stay
+behind the withholding + plausibility + ENGINE_DISAGREE guards — zero-wrong is the hard invariant, never traded for
+coverage. The shipped engine (commit 39447c1, installed) is unchanged and zero-wrong.
+
+## v15 (2026-11-17) — ENGINE_DISAGREE wired; 3-column table; learned engine SHIPPED (gate removed)
 
 ## v15 (2026-11-17) — ENGINE_DISAGREE wired; 3-column table; learned engine SHIPPED (gate removed)
 
