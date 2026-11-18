@@ -72,7 +72,9 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
     /// pre-impact). Port of ops/mc_detect.pins_boxes + pin_detect.detect_pins head-pin logic: local-maxima of heatmap
     /// channel 1 (pins) → full-frame peaks → keep peaks inside the target lane's x-extent → dense y-cluster → head pin
     /// = the NEAREST (max-y) box of the cluster. Returns the frame row, or nil (no pins model / none found).
-    func pinsHeadRow(_ px: CVPixelBuffer, rot: ODRotation, lane: ODDetectedLane, thr: Float = 0.18) -> Float? {
+    /// Target-lane pin peak rows (cy, full-frame rotated coords) forming the deck cluster. Shared by the head-row
+    /// lookup and the DEC-132 deck-ROI extent (pin cluster top..bottom) used by the ported PinContactDetector.
+    private func pinsClusterCy(_ px: CVPixelBuffer, rot: ODRotation, lane: ODDetectedLane, thr: Float = 0.18) -> [Float]? {
         guard let pm = pinsModel, let buf = OnDeviceDecode.rotated(px, rot) else { return nil }
         CVPixelBufferLockBaseAddress(buf, .readOnly); defer { CVPixelBufferUnlockBaseAddress(buf, .readOnly) }
         let W = CVPixelBufferGetWidth(buf), H = CVPixelBufferGetHeight(buf), rb = CVPixelBufferGetBytesPerRow(buf)
@@ -123,8 +125,19 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         let ys = cand.map { $0.cy }.sorted(); let my = ys[ys.count / 2]
         let band = Float(0.12) * Float(max(H, W))
         let cluster = cand.filter { abs($0.cy - my) <= band }
-        let headCy = (cluster.isEmpty ? cand : cluster).map { $0.cy }.max()!
-        return headCy
+        return (cluster.isEmpty ? cand : cluster).map { $0.cy }
+    }
+
+    /// Head-pin row (nearest pin = max cy) on one frame.
+    func pinsHeadRow(_ px: CVPixelBuffer, rot: ODRotation, lane: ODDetectedLane, thr: Float = 0.18) -> Float? {
+        pinsClusterCy(px, rot: rot, lane: lane, thr: thr)?.max()
+    }
+
+    /// Deck extent on one frame: head-pin row (nearest = max cy), and the pin cluster's top (min cy) / bottom (max cy)
+    /// — the y-span the DEC-132 ported deck-motion detector crops. nil if no pins.
+    func pinsDeck(_ px: CVPixelBuffer, rot: ODRotation, lane: ODDetectedLane, thr: Float = 0.18) -> (head: Float, top: Float, bot: Float)? {
+        guard let cy = pinsClusterCy(px, rot: rot, lane: lane, thr: thr), let bot = cy.max(), let top = cy.min() else { return nil }
+        return (bot, top, bot)
     }
 
     /// True when the pins detector model loaded — callers withhold (server parity) if it finds no pins rather than
@@ -152,6 +165,28 @@ nonisolated final class OnDeviceLearnedDetector: @unchecked Sendable {   // immu
         reader.cancelReading()
         if !rows.isEmpty { row = rows.sorted()[rows.count / 2] }
         return row
+    }
+
+    /// Deck extent for a clip (head / top / bottom pin rows), median over a few early frames. DEC-132: the ported
+    /// PinContactDetector crops [top..bot] × lane-width and watches the upper-60% body mask for pin scatter.
+    func pinsDeck(url: URL, rot: ODRotation, lane: ODDetectedLane) -> (head: Float, top: Float, bot: Float)? {
+        guard pinsModel != nil else { return nil }
+        let asset = AVURLAsset(url: url)
+        guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
+        let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
+        var heads: [Float] = [], tops: [Float] = [], bots: [Float] = []; var seen = 0
+        while reader.status == .reading, seen < 5, let sb = out.copyNextSampleBuffer() {
+            seen += 1
+            autoreleasepool {
+                guard let px = CMSampleBufferGetImageBuffer(sb) else { return }
+                if let d = pinsDeck(px, rot: rot, lane: lane) { heads.append(d.head); tops.append(d.top); bots.append(d.bot) }
+            }
+        }
+        reader.cancelReading()
+        guard !heads.isEmpty else { return nil }
+        func med(_ a: [Float]) -> Float { a.sorted()[a.count / 2] }
+        return (med(heads), med(tops), med(bots))
     }
 
     /// Run the detector on one BGRA frame. Returns the ball peak (full-frame coords) over `thr`, and the lane params.

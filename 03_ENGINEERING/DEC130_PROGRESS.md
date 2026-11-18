@@ -1,9 +1,41 @@
 # DEC-130 progress — learned detection front-end
 
 Status doc for the autonomous build (DEC-130). Resume from here. Updated at each milestone, committed + pushed.
-**Last updated:** 2026-11-17 (v16: coverage attempt — geometric head-pin-crossing fallback TRIED + REVERTED (regressed
-0→3 wrong); on-device blocker is the pin-deck motion changepoint frame-collection; impact-trace diagnostics added. v15:
-ENGINE_DISAGREE wired; learned engine SHIPPED — see below).
+**Last updated:** 2026-11-18 (v17: PinContactDetector ported on-device (foul-anchored deck-motion); recovers IMG_8963
+(the server withholds it) → device 5 covered / 0 wrong / MAE 0.166; 8969 withheld — needs on-device stabilization. v16:
+geometric-crossing fallback tried+reverted. v15: ENGINE_DISAGREE wired; learned engine SHIPPED).
+
+## v17 (2026-11-18) — PinContactDetector ported on-device: 5 covered / 0 wrong (recovers 8963)
+
+Root-caused the `deck_series_sparse` blocker with on-device counters: on 8969 the window DID capture the frames
+(132 in-window, 28 refs) — the failure was the old signal's per-frame **ball-tracking band** (bandFail=104, every
+candidate frame), not the window. The server (`ops/pin_contact.py`) doesn't track the ball at all: it watches a FIXED
+deck ROI (pin-cluster span × lane width, **upper-60% body mask**) over a **FOUL-anchored** window `[t_foul+1.2,
+t_foul+3.6]` (explicitly NOT the ball's projected arrival — on far/portrait clips that fires ~1.7 s early).
+
+**Ported `deck_motion_series` + `detect_contact` faithfully** (`OnDeviceTracker.pinDeckContactTime` + `detectContact`;
+`OnDeviceLearnedDetector.pinsDeck` gives the deck y-extent): foul-anchored window, median pre-contact reference,
+body-mask energy = fraction of pixels changed >35, largest sustained STEP walked back to the rise − 3-frame offset,
+NOISY/WEAK guards. Replaced the old ball-band changepoint + removed the v16 geometric fallback + crossing guard.
+Two on-device adaptations (justified, validated zero-wrong):
+- **VP sanity guard** in `speed()`: withhold when the lane solve puts the vanishing point far off-frame (IMG_8753 on
+  device: VP (-30010,-141764) → read 13.2 for an 18.3 ball). The device can't do 8753's geometry (server uses
+  stabilized frames); withhold is honest.
+- **WEAK `spanMin` 0.10 → 0.45**: the server's detector runs on STABILIZED frames (clean baseline); on-device RAW
+  frames are noisier, so a weak scatter is indistinguishable from residual motion and the changepoint lands late
+  (8968 span 0.33 → 11.7 mph; 8969 span 0.22/0.32 → 11.7/14.8). The correct clips scatter strongly (span 0.55–0.81),
+  so 0.45 cleanly separates a real pin fall from ambiguous motion and withholds the rest.
+
+**Device 22-clip (gate path), vs ground truth:** 5 covered {8751 +0.26, 8752 −0.41, **8963 +0.03**, 8966 −0.01,
+8967 +0.13}, **0 plausible-but-wrong**, MAE **0.166**, max lat 12.2 s. Up from the shipped 4 covered / MAE 0.307 — no
+regressions; **8963 is a clip the server production engine WITHHOLDS**, so the device now exceeds the server there.
+
+**8969 NOT covered — needs on-device stabilization.** Its deck scatter is weak (span 0.22/0.32) and both engines time
+the contact ~0.7–1.4 s late on raw handheld frames (classical 11.7, learned 14.8 vs truth 18.1), so it's withheld (and
+would be caught by ENGINE_DISAGREE anyway). An integer-SAD de-jitter was TRIED and REVERTED (it regressed good clips
+8963/8966 without fixing 8968). The real fix is porting the server's per-frame homography warp (`S['Hs']`
+warpPerspective to a common plate) so the deck-motion signal is pins, not camera shake — the documented larger lever,
+also what 8976/8754 coverage needs. Zero-wrong held throughout.
 
 ## v16 (2026-11-17) — coverage: geometric-crossing fallback TRIED + REVERTED; real blocker isolated
 

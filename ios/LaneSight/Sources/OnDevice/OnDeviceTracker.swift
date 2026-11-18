@@ -95,6 +95,11 @@ enum OnDeviceTracker {
             return fail("need ≥6 track points + lane geometry (foul line, VP, lane)")
         }
         let vpY = vp.y
+        // DEC-132: degenerate-geometry guard. A collapsed/ill-conditioned lane solve puts the vanishing point far off
+        // frame (IMG_8753 on device: VP (-30010, -141764)); the u(t) depth fit through it is garbage and the speed is
+        // meaningless (read 13.2 for an 18.3 mph ball). Withhold — the device can't do this clip's geometry (the server
+        // only recovers 8753 via stabilized frames). Legit VPs sit within a few frame-heights of the image.
+        guard abs(vp.x) < 6000, abs(vpY) < 6000 else { return fail("degenerate lane geometry — vanishing point off-frame (\(Int(vp.x)),\(Int(vpY)))") }
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
         // least-squares u = slope*t + intc over the track
         var n = 0.0, st = 0.0, su = 0.0, stt = 0.0, stu = 0.0
@@ -502,132 +507,136 @@ enum OnDeviceTracker {
                                                  foulTOverride: Double? = nil) -> Double? {
         let pts = track.sorted { $0.t < $1.t }
         guard pts.count >= 4 else { return nil }
-        // DEC-131: the frame-diff CHANGEPOINT is the primary pin-contact timer (frame-accurate on a clean deck).
-        // Sanity guard (on-device has no learned cross-engine check): the contact must sit near the ball's farthest
-        // tracked point (arrival). If the changepoint lands far from it the deck ROI/window is unreliable (weak
-        // on-device track) and it would emit a plausible-but-wrong speed — reject and fall through / withhold.
         func u(_ ct: Float) -> Float { 1 / max(ct - vpY, 1) }
         let far = pts.max(by: { u($0.contactRow) < u($1.contactRow) })!
-        // ANCHOR impact to the DETECTED head-pin row (pins detector), not the ball's farthest tracked point: on a
-        // strike the ball rolls ~0.5 s PAST the pins into the pit, so `far` overshoots and the impact reads late/slow
-        // (IMG_8969 14.5 mph for an 18 mph ball). anchorT = the geometric head-pin arrival (track time the ball's
-        // contactRow reaches the head-pin row). When no pins model/row is available, degrade exactly to the old
-        // `far`-anchored behaviour (anchorRow = far.contactRow, anchorT = far.t) — no regression.
+        // DEC-132: pin-contact timing is a FAITHFUL PORT of the server PinContactDetector (ops/pin_contact.py). A
+        // FIXED target-lane deck ROI (pin-cluster y-span × lane width, upper-60% body mask) is watched over a
+        // FOUL-anchored window [t_foul+1.2, t_foul+3.6], NOT the ball's projected arrival. (The old on-device signal
+        // tracked a band beside the ball and built its window on the ball's head-pin arrival — on portrait/far clips
+        // that band collapsed (series=0, bandFail) and the window ended ~1.7 s before the pins scattered. The
+        // geometric crossing anchor is not frame-accurate either (v16 regressed 3 wrong).) The server's foul-anchored
+        // deck-motion changepoint with its NOISY/WEAK guards is the authoritative, zero-wrong timer.
         let det = OnDeviceLearnedDetector.shared
-        let headRow = det?.pinsHeadRow(url: url, rot: rot, lane: lane)
-        lastImpactDebug = "pins=\(det?.hasPinsModel == true) headRow=\(headRow.map { String(format: "%.0f", $0) } ?? "nil") far.ct=\(String(format: "%.0f", far.contactRow)) far.t=\(String(format: "%.2f", far.t)) ctRange=[\(String(format: "%.0f", pts.map{$0.contactRow}.min()!))..\(String(format: "%.0f", pts.map{$0.contactRow}.max()!))]"
-        // WITHHOLD when the pins model is present but finds no pins (server parity: no pins deck → no t_geom / no
-        // classifier → PIN_IMPACT_NOT_DETECTED). This is the honest answer on the hard clips where the pin deck can't
-        // be located (8969/8973) — far better than anchoring to the ball's farthest point, which overshoots into the
-        // pit and reads slow. Degrades to the old far-anchored behaviour only if no pins model is bundled at all.
-        if det?.hasPinsModel == true && headRow == nil { lastImpactDebug += " -> WITHHOLD:headRow_nil"; return nil }
-        let anchorRow: Float = headRow ?? far.contactRow
-        var anchorT = Double(far.t)
-        var crossed = false
-        if headRow != nil {
-            for k in 1..<pts.count {
-                let a = pts[k-1].contactRow, b = pts[k].contactRow
-                if (a - anchorRow) * (b - anchorRow) <= 0, a != b {
-                    anchorT = pts[k-1].t + Double((anchorRow - a) / (b - a)) * (pts[k].t - pts[k-1].t); crossed = true; break
-                }
-            }
-            // The head pin is detected but the ball's track never REACHES it (sparse/short track, e.g. IMG_8969's
-            // 41-pt track) — so there is no geometric contact time, only the far point, which overshoots into the pit.
-            // Honest answer: withhold (we cannot time the contact), rather than emit a slow far-anchored speed.
-            if !crossed { lastImpactDebug += " -> WITHHOLD:track_no_cross_headRow"; return nil }
-            lastImpactDebug += " crossed@t=\(String(format: "%.2f", anchorT))"
-        }
-        // DEC-132 v16 — TRIED AND REVERTED: falling back to the geometric head-pin CROSSING time (anchorT) when the
-        // pin-deck motion changepoint can't time the contact. Rationale was that the crossing is the ball-at-head-pin
-        // moment (not the overshoot `far` point v12 rejected). On the 22-clip gate it REGRESSED zero→3 plausible-but-
-        // wrong (8963 −4.79, 8968 +3.50, 8969 +2.29): the crossing is NOT a frame-accurate contact anchor — head-pin
-        // row localisation + sparse portrait tracks make it over/under-shoot. The pin-deck MOTION changepoint is
-        // REQUIRED; when it can't collect frames (deck_series_sparse — the real on-device blocker, see the impact
-        // trace in diag) the honest answer is to WITHHOLD. Kept as one withhold+trace point for the next session.
-        func geomFallback(_ why: String) -> Double? {
-            lastImpactDebug += " -> WITHHOLD:\(why)"
+        let deck = det?.pinsDeck(url: url, rot: rot, lane: lane)
+        lastImpactDebug = "pins=\(det?.hasPinsModel == true) deck=\(deck.map { "h=\(Int($0.head)) y=[\(Int($0.top))..\(Int($0.bot))]" } ?? "nil") far.t=\(String(format: "%.2f", far.t))"
+        // No pins deck located → withhold (server parity: PIN_IMPACT_NOT_DETECTED). Only degrade if NO pins model is
+        // bundled at all (shouldn't happen — Ball{Lane,Pins}Detector ship in the app).
+        guard let deck, det?.hasPinsModel == true else {
+            lastImpactDebug += det?.hasPinsModel == true ? " -> WITHHOLD:no_pins_deck" : " -> WITHHOLD:no_pins_model"
             return nil
         }
-        // changepoint path (frame-accurate on a clean deck): accept only if it AGREES with the geometric head-pin
-        // arrival (server t_motion vs t_geom cross-check), then clamp so a late changepoint can't overshoot the pins.
-        if let cp = contactChangepoint(url: url, track: track, lane: lane, vpY: vpY, foulY: foulY, rot: rot, foulTOverride: foulTOverride),
-           cp >= anchorT - 0.1, cp <= anchorT + 0.5 {
-            lastImpactDebug += " -> OK:changepoint_agree cp=\(String(format: "%.2f", cp))"
-            return min(cp, anchorT + 0.1)
+        // foul-cross time from the ball's u(t) fit (same fit as speed()), or the caller's override.
+        var tFoul = foulTOverride ?? Double.nan
+        if tFoul.isNaN {
+            var n = 0.0, st = 0.0, su = 0.0, stt = 0.0, stu = 0.0
+            for p in pts { let t = Double(p.t), uu = Double(u(p.contactRow)); n += 1; st += t; su += uu; stt += t*t; stu += t*uu }
+            let den = n*stt - st*st
+            guard abs(den) > 1e-9 else { lastImpactDebug += " -> WITHHOLD:degenerate_fit"; return nil }
+            let slope = (n*stu - st*su)/den, intc = (su - slope*st)/n
+            guard slope > 0 else { lastImpactDebug += " -> WITHHOLD:non_monotonic"; return nil }
+            tFoul = (Double(u(foulY)) - intc)/slope
         }
-        let farD = expDiam(lane, anchorRow)
-        let yA = max(0, Int(anchorRow - 4 * farD)), yB = Int(anchorRow + 4 * farD)
-        let (xaF, xbF) = laneX(lane, anchorRow); let padX = 0.4 * (xbF - xaF)
-        let xA = max(0, Int(xaF - padX)), xB = Int(xbF + padX)
-        guard yB > yA + 8, xB > xA + 8 else { return geomFallback("deck_roi_too_small") }
-        let roiW = xB - xA, roiH = yB - yA
-        // t_enter: first track time the ball's top enters the ROI (ct − D < yB)
-        var tEnter = anchorT - 0.5
-        for p in pts where Double(p.contactRow) - Double(expDiam(lane, p.contactRow)) < Double(yB) { tEnter = p.t; break }
-        // ball interpolation arrays
-        let tt = pts.map { Double($0.t) }, cxA = pts.map { $0.cx }, ctA = pts.map { $0.contactRow }
-        func ballAt(_ t: Double) -> (Float, Float) {
-            var k = 1; while k < tt.count && tt[k] < t { k += 1 }; k = min(max(k, 1), tt.count - 1)
-            let a = Float(min(max((t - tt[k-1]) / max(tt[k]-tt[k-1], 1e-6), 0), 1))
-            return (cxA[k-1] + a * (cxA[k]-cxA[k-1]), ctA[k-1] + a * (ctA[k]-ctA[k-1]))
+        guard tFoul.isFinite else { lastImpactDebug += " -> WITHHOLD:bad_foul_t"; return nil }
+        lastImpactDebug += " tFoul=\(String(format: "%.2f", tFoul))"
+        if let tc = pinDeckContactTime(url: url, lane: lane, rot: rot, deck: deck, tFoul: tFoul) {
+            lastImpactDebug += " -> OK:deck_contact t=\(String(format: "%.2f", tc))"
+            return tc
         }
+        return nil
+    }
+
+    /// DEC-132 — faithful Swift port of ops/pin_contact.py `deck_motion_series` + `detect_contact`. Returns the
+    /// pin-contact time (s) or nil (NOISY/WEAK/short deck → withhold, never a wrong number). FOUL-anchored window; a
+    /// fixed deck ROI (pin-cluster span padded × lane width at the head row ±0.2) with the upper-60% body mask; energy
+    /// = fraction of body-mask pixels whose grayscale |frame − median-reference| > 35; contact = the largest sustained
+    /// STEP walked back to the rise start minus the calibrated 3-frame offset. (Deviation from the server: no
+    /// phase-correlation de-jitter — the validation clips are near-static (v11); add it if a handheld clip needs it.)
+    nonisolated private static func pinDeckContactTime(url: URL, lane: ODDetectedLane, rot: ODRotation,
+                                                       deck: (head: Float, top: Float, bot: Float), tFoul: Double) -> Double? {
+        let (xl, xr) = laneX(lane, deck.head); let padX = 0.2 * (xr - xl)
+        let spanY = max(deck.bot - deck.top, expDiam(lane, deck.head) * 1.5)   // geometric floor when 1 pin detected
+        let y0 = Int(deck.top - 0.25 * spanY), y1 = Int(deck.bot + 0.15 * spanY)
+        let x0 = Int(xl - padX), x1 = Int(xr + padX)
+        guard y1 - y0 >= 6, x1 - x0 >= 6 else { return nil }
+        let roiW = x1 - x0, roiH = y1 - y0
+        let bodyBot = max(Int(0.60 * Double(roiH)), 1)        // upper 60% rows = the standing pin bodies
+        let bodyCount = bodyBot * roiW
+        let loT = tFoul + 1.2, hiT = tFoul + 3.6              // server FOUL_LO/FOUL_HI (≈11–25 mph travel)
         let asset = AVURLAsset(url: url)
         guard let tr = asset.tracks(withMediaType: .video).first, let reader = try? AVAssetReader(asset: asset) else { return nil }
         let out = AVAssetReaderTrackOutput(track: tr, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
         out.alwaysCopiesSampleData = false; reader.add(out); reader.startReading()
-        var refs: [[Float]] = []; var ref: [Float]? = nil; var series: [(t: Double, v: Float)] = []
+        var refFrames: [[Float]] = []; var ref: [Float]? = nil
+        var ts: [Double] = []; var energy: [Float] = []
         while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
             if Task.isCancelled { reader.cancelReading(); return nil }
             autoreleasepool {
                 guard let raw = CMSampleBufferGetImageBuffer(sb), let px = OnDeviceDecode.rotated(raw, rot) else { return }
                 let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
-                if t < tEnter - 0.5 || t > anchorT + 0.6 { return }
+                if t < loT { return }
+                if t > hiT { reader.cancelReading(); return }
                 CVPixelBufferLockBaseAddress(px, .readOnly); defer { CVPixelBufferUnlockBaseAddress(px, .readOnly) }
                 let rb = CVPixelBufferGetBytesPerRow(px), W = CVPixelBufferGetWidth(px), H = CVPixelBufferGetHeight(px)
-                guard let base = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return }
-                var roi = [Float](repeating: 0, count: roiW * roiH)
-                for yy in 0..<roiH { let y = yA + yy; if y < 0 || y >= H { continue }
-                    for xx in 0..<roiW { let x = xA + xx; if x < 0 || x >= W { continue }
-                        let p = y * rb + x * 4; roi[yy * roiW + xx] = Float(max(base[p], base[p+1], base[p+2])) } }
-                if t < tEnter - 0.05 { refs.append(roi); return }
-                if ref == nil, !refs.isEmpty {
-                    var r = [Float](repeating: 0, count: roiW * roiH); var col = [Float](repeating: 0, count: refs.count)
-                    for p in 0..<(roiW * roiH) { for k in 0..<refs.count { col[k] = refs[k][p] }; col.sort(); r[p] = col[col.count/2] }
+                guard let b = CVPixelBufferGetBaseAddress(px)?.assumingMemoryBound(to: UInt8.self) else { return }
+                var g = [Float](repeating: 0, count: roiW * roiH)
+                for yy in 0..<roiH { let y = y0 + yy; if y < 0 || y >= H { continue }
+                    for xx in 0..<roiW { let x = x0 + xx; if x < 0 || x >= W { continue }
+                        let p = y * rb + x * 4   // BGRA → luma (BT.601, matches cv2 BGR2GRAY)
+                        g[yy*roiW+xx] = 0.114*Float(b[p]) + 0.587*Float(b[p+1]) + 0.299*Float(b[p+2]) } }
+                if t < loT + 0.15 { refFrames.append(g); return }       // first 0.15 s = static reference
+                if ref == nil {
+                    guard refFrames.count >= 2 else { reader.cancelReading(); return }
+                    var r = [Float](repeating: 0, count: roiW * roiH); var col = [Float](repeating: 0, count: refFrames.count)
+                    for p in 0..<(roiW*roiH) { for k in 0..<refFrames.count { col[k] = refFrames[k][p] }; col.sort(); r[p] = col[col.count/2] }
                     ref = r
                 }
                 guard let rr = ref else { return }
-                // band JUST BEYOND the ball's top (toward the pins), tracking the ball → masks the ball itself
-                let (bx, by) = ballAt(t); let bd = expDiam(lane, by)
-                let r0 = max(0, Int(by - 2.2*bd) - yA), r1 = min(roiH, Int(by - 1.15*bd) - yA)
-                let c0 = max(0, Int(bx - 1.3*bd) - xA), c1 = min(roiW, Int(bx + 1.3*bd) - xA)
-                guard r1 > r0, c1 > c0 else { return }
-                var diffs: [Float] = []; diffs.reserveCapacity((r1-r0)*(c1-c0))
-                for yy in r0..<r1 { for xx in c0..<c1 { let p = yy*roiW + xx; diffs.append(abs(roi[p] - rr[p])) } }
-                diffs.sort(); let pct95 = diffs[min(diffs.count-1, Int(0.95 * Float(diffs.count)))]
-                series.append((t, pct95))
+                var changed = 0
+                for yy in 0..<bodyBot { let o = yy*roiW; for xx in 0..<roiW where abs(g[o+xx] - rr[o+xx]) > 35 { changed += 1 } }
+                ts.append(t); energy.append(Float(changed) / Float(bodyCount))
             }
         }
-        guard series.count > 6 else { return geomFallback("deck_series_sparse(\(series.count))") }
-        // baseline + MAD over pre-arrival frames (server: E[:,0] < t_enter+0.6)
-        let pre = series.filter { $0.t < tEnter + 0.6 }.map { $0.v }
-        guard !pre.isEmpty else { return geomFallback("deck_no_baseline") }
-        let med = pre.sorted()[pre.count/2]
-        let mad = pre.map { abs($0 - med) }.sorted()[pre.count/2]
-        let base = med, sd = 1.4826 * mad + 2
-        let thr = base + 5 * sd
-        var hotness: Double? = nil
-        for k in 0..<(series.count - 3) {
-            if series[k].v > thr && series[k..<min(k+4, series.count)].filter({ $0.v > thr }).count >= 3 { hotness = series[k].t; break }
+        lastImpactDebug += " [deckPort win=[\(String(format: "%.2f", loT))..\(String(format: "%.2f", hiT))] refs=\(refFrames.count) E=\(ts.count) roi=\(roiW)x\(roiH) body=\(bodyBot)]"
+        return detectContact(t: ts, E: energy)
+    }
+
+    /// DEC-132 — port of ops/pin_contact.py `detect_contact`. Largest sustained STEP in the deck-motion energy,
+    /// walked back to the rise start, minus the calibrated offset. NOISY (high baseline) / WEAK (no scatter) → nil.
+    // spanMin is RAISED from the server's 0.10 to 0.45 on-device: the server runs detect_contact on STABILIZED frames
+    // (clean baseline), so a 0.10 scatter is a real signal; on-device RAW frames are noisier, and a weak scatter is
+    // indistinguishable from residual motion → the changepoint lands late (IMG_8968 span 0.33 → 11.7 mph for a 17.0
+    // ball; IMG_8969 span 0.22/0.32). The correct clips all scatter strongly (span 0.55–0.81), so 0.45 cleanly
+    // separates "real pin fall" from "ambiguous deck motion" and WITHHOLDS the rest (accuracy beats coverage; zero
+    // plausible-but-wrong). This is the on-device compensation for not warping each frame to a common plate.
+    nonisolated private static func detectContact(t: [Double], E: [Float], wa: Int = 15, wb: Int = 8,
+                                                  noiseThr: Float = 0.08, spanMin: Float = 0.45,
+                                                  refineFrac: Float = 0.20, offsetF: Double = 3.0) -> Double? {
+        guard t.count >= 10, E.count == t.count, E.count > wb + 4 else { return nil }
+        var diffs: [Double] = []; for i in 1..<t.count { diffs.append(t[i]-t[i-1]) }
+        let dt0 = diffs.sorted()[diffs.count/2]; let dt = dt0 > 0 ? dt0 : 1.0/60
+        let n0 = min(max(Int(0.5/dt), 5), E.count)
+        let base = Array(E[0..<n0]).sorted()[n0/2]                       // median of the first n0
+        let sorted = E.sorted(); let peak = sorted[min(Int(0.95 * Float(E.count - 1)), E.count - 1)]
+        lastImpactDebug += " {base=\(String(format: "%.3f", base)) peak=\(String(format: "%.3f", peak)) span=\(String(format: "%.3f", peak-base)) dt=\(String(format: "%.3f", dt))}"
+        if base > noiseThr { return nil }                               // NOISY (handheld stabilisation residual)
+        if peak - base < spanMin { return nil }                         // WEAK (deck too far/small)
+        func mean(_ s: ArraySlice<Float>) -> Float { s.isEmpty ? 0 : s.reduce(0,+)/Float(s.count) }
+        var bestStep = -Float.infinity, bestC = wb
+        for c in wb..<(E.count - 4) {
+            let step = mean(E[c..<min(c+wa, E.count)]) - mean(E[max(c-wb,0)..<c])
+            if step > bestStep { bestStep = step; bestC = c }
         }
-        guard let h = hotness else { return geomFallback("no_deck_hotness(thr=\(String(format: "%.0f", thr)))") }
-        lastImpactDebug += " -> OK:deck_hotness h=\(String(format: "%.2f", h)) anchorT=\(String(format: "%.2f", anchorT))"
-        // clamp (DEC-117): a hotness BEFORE the ball entered the ROI is an early reflection → defer to the head-pin
-        // geometric arrival.
-        if anchorT > h && h < tEnter { return anchorT }
-        // Otherwise both estimates tend to OVERSHOOT the true contact — the pin-motion hotness by the pin-fall
-        // latency, the geometric anchor is the ball AT the head-pin row (not past it) — so take the EARLIER of the
-        // two as the best contact estimate (recovers 8754's late hotness without re-overshooting into the pit).
-        return min(h, anchorT)
+        let c = bestC
+        let before = mean(E[max(c-wb,0)..<c]); let after = mean(E[c..<min(c+wa, E.count)])
+        let thr = before + refineFrac * (after - before)
+        var k = c
+        while k > max(c-wb, 0) && E[k-1] > thr { k -= 1 }
+        let tRise: Double
+        if k > 0 && E[k] != E[k-1] {
+            let fr = Double(min(max((thr - E[k-1]) / (E[k] - E[k-1]), 0), 1))
+            tRise = t[k-1] + fr * (t[k] - t[k-1])
+        } else { tRise = t[k] }
+        return tRise - offsetF * dt
     }
 
     // MARK: foreground blobs — diff vs bg, threshold, 3x3 open, connected components (union-find)
