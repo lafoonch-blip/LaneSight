@@ -51,6 +51,43 @@ enum CaptureProbe {
         return out
     }
 
+    /// DEC-133: tone-map an HDR (HLG/PQ, BT.2020) clip to SDR (BT.709) on device before analysis — a mismatched
+    /// HDR tone-map broke ball tracking (DEC-113), so the engine only ever sees SDR frames. Returns a new SDR temp
+    /// URL, or nil if the export failed (caller surfaces HDR_CONVERSION_FAILED). SDR input needs no conversion.
+    static func convertToSDR(_ url: URL) async -> URL? {
+        let asset = AVURLAsset(url: url)
+        guard asset.tracks(withMediaType: .video).first != nil else { return nil }
+        let comp = AVMutableVideoComposition(propertiesOf: asset)
+        comp.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        comp.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        comp.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { return nil }
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("sdr-\(UUID().uuidString).mov")
+        export.outputURL = out
+        export.outputFileType = .mov
+        export.videoComposition = comp
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            export.exportAsynchronously { cont.resume() }
+        }
+        return export.status == .completed ? out : nil
+    }
+
+    /// One-call gate used at the on-device analysis entry: probe the clip, tone-map HDR→SDR if needed, and return
+    /// the URL to analyze + the capture block + any capture-floor reasons. `analysisURL == nil` with an
+    /// HDR_CONVERSION_FAILED reason means the HDR clip couldn't be converted.
+    static func gate(url: URL, source: String, formMode: Bool) async
+        -> (analysisURL: URL?, capture: CaptureInfo?, reasons: [(code: String, reason: String)]) {
+        guard let info = probe(url: url, source: source) else { return (url, nil, []) }
+        var reasons = floorReasons(info, formMode: formMode)
+        var analysisURL: URL? = url
+        if info.dynamicRange != .sdr {
+            if let sdr = await convertToSDR(url) { analysisURL = sdr }
+            else { analysisURL = nil; reasons.append(("HDR_CONVERSION_FAILED",
+                "this clip is in an HDR format we couldn't convert to standard range on your device")) }
+        }
+        return (analysisURL, info, reasons)
+    }
+
     /// Probe a clip. `source` is "live" (just recorded) or "upload" (imported).
     static func probe(url: URL, source: String) -> CaptureInfo? {
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])

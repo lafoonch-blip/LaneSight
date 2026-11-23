@@ -884,11 +884,15 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odp-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        // DEC-133 any-video-in: probe the real capture + tone-map HDR→SDR before analysis (a bad HDR tone-map
+        // breaks ball tracking — DEC-113), so the engine only ever sees SDR frames. `analysisInput` is the SDR clip.
+        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: mode == "form")
+        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceMeasurement? = await withTaskGroup(of: OnDeviceMeasurement?.self) { group in
             group.addTask {
-                let clip = (mode == "form") ? copy : await VideoTrimmer.trimToShotWindow(copy, tail: 5.0)
-                defer { if clip != copy { try? FileManager.default.removeItem(at: clip) } }
+                let clip = (mode == "form") ? analysisInput : await VideoTrimmer.trimToShotWindow(analysisInput, tail: 5.0)
+                defer { if clip != analysisInput { try? FileManager.default.removeItem(at: clip) } }
                 let body = await OnDeviceShadow.run(clipURL: clip, shotId: shotId, source: source,
                                                     sessionId: sessionId, captureMode: mode, appVersion: appVersion)
                 let perf = body["device_perf"] as? [String: Any] ?? [:]
@@ -915,6 +919,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             return first
         }
         try? FileManager.default.removeItem(at: copy)
+        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }
@@ -1028,16 +1033,20 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
 
     /// DEC-129: run the MediaPipe Form engine as the PRIMARY measurement. Same 30 s cap + fall-back-to-server rule
     /// as `measureOnDevicePrimary` (shots). Form keeps the FULL clip (no shot-window trim — DEC-101).
-    nonisolated private func measureOnDeviceFormPrimary(clipURL: URL, shotId: String, handed: String)
+    nonisolated private func measureOnDeviceFormPrimary(clipURL: URL, shotId: String, handed: String,
+                                                        source: String = "upload")
         async -> OnDeviceFormMeasurement? {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odf-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        // DEC-133 any-video-in: probe + tone-map HDR→SDR before the Form engine (DEC-113). Form floor is 60 fps.
+        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: true)
+        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceFormMeasurement? = await withTaskGroup(of: OnDeviceFormMeasurement?.self) { group in
             group.addTask {
                 let t0 = Date()
-                guard let a = try? OnDeviceFormEngine.analyze(clipURL: copy, handed: handed) else { return nil }
+                guard let a = try? OnDeviceFormEngine.analyze(clipURL: analysisInput, handed: handed) else { return nil }
                 let lat = Date().timeIntervalSince(t0)
                 let isoOk = ["E2", "E3", "E4", "E6", "E7"].contains { (a.events[$0] ?? nil) != nil }
                 let mpos = a.measuredPositions.mapValues { $0.dict }
@@ -1059,6 +1068,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             return first
         }
         try? FileManager.default.removeItem(at: copy)
+        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }
@@ -1109,7 +1119,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var ct = ct
         let tOD = Date()
         let od = await measureOnDeviceFormPrimary(clipURL: URL(fileURLWithPath: clipPath),
-                                                  shotId: UUID().uuidString, handed: metadata.handed)
+                                                  shotId: UUID().uuidString, handed: metadata.handed, source: source)
         ct["ondevice_s"] = Date().timeIntervalSince(tOD)
         let newShotId = UUID().uuidString
         var sid: String? = (source == "live" ? sessionId : nil)
