@@ -15,7 +15,7 @@ Branch `context` holds only STATUS.md, INBOX.md and handoffs/ (full briefs), so 
   Project INBOX items onto this branch. Full briefs go in the Project under claude/ AND get copied to handoffs/.
 - Never put code on `context`. Never ask Shayne to paste context.
 
-Last updated: 2026-11-23 (coordinator: added how-to + handoffs/; Form row by Form session)
+Last updated: 2026-11-23 (Session 1 / shots — v17 on-device PinContactDetector shipped; updated Accuracy + Session 1 rows)
 
 ## Live
 - Server: Cloud Run lanesight-api-47dfd3b (lanesight-cv-0.7.2 classical + form fixes). Shadow/validation only.
@@ -25,15 +25,15 @@ Last updated: 2026-11-23 (coordinator: added how-to + handoffs/; Form row by For
 - Results UX: one complete result screen (Complete / Offline), metrics-only server call for score + coaching.
 
 ## Accuracy (22 labeled clips; truth = foul-cross -> first pin contact; gate ±0.5 mph)
-- iPhone: 4/22 within, 0 wrong. Server production engine: 8/22 within, 0 wrong.
-- ~12 clips (mostly 11/1 behind-ball-return / portrait) get no speed on any engine. #1 open problem.
+- iPhone: 5/22 within, 0 wrong (v17 `7f07302`: ported the server PinContactDetector on-device — foul-anchored deck-motion changepoint + VP guard + WEAK spanMin 0.45; recovers 8963, which the server withholds; MAE 0.166). Server production engine: 8/22 within, 0 wrong, MAE 0.10.
+- 8969/8976/8754 (supported framing) need **on-device frame stabilization** to cover at zero-wrong — the real coverage frontier. The ~13 clips no engine covers are the DEC-118 unsupported behind-ball-return/off-axis framing (classified `02_RESEARCH/UNCOVERED_CLIPS_CLASSIFICATION_2026-11-18.md`): pins/contact 7, track 5, foul 1 — a capture-position limit, not a CV bug.
 - Rev rate + early-lane speed: no ground truth (best_effort). Far-lane metrics (entry, breakpoint) off.
 - Form: on-device, plausibility-bounded; step count best_effort; blind test set = next 60 fps clips (not recorded yet).
 
 ## Active sessions
 | Session | Worktree · branch | Now |
 |---|---|---|
-| Session 1 (shots) | ~/Developer/LaneSight · feat/ios-lane-parity | DEC-132 coverage: on-device deck changepoint (8969), then the uncovered clips by first-failing stage (Python first, then port). Sole deployer. |
+| Session 1 (shots) | ~/Developer/LaneSight · feat/ios-lane-parity | DEC-132 DONE + pushed (`eaca061`): v15 ENGINE_DISAGREE wired + learned engine shipped; v17 ported server PinContactDetector on-device → 5/22, 0 wrong (recovered 8963); 8969 deck-changepoint done (withheld — weak deck signal on raw frames, needs on-device stabilization); uncovered clips classified (DEC-118 capture limit). v17 Release installed on phone. NEXT: on-device frame stabilization to cover 8969/8976/8754. Sole deployer. |
 | Form | ~/Developer/LaneSight-form · feat/form-ondevice | All assigned items DONE + pushed (558260d): form card vs design (grouping/labels/footer + on-device stills), E5 slide-plant (−13f early case fixed; late-error clips documented), on-device default verified ON. Release installed on Shayne's phone. IDLE — waiting on Shayne's 2 form re-uploads to validate the device fixes. |
 | Capture (to start) | ~/Developer/LaneSight-capture · feat/capture-any-video | INBOX 2026-11-23: on-device only + any video in + capture picker (next free DEC, likely 133). |
 
