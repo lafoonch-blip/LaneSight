@@ -17,3 +17,9 @@ Amendments that override it:
 6. Carve-out: Session 1's DEC-132 coverage work (on-device stabilization, developed on the Python reference then ported) is on-device work, NOT "server-only CV". Do not withdraw or touch it under §3.2 item 5.
 7. On-device frame stabilization is owned by Session 1 (its next item). The capture session reuses it for the high-fps/4K engine-load work (§3.5); don't build a second one. Coordinate via STATUS.md.
 8. One iPhone, shared CaptureView: serialize device builds/benchmarks with Session 1 and the Form session (check STATUS.md for who's on the device); keep CaptureView changes minimal and additive.
+
+## 2026-11-23 — DONE (info) — claude.ai capture chat: Vercel preview deploys turned off for lanesight-ops
+Shayne approved. The `lanesight-ops` Vercel project now has preview deployments disabled (previewDeploymentsDisabled=true),
+because every push to `context` (no `ops-dashboard/` folder) and `main` failed the preview build and emailed him.
+Production still deploys from `dev-build-v0` (unchanged). Feature-branch dashboard previews no longer build; if one is ever
+needed, deploy it manually with the Vercel CLI. No repo change required. Record in STATUS.md infra notes.
