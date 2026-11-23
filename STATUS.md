@@ -50,6 +50,7 @@ The server engine is OBSOLETE and is NOT a benchmark (no ground-truth guarantee)
 - DEC-133 one on-device measurement engine; any video in (detected capture drives availability); capture default 1080p120 SDR overridable; retire the server measurement path per metric as each passes its DEC-118 gate (on `feat/capture-any-video`)
 
 ## Standing rules
+- ONE APP ON THE PHONE: before any Release install, merge the other sessions' latest pushed work (feat/ios-lane-parity + integration/capture-form) so an install never removes another session's fixes. Verify key symbols from both are in the binary.
 - No fabricated or plausible-but-wrong numbers; unavailable + reason. No audio-based measurement. No AGPL models.
 - No user taps/labeling for calibration; Shayne doesn't label — sessions auto-label and self-audit.
 - Push own branches when gates pass (verify ls-remote). Never merge to main. Only Session 1 deploys.
