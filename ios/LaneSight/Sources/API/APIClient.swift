@@ -467,6 +467,7 @@ struct APIClient {
                           stageReport: [String: Any]? = nil, reasonCode: String? = nil, failedStage: String? = nil,
                           events: [String: Any]? = nil, view: String? = nil,
                           measuredPositions: [String: Any]? = nil, formVersion: String? = nil,
+                          captureQuality: [String: Any]? = nil,
                           timeoutS: Double = 10) async throws -> MetricsResultResponse {
         var req = makeRequest("shots/metrics", method: "POST")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -485,6 +486,7 @@ struct APIClient {
         if let view { body["view"] = view }
         if let measuredPositions { body["measured_positions"] = measuredPositions }
         if let formVersion { body["form_version"] = formVersion }
+        if let captureQuality { body["capture_quality"] = captureQuality }   // DEC-133 capture_quality.capture
         // DEC-128: forward the per-stage report + attempt-level cause so the server writes platform=ios stage rows
         // (analysis_stage_outcome) for every on-device-first attempt, not just the dev /analysis/shadow path.
         if let stageReport { body["stage_report"] = stageReport }

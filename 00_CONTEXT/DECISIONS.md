@@ -1,7 +1,7 @@
 # LaneSight Decision Log
 Status: CANONICAL  
-Version: 1.91  
-Last Updated: 2026-11-16  
+Version: 1.92  
+Last Updated: 2026-11-23  
 Owner: Shayne  
 Supersedes: v1.90 (+ DEC-132 pin contact measured visually, never from audio — renumbered from DEC-131 on the form-ondevice merge)
 
@@ -1804,6 +1804,23 @@ the pins are equally observable in the video, so a visual temporal model gets th
 **Amends/extends:** DEC-130 (replaces its audio `t_pins` exploration with the visual pin-contact classifier; the rest
 of DEC-130 stands); DEC-128 honesty/plausibility rules continue to bind.
 
+### DEC-133 — One product engine (on-device); any video in; capture default + override (2026-11-23)
+**Decision (Shayne, 2026-11-23):** LaneSight ships **one measurement engine: on-device**. The server stops being a measurement fallback, the app accepts and analyzes **any uploaded video**, and in-app recording gets a **user-overridable capture default** (shipping 1080p120 SDR, Form floor 60) that rises as higher formats pass the gates.
+
+**A. One product engine: on-device.**
+- No server-fallback measurement in the product (**amends DEC-102** and **DEC-104**'s fallback-upload clause). The phone is the measurement engine; unsupported phones show an honest "This iPhone isn't supported for analysis" — the minimum is set from **measured device capability (DEC-102)**, not model name. Recording + saving still work on any phone.
+- **Stop all new server-only CV/measurement work** (extends **DEC-117**'s freeze from speed/rev to every metric). The **Python reference engine stays** as the development/validation harness only (**DEC-106**); Session 1's coverage work (develop in Python, then port) continues under this rule.
+- **Retire the server measurement path per metric** once that metric ships on device and passes its **DEC-118** gate (plan: `03_ENGINEERING/SERVER_MEASUREMENT_RETIREMENT.md`). When the last MVP metric ships on device, remove server analysis from the app flow (upload-for-analysis, `/jobs` analysis, the Cloud Run analysis service) — **not in this pass**.
+- **Stays:** the Supabase backend (auth, data, sync, server-authoritative Score / tiers / achievements / coaching policy); DEC-103 submission validation. Diagnostic clip retention (DEC-100) becomes **opt-in** upload of failed/flagged clips, with consent (DEC-104).
+
+**B. Any video in (Upload).** On import, detect the capture properties from the file — real frame rate from PTS (incl. variable frame rate + iPhone slo-mo's native capture rate, NOT the Photos slowed-playback edit), resolution, orientation, dynamic range (SDR / HLG / Dolby Vision), codec, duration — and process accordingly. HDR is tone-mapped to SDR on device (AVFoundation BT.2020 HLG/PQ → BT.709); because a mismatched tone-map broke ball tracking (DEC-113), HDR gets its own validation set. Metric availability + precision follow the detected capture (DEC-028/023); below the floor (30 fps / 720p, lane + pins in frame) the affected metrics are **unavailable with a specific reason** (e.g. "recorded at 24 fps, need 30+"), never estimated (DEC-026/027).
+
+**C. In-app recording default + override** (supersedes the 60/120 framing of DEC-028/121). Default = the highest fps at **≥1080p, SDR**, with **4K when the phone offers it at the same fps**; **Form floors at 60**. **Per the capture benchmark gate, ship 1080p120 SDR as the default until the DEC-118 Shot + Form gates hold at a higher format (work items 12/16); promote it in a separate commit with the numbers.** Override in **Settings › Recording** + a **Setup quick control**, listing only the formats this phone supports with plain-language trade-offs ("More detail for rev rate · larger files · more battery/heat"). **Low-light guard:** a too-dark / too-noisy high-fps capture says so with a tip on the result; it never silently changes format.
+
+**Why:** measurement has moved on-device, so capping capture at 60 fps (a server-cost artifact, not an accuracy one) no longer serves accuracy; one on-device engine removes dual maintenance and the HDR/120 fps server-cost failures; any-video-in makes Upload a first-class path. Higher precision (rev ±40→±20→±10 rpm at 60/120/240; loft/axis/PAP need ≥120 fps) is unlocked by capture and gated by on-device device-load + accuracy validation, not by server cost.
+
+**Date:** 2026-11-23 · **Status:** ACCEPTED (in progress; the shipped default stays 1080p120 SDR until the benchmark + DEC-118 gates pass at a higher format).
+**Amends/extends:** DEC-102 (removes the server-as-fallback measurement role), DEC-104 (fallback upload → opt-in consented upload of failed/flagged clips), DEC-117 (freeze extended from speed/rev to all server-only metrics), DEC-028 / DEC-121 (capture default: max fps at ≥1080p SDR, Form floor 60, user-overridable), DEC-100 (retention → opt-in). DEC-106 (Python harness) and the DEC-118 gates continue to bind.
 ### DEC-134 — Speed is STRICT: reported only when timed foul→detected pin contact; no fallback estimate (2026-11-23)
 **Decision (Shayne, 2026-11-23, after upload 762be1be produced zero numbers):** Ball speed is reported ONLY when it can
 be timed from the foul-line crossing to a DETECTED pin contact. When pin contact isn't detected, speed is `unavailable`
@@ -1839,6 +1856,10 @@ Active Session rings, and the shot-card "Avg speed" headline).
 gate), DEC-064/112 (foul→pins average), DEC-030 (release = secondary), DEC-127 (on-device measured metrics).
 
 ## Superseded decisions
+- DEC-102 — the **server-as-fallback measurement** role **amended by DEC-133** (one product engine: on-device; the server keeps auth/data/sync + authoritative Score/tiers/achievements/coaching, but is no longer a measurement fallback).
+- DEC-104 — the **fallback-upload** clause **amended by DEC-133** (upload of failed/flagged clips becomes **opt-in + consented**, not an automatic fallback).
+- DEC-117 — the server-only CV **freeze extended by DEC-133** from speed/rev to **all** server-only measurement work (new such work stops; the Python reference engine stays the dev/validation harness per DEC-106).
+- DEC-028 / DEC-121 — the capture default (120 target / Form 60 floor) **superseded by DEC-133** (max fps at ≥1080p SDR, 4K at the same fps when available, Form floor 60, user-overridable; ships 1080p120 SDR until the gates pass).
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
 - DEC-092 — near-term optimize-server-first order and "metric math stays on the server" **stand**; only the **long-term scope** is amended by DEC-102 (on-device metric math becomes the target once the DEC-103 gates pass). DEC-092 P3's observation interface is realized as `MeasurementEvidence` (DEC-103).
 - DEC-062 — production CV freeze **lifted for the shadow/validation track only** (DEC-102); production CV behavior stays frozen until the DEC-103 gates pass.

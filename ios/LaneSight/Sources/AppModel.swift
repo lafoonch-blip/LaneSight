@@ -3,6 +3,8 @@ import SwiftUI
 import Combine
 import UIKit
 import Photos
+import AVFoundation
+import CoreImage
 
 /// Progress of the capture -> upload -> analyze -> result pipeline.
 enum PipelineState: Equatable {
@@ -76,6 +78,10 @@ struct ShotResult: Equatable {
     /// Display-only pose-skeleton overlay joints per key frame (visibility-gated, crop-normalized). Each
     /// value is 33 joints, [x,y] in the cropped still or nil for a joint the pose wasn't confident about.
     var keyFramePoses: [String: [[Double]?]] = [:]
+    /// DEC-131: key-position stills extracted ON-DEVICE from the local clip (JPEG), keyed by position key
+    /// (ball_start/end_pushaway/top_of_swing/release). When present the UI shows these immediately without a
+    /// server round-trip; the server frame is only fetched when a local one isn't available.
+    var localKeyFrames: [String: Data] = [:]
     var events: [String: Double] = [:]
     var timingCheckpoints: [String: TimingCheckpoint] = [:]
     var measuredPositions: [String: MeasuredPosition] = [:]
@@ -878,6 +884,22 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var stageReportJSON: Data? = nil
         var reasonCode: String? = nil
         var failedStage: String? = nil
+        // DEC-133: the detected capture block (capture_quality.capture) for this clip, as JSON. Stored on the record.
+        var captureJSON: Data? = nil
+    }
+
+    /// DEC-133: below the capture floor, mark every measured metric in the detailed JSON `unavailable` with the
+    /// specific reason + reason_code — never estimate below the floor (DEC-026/027). No-op if no reasons.
+    nonisolated static func stampBelowFloor(_ detailed: Data?, reasons: [(code: String, reason: String)]) -> Data? {
+        guard !reasons.isEmpty, let detailed, let first = reasons.first,
+              var obj = (try? JSONSerialization.jsonObject(with: detailed)) as? [String: Any] else { return detailed }
+        let note = reasons.map { $0.reason }.joined(separator: "; ")
+        for (k, v) in obj {
+            guard var cell = v as? [String: Any] else { continue }
+            cell["value"] = NSNull(); cell["status"] = "unavailable"; cell["note"] = note; cell["reason_code"] = first.code
+            obj[k] = cell
+        }
+        return (try? JSONSerialization.data(withJSONObject: obj)) ?? detailed
     }
 
     /// DEC-126: run the on-device engine as the PRIMARY measurement for a live shot. Returns the measurement, or
@@ -890,11 +912,15 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odp-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        // DEC-133 any-video-in: probe the real capture + tone-map HDR→SDR before analysis (a bad HDR tone-map
+        // breaks ball tracking — DEC-113), so the engine only ever sees SDR frames. `analysisInput` is the SDR clip.
+        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: mode == "form")
+        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceMeasurement? = await withTaskGroup(of: OnDeviceMeasurement?.self) { group in
             group.addTask {
-                let clip = (mode == "form") ? copy : await VideoTrimmer.trimToShotWindow(copy, tail: 5.0)
-                defer { if clip != copy { try? FileManager.default.removeItem(at: clip) } }
+                let clip = (mode == "form") ? analysisInput : await VideoTrimmer.trimToShotWindow(analysisInput, tail: 5.0)
+                defer { if clip != analysisInput { try? FileManager.default.removeItem(at: clip) } }
                 let body = await OnDeviceShadow.run(clipURL: clip, shotId: shotId, source: source,
                                                     sessionId: sessionId, captureMode: mode, appVersion: appVersion)
                 let perf = body["device_perf"] as? [String: Any] ?? [:]
@@ -909,8 +935,10 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                     ballSpeed: m["ball_speed"] as? Double, foulToPins: m["speed_avg_foul_to_pins"] as? Double,
                     revRate: m["rev_rate"] as? Double, basis: body["basis"] as? String ?? "unavailable",
                     note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity,
-                    detailedJSON: dj, trajectoryJSON: tj, stageReportJSON: sj,
-                    reasonCode: body["reason_code"] as? String, failedStage: body["failed_stage"] as? String)
+                    detailedJSON: Self.stampBelowFloor(dj, reasons: gated.reasons), trajectoryJSON: tj, stageReportJSON: sj,
+                    reasonCode: gated.reasons.first?.code ?? (body["reason_code"] as? String),
+                    failedStage: body["failed_stage"] as? String,
+                    captureJSON: gated.capture.flatMap { try? JSONSerialization.data(withJSONObject: $0.dict) })
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -921,6 +949,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             return first
         }
         try? FileManager.default.removeItem(at: copy)
+        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }
@@ -1030,31 +1059,38 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var measuredPositionsJSON: Data? = nil // M1–M7
         var stageReportJSON: Data? = nil
         var reasonCode: String? = nil          // FORM_DELIVERY_NOT_ISOLATED when all swing events dropped
+        var captureJSON: Data? = nil           // DEC-133 capture_quality.capture
     }
 
     /// DEC-129: run the MediaPipe Form engine as the PRIMARY measurement. Same 30 s cap + fall-back-to-server rule
     /// as `measureOnDevicePrimary` (shots). Form keeps the FULL clip (no shot-window trim — DEC-101).
-    nonisolated private func measureOnDeviceFormPrimary(clipURL: URL, shotId: String, handed: String)
+    nonisolated private func measureOnDeviceFormPrimary(clipURL: URL, shotId: String, handed: String,
+                                                        source: String = "upload")
         async -> OnDeviceFormMeasurement? {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odf-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
+        // DEC-133 any-video-in: probe + tone-map HDR→SDR before the Form engine (DEC-113). Form floor is 60 fps.
+        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: true)
+        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceFormMeasurement? = await withTaskGroup(of: OnDeviceFormMeasurement?.self) { group in
             group.addTask {
                 let t0 = Date()
-                guard let a = try? OnDeviceFormEngine.analyze(clipURL: copy, handed: handed) else { return nil }
+                guard let a = try? OnDeviceFormEngine.analyze(clipURL: analysisInput, handed: handed) else { return nil }
                 let lat = Date().timeIntervalSince(t0)
                 let isoOk = ["E2", "E3", "E4", "E6", "E7"].contains { (a.events[$0] ?? nil) != nil }
                 let mpos = a.measuredPositions.mapValues { $0.dict }
+                let mj = try? JSONSerialization.data(withJSONObject: a.metricsJSONObject)
                 return OnDeviceFormMeasurement(
                     view: a.view, status: a.status, formVersion: a.formVersion,
                     basis: isoOk ? "best_effort" : "unavailable", latencyS: lat,
-                    metricsJSON: try? JSONSerialization.data(withJSONObject: a.metricsJSONObject),
+                    metricsJSON: Self.stampBelowFloor(mj, reasons: gated.reasons),
                     eventsJSON: try? JSONSerialization.data(withJSONObject: a.eventsJSONObject),
                     measuredPositionsJSON: try? JSONSerialization.data(withJSONObject: mpos),
                     stageReportJSON: try? JSONSerialization.data(withJSONObject: a.stageReportJSONObject),
-                    reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED")
+                    reasonCode: gated.reasons.first?.code ?? (isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
+                    captureJSON: gated.capture.flatMap { try? JSONSerialization.data(withJSONObject: $0.dict) })
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -1065,6 +1101,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             return first
         }
         try? FileManager.default.removeItem(at: copy)
+        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }
@@ -1100,10 +1137,60 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                            recommendation: nil, insightsState: nil, insightsConfidence: nil, insightsNote: nil,
                            captureFarLaneLimited: false, captureReason: nil, isUpload: isUpload, isForm: true,
                            formView: m?.view, formStatus: m?.status ?? "unavailable",
-                           formVersion: m?.formVersion ?? "form-0.0.0")
+                           formVersion: m?.formVersion ?? OnDeviceFormEngine.formVersion)
         r.engine = "iphone"
         r.coachingPendingOffline = true
         return r
+    }
+
+    /// DEC-131: extract the key-position stills ON-DEVICE from the local clip at the measured event times, so they
+    /// show without a server round-trip. Keyed by position key (ball_start E2 / end_pushaway E3 / top_of_swing E4 /
+    /// release E7). Only events the engine actually located are extracted — never a guessed frame.
+    nonisolated static func extractFormKeyFrames(clipURL: URL, events: [String: Double]) -> [String: Data] {
+        // Read frames on the SAME clock the pose engine timed the events with (AVAssetReader sample PTS + the same
+        // display rotation). The old AVAssetImageGenerator path seeks on the asset timeline, which can be offset
+        // from the sample PTS (edited / trimmed / slo-mo clips) — every grab then missed and all four tiles said
+        // "not found" even when the events were located (Shayne's rear upload 0caad150, 2026-11-23).
+        let map: [(ev: String, key: String)] = [("E2", "ball_start"), ("E3", "end_pushaway"),
+                                                 ("E4", "top_of_swing"), ("E7", "release")]
+        var targets: [(key: String, t: Double)] = []
+        for (ev, key) in map { if let t = events[ev], t.isFinite { targets.append((key, t)) } }
+        guard !targets.isEmpty else { return [:] }
+        let asset = AVURLAsset(url: clipURL)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return [:] }
+        let rot = OnDeviceDecode.displayRotation(track)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        guard reader.canAdd(out) else { return [:] }
+        reader.add(out)
+        reader.startReading()
+        let lastT = (targets.map(\.t).max() ?? 0) + 0.1
+        // Best (closest-PTS) frame per key, rotated to display orientation.
+        var best: [String: (dt: Double, px: CVPixelBuffer)] = [:]
+        while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+            if t > lastT { reader.cancelReading(); break }
+            guard let raw = CMSampleBufferGetImageBuffer(sb) else { continue }
+            for tg in targets {
+                let dt = abs(t - tg.t)
+                guard dt <= 0.05, dt < (best[tg.key]?.dt ?? .infinity),
+                      let px = OnDeviceDecode.rotated(raw, rot) else { continue }
+                best[tg.key] = (dt, px)
+            }
+        }
+        let ctx = CIContext()
+        var result: [String: Data] = [:]
+        for (key, b) in best {
+            var img = CIImage(cvPixelBuffer: b.px)
+            let maxSide = max(img.extent.width, img.extent.height)
+            if maxSide > 720 { img = img.transformed(by: CGAffineTransform(scaleX: 720 / maxSide, y: 720 / maxSide)) }
+            if let cg = ctx.createCGImage(img, from: img.extent),
+               let jpg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.85) {
+                result[key] = jpg
+            }
+        }
+        return result
     }
 
     /// DEC-129: run the on-device Form engine on the durable clip and show the result ONCE (Complete online /
@@ -1115,7 +1202,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var ct = ct
         let tOD = Date()
         let od = await measureOnDeviceFormPrimary(clipURL: URL(fileURLWithPath: clipPath),
-                                                  shotId: UUID().uuidString, handed: metadata.handed)
+                                                  shotId: UUID().uuidString, handed: metadata.handed, source: source)
         ct["ondevice_s"] = Date().timeIntervalSince(tOD)
         let newShotId = UUID().uuidString
         var sid: String? = (source == "live" ? sessionId : nil)
@@ -1136,13 +1223,15 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             let events = od.eventsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let mpos = od.measuredPositionsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let stage = od.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            let capQ = od.captureJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }.map { ["capture": $0] }
             do {
                 let resp = try await client.scoreFromMetrics(
                     metricsDetailed: detailed, trajectory: nil, keyPoints: nil,
                     sessionId: (source == "upload" ? nil : sid), metadata: metadata,
                     devicePerf: ["latency_s": od.latencyS], algorithmVersion: OnDeviceFormEngine.backendVersion,
                     appVersion: appVersion, stageReport: stage, reasonCode: od.reasonCode, failedStage: nil,
-                    events: events, view: od.view, measuredPositions: mpos, formVersion: od.formVersion, timeoutS: 10)
+                    events: events, view: od.view, measuredPositions: mpos, formVersion: od.formVersion,
+                    captureQuality: capQ, timeoutS: 10)
                 built = Self.buildFormResultFromCard(resp, isUpload: source != "live")   // Complete
                 onDeviceShadowTargets[recId] = resp.shot_id
                 track("ondevice_form_complete", props: ["ondevice_s": ct["ondevice_s"] ?? 0, "view": od.view])
@@ -1150,10 +1239,30 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                 built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")   // Offline
                 enqueueMetricsCall(detailed: od.metricsJSON, sessionId: (source == "upload" ? nil : sid),
                                    metadata: metadata, shotId: newShotId)
+                // Offline: the queued metrics call creates the shot with THIS id (server honors client shot_id), so
+                // still target the server VIDEO shadow at it — otherwise an offline form upload silently loses the
+                // server comparison (DEC-131: the shadow target was previously set only on the online path).
+                onDeviceShadowTargets[recId] = newShotId
                 track("ondevice_form_offline_shown", props: ["ondevice_s": ct["ondevice_s"] ?? 0])
             }
         } else {
             built = Self.offlineFormResult(od, shotId: newShotId, isUpload: source != "live")       // engine couldn't measure
+            // No metrics to submit here (engine produced nothing / offline before the engine ran), so no shot is
+            // created and there's nothing for the server shadow to attach to — leave the target unset.
+        }
+        // DEC-131: extract the key-position stills from the LOCAL clip at the on-device event times and attach them,
+        // so the Key positions tiles render immediately with no server fetch. Only located events produce a frame.
+        if let od, let ej = od.eventsJSON,
+           let evObj = (try? JSONSerialization.jsonObject(with: ej)) as? [String: Any] {
+            var evTimes: [String: Double] = [:]
+            for (k, v) in evObj { if let d = (v as? NSNumber)?.doubleValue { evTimes[k] = d } }
+            let clip = URL(fileURLWithPath: clipPath)
+            let frames = await Task.detached { Self.extractFormKeyFrames(clipURL: clip, events: evTimes) }.value
+            if !frames.isEmpty {
+                built.localKeyFrames = frames
+                built.keyFrames = Array(Set(built.keyFrames).union(frames.keys))
+                FormStillStore.save(frames, shotId: built.shotId)   // so reopening from history keeps the stills
+            }
         }
         result = built
         onDevicePrimaryRecords.insert(recId)
@@ -1331,12 +1440,13 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             pipeline = .analyzing(state: "coaching", timings: [:])          // "Generating coaching"
             do {
                 let stageRep = m.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                let capQ = m.captureJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }.map { ["capture": $0] }
                 let resp = try await client.scoreFromMetrics(
                     metricsDetailed: detailed, trajectory: traj, keyPoints: nil,
                     sessionId: (source == "upload" ? nil : sid), metadata: metadata,
                     devicePerf: ["latency_s": m.latencyS], algorithmVersion: OnDeviceShadow.engineVersion,
                     appVersion: appVersion, stageReport: stageRep, reasonCode: m.reasonCode,
-                    failedStage: m.failedStage, timeoutS: 10)
+                    failedStage: m.failedStage, captureQuality: capQ, timeoutS: 10)
                 built = Self.buildResultFromCard(resp, isUpload: source != "live")   // Complete Analysis
                 onDeviceShadowTargets[recId] = resp.shot_id        // runAnalyze → shadowVideo against this shot
                 track("ondevice_metrics_complete",
@@ -1695,7 +1805,14 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             built.shotNumber = shot.sequence
             built.ballName = shot.ball_name          // DEC-097: the ball this shot was thrown with
             built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
-            if isForm { Self.attachFormFundamentals(&built, record) }
+            if isForm {
+                Self.attachFormFundamentals(&built, record)
+                let stills = FormStillStore.load(shotId: built.shotId)
+                if !stills.isEmpty {
+                    built.localKeyFrames = stills
+                    built.keyFrames = Array(Set(built.keyFrames).union(stills.keys))
+                }
+            }
             else { Self.attachShotCard(&built, record) }
             result = built
             return true
@@ -1989,5 +2106,27 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// Marks the bowler profile complete after the setup + add-ball steps → the app root switches to Home.
     func finishProfileSetup() {
         profileComplete = true
+    }
+}
+
+
+/// On-device Form key-position stills, kept on the phone per shot so a result reopened from Lab › Uploads or a
+/// session shows the same thumbnails it showed the first time (the server has no stills for on-device analyses).
+enum FormStillStore {
+    nonisolated static func dir(_ shotId: String) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("form_stills", isDirectory: true).appendingPathComponent(shotId, isDirectory: true)
+    }
+    nonisolated static func save(_ frames: [String: Data], shotId: String) {
+        let d = dir(shotId)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        for (k, data) in frames { try? data.write(to: d.appendingPathComponent("\(k).jpg"), options: .atomic) }
+    }
+    nonisolated static func load(shotId: String) -> [String: Data] {
+        var out: [String: Data] = [:]
+        for k in ["ball_start", "end_pushaway", "top_of_swing", "release"] {
+            if let data = try? Data(contentsOf: dir(shotId).appendingPathComponent("\(k).jpg")) { out[k] = data }
+        }
+        return out
     }
 }

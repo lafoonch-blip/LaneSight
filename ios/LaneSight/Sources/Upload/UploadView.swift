@@ -27,6 +27,7 @@ struct UploadView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 clipCard
+                if let cap = capture { captureBadge(cap) }   // DEC-133: detected quality + lower-quality warning
                 if mode == "shot" { intentSection }      // Form has no target line (DEC-081)
 
                 if let errorText {
@@ -43,7 +44,7 @@ struct UploadView: View {
                 .disabled(pickedURL == nil || busy)
                 .opacity(pickedURL == nil || busy ? 0.5 : 1)
 
-                Text("One shot per clip. Results in about 2 minutes. Saved under Lab › Uploads; not a session, and not counted in Stats, Score or achievements.")
+                Text("One shot per clip. Results in about 15 seconds, analyzed on your iPhone. Saved under Lab › Uploads; not a session, and not counted in Stats, Score or achievements.")
                     .font(.lsCaption).foregroundStyle(LS.textFaint).multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }
@@ -62,6 +63,37 @@ struct UploadView: View {
     }
 
     @State private var pickerItem: PhotosPickerItem?
+    @State private var capture: CaptureProbe.CaptureInfo?   // DEC-133: detected capture of the imported clip
+    @State private var captureWarn: String?                 // below-floor reason, if any
+
+    /// DEC-133 (Figma 822:4354): the imported clip's detected quality + an amber "Lower-quality clip" badge when a
+    /// metric can't be supported. HDR clips are allowed (tone-mapped on analysis); the note says so.
+    private func captureBadge(_ cap: CaptureProbe.CaptureInfo) -> some View {
+        let fps = Int(max(cap.fpsMeasured, cap.fpsNominal).rounded())
+        let res = cap.height >= 2160 ? "4K" : "\(cap.height)p"
+        let hdr = cap.dynamicRange != .sdr
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: captureWarn == nil ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(captureWarn == nil ? LS.success : LS.bestEffort)
+                Text("\(res) · \(fps) fps\(hdr ? " · HDR" : "")")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.textPrimary)
+                if captureWarn != nil {
+                    Text("Lower-quality clip").font(.system(size: 11, weight: .semibold)).foregroundStyle(LS.bestEffort)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(LS.bestEffort.opacity(0.14), in: Capsule())
+                }
+            }
+            if let w = captureWarn {
+                Text(w + (hdr ? " · HDR is converted to standard range automatically." : "")).font(.lsCaption)
+                    .foregroundStyle(LS.textSecondary).fixedSize(horizontal: false, vertical: true)
+            } else if hdr {
+                Text("HDR is converted to standard range automatically.").font(.lsCaption).foregroundStyle(LS.textSecondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lsCard(padding: 12)
+    }
 
     private var clipCard: some View {
         Button { showPicker = true } label: {
@@ -127,6 +159,10 @@ struct UploadView: View {
             try data.write(to: url)
             pickedURL = url
             pickedName = url.lastPathComponent
+            // DEC-133: detect the imported clip's real capture + whether it's below the floor for this mode.
+            let info = CaptureProbe.probe(url: url, source: "upload")
+            capture = info
+            captureWarn = info.flatMap { CaptureProbe.floorReasons($0, formMode: mode == "form").first?.reason }
         } catch {
             errorText = "Couldn't load the clip: \(error.localizedDescription)"
         }

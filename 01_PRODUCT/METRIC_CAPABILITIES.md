@@ -26,7 +26,7 @@ What LaneSight can promise a user depends on two things: **how the shot was reco
 
 ### Recommended minimum requirement (decision needed: DEC-023, proposed)
 - **Hard minimum:** Base (30 fps, 720p, full lane + pins visible). Below this, LaneSight refuses with a clear "can't analyze" message.
-- **Recommended setting:** Standard (1080p, 60 fps). The app should default the camera to 1080p60 and nudge users who record at 30 fps ("switch to 60 fps to unlock loft, entry angle and speed profile").
+- **Recommended setting:** ~~Standard (1080p, 60 fps); default the camera to 1080p60~~ **superseded by DEC-133 (2026-11-23):** the in-app default is the highest fps at ≥1080p SDR (4K at the same fps when available), **Form floor 60** — shipping **1080p120 SDR** until the device benchmark + DEC-118 gates pass a higher format; the user can override it (Settings › Recording). Tiers below are now driven by the **detected** capture (`CaptureProbe`) for any uploaded video, not just the in-app setting; still nudge a 30 fps clip ("recorded at 30 fps, record at 60+ to unlock loft, entry angle and speed profile").
 - **Slo-mo (≥120 fps):** reserved for axis and PAP once built, as an opt-in "deep analysis" capture.
 
 ## 2. Video-only metrics by tier

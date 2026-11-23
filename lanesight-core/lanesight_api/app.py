@@ -1789,6 +1789,9 @@ def _form_shot_from_metrics(store, user, b, meta, handed, algo, metrics, session
            'metrics': metrics, 'events': b.get('events') or {},
            'measured_positions': b.get('measured_positions') or {},
            'handed': handed, 'engine': 'iphone', 'algorithm_version': algo, 'key_frames': []}
+    _sub_cap = (b.get('capture_quality') or {}).get('capture')   # DEC-133: the phone's detected capture block
+    if _sub_cap:
+        rec['capture_quality'] = {'source': 'ios-ondevice', 'capture': _sub_cap}
     if isinstance(b.get('view_info'), dict):
         rec['view_info'] = b['view_info']
     if isinstance(b.get('stage_report'), dict):
@@ -1865,9 +1868,10 @@ def shot_from_metrics(body: dict = Body(...), user=Depends(current_user)):
     if b.get('reason_code'):
         cq = {**cq, 'far_lane': 'not_read', 'reason_code': b['reason_code'],
               'failed_stage': b.get('failed_stage'), 'reason': _FAILURE_REASON_TEXT.get(b['reason_code'])}
+    _sub_cap = (b.get('capture_quality') or {}).get('capture')   # DEC-133: the phone's detected capture block
     rec = {'shot_id': b.get('shot_id'), 'metrics': metrics, 'handed': handed,
            'key_points': key_points,
-           'capture_quality': {**cq, 'source': 'ios-ondevice'},
+           'capture_quality': {**cq, 'source': 'ios-ondevice', **({'capture': _sub_cap} if _sub_cap else {})},
            'engine': 'iphone', 'algorithm_version': algo}
     # DEC-127: the on-device ball path (trajectory.smoothed = [{z_ft, board}]). _shot_card_enrich builds path_fit
     # from it, so the shot-card lane view draws the same path + four labels as the server video path.

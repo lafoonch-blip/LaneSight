@@ -46,8 +46,9 @@ struct CaptureView: View {
         // Form timing needs a high frame rate: floor Form capture at 60 fps (bestFormat still takes 120 when the
         // device supports it at >=1080p). Shot keeps the user's preference. (DEC-121 Form capture defaults.)
         .task {
-            let fps = model.captureMode == "form" ? max(60.0, Double(model.preferredFPS)) : Double(model.preferredFPS)
-            await camera.start(preferredFPS: fps)
+            // DEC-133: the user's chosen recording format (Form floors at 60 fps / 1080p inside `effective`).
+            let choice = CaptureFormats.effective(mode: model.captureMode)
+            await camera.start(preferredFPS: Double(choice.fps), preferredHeight: Int32(choice.height))
         }
         // Keep the screen awake for the whole capture flow (recording, trimming, upload, analysis).
         // Auto-Lock otherwise sleeps the phone mid-shot.

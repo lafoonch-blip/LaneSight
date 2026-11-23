@@ -18,13 +18,19 @@ struct SettingsView: View {
                     }
                 }
 
-                section("Capture", footer: "Records at 120 fps when the phone supports it, then 60, then 30.") {
+                // DEC-133: the fps-only picker becomes a full recording-quality screen (resolution + fps, device
+                // formats only). Default 1080p120; Form never below 60. Footnote mirrors Figma 434:6174.
+                section("Capture", footer: "Shots record at 1080p, 120 fps by default. Form never goes below 60 fps.") {
                     card {
-                        pickerRow("Recording quality", value: "Highest available") {
-                            Picker("", selection: $model.preferredFPS) {
-                                Text("Highest available").tag(120); Text("60 fps").tag(60); Text("30 fps").tag(30)
+                        NavigationLink { RecordingQualityView() } label: {
+                            HStack {
+                                Text("Recording quality").font(.system(size: 15)).foregroundStyle(LS.textPrimary)
+                                Spacer()
+                                Text(CaptureFormats.savedShot().label).font(.system(size: 15)).foregroundStyle(LS.textSecondary)
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.textSecondary)
                             }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
 
