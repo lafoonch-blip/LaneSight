@@ -248,3 +248,12 @@ capture + montage + apply verified fixes from Shayne's next on-device Form uploa
 - End flow: Submit or Skip on the feedback sheet now ends the session AFTER the sheet closes (presenting the summary mid-dismiss is what made Skip do nothing), shows "Ending session…", surfaces any error with Try again, and Summary "Done" returns to Home.
 - Stuck-forever root cause: the server had 62 never-closed sessions on Shayne's account; ending one made the app adopt the next. Ending now closes every other open session too, and resume adopts only the newest open session and closes older leftovers.
 **DIFFERS:** vs Figma 413:3804 — context chips row replaced by the Ball/Oil tiles at the top; latest-shot card is lane-on-top instead of lane-left/outcome-right. Figma should be updated to match.
+
+---
+
+## 2026-11-23-C · Shot result when nothing was measured — per Shayne's upload 762be1be
+**Status:** BUILT (branch `fix/active-session-usability`; not compiled — Session 1 to build + install).
+**Found:** lane ok, ball track ok but sparse, metrics FAILED (`TRACK_TOO_SPARSE_FOR_SPEED`; speed: PIN_IMPACT_NOT_DETECTED; rev: spin period not clean). Zero numbers, yet the screen showed the 3D lane, six empty "—" gauges and the server coach line "Move the tripod…" on an upload; "What worked" hid the failed stage (on-device keys `track`/`metrics` weren't in its list).
+**Change:** new `NoReadCard` replaces lane view + gauges when every metric is unavailable — "We couldn't measure this shot", plain reasons mapped from the codes, one filming tip; "What worked" now lists on-device `track` + `metrics` stages.
+**DIFFERS:** no Figma frame for the zero-measurement state; needs one. Server coach text "Move the tripod…" (`insights/coach.py:164`) should also stop firing when nothing was measured / on uploads — Session 1 (sole deployer).
+**Underlying gap (not a UI fix):** speed now requires a detected pin contact (5/22 labeled clips); most real clips will hit this card until coverage improves.

@@ -38,6 +38,10 @@ struct ShotCardView: View {
     private var ballMetrics: [(String, Metric)] {
         result.metrics.filter { !Self.formKeys.contains($0.0) && !Self.positionalKeys.contains($0.0) }
     }
+    /// True when the shot produced no measured number at all (every metric unavailable).
+    private var nothingMeasured: Bool {
+        !result.isForm && !result.metrics.contains { $0.1.value != nil && MetricStatus($0.1.status) != .unavailable }
+    }
     private var formMetrics: [(String, Metric)] { result.metrics.filter { Self.formKeys.contains($0.0) } }
 
     var body: some View {
@@ -52,8 +56,15 @@ struct ShotCardView: View {
                         // DEC-088/090 shot card: live 3D lane view + the two-part Shot-read card (rings +
                         // coach). The old result badge / capture banner / next-shot card / flat lane are
                         // replaced; detail metrics move behind a collapsed "All metrics".
-                        ShotLaneView(result: result)
-                        ShotReadCard(result: result)
+                        // 2026-11-23: when NOTHING was measured, don't show a 3D lane + six empty "—" gauges + a coach
+                        // line ("move the tripod" on an upload). Lead with one honest card: what failed, in plain words,
+                        // and how to film the next one.
+                        if nothingMeasured {
+                            NoReadCard(result: result)
+                        } else {
+                            ShotLaneView(result: result)
+                            ShotReadCard(result: result)
+                        }
                         DisclosureGroup {
                             allMetricsSection.padding(.top, 8)
                         } label: {
@@ -766,7 +777,9 @@ struct ShotCardView: View {
         ("decode", "Decode"), ("stabilize", "Stabilize"), ("lane", "Lane detect"), ("foul", "Foul line"),
         ("ball_track", "Ball track"), ("impact", "Pin impact"), ("refine", "Refine"), ("compute", "Geometry"),
         ("pins", "Pin read"), ("rev", "Rev rate"),
-        ("pose", "Pose"), ("swing_events", "Swing events"), ("delivery_isolation", "Delivery"), ("slowmo", "Slow-mo")]
+        ("pose", "Pose"), ("swing_events", "Swing events"), ("delivery_isolation", "Delivery"), ("slowmo", "Slow-mo"),
+        // on-device ball engine stage keys (were missing → its failed stage was silently hidden from this list)
+        ("track", "Ball track"), ("metrics", "Speed & revs")]
 
     private func stageIcon(_ s: String?) -> String {
         switch s { case "ok": return "checkmark.circle.fill"; case "failed": return "xmark.octagon.fill"
