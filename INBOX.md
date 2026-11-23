@@ -46,3 +46,33 @@ Figma file k6F8iHTtl2ZHvnXlHmYPnd, page "01 — Home & Foundation", section "Tar
 - CHANGED `411:3491` Setup · Shot: pre-flight Camera row "1080p · 120 fps ›" (taps open the sheet).
 - CHANGED `422:5069` Upload video: "Results in about 15 seconds, analyzed on your iPhone."
 Add APP_DESIGN_CHANGES.md entries (NOT BUILT → build) with these node IDs; only list formats the device actually supports (hide 4K/240 rows when unavailable).
+
+## 2026-11-23 — DONE (`4f7e4c7` on docs/consolidation-2026-11) — Docs consolidation pass
+Doc-only consolidation (no code / no engine, threshold or product-decision changes). Done:
+- AGENTS.md + CLAUDE.md now agree: **STATUS.md (this branch) is the live truth**; CURRENT_STATE.md is the
+  architecture/history record (not the task board); **one push rule** (push own branch when tests+gates pass +
+  verify ls-remote; never push/merge to main; only Session 1 deploys). CURRENT_STATE.md got a top pointer saying the same.
+- Replaced `01_PRODUCT/METRIC_CAPABILITIES.md` with a **metric contract**: every MVP metric × {status
+  (measured/best_effort/unavailable/disabled) · evidence · display-eligible · coaching-eligible}, **fail-closed**
+  (no documented validation evidence or ambiguous → NOT coaching-eligible; "implemented" ≠ "validated"). **"Guaranteed"
+  retired** across active docs (FEATURE_REVIEW, LOCAL_RUNNER_SPEC, VALIDATION_PLAN; one vocabulary everywhere + design README).
+- Supersession one-liners on MASTER_CONTEXT §4/§18, ENGINE_ARCHITECTURE_DECISION, MVP_READINESS_PLAN, FEATURE_REVIEW
+  (→ on-device DEC-106/126/127/130; DEC-133 noted as the capture-branch capstone — it is not yet in this branch's DECISIONS.md).
+- APP_DESIGN_CHANGES "How this works" + design README: **honesty/accuracy/privacy outrank design parity** (deferrals
+  allowed with a reason); **coaching acts only on coaching-eligible metrics**; **lane path drawn only where the ball
+  was observed**. Design README: blocking "Analyzing" replaced with the DEC-127 **Complete/Offline** result flow.
+- DECISIONS.md left as-is (history). DECISIONS.md lines 172–173 ("Guaranteed/Best effort/Sensor/Unavailable" per tier,
+  DEC-023) and line 909 (blocking Analyzing, DEC-068) are historical and intentionally untouched; `dev_build_v0/HANDOFF.md`
+  (frozen) still carries the old push line and was left frozen. All flagged in my report, none are live guidance.
+
+## 2026-11-23 — OPEN (for Shayne) — Coaching-eligibility conflicts surfaced by the metric contract
+The new fail-closed metric contract (`01_PRODUCT/METRIC_CAPABILITIES.md`) marks some metrics **not** coaching-eligible that
+current coaching/Accuracy/Score logic already acts on. These are product calls, left undecided (docs-only pass):
+1. **Rev rate** — contract: not coaching-eligible (REV_SENSOR_FACTOR=1.12 fitted on 4 shots, blind validation pending,
+   DEC-027/028). But the shot-card coach matrix (APP_DESIGN_CHANGES 2026-10-27-A) uses revs as a *throw* classification
+   input. Decide: blind-validate rev before it drives coaching, OR document the coach's rev use as relative-to-own-baseline only.
+2. **Near-lane boards (arrows/laydown)** — contract: not coaching-eligible until the Specto board-accuracy gate (DEC-034)
+   passes. But Accuracy `A` (DEC-031) and the lane-move coach already act on the arrows board, and DEC-127 makes measured
+   on-device boards Score-eligible. Decide how to reconcile DEC-127 (measured = Score-eligible) with the fail-closed coaching bar.
+3. **Headline speed definition** — DEC-030 (release) vs DEC-064 (60 ft foul→pins average) is still open (also tracked in
+   METRIC_AND_SCORING_LOGIC / CURRENT_STATE). Phase-2 Specto settles it; noted in the contract's Open-conflicts section.
