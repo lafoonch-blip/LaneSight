@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.6 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-23 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -22,6 +22,7 @@ Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; eve
 | 8 | **Upload result (Shot)** on the same layout | DEC-088 | **BUILT** — see 2026-10-27-C |
 | 9 | Primary button "Record next shot" | DEC-088 | **BUILT** (ResultView now shows "Record next shot") |
 | 10 | **Shot card: design-parity + data-honesty correction** — the live card (upload 2026-10-29) doesn't match `upload_result_shot.png`/`shot_card.png` and shows gated far-lane metrics + a coach move from them | DEC-065/088/090/094 | **BUILT** (A + B1/B2/B3/B4/B5/B6); **C** (screenshot-vs-PNG) pending owner creds — see 2026-10-29-A |
+| 11 | **Recording format picker + import quality** (DEC-133 "any video in"): **Settings › Recording** lists only this phone's supported formats (resolution · max fps · SDR) with plain-language trade-offs ("More detail for rev rate · larger files · more battery/heat"); a **Setup quick control** for a fast change; default **1080p120 SDR** (Form floor 60). **Upload** surfaces the detected capture (real fps / resolution / HDR→SDR) and which metrics it supports, with a specific reason for anything below the floor. Low-light capture shows a tip, never silently changes format. | DEC-133 | **NOT BUILT** — needs Figma frames first (DEC-091); none exist yet for Settings › Recording / the Setup quick control / the Upload quality row. Engine side landed on `feat/capture-any-video`: `CaptureProbe` (real fps/res/HDR/codec detection + capture-floor reasons) and the capture-floor failure copy. Picker UI + screens pending design. |
 
 ---
 

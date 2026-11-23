@@ -118,6 +118,24 @@ FAILURE_COPY: dict[str, dict] = {
         'user_message': "We couldn't read any frames from this clip.",
         'tip': "Record a fresh clip and try again.",
     },
+    # DEC-133 capture-floor gates: a metric's capture requirement wasn't met (any-video-in). The affected metrics are
+    # reported unavailable with the SPECIFIC reason — never estimated (DEC-026/027). The reason strings carry the
+    # measured value so the copy can be specific ("recorded at 24 fps, need 30+").
+    'CAPTURE_FPS_BELOW_MIN': {
+        'user_title': "This clip's frame rate is too low",
+        'user_message': "The timing-based measurements need at least 30 frames per second, and this clip was slower.",
+        'tip': "Record at 30 fps or higher (60+ for form). iPhone slo-mo is fine — we read its real capture rate.",
+    },
+    'CAPTURE_RES_BELOW_MIN': {
+        'user_title': "This clip's resolution is too low",
+        'user_message': "We need at least 720p with the lane and pins in frame to measure the shot.",
+        'tip': "Record at 1080p or higher with the whole lane — foul line to pins — in view.",
+    },
+    'HDR_CONVERSION_FAILED': {
+        'user_title': "We couldn't convert this HDR video",
+        'user_message': "This clip is in an HDR format we couldn't tone-map to standard range on your device.",
+        'tip': "Re-record with HDR off, or export the clip as SDR / Most Compatible and try again.",
+    },
     'UNKNOWN_LEGACY': {
         'user_title': "Couldn't analyze",
         'user_message': "This clip couldn't be analyzed.",
