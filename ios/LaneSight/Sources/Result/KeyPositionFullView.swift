@@ -18,7 +18,8 @@ struct KeyPositionFullView: View {
     @State private var loading = false
     @State private var skeletonOn = true
 
-    private var joints: [[Double]?] { result.keyFramePoses[current.key] ?? [] }
+    // Suppress the server skeleton (cropped-normalized) when showing an on-device local (full-frame) still. DEC-131.
+    private var joints: [[Double]?] { result.localKeyFrames[current.key] != nil ? [] : (result.keyFramePoses[current.key] ?? []) }
     private var hasSkeleton: Bool { joints.contains { $0 != nil } }
 
     /// The four canonical positions, filtered to those actually exported for this delivery.
@@ -217,6 +218,8 @@ struct KeyPositionFullView: View {
     private func loadFrame() async {
         guard result.keyFrames.contains(current.key) else { image = nil; return }
         loading = true; defer { loading = false }
+        // Prefer the on-device still from the local clip (no server round-trip, works offline). DEC-131.
+        if let local = result.localKeyFrames[current.key], let img = UIImage(data: local) { image = img; return }
         if let client = try? model.makeClient(),
            let data = try? await client.shotFrame(shotId: result.shotId, key: current.key) {
             image = UIImage(data: data)

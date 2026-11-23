@@ -18,25 +18,34 @@ struct FormCardView: View {
     /// is unavailable; otherwise the per-section honest states carry the story.
     private var topUnavailable: Bool { (result.formStatus ?? "").lowercased() == "unavailable" }
 
+    /// The scrollable card content (no nav chrome), extracted so a render harness can snapshot it at a fixed
+    /// width for the design comparison (02_DESIGN/target_state/compare/form).
+    @ViewBuilder var formContent: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // Show only what was actually measured. Everything that wasn't is ONE plain-English card at the end
+            // (names + a tap-to-expand "why"), not dashed "—" tiles and paragraphs of engine notes (2026-11-23).
+            if topUnavailable {
+                unavailableCard
+            } else {
+                if !deliveryTimed { notTimedCard }
+                if result.formFocus != nil { focusCard }
+                if !result.keyFrames.isEmpty { keyPositionsSection }
+                if !shownCheckpoints.isEmpty { timingCheckpointsSection }
+                if let st = result.swingTiming, Self.measuredPhases(st).count >= 2 { swingTimingSection }
+                if !approachTiles.isEmpty { approachSection }
+                if !postureTiles.isEmpty { positionsSection }
+                if !notMeasured.isEmpty { notMeasuredCard }
+                if let cues = result.coachingCues, let list = cues.cues, !list.isEmpty { coachingCuesSection(cues) }
+            }
+            footer
+        }
+        .padding(16)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    contextHeader
-                    if topUnavailable {
-                        unavailableCard
-                    } else {
-                        if result.formFocus != nil { focusCard }
-                        keyPositionsSection
-                        if !orderedCheckpoints.isEmpty { timingCheckpointsSection }
-                        if result.swingTiming != nil { swingTimingSection }
-                        if !approachMetrics.isEmpty { approachSection }
-                        if !orderedPositions.isEmpty { positionsSection }
-                        if let cues = result.coachingCues, let list = cues.cues, !list.isEmpty { coachingCuesSection(cues) }
-                    }
-                    footer
-                }
-                .padding(16)
+                formContent
             }
             .background(LSBackground())
             .navigationBarTitleDisplayMode(.inline)
@@ -70,7 +79,9 @@ struct FormCardView: View {
 
     /// Slim honest note that v1 form metrics are early (the view/fps now live in the nav subtitle).
     private var contextHeader: some View {
-        Text("Early form analysis (\(result.formFooter?.form_version ?? result.formVersion ?? "form-0.0.0")). Treat these as directional, not exact.")
+        let ver = result.formFooter?.form_version ?? result.formVersion
+        let verPart = ver.map { " (\($0))" } ?? ""   // show the real engine version, never a fabricated 0.0.0
+        return Text("Early form analysis\(verPart). Treat these as directional, not exact.")
             .font(.system(size: 12)).foregroundStyle(LS.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,6 +91,17 @@ struct FormCardView: View {
         var parts = [viewLabel]
         if let fps = result.formFPS { parts.append("\(Int(fps.rounded())) fps") }
         return parts.joined(separator: " · ")
+    }
+
+    /// Design 3.4: the timing card's right label pairs the measurement status with the view
+    /// ("Measured · side view" / "Best effort · rear view").
+    private var timingStatusLabel: String {
+        let statuses = shownCheckpoints.map { MetricStatus($0.status) }
+        let word: String
+        if statuses.contains(.measured) && !statuses.contains(.bestEffort) { word = "Measured" }
+        else if statuses.contains(.measured) || statuses.contains(.bestEffort) { word = "Best effort" }
+        else { return viewLabel }
+        return "\(word) · \(viewLabel)"
     }
 
     private var viewLabel: String {
@@ -163,7 +185,7 @@ struct FormCardView: View {
             HStack {
                 Text("Key positions").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
-                Text("tap to open the frame").font(.lsCaption).foregroundStyle(LS.textSecondary)
+                Text("Tap a position to see the full frame").font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(Self.positions, id: \.key) { pos in
@@ -171,7 +193,10 @@ struct FormCardView: View {
                         label: pos.label,
                         timeText: eventTimeText(pos.event),
                         available: result.keyFrames.contains(pos.key),
-                        poseJoints: result.keyFramePoses[pos.key],      // skeleton overlay (DEC-082); nil → plain still
+                        // skeleton overlay (DEC-082) is normalized to the server's CROPPED still — suppress it on an
+                        // on-device local (full-frame) still so the joints don't land off the body. nil → plain still.
+                        poseJoints: result.localKeyFrames[pos.key] != nil ? nil : result.keyFramePoses[pos.key],
+                        initialImage: result.localKeyFrames[pos.key].flatMap { UIImage(data: $0) },
                         loader: { await fetchFrame(pos.key) })
                     if result.keyFrames.contains(pos.key) {
                         // Tap → the full-frame viewer (Figma 472:4185). Not-found tiles stay non-tappable.
@@ -192,6 +217,8 @@ struct FormCardView: View {
     }
 
     private func fetchFrame(_ key: String) async -> UIImage? {
+        // Prefer the still extracted on-device from the local clip (no server round-trip, works offline). DEC-131.
+        if let local = result.localKeyFrames[key], let img = UIImage(data: local) { return img }
         guard let client = try? model.makeClient(),
               let data = try? await client.shotFrame(shotId: result.shotId, key: key) else { return nil }
         return UIImage(data: data)
@@ -202,18 +229,22 @@ struct FormCardView: View {
     private var orderedCheckpoints: [TimingCheckpoint] {
         result.timingCheckpoints.values.sorted { ($0.id ?? "") < ($1.id ?? "") }
     }
+    /// Checkpoints that actually got a reading — unavailable ones go to the "not measured" card instead.
+    private var shownCheckpoints: [TimingCheckpoint] {
+        orderedCheckpoints.filter { MetricStatus($0.status) != .unavailable }
+    }
 
     private var timingCheckpointsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Timing vs your baseline").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
                 Spacer()
-                Text(viewLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
+                Text(timingStatusLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             .padding(.bottom, 4)
-            ForEach(Array(orderedCheckpoints.enumerated()), id: \.offset) { idx, cp in
+            ForEach(Array(shownCheckpoints.enumerated()), id: \.offset) { idx, cp in
                 TimingCheckpointRow(checkpoint: cp)
-                if idx != orderedCheckpoints.count - 1 { Divider().overlay(LS.cardStroke) }
+                if idx != shownCheckpoints.count - 1 { Divider().overlay(LS.cardStroke) }
             }
         }
         .lsCard()
@@ -324,23 +355,123 @@ struct FormCardView: View {
 
     /// The measured P1 approach metrics (the design's Approach & balance tiles that aren't M-positions).
     /// Swing-phase splits live in the swing-timing bar; foul line / finish hold / posture live in M1–M7.
+    /// Design 3.4 groups the tiles by MEANING, not data type: "Approach & balance" carries the approach + ball +
+    /// slide + finish metrics (9), "Posture & finish" carries only the body-position metrics. `finish_hold`,
+    /// `foul_line_distance` and `slide_length` live here even though some are MeasuredPositions server-side.
     private static let approachKeys: [String] = [
-        "step_count", "approach_time", "rhythm_ratio", "ball_start_step", "backswing_height_rel", "drift_boards",
+        "step_count", "approach_time", "rhythm_ratio", "finish_hold", "backswing_height_rel", "ball_start_step",
+        "foul_line_distance", "drift_boards", "slide_length",
     ]
+    private static let postureKeys: [String] = ["spine_tilt", "follow_through", "balance_arm", "shoulder_tilt", "pendulum"]
 
-    private var approachMetrics: [(String, Metric)] {
-        Self.approachKeys.compactMap { key in result.metrics.first { $0.0 == key } }
+    /// One tile's data, resolved from whichever source holds the key (a Metric, else a MeasuredPosition).
+    private struct FormTileData: Identifiable { let id: String; let label: String; let value: String; let status: MetricStatus; let reason: String? }
+
+    private func formTile(_ key: String) -> FormTileData? {
+        if let (_, m) = result.metrics.first(where: { $0.0 == key }) {
+            return FormTileData(id: key, label: FormMetricDisplay.label(key), value: approachValueText(key, m),
+                                status: MetricStatus(m.status), reason: m.value == nil ? m.note : nil)
+        }
+        if let pos = result.measuredPositions.values.first(where: { ($0.metric ?? "") == key }) ?? result.measuredPositions[key] {
+            let st = MetricStatus(pos.status)
+            return FormTileData(id: key, label: Self.positionLabels[key] ?? MetricDisplay.humanize(key),
+                                value: pos.display ?? "—", status: st,
+                                reason: st != .measured ? pos.note : nil)   // best_effort + unavailable → surfaced below
+        }
+        return nil
+    }
+
+    private var allApproachTiles: [FormTileData] { Self.approachKeys.compactMap(formTile) }
+    private var allPostureTiles: [FormTileData] { Self.postureKeys.compactMap(formTile) }
+    private var approachTiles: [FormTileData] { allApproachTiles.filter { $0.status != .unavailable && $0.value != "—" } }
+    private var postureTiles: [FormTileData] { allPostureTiles.filter { $0.status != .unavailable && $0.value != "—" } }
+
+    /// Everything this clip couldn't measure, as (name, plain reason) — deduped, in screen order.
+    private struct NotMeasuredItem: Hashable { let name: String; let why: String }
+    private var notMeasured: [NotMeasuredItem] {
+        var out: [NotMeasuredItem] = []
+        var seen = Set<String>()
+        func add(_ name: String, _ note: String?) {
+            guard seen.insert(name).inserted else { return }
+            out.append(NotMeasuredItem(name: name, why: Self.plainReason(note, view: result.formView)))
+        }
+        for cp in orderedCheckpoints where MetricStatus(cp.status) == .unavailable {
+            add(cp.label ?? MetricDisplay.humanize(cp.id ?? ""), cp.note ?? cp.detail)
+        }
+        for t in allApproachTiles + allPostureTiles where t.status == .unavailable || t.value == "—" {
+            add(t.label, t.reason)
+        }
+        return out
+    }
+
+    /// True when at least one swing moment was located. False → the delivery itself couldn't be timed, and the
+    /// card leads with that (one sentence + what to do), instead of a wall of "unavailable".
+    private var deliveryTimed: Bool { !result.keyFrames.isEmpty || !shownCheckpoints.isEmpty }
+
+    /// Engine notes are written for engineers ("E4", homography, file names). Map them to one short phrase.
+    static func plainReason(_ note: String?, view: String?) -> String {
+        let n = (note ?? "").lowercased()
+        if n.contains("needs a side view") || (n.contains("side view") && (view ?? "") != "down_lane") { return "Needs a side view" }
+        if n.contains("rear") && n.contains("needs") || n.contains("from behind") { return "Needs a view from behind" }
+        if n.contains("implausible") || n.contains("couldn't be timed") || n.contains("could not be isolated")
+            || n.contains("mis-segment") || n.contains("delivery") && n.contains("timed") { return "Couldn't time this delivery" }
+        if n.contains("not visible") { return "Body not clearly visible at that moment" }
+        if n.contains("not located") || n.contains("not measured") || n.contains("not found") { return "That moment wasn't found in the video" }
+        if n.contains("calibrat") || n.contains("homography") || n.contains("validating") || n.contains("scale") { return "Not supported yet" }
+        return "Couldn't measure on this clip"
+    }
+
+    private var notTimedCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LS.bestEffort)
+                Text("We couldn't time this delivery").font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+            }
+            Text("None of the key swing moments were found, so timing and swing results are missing. "
+                 + "For best results, keep your whole approach, swing and slide in frame from start to finish.")
+                .font(.system(size: 14)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .lsCard()
+    }
+
+    @State private var showWhy = false
+    private var notMeasuredCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Not measured on this clip").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+            Text(notMeasured.map(\.name).joined(separator: " · "))
+                .font(.system(size: 14)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { withAnimation { showWhy.toggle() } } label: {
+                HStack(spacing: 4) {
+                    Text(showWhy ? "Hide why" : "Why?").font(.system(size: 14, weight: .semibold))
+                    Image(systemName: showWhy ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .bold))
+                }
+                .foregroundStyle(LS.link).frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            if showWhy {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(notMeasured, id: \.self) { item in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                            Spacer(minLength: 8)
+                            Text(item.why).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+            }
+        }
+        .lsCard()
     }
 
     private var approachSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Approach & balance").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                ForEach(approachMetrics, id: \.0) { key, metric in
-                    FormTile(label: FormMetricDisplay.label(key),
-                             value: approachValueText(key, metric),
-                             status: MetricStatus(metric.status),
-                             reason: metric.value == nil ? metric.note : nil)
+                ForEach(approachTiles) { t in
+                    FormTile(label: t.label, value: t.value, status: t.status, reason: t.reason)
                 }
             }
         }
@@ -355,10 +486,6 @@ struct FormCardView: View {
 
     // MARK: POSTURE & POSITIONS (M1–M7, design 3.4)
 
-    private var orderedPositions: [MeasuredPosition] {
-        result.measuredPositions.values.sorted { ($0.id ?? "") < ($1.id ?? "") }
-    }
-
     private static let positionLabels: [String: String] = [
         "foul_line_distance": "Foul line", "spine_tilt": "Spine tilt", "balance_arm": "Balance arm",
         "shoulder_tilt": "Shoulders", "follow_through": "Follow-through", "finish_hold": "Finish hold",
@@ -369,24 +496,8 @@ struct FormCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Posture & finish").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                ForEach(orderedPositions, id: \.id) { pos in
-                    FormTile(label: Self.positionLabels[pos.metric ?? ""] ?? MetricDisplay.humanize(pos.metric ?? "—"),
-                             value: pos.display ?? "—",
-                             status: MetricStatus(pos.status),
-                             reason: MetricStatus(pos.status) == .unavailable ? pos.note : nil)
-                }
-            }
-            // Honest reasons for anything best-effort / unavailable (targets + why a view can't measure it).
-            let reasons = orderedPositions.compactMap { pos -> String? in
-                guard MetricStatus(pos.status) != .measured, let note = pos.note, !note.isEmpty else { return nil }
-                let label = Self.positionLabels[pos.metric ?? ""] ?? (pos.metric ?? "")
-                return "\(label): \(note)"
-            }
-            if !reasons.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(reasons, id: \.self) { r in
-                        Text(r).font(.lsCaption2).foregroundStyle(LS.textSecondary)
-                    }
+                ForEach(postureTiles) { t in
+                    FormTile(label: t.label, value: t.value, status: t.status, reason: t.reason)
                 }
             }
         }
@@ -395,16 +506,29 @@ struct FormCardView: View {
 
     // MARK: COACHING CUES (§0.3, text only)
 
+    // General hand/wrist tips (not measured from this clip) — collapsed so they don't read as results.
+    @State private var showCues = false
     private func coachingCuesSection(_ cues: CoachingCues) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Coaching cues").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
-            if let note = cues.note, !note.isEmpty {
-                Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
+            Button { withAnimation { showCues.toggle() } } label: {
+                HStack {
+                    Text("Hand & wrist tips").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    Spacer()
+                    Image(systemName: showCues ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(LS.link)
+                }
+                .frame(minHeight: 44).contentShape(Rectangle())
             }
-            ForEach(cues.cues ?? [], id: \.self) { cue in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(LS.action).padding(.top, 6)
-                    Text(cue).font(.lsCaption).foregroundStyle(LS.textPrimary)
+            .buttonStyle(.plain)
+            if showCues {
+                Text("General tips — not measured from your video.")
+                    .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                ForEach(cues.cues ?? [], id: \.self) { cue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(LS.action).padding(.top, 7)
+                        Text(cue).font(.system(size: 14)).foregroundStyle(LS.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -414,13 +538,26 @@ struct FormCardView: View {
     // MARK: footer
 
     private var footer: some View {
-        HStack {
-            Text(analyzedText)
-            Spacer()
-            Text(versionsLine)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(analyzedText).font(.lsCaption2).foregroundStyle(LS.textSecondary)
         }
-        .font(.lsCaption).foregroundStyle(LS.textSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Design 3.4: an honest, view-aware note of what this camera angle can and can't measure. Mirrors the
+    /// position view-gating (`gate_positions`) so the bowler knows why "— SIDE VIEW" / "— REAR VIEW" appear.
+    private var viewCapabilityNote: String? {
+        switch (result.formView ?? "").lowercased() {
+        case "down_lane":
+            return "This clip was recorded from the side, so timing, steps, posture and foul line are measured. "
+                + "Drift and balance arm need a view from behind."
+        case "rear":
+            return "This clip was recorded from behind, so drift and balance arm are measured. Spine tilt and "
+                + "foul-line distance need a side view; record from the side to add them."
+        default:
+            return nil
+        }
     }
 
     private var analyzedText: String {
@@ -446,11 +583,15 @@ private struct KeyPositionTile: View {
     let timeText: String?
     let available: Bool
     var poseJoints: [[Double]?]? = nil
+    /// On-device still decoded from the local clip — shown synchronously (no async flash) and lets the view
+    /// render in a single pass (ImageRenderer screenshots). When set, the server loader is skipped. DEC-131.
+    var initialImage: UIImage? = nil
     let loader: () async -> UIImage?
 
     @State private var image: UIImage?
     @State private var loaded = false
 
+    private var shown: UIImage? { image ?? initialImage }
     // Skeleton is drawn only when the pose found confident joints for this still (never guessed).
     private var hasSkeleton: Bool { (poseJoints?.contains { $0 != nil }) ?? false }
 
@@ -459,7 +600,7 @@ private struct KeyPositionTile: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(LS.raised)
                 RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(LS.borderStrong, lineWidth: 1)
-                if let image {
+                if let image = shown {
                     // scaledToFit (not fill) so the skeleton overlay's aspect-fit mapping lines up with the
                     // bowler-cropped still, matching KeyPositionFullView (DEC-082: thumbnails carry the skeleton).
                     Image(uiImage: image).resizable().scaledToFit()
@@ -479,7 +620,7 @@ private struct KeyPositionTile: View {
                         }
                     }
                 }
-                if image != nil, let timeText {
+                if shown != nil, let timeText {
                     VStack { Spacer()
                         Text(timeText).font(.lsCaption2).foregroundStyle(LS.textPrimary)
                             .padding(.horizontal, 5).padding(.vertical, 2)
@@ -494,7 +635,7 @@ private struct KeyPositionTile: View {
                 .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
         }
         .task {
-            guard available, !loaded else { return }
+            guard available, !loaded, initialImage == nil else { return }   // local still already shown → no fetch
             image = await loader()
             loaded = true
         }
@@ -564,7 +705,11 @@ private struct TimingCheckpointRow: View {
     private enum Verdict: Equatable {
         case early, onTime, late, unavailable
         init(_ raw: String?, status: String?) {
-            if (status ?? "").lowercased() == "unavailable" { self = .unavailable; return }
+            // A verdict is only shown when the checkpoint was actually measured. A missing/empty status, an
+            // "unavailable" status, or a nil verdict all collapse to UNAVAILABLE — never a stale "early"/"late"
+            // leaking through when its underlying event (E4 top-of-swing, E7 release, …) wasn't located.
+            let ok = ["measured", "ok", "best_effort", "low_confidence"].contains((status ?? "").lowercased())
+            guard ok else { self = .unavailable; return }
             switch raw?.lowercased() {
             case "early": self = .early
             case "late": self = .late

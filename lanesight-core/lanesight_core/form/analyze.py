@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from ..models.shot import Measurement
 
-FORM_VERSION = 'form-0.0.0'          # contract only; pose backend not yet implemented
+FORM_VERSION = 'form-1.0.0'          # DEC-131: pose backend implemented (server + on-device parity)
 _SRC = 'lanesight_form'
 
 # (metric key, unit). Backswing height is RELATIVE (ratio), not an absolute height; drift is rear-view best effort.

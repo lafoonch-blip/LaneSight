@@ -9,13 +9,21 @@ import Foundation
 /// events that fail the honesty gate are withheld, but step count / approach duration / tempo still return.
 nonisolated enum OnDeviceFormEngine {
     static let backendVersion = "ios-form-pose-0.1.0"   // mirrors pose.POSE_BACKEND_VERSION "form-pose-0.1.0"
-    static let formVersion = "form-0.0.0"
+    static let formVersion = "form-1.0.0"   // DEC-131: pose backend implemented (server + on-device parity)
     typealias LM = FormPoseLandmarker.LM
 
     /// Does a windowed pose pass actually contain the delivery AND yield swing events? Mirrors analyze's own
     /// delivery + swing-event logic so a too-tight prescan window (one that dropped the delivery) triggers the
     /// widen-to-full retry (decision 2: "widen and retry if events aren't found").
     private static func deliveryWithEventsFound(_ lms: FormPoseLandmarker.Landmarks, handed: String?) -> Bool {
+        return deliveryProbe(lms, handed: handed).hasEvents
+    }
+
+    /// Quick delivery probe over an already-posed window: does any gated swing event survive, and how many foot
+    /// plants are in the approach? Used both for the widen-to-full retry (no events) and the widen-the-lead retry
+    /// (events but a truncated approach — step count < 3 because findDelivery anchored b0 late on a short lead).
+    private static func deliveryProbe(_ lms: FormPoseLandmarker.Landmarks, handed: String?)
+        -> (hasEvents: Bool, stepCount: Int) {
         let fr = lms.frames, tt = lms.t
         let rs = FormSignal.speed(FormSignal.point(fr, LM.rFootPts, axis: 0),
                                   FormSignal.point(fr, LM.rFootPts, axis: 1), tt)
@@ -25,12 +33,17 @@ nonisolated enum OnDeviceFormEngine {
         let delivery = slow
             ? FormEngine.findDelivery(tt, fr, rs, ls, burstMotion: 0.11, burstMaxS: 9.0, stillThr: 0.06)
             : FormEngine.findDelivery(tt, fr, rs, ls)
-        guard let d = delivery else { return false }
+        guard let d = delivery else { return (false, 0) }
         let torso = FormSignal.torso(fr)
         let b0 = d.win.0 + 0.4
         let swingWin = (Swift.max(tt[0], b0 - 0.8), Swift.min(d.hold.0 + 0.3, tt[tt.count - 1]))
         let ev = FormEngine.swingEvents(tt, fr, ball: [:], win: swingWin, torso: torso)
-        return ev.E4 != nil || ev.E6 != nil || ev.E7 != nil
+        let hasEvents = ev.E4 != nil || ev.E6 != nil || ev.E7 != nil
+        let relBound = (ev.E7 ?? d.hold.0) + 0.12
+        let stepStart = FormEngine.setupHoldEnd(tt, rs, ls, burstStart: b0)
+        let plants = FormEngine.footStrikes(tt, fr, win: (stepStart, relBound + 0.1), rs, ls)
+            .filter { $0.0 >= stepStart && $0.0 <= relBound }
+        return (hasEvents, plants.count)
     }
 
     /// Analyze a form clip end to end. `trackBall` runs the ball-colour release confirmation. It defaults OFF:
@@ -85,9 +98,21 @@ nonisolated enum OnDeviceFormEngine {
             }
         }
         var lms = try ex(winner)      // full-rate pose on the winning window
-        if !Self.deliveryWithEventsFound(lms, handed: handed) {
+        let probe = Self.deliveryProbe(lms, handed: handed)
+        if !probe.hasEvents {
             // The winner still didn't yield the delivery — widen to the FULL clip and retry (last resort, DEC-129).
             lms = try ex(nil)
+        } else if probe.stepCount < 3 && winner.0 > 0.01 {
+            // Events found but the approach came out truncated (< 3 plants): on a short lead findDelivery anchors b0
+            // on the fast final steps and the step search misses the slow early steps, so step_count is banded
+            // implausible (b6cfd17c: first_step 15.76, 2 steps on device vs 6 on the full clip). Re-pose with a
+            // bigger lead so findDelivery has the context to anchor the whole approach; keep it only if it recovers
+            // more steps and still finds the delivery. Fires only on the truncation case, so clean clips are
+            // untouched. DEC-131.
+            let wider = (Swift.max(0, winner.0 - 2.0), winner.1)
+            let l2 = try ex(wider)
+            let p2 = Self.deliveryProbe(l2, handed: handed)
+            if p2.hasEvents && p2.stepCount > probe.stepCount { lms = l2 }
         }
         return lms
     }
@@ -304,6 +329,26 @@ nonisolated enum OnDeviceFormEngine {
             }
         }
 
+        // When the delivery couldn't be isolated (no gated swing event survived the DEC-095 gates), every
+        // window-derived timing/count was measured off an unreliable window → withhold them all as unavailable +
+        // FORM_DELIVERY_NOT_ISOLATED, never best_effort. The user sees "we couldn't time this", not a wrong number.
+        // Parity with the server (pose.analyze). DEC-131.
+        let gk = ["E2", "E3", "E4", "E6", "E7"].map { events[$0] ?? nil }
+        let isoOk = gk.contains { $0 != nil }
+        if !isoOk {
+            let isoReason = "the delivery could not be isolated on this clip (no reliable swing events), so these "
+                + "timings could not be measured — record with your full approach and swing in frame"
+            for k in ["approach_time", "swing_time", "pushaway_time", "backswing_time", "downswing_time",
+                      "release_time", "rhythm_ratio", "backswing_height_rel", "finish_hold", "step_count",
+                      "ball_start_step", "timing_at_slide", "slide_length"] {
+                guard let m = metrics[k], m.status != "unavailable" else { continue }
+                var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: isoReason,
+                                         id: m.id, viewRequired: m.viewRequired)
+                mm.reasonCode = "FORM_DELIVERY_NOT_ISOLATED"
+                metrics[k] = mm
+            }
+        }
+
         // DEC-131 plausibility backstop (runs LAST, overrides slo-mo too): a delivery timing/count outside its
         // physiological band is a mis-segmented delivery, not a real measurement → unavailable + IMPLAUSIBLE_VALUE,
         // never best_effort. Same bands as the server (failures._FORM_BANDS).
@@ -315,27 +360,57 @@ nonisolated enum OnDeviceFormEngine {
             metrics[k] = mm
         }
 
+        // 2026-11-23 (Shayne's rear/side uploads): an impossible core timing means the DELIVERY was mis-segmented
+        // (e.g. a whole approach found inside 0.4 s). Everything timed off that window is then wrong too — the
+        // swing events (which drive the "Early/Late" checkpoints + thumbnails) and every swing-derived metric.
+        // Withhold them all instead of showing "EARLY" verdicts built on a bad window. Zero plausible-but-wrong.
+        let coreTiming = ["approach_time", "swing_time", "backswing_time", "downswing_time", "step_count"]
+        let misSegmented = coreTiming.contains { metrics[$0]?.reasonCode == "IMPLAUSIBLE_VALUE" }
+        if misSegmented {
+            let why = "this delivery couldn't be timed reliably — record with your whole approach and swing in frame"
+            for k in ["E2", "E3", "E4", "E6", "E7"] { events[k] = Double?.none }
+            for k in ["pushaway_time", "backswing_time", "downswing_time", "release_time", "swing_time",
+                      "rhythm_ratio", "backswing_height_rel", "ball_start_step", "approach_time", "step_count"] {
+                guard let m = metrics[k], m.status != "unavailable" else { continue }
+                var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: why,
+                                         id: m.id, viewRequired: m.viewRequired)
+                mm.reasonCode = "FORM_DELIVERY_NOT_ISOLATED"
+                metrics[k] = mm
+            }
+        }
+        // Positions were computed BEFORE the plausibility gate, so a rejected downswing still produced a pendulum
+        // tile (0.05 s shown on the side clip). Rebuild them from the final events + metrics.
+        positions = FormFundamentals.measuredPositions(t, frames, events: [
+            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slideStart,
+            "E6": events["E6"] ?? nil, "E7": events["E7"] ?? nil, "E8": slideStop,
+            "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
+            "hold_start": holdStart, "hold_end": holdEnd,
+        ], torso: torso, handed: handed, metrics: metrics)
+
         // stage report (DEC-122)
-        let gk = ["E2", "E3", "E4", "E6", "E7"].map { events[$0] ?? nil }
-        let isoOk = gk.contains { $0 != nil }
+        let isolated = isoOk && !misSegmented
         var stage: [String: FormStageOutcome] = [
             "decode": FormStageOutcome(status: "ok"),
             "pose": FormStageOutcome(status: "ok", frames: t.count),
-            "swing_events": FormStageOutcome(status: isoOk ? "ok" : "failed",
-                                             reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED",
-                                             reason: isoOk ? nil : "every swing event failed the DEC-095 sanity gates"),
-            "delivery_isolation": FormStageOutcome(status: isoOk ? "ok" : "failed",
-                                                   reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
+            "swing_events": FormStageOutcome(status: isolated ? "ok" : "failed",
+                                             reasonCode: isolated ? nil : "FORM_DELIVERY_NOT_ISOLATED",
+                                             reason: isolated ? nil : (misSegmented ? "core timings implausible — delivery mis-segmented"
+                                                                            : "every swing event failed the DEC-095 sanity gates")),
+            "delivery_isolation": FormStageOutcome(status: isolated ? "ok" : "failed",
+                                                   reasonCode: isolated ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
             "slowmo": FormStageOutcome(status: "ok"),
         ]
         _ = intervals; _ = ballHipToRelease; _ = firstToRelease   // diagnostics parity (surfaced server-side)
 
-        // analyze_form_clip layer: detected view + view gating of positions
-        let view = FormEngine.classifyViewFromPose(t, frames).view
+        // analyze_form_clip layer: detected view + view gating of positions. Refine the view now the clean
+        // approach window (firstStep → holdStart) is known — the full posed span alone mis-reads a real rear clip
+        // as side when the bowler walked around a lot (DEC-131). Mirrors pose.analyze's re-classification.
+        let refinedView = FormEngine.classifyViewFromPose(t, frames, approach: (firstStep, holdStart))
+        let view = refinedView.view
         positions = FormFundamentals.gatePositions(positions, view: view)
 
         return FormAnalysis(
-            formVersion: formVersion, view: view, viewInfo: viewInfo, status: "ok", handed: handed, fps: fps,
+            formVersion: formVersion, view: view, viewInfo: refinedView, status: "ok", handed: handed, fps: fps,
             metrics: metrics, measuredPositions: positions, events: events, eventsGateReasons: evReasons,
             strikes: plants, stepIntervals: intervals, swingSource: swSrc,
             slowmo: (isSlow, factor, slowNote), stageReport: stage)

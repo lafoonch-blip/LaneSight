@@ -1,0 +1,26 @@
+{
+  "title": "Form: swing events (2 new real clips, 2026-11-23)",
+  "instructions": "Mark each moment for these two deliveries. These are the ground truth for the form timing + step detection (DECISIONS #4, 2026-11-23). The player opens near the engine's best guess — scrub to the exact frame and confirm/adjust. IMPORTANT: for the REAR clip, the engine is missing your EARLY approach steps — please scrub BACK from the slide to your FIRST step and set the step count to the true number. If a moment isn't clearly visible from this camera, press X (Not visible) rather than guessing.",
+  "clips": [
+    {"id": "IMG_rear_0caad150", "static": {"view": "rear"},
+     "hints": {"ball_start": 450, "pushaway_end": 516, "backswing_top": 552, "release": 594, "slide_stop": 595}},
+    {"id": "IMG_side_be86b1db", "static": {"view": "side"},
+     "hints": {"ball_start": 1188, "pushaway_end": 1224, "backswing_top": 1254, "release": 1284, "slide_stop": 1297}}
+  ],
+  "events": [
+    {"id": "ball_start", "label": "Ball start (E2)", "help": "The ball first moves out of your setup hold (pushaway begins).",
+     "export_key": "E2_ball_start_s", "export_unit": "seconds"},
+    {"id": "pushaway_end", "label": "End of pushaway (E3)", "help": "The ball reaches the bottom/forward of the pushaway, about to swing back.",
+     "export_key": "E3_pushaway_end_s", "export_unit": "seconds"},
+    {"id": "backswing_top", "label": "Top of swing (E4)", "help": "The ball at its highest point behind you.",
+     "export_key": "E4_backswing_top_s", "export_unit": "seconds"},
+    {"id": "release", "label": "Release (E7)", "help": "The ball leaves your hand at the bottom of the swing.",
+     "export_key": "E7_release_s", "export_unit": "seconds"},
+    {"id": "slide_stop", "label": "Slide stops (E8)", "help": "Your slide foot stops at the line.",
+     "export_key": "E8_slide_stop_s", "export_unit": "seconds"}
+  ],
+  "fields": [
+    {"id": "step_count", "label": "Approach steps (count ALL, incl. the first slow ones)", "type": "int", "required": true, "help": "e.g. 4 or 5 — scrub back to your first step"}
+  ],
+  "export": {"path": "lanesight-core/validation/form_labels.json", "wrap": "clips", "add_fps": true}
+}

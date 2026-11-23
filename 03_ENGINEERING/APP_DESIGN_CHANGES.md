@@ -236,3 +236,51 @@ confirm against a render):**
 **Blocked:** the side-by-side montage (the way the shot card was done) needs `FormCardView` rendered with a REAL
 form result — the key-position tiles are frames from the bowler's own clip, so a synthetic render is blank. Will
 capture + montage + apply verified fixes from Shayne's next on-device Form upload (ties into the 60 fps check).
+
+### Progress — 2026-11-17 · Form result vs target-state design (section-by-section compared; mismatches fixed)
+Completed the comparison against `design_form_results_{side,rear}.png` and **applied the fixes in `FormCardView`**
+(all BUILT this commit). The section order already matched; the mismatches were in grouping, labels and the footer:
+- **Metric grouping (biggest fix).** The design's **"Approach & balance"** carries **9** tiles in this order —
+  Steps · Approach · Rhythm · **Finish hold** · Backswing · Ball start · **Foul line** · Drift · **Slide** — and
+  **"Posture & finish"** carries only Spine tilt · Follow-through · Balance arm. Code had grouped by data type
+  (6 metrics in Approach; all MeasuredPositions in Posture). Now a `formTile(key)` helper resolves each tile from
+  whichever source holds it (Metric → else MeasuredPosition), driven by explicit `approachKeys` (9, design order)
+  and `postureKeys`, so `finish_hold`/`foul_line_distance`/`slide_length` sit under Approach & balance as designed.
+- **Timing card right label** → status + view ("Measured · side view" / "Best effort · rear view"), was view only.
+- **Key-positions subtitle** → "Tap a position to see the full frame" (was "tap to open the frame").
+- **Footer** → added the view-aware capability note ("recorded from the side, so timing/steps/posture/foul line are
+  measured; drift and balance arm need a view from behind" — and the rear mirror), matching the design's footer.
+- **Key-position stills now render on-device** (DEC-131): local JPEGs decode synchronously (no async flash / no
+  server round-trip), and the server skeleton overlay is suppressed on a local full-frame still.
+
+**DIFFERS (documented — NOT built; building them would fabricate data or is out of scope):**
+- **Key-position sub-labels** ("Arm 14°", "Step 2", "Shoulders 41°", "Beside right leg", "No overlay / low
+  confidence"). The design annotates each key-position tile with a per-position measured value; the engine produces
+  **no arm-angle / per-key annotation data**, so these can't be shown without fabricating numbers (DEC rule). Needs
+  engine support (per-key-frame arm angle + a confidence note) before it can be built.
+- **"Record delivery N" bottom CTA.** The design shows an inline primary button; the app uses the nav **Done** + the
+  live-session flow (`ProcessingCover` / `exitToSession`). Session-contextual; left to the session wiring.
+- **Context line.** Design puts "Form Analysis · {view} (detected) · {fps} fps" as a body line; code keeps the
+  DEC-086 honesty disclaimer ("Early form analysis …") as the body line and the view/fps as the nav subtitle.
+  Intentional honesty DIFFERS.
+- **Swing-timing badge casing.** Code uses the app-wide uppercase status chip ("MEASURED"); design shows
+  "● Measured" (dot + title case). App-wide badge style — left as-is to stay consistent across the app.
+
+**Side-by-side montage: still from the REAL upload, not synthetic.** A synthetic render was attempted (a simulator
+`FormCardView` snapshot harness with real key-position stills) and **abandoned** — headless SwiftUI snapshotting of
+this screen can't be made faithful: `ImageRenderer` renders the "failed" placeholder because it doesn't satisfy
+`FormCardView`'s `@EnvironmentObject model` (the key-positions `NavigationLink` destination needs it), and a
+`UIHostingController` + `drawHierarchy` snapshot comes out blank in a unit test (no live scene). Don't retry that
+path. The authentic side-by-side will be captured from Shayne's re-upload result (full scene + real data + real
+frames) and dropped into `02_DESIGN/target_state/compare/form/`.
+
+---
+
+## 2026-11-23-B · Form result usability + honesty fix — per Shayne's rear/side uploads (0caad150 rear, be86b1db side)
+**Status:** BUILT (branch `fix/form-result-usability` off `feat/form-ondevice`; not compiled — Form session to build + install).
+**Found in the DB:** rear clip located the whole approach inside 0.47 s (approach 0.38 s flagged implausible) yet still showed "Early" checkpoints + a pendulum value from the same bad window; side clip located no E2/E3/E4/E7, and its rejected 0.05 s downswing still appeared as the Pendulum tile; no key-position stills on either.
+**Engine (OnDeviceFormEngine.swift):** an implausible core timing (approach/swing/backswing/downswing/steps) now marks the delivery mis-segmented → swing events E2–E7 and every swing-derived metric withheld (FORM_DELIVERY_NOT_ISOLATED); measured positions rebuilt AFTER the plausibility gate (pendulum no longer leaks a rejected downswing); stage report reflects it.
+**Stills (AppModel.extractFormKeyFrames):** frames now read with AVAssetReader on the same PTS clock + rotation the pose engine used (the image-generator seek could miss on offset/edited clips); stills saved per shot on the phone (FormStillStore) so reopening from Lab › Uploads keeps them.
+**Card (FormCardView.swift):** only measured / best-effort tiles + checkpoints shown; everything unmeasured is ONE "Not measured on this clip" card (names + tap "Why?" with short plain reasons — no engine notes, event codes or file names); "We couldn't time this delivery" lead card when no swing moment was found; Key positions hidden when no stills; swing-timing bar only with ≥2 measured phases; coaching cues collapsed as "Hand & wrist tips"; engine-version banner + footer versions removed.
+**DIFFERS:** vs Figma form result (design 3.3/3.4): no dashed unavailable tiles, no per-tile reason paragraphs, no version footer; added "Not measured" + "couldn't time" cards. Figma should be updated to match.
+**NOT fixed here (the real gap):** swing-moment detection itself — on these clips the engine finds the wrong window (rear) or nothing (side). Needs the two clips from the phone and engine work.

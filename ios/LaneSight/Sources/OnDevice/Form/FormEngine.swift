@@ -42,6 +42,11 @@ nonisolated enum FormEngine {
     static let formBands: [String: (Double, Double)] = [
         "approach_time": (1.0, 3.5), "backswing_time": (0.25, 1.2), "downswing_time": (0.2, 0.8),
         "swing_time": (0.7, 2.0), "step_count": (3.0, 7.0), "finish_hold": (0.0, 10.0), "rhythm_ratio": (0.2, 1.8),
+        // every other P1 metric gets a band too, so a mis-segmented delivery can't surface an absurd value
+        // (e.g. backswing_height_rel −5.75 on a rear mis-segmentation). Parity with failures._FORM_BANDS.
+        "pushaway_time": (0.05, 1.2), "release_time": (0.0, 0.35), "backswing_height_rel": (-2.0, 3.0),
+        "ball_start_step": (1.0, 7.0), "drift_boards": (-25.0, 25.0), "timing_at_slide": (-1.0, 1.0),
+        "slide_length": (0.0, 60.0),
     ]
     static func implausibleReason(_ metric: String, _ value: Double) -> String? {
         if value.isNaN || value.isInfinite { return "came out non-finite" }
@@ -51,6 +56,18 @@ nonisolated enum FormEngine {
         }
         if metric == "rhythm_ratio" {
             return "swing tempo \(String(format: "%.2f", value)) is out of a plausible range — the delivery wasn't timed correctly"
+        }
+        if metric == "backswing_height_rel" {
+            return "backswing height \(String(format: "%.2f", value)) torso-lengths vs the shoulder is off the body — the swing wasn't tracked correctly"
+        }
+        if metric == "ball_start_step" {
+            return "ball start on step \(Int(value)) isn't a real approach step — the delivery wasn't segmented correctly"
+        }
+        if metric == "drift_boards" {
+            return "drift \(String(format: "%.1f", value)) boards is off the lane — the approach wasn't tracked correctly"
+        }
+        if metric == "slide_length" {
+            return "slide length \(Int(value)) in is not physically possible — the slide wasn't tracked correctly"
         }
         let label = metric.replacingOccurrences(of: "_time", with: "").replacingOccurrences(of: "_", with: " ")
         return "\(label) \(String(format: "%.2f", value))s is outside a real delivery "
@@ -427,30 +444,48 @@ nonisolated enum FormEngine {
         return "Shoulder"
     }
 
-    /// classify_view_from_pose → {view, confidence, reason} (MVP-03).
-    static func classifyViewFromPose(_ t: [Double], _ frames: [Frame]) -> (view: String, confidence: Double, reason: String) {
-        var okMask = [Bool](repeating: false, count: frames.count)
-        var okCount = 0
+    /// dy/dx of the hip centroid over [lo,hi] (or the whole track), with ok-fraction. ratio is nil if too few
+    /// clear frames or the bowler barely moves. Mirrors pose._hip_travel_ratio.
+    private static func hipTravelRatio(_ t: [Double], _ frames: [Frame], _ lo: Double? = nil,
+                                       _ hi: Double? = nil) -> (ratio: Double?, frac: Double, tooFew: Bool) {
+        var hipX = [Double](), hipY = [Double](), okCount = 0, total = 0
         for i in 0..<frames.count {
+            if let lo, let hi, !(t[i] >= lo && t[i] <= hi) { continue }
+            total += 1
             let r = frames[i].lm
             let ok = Double(r[LM.lShoulder][3]) > MIN_VIS && Double(r[LM.rShoulder][3]) > MIN_VIS
                 && Double(r[LM.lHip][3]) > MIN_VIS && Double(r[LM.rHip][3]) > MIN_VIS
-            okMask[i] = ok; if ok { okCount += 1 }
+            if ok {
+                okCount += 1
+                hipX.append((Double(r[LM.lHip][0]) + Double(r[LM.rHip][0])) / 2)
+                hipY.append((Double(r[LM.lHip][1]) + Double(r[LM.rHip][1])) / 2)
+            }
         }
-        if okCount < 8 { return ("unknown", 0.0, "Not enough clear pose frames to tell the camera view.") }
-        var hipX = [Double](), hipY = [Double]()
-        for i in 0..<frames.count where okMask[i] {
-            let r = frames[i].lm
-            hipX.append((Double(r[LM.lHip][0]) + Double(r[LM.rHip][0])) / 2)
-            hipY.append((Double(r[LM.lHip][1]) + Double(r[LM.rHip][1])) / 2)
-        }
+        if okCount < 8 { return (nil, 0.0, true) }
         let dx = FormSignal.nanmax(hipX) - FormSignal.nanmin(hipX)
         let dy = FormSignal.nanmax(hipY) - FormSignal.nanmin(hipY)
-        if Swift.max(dx, dy) < 0.08 {
+        let frac = Double(okCount) / Double(Swift.max(total, 1))
+        if Swift.max(dx, dy) < 0.08 { return (nil, frac, false) }
+        return (dy / Swift.max(dx, 1e-3), frac, false)
+    }
+
+    /// classify_view_from_pose → {view, confidence, reason} (MVP-03). When the delivery's `approach`=(firstStep,
+    /// holdStart) window is known, takes the MAX of the full (posed-span) and approach-window hip dy/dx so a rear
+    /// camera is caught whichever phase shows the toward-pins / toward-camera vertical travel (DEC-131). Parity
+    /// with pose.classify_view_from_pose.
+    static func classifyViewFromPose(_ t: [Double], _ frames: [Frame],
+                                     approach: (Double, Double)? = nil) -> (view: String, confidence: Double, reason: String) {
+        let full = hipTravelRatio(t, frames)
+        if full.tooFew { return ("unknown", 0.0, "Not enough clear pose frames to tell the camera view.") }
+        guard var ratio = full.ratio else {
             return ("unknown", 0.1, "The bowler barely moves in frame — the camera view is unclear (check framing).")
         }
-        let frac = Double(okCount) / Double(frames.count)
-        if dy / Swift.max(dx, 1e-3) < 0.30 {
+        if let approach {
+            let appr = hipTravelRatio(t, frames, approach.0, approach.1)
+            if let ra = appr.ratio { ratio = Swift.max(ratio, ra) }
+        }
+        let frac = full.frac
+        if ratio < 0.30 {
             return ("down_lane", round2(0.5 + 0.2 * frac), "The bowler moves across the frame — a side (profile) view.")
         }
         return ("rear", round2(0.4 + 0.2 * frac), "The bowler moves up the frame toward the pins — a rear view.")
