@@ -65,7 +65,7 @@ Doc-only consolidation (no code / no engine, threshold or product-decision chang
   DEC-023) and line 909 (blocking Analyzing, DEC-068) are historical and intentionally untouched; `dev_build_v0/HANDOFF.md`
   (frozen) still carries the old push line and was left frozen. All flagged in my report, none are live guidance.
 
-## 2026-11-23 — OPEN (for Shayne) — Coaching-eligibility conflicts surfaced by the metric contract
+## 2026-11-23 — DECIDED by Shayne (see item below) — Coaching-eligibility conflicts surfaced by the metric contract
 The new fail-closed metric contract (`01_PRODUCT/METRIC_CAPABILITIES.md`) marks some metrics **not** coaching-eligible that
 current coaching/Accuracy/Score logic already acts on. These are product calls, left undecided (docs-only pass):
 1. **Rev rate** — contract: not coaching-eligible (REV_SENSOR_FACTOR=1.12 fitted on 4 shots, blind validation pending,
@@ -76,3 +76,20 @@ current coaching/Accuracy/Score logic already acts on. These are product calls, 
    on-device boards Score-eligible. Decide how to reconcile DEC-127 (measured = Score-eligible) with the fail-closed coaching bar.
 3. **Headline speed definition** — DEC-030 (release) vs DEC-064 (60 ft foul→pins average) is still open (also tracked in
    METRIC_AND_SCORING_LOGIC / CURRENT_STATE). Phase-2 Specto settles it; noted in the contract's Open-conflicts section.
+
+## 2026-11-23 — OPEN — Shayne decisions on coaching eligibility + headline speed (record as next free DEC)
+Decided by Shayne 2026-11-23 (resolves the metric-contract conflicts above):
+1. Rev rate: display-eligible (best_effort), NOT coaching-eligible until validated against independent truth
+   (240 fps marked-ball clips or Specto). The coach matrix must not use revs as a throw signal until then.
+2. Near-lane boards (laydown, arrows, 7 ft): coaching may use them for DIRECTION only ("missing left/right of your
+   target"), never exact board-move prescriptions, until validated. Exact moves unlock once boards pass validation.
+3. Headline speed = 60-ft average (foul line → first pin contact), labeled "Avg speed" — the validated metric and what
+   center displays show. Release speed is secondary detail. Resolves DEC-030 vs DEC-064.
+Tasks:
+- DOCS session: record this as the next free DEC (fetch first) on docs/consolidation-2026-11; update METRIC_CAPABILITIES
+  (metric contract) coaching-eligibility columns + the design README; push; mark this DONE.
+- SESSION 1 (after 8754): enforce 1–2 in the coaching/rec code (server + on-device) and make the shot card headline
+  "Avg speed" = speed_avg_foul_to_pins. Then validate near-lane boards WITHOUT Shayne labeling: on the 22 labeled
+  clips, read the true board at the arrows/foul line from frames yourself (visible arrows/dots as the ruler), audit
+  with contact sheets, grade laydown/arrows vs that truth, and report. If they pass a ±1 board gate, propose unlocking
+  exact board moves.
