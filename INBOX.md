@@ -106,6 +106,11 @@ Release install. 2) Pull both clips off the phone into ~/LaneSightData and root-
 fix on the Python reference first, then port; re-run the form gate. Zero plausible-but-wrong. 3) Confirm stills now appear on the rear clip.
 4) Prepare a Labeler task for form events (DECISIONS #4) on all form clips incl. these two.
 
+## 2026-11-23 — DONE (`6e71dda`, DEC-134 on feat/ios-lane-parity) — SESSION 1: keep speed strict
+Recorded as **DEC-134** (speed reported only when timed foul→detected pin contact; no early-lane/rev fallback; unavailable+reason).
+**DEC-134 is TAKEN** — DOCS session: use **DEC-135** for the coaching-eligibility + headline "Avg speed" decision. Enforcement
+(coaching/rec server+on-device + Active Session rings + shot-card "Avg speed" headline) pending on Session 1 after the 8754/coverage pass.
+(original item:)
 ## 2026-11-23 — OPEN — SESSION 1 (shots): DECISION — keep speed strict (record as next free DEC)
 Shayne chose (2026-11-23, after upload 762be1be produced zero numbers): keep speed strict. Speed is reported ONLY when timed foul line →
 detected pin contact. Do NOT fall back to an early-lane / front-lane speed (or rev) estimate when pin contact isn't detected — show
