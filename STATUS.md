@@ -18,6 +18,7 @@ Branch `context` holds only STATUS.md, INBOX.md and handoffs/ (full briefs), so 
 Last updated: 2026-11-23 (Capture/Form session — A + B-core done + pushed (77ab923); C unblocked/recorded; D blocked)
 
 ## Live
+- 📱 **DEVICE IN USE: Session 1 (shots) since 11:44 — 8754 trim fix + 22-clip re-gate. Form: wait for "device free" before the HDR check.**
 - Server: Cloud Run lanesight-api-47dfd3b (lanesight-cv-0.7.2 classical + form fixes). Shadow/validation only.
 - iPhone (Shayne's): Release from feat/ios-lane-parity, on-device primary ON (classical + changepoint
   + learned fallback with ENGINE_DISAGREE). Form on-device (MediaPipe) from feat/form-ondevice.
