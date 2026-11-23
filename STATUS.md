@@ -6,7 +6,7 @@ Branch `context` holds ONLY this file and INBOX.md, so it never conflicts with c
 - claude.ai chat sessions read both via GitHub at the start of any LaneSight conversation and
   append new decisions/requests to INBOX.md.
 
-Last updated: 2026-11-23 (claude.ai coordinator)
+Last updated: 2026-11-23 (Form session, Claude Code — updated Form row)
 
 ## Live
 - Server: Cloud Run lanesight-api-47dfd3b (lanesight-cv-0.7.2 classical + form fixes). Shadow/validation only.
@@ -25,7 +25,7 @@ Last updated: 2026-11-23 (claude.ai coordinator)
 | Session | Worktree · branch | Now |
 |---|---|---|
 | Session 1 (shots) | ~/Developer/LaneSight · feat/ios-lane-parity | DEC-132 coverage: on-device deck changepoint (8969), then the uncovered clips by first-failing stage (Python first, then port). Sole deployer. |
-| Form | ~/Developer/LaneSight-form · feat/form-ondevice | Form card vs design, E5 slide-plant, on-device default. Waiting on Shayne's 2 form re-uploads. |
+| Form | ~/Developer/LaneSight-form · feat/form-ondevice | All assigned items DONE + pushed (558260d): form card vs design (grouping/labels/footer + on-device stills), E5 slide-plant (−13f early case fixed; late-error clips documented), on-device default verified ON. Release installed on Shayne's phone. IDLE — waiting on Shayne's 2 form re-uploads to validate the device fixes. |
 | Capture (to start) | ~/Developer/LaneSight-capture · feat/capture-any-video | INBOX 2026-11-23: on-device only + any video in + capture picker (next free DEC, likely 133). |
 
 ## Latest decisions (full text: 00_CONTEXT/DECISIONS.md on feat/ios-lane-parity)
