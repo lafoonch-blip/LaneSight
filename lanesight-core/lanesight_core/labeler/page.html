@@ -46,6 +46,13 @@ aside,section{min-height:0}
 .stage{flex:1;min-height:0;background:#000;border-radius:10px;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;cursor:zoom-in}
 .stage.zoomed{cursor:zoom-out}
 .stage img{max-width:100%;max-height:100%;object-fit:contain;transition:transform .12s;user-select:none;-webkit-user-drag:none}
+.stage.drawing{cursor:crosshair}
+.ovl{position:absolute;pointer-events:none;z-index:5}
+.ovl.pt{width:9px;height:9px;margin:-5px 0 0 -5px;border-radius:50%;background:#19d3a2;border:2px solid #000;box-shadow:0 0 0 1px #19d3a2}
+.ovl.bx{border:2px solid #ffcf33;background:rgba(255,207,51,.12)}
+.ovl .lbl{position:absolute;top:-16px;left:0;font-size:10px;color:#ffcf33;background:#000a;padding:0 3px;border-radius:3px;white-space:nowrap}
+.boxbtn{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:5px;cursor:pointer}
+.boxbtn.active{border-color:#ffcf33;box-shadow:0 0 0 1px #ffcf33 inset}
 .stage .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gray);text-align:center;padding:30px}
 .stage .badge{position:absolute;top:10px;left:10px;background:rgba(11,19,32,.8);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font-variant-numeric:tabular-nums;font-size:13px}
 .stage .marker{position:absolute;top:10px;right:10px;background:var(--ok);color:#04210f;border-radius:8px;padding:4px 8px;font-weight:600;font-size:12px;display:none}
@@ -118,6 +125,7 @@ aside,section{min-height:0}
     <aside class="side">
       <div class="instructions" id="instr"></div>
       <div><h3>Mark these moments</h3><div id="events"></div></div>
+      <div id="boxesWrap"><h3>Draw on the frame</h3><div id="boxes"></div></div>
       <div id="fieldsWrap"><div id="fields"></div></div>
       <div class="next">
         <button id="bPrevClip">← Previous clip</button>
@@ -134,7 +142,7 @@ aside,section{min-height:0}
 <div class="toast" id="toast"></div>
 <script>
 const $ = id => document.getElementById(id);
-const S = {tasks:[], task:null, clipIdx:0, meta:null, frame:0, evIdx:0, playing:false, zoom:false, reqSeq:0};
+const S = {tasks:[], task:null, clipIdx:0, meta:null, frame:0, evIdx:0, playing:false, zoom:false, reqSeq:0, drawBox:null};
 
 const store = {
   get(k){ try { return localStorage.getItem('lsl.'+k); } catch(e){ return null; } },
@@ -149,7 +157,7 @@ async function api(path, body){
 function toast(t, ms=2200){ const el=$('toast'); el.textContent=t; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', ms); }
 function flashSaved(){ const s=$('saved'); s.classList.add('show'); clearTimeout(s._t); s._t=setTimeout(()=>s.classList.remove('show'),1200); }
 const clip = () => S.task && S.task.clips[S.clipIdx];
-const labels = () => { const l = (clip() && clip().labels) || {}; return {...l, events: l.events || {}, fields: l.fields || {}}; };
+const labels = () => { const l = (clip() && clip().labels) || {}; return {...l, events: l.events || {}, fields: l.fields || {}, boxes: l.boxes || {}}; };
 const fmtT = f => S.meta && S.meta.fps ? (f / S.meta.fps).toFixed(3)+' s' : '';
 
 // ---------- tasks
@@ -218,7 +226,7 @@ async function openClip(i){
     $('readout').textContent=''; $('scrub').max=0; $('scrub').value=0; $('ticks').innerHTML='';
     $('msg').innerHTML = S.meta.found ? `<div><span class="err">Couldn't open ${clip().id}</span><br><br>${S.meta.error}</div>`
       : `<div><span class="err">${clip().id} wasn't found.</span><br><br>Put the clip anywhere under ~/LaneSightData (any sub-folder is fine), then click it again in the list.</div>`;
-    renderEvents(); renderFields(); return;
+    renderEvents(); renderFields(); renderBoxes(); return;
   }
   $('badge').style.display='';
   clip()._missing = false;
@@ -228,7 +236,7 @@ async function openClip(i){
   const lab = ev && labels().events[ev.id];
   const hint = ev && (clip().hints||{})[ev.id];
   await show(lab && lab.frame!=null ? lab.frame : hint!=null ? hint : 0);
-  renderEvents(); renderFields(); renderTicks();
+  renderEvents(); renderFields(); renderBoxes(); renderTicks();
 }
 function firstOpenEvent(){
   const evs = labels().events||{};
@@ -250,6 +258,7 @@ async function show(f){
     img.src = url;
   });
   if(S.meta!==m) return;
+  if(S.task && S.task.boxes && S.task.boxes.length) renderBoxes();   // refresh overlays + per-frame box state
   for(let k=1;k<=3;k++){ const p=new Image(); p.src=`/api/frame/${encodeURIComponent(clip().id)}/${Math.min(f+k, m.frames-1)}`; }
 }
 function updateReadout(){
@@ -324,6 +333,43 @@ async function save(change){
     return true;
   }catch(e){ toast('Not saved: '+e.message, 4000); return false; }
 }
+// ---------- boxes / points (draw on the frame)
+function activeBox(){ return (S.task.boxes||[]).find(b=>b.id===S.drawBox); }
+function imgRect(){ const img=$('frame'), sr=$('stage').getBoundingClientRect(), r=img.getBoundingClientRect();
+  return {left:r.left-sr.left, top:r.top-sr.top, w:r.width||1, h:r.height||1, nw:img.naturalWidth||1, nh:img.naturalHeight||1}; }
+function toNative(ev){ const R=imgRect(), sr=$('stage').getBoundingClientRect();
+  return [ (ev.clientX-sr.left-R.left)/R.w*R.nw, (ev.clientY-sr.top-R.top)/R.h*R.nh ]; }
+function renderBoxes(){
+  const wrap=$('boxesWrap'), el=$('boxes');
+  if(!S.task.boxes || !S.task.boxes.length){ wrap.style.display='none'; return; }
+  wrap.style.display=''; el.innerHTML='';
+  const bl=(labels().boxes)||{};
+  S.task.boxes.forEach(b=>{
+    const store=bl[b.id]||{}, key=b.per_frame?String(S.frame):'single', has=store[key], n=Object.keys(store).length;
+    const d=document.createElement('div'); d.className='boxbtn'+(S.drawBox===b.id?' active':'');
+    d.innerHTML=`<span><b>${b.label}</b> <small style="color:var(--muted)">${b.kind==='point'?'point':'box'}${b.per_frame?' · per frame':' · one/clip'}</small>${b.help?`<br><small style="color:var(--muted)">${b.help}</small>`:''}</span>`+
+      `<span style="display:flex;gap:5px;align-items:center"><small style="color:var(--muted)">${b.per_frame?n+' fr':(has?'set':'—')}</small>${has?'<button data-a="clr" class="ghost">Clear</button>':''}</span>`;
+    d.onclick=async ev=>{ if(ev.target.dataset.a==='clr'){ ev.stopPropagation(); await save({box:b.id, frame:S.frame, status:'clear'}); renderBoxes(); return; }
+      S.drawBox = S.drawBox===b.id ? null : b.id; renderBoxes(); $('stage').classList.toggle('drawing', !!S.drawBox); };
+    el.appendChild(d);
+  });
+  drawOverlays();
+}
+function drawOverlays(){
+  const s=$('stage'); s.querySelectorAll('.ovl').forEach(e=>e.remove());
+  if(!S.task || !S.task.boxes) return;
+  const R=imgRect(), bl=(labels().boxes)||{}, toX=x=>R.left+x/R.nw*R.w, toY=y=>R.top+y/R.nh*R.h;
+  S.task.boxes.forEach(b=>{ const co=((bl[b.id]||{})[b.per_frame?String(S.frame):'single']); if(!co) return;
+    if(b.kind==='point'){ const d=document.createElement('div'); d.className='ovl pt'; d.style.left=toX(co[0])+'px'; d.style.top=toY(co[1])+'px'; s.appendChild(d); }
+    else { const d=document.createElement('div'); d.className='ovl bx'; d.style.left=toX(Math.min(co[0],co[2]))+'px'; d.style.top=toY(Math.min(co[1],co[3]))+'px';
+      d.style.width=Math.abs(toX(co[2])-toX(co[0]))+'px'; d.style.height=Math.abs(toY(co[3])-toY(co[1]))+'px'; d.innerHTML=`<span class="lbl">${b.label}</span>`; s.appendChild(d); } });
+}
+let _drag=null;
+$('stage').addEventListener('mousedown', ev=>{ if(!S.drawBox || !S.meta || !S.meta.found) return; const b=activeBox(); if(!b) return;
+  const [nx,ny]=toNative(ev); if(nx<0||ny<0) return; ev.preventDefault();
+  if(b.kind==='point'){ save({box:b.id, frame:S.frame, coords:[nx,ny]}).then(renderBoxes); } else { _drag=[nx,ny]; } });
+$('stage').addEventListener('mouseup', ev=>{ if(!_drag) return; const b=activeBox(); const [nx,ny]=toNative(ev); const co=[_drag[0],_drag[1],nx,ny]; _drag=null;
+  if(Math.abs(co[2]-co[0])<4 || Math.abs(co[3]-co[1])<4) return; save({box:b.id, frame:S.frame, coords:co}).then(renderBoxes); });
 async function mark(evId, status){
   stop();
   const ok = await save({event: evId, status, frame: S.frame});
@@ -371,7 +417,7 @@ function setZoom(on, ev){
     img.style.transformOrigin = `${x}% ${y}%`; img.style.transform='scale(3)';
   } else img.style.transform='none';
 }
-$('stage').onclick = ev => setZoom(!S.zoom, ev);
+$('stage').onclick = ev => { if(S.drawBox) return; setZoom(!S.zoom, ev); };   // drawing a box/point suppresses zoom
 $('bZoom').onclick = () => setZoom(!S.zoom);
 
 // ---------- wiring

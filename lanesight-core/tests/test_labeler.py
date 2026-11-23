@@ -78,6 +78,36 @@ def test_save_complete_and_export(env, tmp_path):
     assert 'a' not in d['clips']['IMG_0001']['events']
 
 
+def test_box_and_point_storage_and_export(tmp_path):
+    # DEC-132: the labeler stores per-frame points (ball centers) + one box per clip (pin-deck box), and exports them.
+    tasks = tmp_path / 'tasks'; tasks.mkdir()
+    (tasks / 'boxes.json').write_text(json.dumps({
+        'title': 'Boxes', 'clips': [{'id': 'IMG_0001'}],
+        'boxes': [
+            {'id': 'ball_center', 'kind': 'point', 'per_frame': True, 'export_key': 'ball_centers'},
+            {'id': 'pin_deck', 'kind': 'box', 'per_frame': False, 'required': True, 'export_key': 'pin_deck_box'},
+        ],
+        'export': {'path': 'out/boxes_export.json'}}))
+    t = load_task(str(tasks / 'boxes.json'))
+    assert t['boxes'][0]['kind'] == 'point' and t['boxes'][1]['per_frame'] is False
+    st = LabelStore(str(tmp_path / 'labels'), str(tmp_path))
+    st.update(t, 'IMG_0001', {'box': 'ball_center', 'frame': 12, 'coords': [100.4, 50.6]})
+    st.update(t, 'IMG_0001', {'box': 'ball_center', 'frame': 30, 'coords': [120, 60]})
+    d = st.update(t, 'IMG_0001', {'box': 'pin_deck', 'frame': 0, 'coords': [10, 20, 90, 110]})
+    c = d['clips']['IMG_0001']
+    assert c['boxes']['ball_center'] == {'12': [100.4, 50.6], '30': [120.0, 60.0]}
+    assert c['boxes']['pin_deck'] == {'single': [10.0, 20.0, 90.0, 110.0]}
+    assert clip_complete(t, c)                                   # required box is set
+    ex = json.loads((tmp_path / 'out/boxes_export.json').read_text())   # JSON stringifies the frame keys
+    assert ex['IMG_0001']['ball_centers'] == {'12': [100.4, 50.6], '30': [120.0, 60.0]}
+    assert ex['IMG_0001']['pin_deck_box'] == [10.0, 20.0, 90.0, 110.0]
+    # wrong coord count rejected; clear removes it
+    with pytest.raises(ValueError):
+        st.update(t, 'IMG_0001', {'box': 'pin_deck', 'frame': 0, 'coords': [1, 2, 3]})
+    d = st.update(t, 'IMG_0001', {'box': 'pin_deck', 'frame': 0, 'status': 'clear'})
+    assert not clip_complete(t, d['clips']['IMG_0001'])          # required box now missing
+
+
 def test_http_api_end_to_end(env, tmp_path):
     root, tasks = env
     srv = make_server(0, task_dir=str(tasks), label_dir=str(tmp_path / 'labels'),

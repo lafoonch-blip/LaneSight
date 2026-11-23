@@ -1,0 +1,210 @@
+{
+  "title": "Shot truth: foul, pin contact, ball centers, pin-deck box (DEC-132 coverage)",
+  "instructions": "For each shot clip: (1) confirm/adjust the FOUL CROSS and FIRST PIN CONTACT frames (hints are pre-set from earlier labels \u2014 nudge if off). (2) Select 'Ball center' and click the ball's center on ~5-8 frames spread foul\u2192pins (especially the back half where tracking is hard). (3) Select 'Pin-deck box' and drag ONE tight box around the target lane's pin deck (the standing pins) on any clear pre-contact frame. Clips tagged held_out are a blind validation set \u2014 label them the same; they're just excluded from tuning. Pins are visible in every clip.",
+  "clips": [
+    {
+      "id": "IMG_8751",
+      "hints": {
+        "foul_cross": 1601,
+        "first_pin_contact": 1737
+      }
+    },
+    {
+      "id": "IMG_8752",
+      "hints": {
+        "foul_cross": 1114,
+        "first_pin_contact": 1249
+      }
+    },
+    {
+      "id": "IMG_8753",
+      "hints": {
+        "foul_cross": 559,
+        "first_pin_contact": 692
+      }
+    },
+    {
+      "id": "IMG_8754",
+      "hints": {
+        "foul_cross": 1543,
+        "first_pin_contact": 1683
+      },
+      "static": {
+        "held_out": true
+      }
+    },
+    {
+      "id": "IMG_8963",
+      "hints": {
+        "foul_cross": 667,
+        "first_pin_contact": 804
+      }
+    },
+    {
+      "id": "IMG_8964",
+      "hints": {
+        "foul_cross": 602,
+        "first_pin_contact": 746
+      }
+    },
+    {
+      "id": "IMG_8965",
+      "hints": {
+        "foul_cross": 911,
+        "first_pin_contact": 1050
+      }
+    },
+    {
+      "id": "IMG_8966",
+      "hints": {
+        "foul_cross": 670,
+        "first_pin_contact": 811
+      }
+    },
+    {
+      "id": "IMG_8967",
+      "hints": {
+        "foul_cross": 790,
+        "first_pin_contact": 932
+      }
+    },
+    {
+      "id": "IMG_8968",
+      "hints": {
+        "foul_cross": 723,
+        "first_pin_contact": 866
+      }
+    },
+    {
+      "id": "IMG_8969",
+      "hints": {
+        "foul_cross": 543,
+        "first_pin_contact": 677
+      },
+      "static": {
+        "held_out": true
+      }
+    },
+    {
+      "id": "IMG_8970",
+      "hints": {
+        "foul_cross": 774,
+        "first_pin_contact": 915
+      }
+    },
+    {
+      "id": "IMG_8971",
+      "hints": {
+        "foul_cross": 822,
+        "first_pin_contact": 961
+      }
+    },
+    {
+      "id": "IMG_8972",
+      "hints": {
+        "foul_cross": 728,
+        "first_pin_contact": 871
+      }
+    },
+    {
+      "id": "IMG_8973",
+      "hints": {
+        "foul_cross": 691,
+        "first_pin_contact": 828
+      }
+    },
+    {
+      "id": "IMG_8974",
+      "hints": {
+        "foul_cross": 692,
+        "first_pin_contact": 832
+      }
+    },
+    {
+      "id": "IMG_8975",
+      "hints": {
+        "foul_cross": 902,
+        "first_pin_contact": 1037
+      }
+    },
+    {
+      "id": "IMG_8976",
+      "hints": {
+        "foul_cross": 769,
+        "first_pin_contact": 911
+      }
+    },
+    {
+      "id": "IMG_8977",
+      "hints": {
+        "foul_cross": 720,
+        "first_pin_contact": 864
+      }
+    },
+    {
+      "id": "IMG_8978",
+      "hints": {
+        "foul_cross": 1130,
+        "first_pin_contact": 1272
+      }
+    },
+    {
+      "id": "IMG_8979",
+      "hints": {
+        "foul_cross": 593,
+        "first_pin_contact": 730
+      }
+    },
+    {
+      "id": "IMG_8981",
+      "hints": {
+        "foul_cross": 867,
+        "first_pin_contact": 999
+      },
+      "static": {
+        "held_out": true
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "foul_cross",
+      "label": "Ball crosses the foul line",
+      "export_key": "foul_cross_frame",
+      "export_unit": "frame",
+      "help": "The frame the ball first crosses the foul line."
+    },
+    {
+      "id": "first_pin_contact",
+      "label": "Ball first contacts the pins",
+      "export_key": "first_pin_contact_frame",
+      "export_unit": "frame",
+      "help": "The frame the ball first touches the head pin."
+    }
+  ],
+  "boxes": [
+    {
+      "id": "ball_center",
+      "kind": "point",
+      "per_frame": true,
+      "label": "Ball center",
+      "export_key": "ball_centers",
+      "export_unit": "pixels_xy",
+      "help": "Click the center of the ball. A handful of frames spread down the lane."
+    },
+    {
+      "id": "pin_deck",
+      "kind": "box",
+      "per_frame": false,
+      "required": true,
+      "label": "Pin-deck box",
+      "export_key": "pin_deck_box",
+      "export_unit": "pixels_xyxy",
+      "help": "Drag a tight box around the target lane standing pins (one per clip)."
+    }
+  ],
+  "export": {
+    "path": "validation/labels/shot_box_truth_export.json",
+    "add_fps": true
+  }
+}

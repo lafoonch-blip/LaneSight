@@ -53,6 +53,12 @@ def load_task(path):
     t['fields'] = [dict(x) for x in t.get('fields', [])]
     for x in t['fields']:
         x.setdefault('label', x['id']); x.setdefault('type', 'text')
+    # DEC-094/DEC-132: box/point annotations drawn on the frame. kind 'box' = [x0,y0,x1,y1], 'point' = [x,y], in the
+    # frame's native pixels. per_frame True = one per labeled frame (ball centers); False = one per clip (pin-deck box).
+    t['boxes'] = [dict(b) for b in t.get('boxes', [])]
+    for b in t['boxes']:
+        b.setdefault('label', b['id']); b.setdefault('help', '')
+        b.setdefault('kind', 'box'); b.setdefault('per_frame', True)
     t['_path'] = path
     return t
 
@@ -248,7 +254,7 @@ class LabelStore:
 
     @staticmethod
     def _clip(data, clip_id):
-        return data['clips'].setdefault(clip_id, {'events': {}, 'fields': {}, 'done': False})
+        return data['clips'].setdefault(clip_id, {'events': {}, 'fields': {}, 'boxes': {}, 'done': False})
 
     def update(self, task, clip_id, change, fps=None):
         """change: {"event": id, "frame": int|None, "status": "set"|"not_visible"|"clear"}
@@ -288,6 +294,23 @@ class LabelStore:
                     elif fld['type'] == 'float':
                         v = float(v)
                     c['fields'][fld['id']] = v
+            elif 'box' in change:
+                b = next((x for x in task['boxes'] if x['id'] == change['box']), None)
+                if b is None:
+                    raise ValueError(f"unknown box {change['box']}")
+                store = c.setdefault('boxes', {}).setdefault(b['id'], {})
+                key = str(int(change['frame'])) if b.get('per_frame') else 'single'
+                st = change.get('status', 'set')
+                if st == 'clear':
+                    store.pop(key, None)
+                elif st == 'set':
+                    coords = change.get('coords')
+                    n = 2 if b.get('kind') == 'point' else 4
+                    if not (isinstance(coords, (list, tuple)) and len(coords) == n):
+                        raise ValueError(f"box {b['id']} needs {n} coords, got {coords!r}")
+                    store[key] = [round(float(x), 1) for x in coords]
+                else:
+                    raise ValueError(f'bad status {st}')
             elif 'done' in change:
                 c['done'] = bool(change['done'])
             else:
@@ -318,6 +341,13 @@ class LabelStore:
                     row[key] = v.get('frame')
             for x in task['fields']:
                 row[x.get('export_key') or x['id']] = (c.get('fields') or {}).get(x['id'])
+            for b in task['boxes']:
+                key = b.get('export_key') or b['id']
+                bx = (c.get('boxes') or {}).get(b['id']) or {}
+                if b.get('per_frame'):
+                    row[key] = ({int(fr): co for fr, co in bx.items()} or None) if bx else None
+                else:
+                    row[key] = bx.get('single')
             if ex.get('add_fps'):
                 row['fps'] = c.get('fps')
             out[cid] = row
@@ -337,7 +367,10 @@ def clip_complete(task, c):
     if any(e['id'] not in evs for e in task['events'] if not e.get('optional')):
         return False
     flds = c.get('fields') or {}
-    return all(x['id'] in flds for x in task['fields'] if x.get('required'))
+    if not all(x['id'] in flds for x in task['fields'] if x.get('required')):
+        return False
+    bxs = c.get('boxes') or {}
+    return all(bxs.get(b['id']) for b in task.get('boxes', []) if b.get('required'))
 
 
 def task_progress(task, data):
