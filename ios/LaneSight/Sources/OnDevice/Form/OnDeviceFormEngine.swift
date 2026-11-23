@@ -360,15 +360,44 @@ nonisolated enum OnDeviceFormEngine {
             metrics[k] = mm
         }
 
+        // 2026-11-23 (Shayne's rear/side uploads): an impossible core timing means the DELIVERY was mis-segmented
+        // (e.g. a whole approach found inside 0.4 s). Everything timed off that window is then wrong too — the
+        // swing events (which drive the "Early/Late" checkpoints + thumbnails) and every swing-derived metric.
+        // Withhold them all instead of showing "EARLY" verdicts built on a bad window. Zero plausible-but-wrong.
+        let coreTiming = ["approach_time", "swing_time", "backswing_time", "downswing_time", "step_count"]
+        let misSegmented = coreTiming.contains { metrics[$0]?.reasonCode == "IMPLAUSIBLE_VALUE" }
+        if misSegmented {
+            let why = "this delivery couldn't be timed reliably — record with your whole approach and swing in frame"
+            for k in ["E2", "E3", "E4", "E6", "E7"] { events[k] = Double?.none }
+            for k in ["pushaway_time", "backswing_time", "downswing_time", "release_time", "swing_time",
+                      "rhythm_ratio", "backswing_height_rel", "ball_start_step", "approach_time", "step_count"] {
+                guard let m = metrics[k], m.status != "unavailable" else { continue }
+                var mm = FormMeasurement(k, nil, m.unit, 0.0, "unavailable", note: why,
+                                         id: m.id, viewRequired: m.viewRequired)
+                mm.reasonCode = "FORM_DELIVERY_NOT_ISOLATED"
+                metrics[k] = mm
+            }
+        }
+        // Positions were computed BEFORE the plausibility gate, so a rejected downswing still produced a pendulum
+        // tile (0.05 s shown on the side clip). Rebuild them from the final events + metrics.
+        positions = FormFundamentals.measuredPositions(t, frames, events: [
+            "E2": events["E2"] ?? nil, "E3": events["E3"] ?? nil, "E4": events["E4"] ?? nil, "E5": slideStart,
+            "E6": events["E6"] ?? nil, "E7": events["E7"] ?? nil, "E8": slideStop,
+            "first_step": firstStep, "slide_plant": slidePlant, "slide_stop": slideStop,
+            "hold_start": holdStart, "hold_end": holdEnd,
+        ], torso: torso, handed: handed, metrics: metrics)
+
         // stage report (DEC-122)
+        let isolated = isoOk && !misSegmented
         var stage: [String: FormStageOutcome] = [
             "decode": FormStageOutcome(status: "ok"),
             "pose": FormStageOutcome(status: "ok", frames: t.count),
-            "swing_events": FormStageOutcome(status: isoOk ? "ok" : "failed",
-                                             reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED",
-                                             reason: isoOk ? nil : "every swing event failed the DEC-095 sanity gates"),
-            "delivery_isolation": FormStageOutcome(status: isoOk ? "ok" : "failed",
-                                                   reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
+            "swing_events": FormStageOutcome(status: isolated ? "ok" : "failed",
+                                             reasonCode: isolated ? nil : "FORM_DELIVERY_NOT_ISOLATED",
+                                             reason: isolated ? nil : (misSegmented ? "core timings implausible — delivery mis-segmented"
+                                                                            : "every swing event failed the DEC-095 sanity gates")),
+            "delivery_isolation": FormStageOutcome(status: isolated ? "ok" : "failed",
+                                                   reasonCode: isolated ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
             "slowmo": FormStageOutcome(status: "ok"),
         ]
         _ = intervals; _ = ballHipToRelease; _ = firstToRelease   // diagnostics parity (surfaced server-side)

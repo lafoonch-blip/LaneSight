@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-17 · Owner: Shayne
+Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-23 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -272,3 +272,14 @@ this screen can't be made faithful: `ImageRenderer` renders the "failed" placeho
 `UIHostingController` + `drawHierarchy` snapshot comes out blank in a unit test (no live scene). Don't retry that
 path. The authentic side-by-side will be captured from Shayne's re-upload result (full scene + real data + real
 frames) and dropped into `02_DESIGN/target_state/compare/form/`.
+
+---
+
+## 2026-11-23-B · Form result usability + honesty fix — per Shayne's rear/side uploads (0caad150 rear, be86b1db side)
+**Status:** BUILT (branch `fix/form-result-usability` off `feat/form-ondevice`; not compiled — Form session to build + install).
+**Found in the DB:** rear clip located the whole approach inside 0.47 s (approach 0.38 s flagged implausible) yet still showed "Early" checkpoints + a pendulum value from the same bad window; side clip located no E2/E3/E4/E7, and its rejected 0.05 s downswing still appeared as the Pendulum tile; no key-position stills on either.
+**Engine (OnDeviceFormEngine.swift):** an implausible core timing (approach/swing/backswing/downswing/steps) now marks the delivery mis-segmented → swing events E2–E7 and every swing-derived metric withheld (FORM_DELIVERY_NOT_ISOLATED); measured positions rebuilt AFTER the plausibility gate (pendulum no longer leaks a rejected downswing); stage report reflects it.
+**Stills (AppModel.extractFormKeyFrames):** frames now read with AVAssetReader on the same PTS clock + rotation the pose engine used (the image-generator seek could miss on offset/edited clips); stills saved per shot on the phone (FormStillStore) so reopening from Lab › Uploads keeps them.
+**Card (FormCardView.swift):** only measured / best-effort tiles + checkpoints shown; everything unmeasured is ONE "Not measured on this clip" card (names + tap "Why?" with short plain reasons — no engine notes, event codes or file names); "We couldn't time this delivery" lead card when no swing moment was found; Key positions hidden when no stills; swing-timing bar only with ≥2 measured phases; coaching cues collapsed as "Hand & wrist tips"; engine-version banner + footer versions removed.
+**DIFFERS:** vs Figma form result (design 3.3/3.4): no dashed unavailable tiles, no per-tile reason paragraphs, no version footer; added "Not measured" + "couldn't time" cards. Figma should be updated to match.
+**NOT fixed here (the real gap):** swing-moment detection itself — on these clips the engine finds the wrong window (rear) or nothing (side). Needs the two clips from the phone and engine work.

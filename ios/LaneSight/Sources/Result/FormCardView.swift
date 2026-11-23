@@ -22,16 +22,19 @@ struct FormCardView: View {
     /// width for the design comparison (02_DESIGN/target_state/compare/form).
     @ViewBuilder var formContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            contextHeader
+            // Show only what was actually measured. Everything that wasn't is ONE plain-English card at the end
+            // (names + a tap-to-expand "why"), not dashed "—" tiles and paragraphs of engine notes (2026-11-23).
             if topUnavailable {
                 unavailableCard
             } else {
+                if !deliveryTimed { notTimedCard }
                 if result.formFocus != nil { focusCard }
-                keyPositionsSection
-                if !orderedCheckpoints.isEmpty { timingCheckpointsSection }
-                if result.swingTiming != nil { swingTimingSection }
+                if !result.keyFrames.isEmpty { keyPositionsSection }
+                if !shownCheckpoints.isEmpty { timingCheckpointsSection }
+                if let st = result.swingTiming, Self.measuredPhases(st).count >= 2 { swingTimingSection }
                 if !approachTiles.isEmpty { approachSection }
                 if !postureTiles.isEmpty { positionsSection }
+                if !notMeasured.isEmpty { notMeasuredCard }
                 if let cues = result.coachingCues, let list = cues.cues, !list.isEmpty { coachingCuesSection(cues) }
             }
             footer
@@ -93,7 +96,7 @@ struct FormCardView: View {
     /// Design 3.4: the timing card's right label pairs the measurement status with the view
     /// ("Measured · side view" / "Best effort · rear view").
     private var timingStatusLabel: String {
-        let statuses = orderedCheckpoints.map { MetricStatus($0.status) }
+        let statuses = shownCheckpoints.map { MetricStatus($0.status) }
         let word: String
         if statuses.contains(.measured) && !statuses.contains(.bestEffort) { word = "Measured" }
         else if statuses.contains(.measured) || statuses.contains(.bestEffort) { word = "Best effort" }
@@ -226,6 +229,10 @@ struct FormCardView: View {
     private var orderedCheckpoints: [TimingCheckpoint] {
         result.timingCheckpoints.values.sorted { ($0.id ?? "") < ($1.id ?? "") }
     }
+    /// Checkpoints that actually got a reading — unavailable ones go to the "not measured" card instead.
+    private var shownCheckpoints: [TimingCheckpoint] {
+        orderedCheckpoints.filter { MetricStatus($0.status) != .unavailable }
+    }
 
     private var timingCheckpointsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -235,9 +242,9 @@ struct FormCardView: View {
                 Text(timingStatusLabel).font(.lsCaption).foregroundStyle(LS.textSecondary)
             }
             .padding(.bottom, 4)
-            ForEach(Array(orderedCheckpoints.enumerated()), id: \.offset) { idx, cp in
+            ForEach(Array(shownCheckpoints.enumerated()), id: \.offset) { idx, cp in
                 TimingCheckpointRow(checkpoint: cp)
-                if idx != orderedCheckpoints.count - 1 { Divider().overlay(LS.cardStroke) }
+                if idx != shownCheckpoints.count - 1 { Divider().overlay(LS.cardStroke) }
             }
         }
         .lsCard()
@@ -374,8 +381,90 @@ struct FormCardView: View {
         return nil
     }
 
-    private var approachTiles: [FormTileData] { Self.approachKeys.compactMap(formTile) }
-    private var postureTiles: [FormTileData] { Self.postureKeys.compactMap(formTile) }
+    private var allApproachTiles: [FormTileData] { Self.approachKeys.compactMap(formTile) }
+    private var allPostureTiles: [FormTileData] { Self.postureKeys.compactMap(formTile) }
+    private var approachTiles: [FormTileData] { allApproachTiles.filter { $0.status != .unavailable && $0.value != "—" } }
+    private var postureTiles: [FormTileData] { allPostureTiles.filter { $0.status != .unavailable && $0.value != "—" } }
+
+    /// Everything this clip couldn't measure, as (name, plain reason) — deduped, in screen order.
+    private struct NotMeasuredItem: Hashable { let name: String; let why: String }
+    private var notMeasured: [NotMeasuredItem] {
+        var out: [NotMeasuredItem] = []
+        var seen = Set<String>()
+        func add(_ name: String, _ note: String?) {
+            guard seen.insert(name).inserted else { return }
+            out.append(NotMeasuredItem(name: name, why: Self.plainReason(note, view: result.formView)))
+        }
+        for cp in orderedCheckpoints where MetricStatus(cp.status) == .unavailable {
+            add(cp.label ?? MetricDisplay.humanize(cp.id ?? ""), cp.note ?? cp.detail)
+        }
+        for t in allApproachTiles + allPostureTiles where t.status == .unavailable || t.value == "—" {
+            add(t.label, t.reason)
+        }
+        return out
+    }
+
+    /// True when at least one swing moment was located. False → the delivery itself couldn't be timed, and the
+    /// card leads with that (one sentence + what to do), instead of a wall of "unavailable".
+    private var deliveryTimed: Bool { !result.keyFrames.isEmpty || !shownCheckpoints.isEmpty }
+
+    /// Engine notes are written for engineers ("E4", homography, file names). Map them to one short phrase.
+    static func plainReason(_ note: String?, view: String?) -> String {
+        let n = (note ?? "").lowercased()
+        if n.contains("needs a side view") || (n.contains("side view") && (view ?? "") != "down_lane") { return "Needs a side view" }
+        if n.contains("rear") && n.contains("needs") || n.contains("from behind") { return "Needs a view from behind" }
+        if n.contains("implausible") || n.contains("couldn't be timed") || n.contains("could not be isolated")
+            || n.contains("mis-segment") || n.contains("delivery") && n.contains("timed") { return "Couldn't time this delivery" }
+        if n.contains("not visible") { return "Body not clearly visible at that moment" }
+        if n.contains("not located") || n.contains("not measured") || n.contains("not found") { return "That moment wasn't found in the video" }
+        if n.contains("calibrat") || n.contains("homography") || n.contains("validating") || n.contains("scale") { return "Not supported yet" }
+        return "Couldn't measure on this clip"
+    }
+
+    private var notTimedCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(LS.bestEffort)
+                Text("We couldn't time this delivery").font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+            }
+            Text("None of the key swing moments were found, so timing and swing results are missing. "
+                 + "For best results, keep your whole approach, swing and slide in frame from start to finish.")
+                .font(.system(size: 14)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .lsCard()
+    }
+
+    @State private var showWhy = false
+    private var notMeasuredCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Not measured on this clip").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+            Text(notMeasured.map(\.name).joined(separator: " · "))
+                .font(.system(size: 14)).foregroundStyle(LS.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button { withAnimation { showWhy.toggle() } } label: {
+                HStack(spacing: 4) {
+                    Text(showWhy ? "Hide why" : "Why?").font(.system(size: 14, weight: .semibold))
+                    Image(systemName: showWhy ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .bold))
+                }
+                .foregroundStyle(LS.link).frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            if showWhy {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(notMeasured, id: \.self) { item in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                            Spacer(minLength: 8)
+                            Text(item.why).font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+                }
+            }
+        }
+        .lsCard()
+    }
 
     private var approachSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -411,34 +500,35 @@ struct FormCardView: View {
                     FormTile(label: t.label, value: t.value, status: t.status, reason: t.reason)
                 }
             }
-            // Honest reasons for anything best-effort / unavailable (targets + why a view can't measure it).
-            let reasons = postureTiles.compactMap { t -> String? in
-                guard t.status != .measured, let note = t.reason, !note.isEmpty else { return nil }
-                return "\(t.label): \(note)"
-            }
-            if !reasons.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(reasons, id: \.self) { r in
-                        Text(r).font(.lsCaption2).foregroundStyle(LS.textSecondary)
-                    }
-                }
-            }
         }
         .lsCard()
     }
 
     // MARK: COACHING CUES (§0.3, text only)
 
+    // General hand/wrist tips (not measured from this clip) — collapsed so they don't read as results.
+    @State private var showCues = false
     private func coachingCuesSection(_ cues: CoachingCues) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Coaching cues").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
-            if let note = cues.note, !note.isEmpty {
-                Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
+            Button { withAnimation { showCues.toggle() } } label: {
+                HStack {
+                    Text("Hand & wrist tips").font(.system(size: 16, weight: .bold)).foregroundStyle(LS.textPrimary)
+                    Spacer()
+                    Image(systemName: showCues ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(LS.link)
+                }
+                .frame(minHeight: 44).contentShape(Rectangle())
             }
-            ForEach(cues.cues ?? [], id: \.self) { cue in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(LS.action).padding(.top, 6)
-                    Text(cue).font(.lsCaption).foregroundStyle(LS.textPrimary)
+            .buttonStyle(.plain)
+            if showCues {
+                Text("General tips — not measured from your video.")
+                    .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+                ForEach(cues.cues ?? [], id: \.self) { cue in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(LS.action).padding(.top, 7)
+                        Text(cue).font(.system(size: 14)).foregroundStyle(LS.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -449,16 +539,7 @@ struct FormCardView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let note = viewCapabilityNote {
-                Text(note).font(.lsCaption).foregroundStyle(LS.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Text(analyzedText)
-                Spacer()
-                Text(versionsLine)
-            }
-            .font(.lsCaption2).foregroundStyle(LS.textSecondary)
+            Text(analyzedText).font(.lsCaption2).foregroundStyle(LS.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

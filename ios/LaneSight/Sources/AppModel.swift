@@ -4,6 +4,7 @@ import Combine
 import UIKit
 import Photos
 import AVFoundation
+import CoreImage
 
 /// Progress of the capture -> upload -> analyze -> result pipeline.
 enum PipelineState: Equatable {
@@ -1109,23 +1110,50 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// show without a server round-trip. Keyed by position key (ball_start E2 / end_pushaway E3 / top_of_swing E4 /
     /// release E7). Only events the engine actually located are extracted — never a guessed frame.
     nonisolated static func extractFormKeyFrames(clipURL: URL, events: [String: Double]) -> [String: Data] {
+        // Read frames on the SAME clock the pose engine timed the events with (AVAssetReader sample PTS + the same
+        // display rotation). The old AVAssetImageGenerator path seeks on the asset timeline, which can be offset
+        // from the sample PTS (edited / trimmed / slo-mo clips) — every grab then missed and all four tiles said
+        // "not found" even when the events were located (Shayne's rear upload 0caad150, 2026-11-23).
         let map: [(ev: String, key: String)] = [("E2", "ball_start"), ("E3", "end_pushaway"),
                                                  ("E4", "top_of_swing"), ("E7", "release")]
-        let gen = AVAssetImageGenerator(asset: AVURLAsset(url: clipURL))
-        gen.appliesPreferredTrackTransform = true
-        gen.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 60)
-        gen.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 60)
-        gen.maximumSize = CGSize(width: 720, height: 720)
-        var out: [String: Data] = [:]
-        for (ev, key) in map {
-            guard let t = events[ev], t.isFinite, t >= 0 else { continue }
-            let cmt = CMTime(seconds: t, preferredTimescale: 600)
-            if let cg = try? gen.copyCGImage(at: cmt, actualTime: nil),
-               let jpg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.85) {
-                out[key] = jpg
+        var targets: [(key: String, t: Double)] = []
+        for (ev, key) in map { if let t = events[ev], t.isFinite { targets.append((key, t)) } }
+        guard !targets.isEmpty else { return [:] }
+        let asset = AVURLAsset(url: clipURL)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else { return [:] }
+        let rot = OnDeviceDecode.displayRotation(track)
+        let out = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)])
+        guard reader.canAdd(out) else { return [:] }
+        reader.add(out)
+        reader.startReading()
+        let lastT = (targets.map(\.t).max() ?? 0) + 0.1
+        // Best (closest-PTS) frame per key, rotated to display orientation.
+        var best: [String: (dt: Double, px: CVPixelBuffer)] = [:]
+        while reader.status == .reading, let sb = out.copyNextSampleBuffer() {
+            let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sb))
+            if t > lastT { reader.cancelReading(); break }
+            guard let raw = CMSampleBufferGetImageBuffer(sb) else { continue }
+            for tg in targets {
+                let dt = abs(t - tg.t)
+                guard dt <= 0.05, dt < (best[tg.key]?.dt ?? .infinity),
+                      let px = OnDeviceDecode.rotated(raw, rot) else { continue }
+                best[tg.key] = (dt, px)
             }
         }
-        return out
+        let ctx = CIContext()
+        var result: [String: Data] = [:]
+        for (key, b) in best {
+            var img = CIImage(cvPixelBuffer: b.px)
+            let maxSide = max(img.extent.width, img.extent.height)
+            if maxSide > 720 { img = img.transformed(by: CGAffineTransform(scaleX: 720 / maxSide, y: 720 / maxSide)) }
+            if let cg = ctx.createCGImage(img, from: img.extent),
+               let jpg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.85) {
+                result[key] = jpg
+            }
+        }
+        return result
     }
 
     /// DEC-129: run the on-device Form engine on the durable clip and show the result ONCE (Complete online /
@@ -1194,6 +1222,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             if !frames.isEmpty {
                 built.localKeyFrames = frames
                 built.keyFrames = Array(Set(built.keyFrames).union(frames.keys))
+                FormStillStore.save(frames, shotId: built.shotId)   // so reopening from history keeps the stills
             }
         }
         result = built
@@ -1736,7 +1765,14 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             built.shotNumber = shot.sequence
             built.ballName = shot.ball_name          // DEC-097: the ball this shot was thrown with
             built.stageReport = record?.stage_report ?? [:]     // DEC-122 "What worked" (dev/TestFlight)
-            if isForm { Self.attachFormFundamentals(&built, record) }
+            if isForm {
+                Self.attachFormFundamentals(&built, record)
+                let stills = FormStillStore.load(shotId: built.shotId)
+                if !stills.isEmpty {
+                    built.localKeyFrames = stills
+                    built.keyFrames = Array(Set(built.keyFrames).union(stills.keys))
+                }
+            }
             else { Self.attachShotCard(&built, record) }
             result = built
             return true
@@ -2017,5 +2053,27 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// Marks the bowler profile complete after the setup + add-ball steps → the app root switches to Home.
     func finishProfileSetup() {
         profileComplete = true
+    }
+}
+
+
+/// On-device Form key-position stills, kept on the phone per shot so a result reopened from Lab › Uploads or a
+/// session shows the same thumbnails it showed the first time (the server has no stills for on-device analyses).
+enum FormStillStore {
+    nonisolated static func dir(_ shotId: String) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("form_stills", isDirectory: true).appendingPathComponent(shotId, isDirectory: true)
+    }
+    nonisolated static func save(_ frames: [String: Data], shotId: String) {
+        let d = dir(shotId)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        for (k, data) in frames { try? data.write(to: d.appendingPathComponent("\(k).jpg"), options: .atomic) }
+    }
+    nonisolated static func load(shotId: String) -> [String: Data] {
+        var out: [String: Data] = [:]
+        for k in ["ball_start", "end_pushaway", "top_of_swing", "release"] {
+            if let data = try? Data(contentsOf: dir(shotId).appendingPathComponent("\(k).jpg")) { out[k] = data }
+        }
+        return out
     }
 }
