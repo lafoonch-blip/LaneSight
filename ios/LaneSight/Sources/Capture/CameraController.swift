@@ -34,6 +34,7 @@ final class CameraController: NSObject, ObservableObject {
     /// User-chosen capture frame rate (120 / 60 / 30). The camera clamps to the highest supported
     /// rate ≤ this value. Set from Settings before `start()`; defaults to 120.
     var preferredFPS: Double = 120
+    var preferredHeight: Int32 = 1080   // DEC-133: the chosen resolution tier (1080 / 2160)
 
     let session = AVCaptureSession()
     private let movieOutput = AVCaptureMovieFileOutput()
@@ -73,8 +74,9 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: setup
 
-    func start(preferredFPS: Double = 120) async {
+    func start(preferredFPS: Double = 120, preferredHeight: Int32 = 1080) async {
         self.preferredFPS = preferredFPS
+        self.preferredHeight = preferredHeight
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             configure()
@@ -123,7 +125,7 @@ final class CameraController: NSObject, ObservableObject {
                 }
             }
 
-            let chosen = bestFormat(for: device, preferred: preferredFPS)
+            let chosen = bestFormat(for: device, preferred: preferredFPS, preferredHeight: preferredHeight)
             session.sessionPreset = (chosen != nil) ? .inputPriority : .high
             session.commitConfiguration()
 
@@ -168,13 +170,16 @@ final class CameraController: NSObject, ObservableObject {
             || st == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
     }
 
-    private func bestFormat(for device: AVCaptureDevice, preferred: Double) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
-        // Candidate rates no higher than the user's choice, highest first.
-        let targets = [120.0, 60.0, 30.0].filter { $0 <= preferred + 0.5 }.sorted(by: >)
+    private func bestFormat(for device: AVCaptureDevice, preferred: Double, preferredHeight: Int32 = 1080) -> (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)? {
+        // Candidate rates no higher than the user's choice, highest first (DEC-133: 240 is now a valid choice).
+        let targets = [240.0, 120.0, 60.0, 30.0].filter { $0 <= preferred + 0.5 }.sorted(by: >)
         // Prefer 8-bit SDR formats; keep any 10-bit match only as a fallback (same resolution/fps selection).
         var best8: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
         var bestAny: (format: AVCaptureDevice.Format, fps: Double, width: Int32, height: Int32)?
-        for minHeight: Int32 in [1080, 720] {
+        // Try the chosen resolution tier first, then fall back down (DEC-133). Dedup, keep order.
+        var seen = Set<Int32>()
+        let tiers = [preferredHeight, 1080, 720].filter { seen.insert($0).inserted }
+        for minHeight: Int32 in tiers {
             for format in device.formats {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 guard dims.height >= minHeight else { continue }
