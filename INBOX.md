@@ -5,7 +5,7 @@ on your branch, do the work), then mark it DONE with your commit hash and update
 claude.ai chats: append new items at the bottom (date, OPEN, who it's for, the decision/request).
 
 ## 2026-11-23 — OPEN — Capture session: on-device only, any video in, capture default + override
-Full handoff: claude.ai Project doc `claude/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md`.
+Full handoff: `handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md` on this branch (`git show origin/context:handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md`).
 Amendments that override it:
 1. Use the next free DEC number in the repo (likely DEC-133), not DEC-126. Ignore the mirror's "v1.81 / DEC-125" notes.
 2. "Stop server CV work" = no server-only measurement work. The Python reference engine stays the dev/validation

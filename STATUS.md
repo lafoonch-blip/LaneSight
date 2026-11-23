@@ -1,12 +1,21 @@
 # LaneSight — live status (single source of truth for every session)
 
-Branch `context` holds ONLY this file and INBOX.md, so it never conflicts with code branches.
-- Every Claude Code session reads STATUS.md + INBOX.md at start and updates STATUS.md when it
-  finishes a task (commit + push to `context`).
-- claude.ai chat sessions read both via GitHub at the start of any LaneSight conversation and
-  append new decisions/requests to INBOX.md.
+Branch `context` holds only STATUS.md, INBOX.md and handoffs/ (full briefs), so it never conflicts with code branches.
 
-Last updated: 2026-11-23 (Form session, Claude Code — updated Form row)
+## How to use this branch
+- **Claude Code (Mac):** at session start `git -C ~/Developer/LaneSight fetch -q origin context`, then read
+  `git show origin/context:STATUS.md`, `…:INBOX.md` and any `…:handoffs/<file>` an INBOX item points to.
+  To update: use the worktree `~/Developer/LaneSight-context` (create once:
+  `git -C ~/Developer/LaneSight worktree add ../LaneSight-context context`), `git pull`, edit only your own
+  rows/sections, then `git commit --no-verify` (the repo's pre-commit hook expects the full codebase and
+  silently fails on this 2-file branch) and `git push`; verify with `git ls-remote origin context`.
+- **claude.ai chats:** read these via the GitHub connector (or 00_CONTEXT/STATUS.md in the Project).
+  The website GitHub connector is READ-ONLY, so a chat can't push here. Put new decisions/requests in the
+  Project doc `00_CONTEXT/INBOX.md` (append) and tell Shayne "INBOX updated" — the coordinator session copies
+  Project INBOX items onto this branch. Full briefs go in the Project under claude/ AND get copied to handoffs/.
+- Never put code on `context`. Never ask Shayne to paste context.
+
+Last updated: 2026-11-23 (coordinator: added how-to + handoffs/; Form row by Form session)
 
 ## Live
 - Server: Cloud Run lanesight-api-47dfd3b (lanesight-cv-0.7.2 classical + form fixes). Shadow/validation only.
