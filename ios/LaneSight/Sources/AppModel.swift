@@ -352,7 +352,13 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     func refreshActiveSessionFromServer() async {
         guard let client = try? makeClient() else { return }
         guard let rows = try? await client.listSessions() else { return }   // offline → keep local mirror
-        if let live = rows.first(where: { $0.ended_at == nil }) {
+        // Only one session can be active: adopt the NEWEST open one (the list isn't guaranteed to be ordered),
+        // and close any older leftovers in the background so they can't resurface after this one ends.
+        let open = rows.filter { $0.ended_at == nil }.sorted { ($0.started_at ?? 0) > ($1.started_at ?? 0) }
+        if open.count > 1, let newest = open.first {
+            Task { await closeStaleOpenSessions(client, keep: newest.id) }
+        }
+        if let live = open.first {
             let count = (activeSession?.id == live.id) ? (activeSession?.shotCount ?? 0) : 0
             activeSession = PersistedSession(id: live.id,
                                              mode: live.capture_mode ?? captureMode,
@@ -1965,6 +1971,19 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         // DEC-119: the user explicitly ended it → drop the active-session mirror (banner/prompt stop showing).
         activeSession = nil
         persistActiveSession()
+        // Close any OTHER sessions the server still has open (left over from crashes / old builds). Without this,
+        // the next server refresh adopted the next stale open session and End looked like it never worked —
+        // Shayne's account had 62 of them on 2026-11-23. Best-effort: a failure here never blocks the end.
+        await closeStaleOpenSessions(client)
+    }
+
+    /// Ends every open server session except `keep` (best-effort, sequential so the server isn't flooded).
+    private func closeStaleOpenSessions(_ client: APIClient, keep: String? = nil) async {
+        guard let rows = try? await client.listSessions() else { return }
+        let stale = rows.filter { $0.ended_at == nil && $0.id != keep }
+        guard !stale.isEmpty else { return }
+        ls119log("closing \(stale.count) stale open session(s)")
+        for r in stale { _ = try? await client.endSession(r.id) }
     }
 
     /// Marks the bowler profile complete after the setup + add-ball steps → the app root switches to Home.

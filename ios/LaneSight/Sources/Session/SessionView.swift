@@ -22,6 +22,11 @@ struct SessionView: View {
     @State private var showBallSheet = false
     @State private var showOilSheet = false
     @State private var oilPatterns: [OilPattern] = []
+    // End flow (Skip / Submit → end once the feedback sheet is gone → summary → back to Home).
+    @State private var loaded = false
+    @State private var endRequested = false
+    @State private var ending = false
+    @State private var endError: String?
 
     var reviewSessionId: String? = nil
     var readOnly: Bool = false
@@ -47,33 +52,46 @@ struct SessionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                contextChips
+                // Ball + oil sit at the very top as two big tap targets so a mid-session change is one tap
+                // (DEC-097). In review they're read-only context.
+                ballOilBar
                 if let latest {
                     sectionHeading("Latest shot")
                     latestResultCard(latest)
                     recapCard(latest)
-                } else if loadError == nil {
-                    loadingCard
+                } else if !loaded || rows.contains(where: { $0.state == "pending" }) {
+                    loadingCard          // first load, or a shot is still analyzing
+                } else {
+                    emptyCard
                 }
                 sessionStatsHeading
                 ringRow
-                // Target line + ball/oil are only adjustable during a live session (DEC-071/097) — hidden in review.
+                // Target line is only adjustable during a live session (DEC-071) — hidden in review.
                 if !readOnly {
                     sectionHeading("Target Line", action: "Why it matters")
                     targetSteppers
-                    sectionHeading("Ball and oil")
-                    ballOilRows
                 }
                 collapsedRow(title: "Shot history (\(rows.count))", subtitle: historySubtitle)
                 collapsedRow(title: "Lane transition", subtitle: "Inferred from your line, not measured oil")
                 if let loadError {
                     Text(loadError).font(.system(size: 12)).foregroundStyle(LS.bestEffort)
                 }
-                Spacer(minLength: 8)
-                if !readOnly { bottomBar }
             }
             .padding(.horizontal, 17).padding(.vertical, 8)
         }
+        // Record / End are pinned above the tab bar so they're always reachable without scrolling.
+        .safeAreaInset(edge: .bottom) {
+            if !readOnly {
+                bottomBar
+                    .padding(.horizontal, 17).padding(.top, 10).padding(.bottom, 8)
+                    .background(LS.bg.opacity(0.96))
+            }
+        }
+        .overlay { if ending { endingOverlay } }
+        .alert("Couldn't end the session", isPresented: Binding(get: { endError != nil }, set: { if !$0 { endError = nil } })) {
+            Button("Try again") { Task { await endSession() } }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text(endError ?? "") }
         .background(LSBackground())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -85,10 +103,16 @@ struct SessionView: View {
         }
         .task { await pollLoop() }
         .refreshable { await load() }
-        .sheet(isPresented: $showFeedback) {
-            FeedbackView(onFinish: { endAndSummarize() }).environmentObject(model)
+        // End flow: the feedback sheet (Submit OR Skip) only flags the end; the session is actually ended once
+        // the sheet has finished dismissing. Presenting the summary while the sheet was still animating away is
+        // what made "Skip" silently do nothing before. Swiping the sheet down = cancel (session stays open).
+        .sheet(isPresented: $showFeedback, onDismiss: {
+            if endRequested { endRequested = false; Task { await endSession() } }
+        }) {
+            FeedbackView(onFinish: { endRequested = true }).environmentObject(model)
         }
-        .fullScreenCover(isPresented: $showSummary) {
+        // Summary "Done" → leave the Active Session and land back on Home / Lab.
+        .fullScreenCover(isPresented: $showSummary, onDismiss: { dismiss() }) {
             SummaryView(summary: model.endSummary).environmentObject(model)
         }
         // DEC-096: the record → analyze → result flow runs as a cover OVER the Active Session; every exit
@@ -96,45 +120,62 @@ struct SessionView: View {
         .fullScreenCover(isPresented: $model.inLiveCapture, onDismiss: { Task { await load() } }) {
             CaptureView().environmentObject(model)
         }
-        // DEC-097: ball + oil pickers reuse Setup's views; selections apply to the next shot (locked per clip).
+        // DEC-097: in-session ball + oil pickers; a change applies to the NEXT shot (the recorded clip keeps the
+        // ball/oil it was thrown with). Tapping a ball / pattern applies it immediately and closes the sheet.
         .sheet(isPresented: $showBallSheet) {
-            NavigationStack { BallPickerSheet() }.environmentObject(model).presentationDetents([.medium, .large])
+            NavigationStack { QuickBallSheet() }.environmentObject(model).presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showOilSheet) {
-            OilPatternSheet(patterns: oilPatterns,
-                            selectedName: $model.selectedOilPatternName, selectedId: $model.selectedOilPatternId)
+            QuickOilSheet(patterns: $oilPatterns,
+                          selectedName: $model.selectedOilPatternName, selectedId: $model.selectedOilPatternId)
+                .environmentObject(model)
                 .presentationDetents([.medium, .large])
         }
         .task { if oilPatterns.isEmpty { oilPatterns = (try? await model.makeClient().oilPatterns()) ?? [] } }
     }
 
-    // DEC-097: current ball + oil, each with a Change control, next to the target line. A change applies to the
-    // NEXT shot only — the clip already recorded/analyzing keeps the ball/oil it was thrown with (server-locked).
-    private var ballOilRows: some View {
-        VStack(spacing: 8) {
-            changeRow(kind: "Ball", value: model.currentBall?.displayName ?? model.currentBallName ?? "Choose a ball") {
-                showBallSheet = true
-            }
-            changeRow(kind: "Oil pattern", value: model.selectedOilPatternName ?? "Choose a pattern") {
-                showOilSheet = true
-            }
+    // MARK: ball + oil (top of screen)
+
+    private var ballOilBar: some View {
+        HStack(spacing: 10) {
+            ballOilTile(icon: "circle.circle.fill", kind: "Ball",
+                        value: model.currentBall?.displayName ?? model.currentBallName,
+                        placeholder: "Pick a ball") { showBallSheet = true }
+            ballOilTile(icon: "drop.fill", kind: "Oil",
+                        value: model.selectedOilPatternName,
+                        placeholder: "Pick a pattern") { showOilSheet = true }
         }
     }
 
-    private func changeRow(kind: String, value: String, _ action: @escaping () -> Void) -> some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(kind.uppercased()).font(.system(size: 9, weight: .semibold)).tracking(0.4).foregroundStyle(LS.textSecondary)
-                Text(value).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+    private func ballOilTile(icon: String, kind: String, value: String?, placeholder: String,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon).font(.system(size: 18)).foregroundStyle(LS.action)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(kind.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.5)
+                        .foregroundStyle(LS.textSecondary)
+                    Text(value ?? placeholder)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(value == nil ? LS.link : .white)
+                        .lineLimit(2).minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 4)
+                if !readOnly {
+                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(LS.link)
+                }
             }
-            Spacer(minLength: 8)
-            Button("Change", action: action)
-                .font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
+            .padding(.horizontal, 12).frame(minHeight: 64)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14).frame(height: 54)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LS.card, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
+        .buttonStyle(.plain)
+        .disabled(readOnly)
+        .accessibilityLabel("\(kind): \(value ?? placeholder). \(readOnly ? "" : "Tap to change.")")
     }
 
     // MARK: header + context
@@ -149,28 +190,11 @@ struct SessionView: View {
         }
     }
 
-    private var contextChips: some View {
-        HStack(spacing: 6) {
-            if let ball = model.currentBall?.displayName ?? model.currentBallName { chip(ball) }
-            if let pat = model.selectedOilPatternName { chip(pat) }
-            Spacer()
-            // DEC-096: the session never returns to Session Setup. The target is edited in place via the
-            // Target Line steppers below; changing ball/oil mid-session is a follow-up in-session picker.
-        }
-    }
-
-    private func chip(_ text: String) -> some View {
-        Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(LS.textPrimary)
-            .lineLimit(1)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(LS.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(LS.cardStrokeBright, lineWidth: 1))
-    }
-
     // MARK: latest result card (lane + outcome)
 
+    // Full-width lane so the line + board labels are readable, with the three outcome facts in a row below.
     private func latestResultCard(_ s: LatestShot) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             LaneRecreationView(
                 targetFeet: model.sessionTarget.feetBoard, targetArrows: model.sessionTarget.arrowsBoard,
                 targetBreakpoint: model.sessionTarget.breakpointBoard,
@@ -178,19 +202,25 @@ struct SessionView: View {
                 actualBreakpoint: s.v("breakpoint_board"), breakpointDistanceFt: s.v("breakpoint_distance"),
                 entryBoard: s.v("entry_board"), entryAngle: s.v("entry_angle"),
                 handed: model.handed, oilLengthFt: nil)
-            .frame(width: 150)
+            .frame(maxWidth: .infinity)
 
-            VStack(alignment: .leading, spacing: 10) {
-                resultBadge(s)
-                outcomeItem("PIN RESULT", pinResult(s).0, color: pinResult(s).1)
+            HStack(alignment: .top, spacing: 8) {
+                outcomeItem("PINS", pinResult(s).0, color: pinResult(s).1)
+                outcomeItem("POCKET", pocketEntry(s))
                 outcomeItem("TARGET", targetLine(s))
-                outcomeItem("POCKET ENTRY", pocketEntry(s))
-                outcomeItem("LANE", laneNote(s), lines: 2)
-                Button { openLatest() } label: {
-                    Text("Full analysis ›").font(.system(size: 12, weight: .medium)).foregroundStyle(LS.link)
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button { openLatest() } label: {
+                HStack {
+                    Text("Full shot analysis").font(.system(size: 15, weight: .semibold))
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold))
+                }
+                .foregroundStyle(LS.link)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -198,20 +228,15 @@ struct SessionView: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
-    private func outcomeItem(_ label: String, _ value: String, color: Color = LS.textPrimary, lines: Int = 1) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 9, weight: .semibold)).tracking(0.4).foregroundStyle(LS.textSecondary)
-            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
-                .lineLimit(lines).fixedSize(horizontal: false, vertical: true)
+    private func outcomeItem(_ label: String, _ value: String, color: Color = LS.textPrimary) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.system(size: 11, weight: .semibold)).tracking(0.5).foregroundStyle(LS.textSecondary)
+            Text(value).font(.system(size: 16, weight: .semibold)).foregroundStyle(color)
+                .lineLimit(2).minimumScaleFactor(0.8).fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private func resultBadge(_ s: LatestShot) -> some View {
-        let (glyph, color) = pinGlyph(s)
-        return Text(glyph).font(.system(size: 13, weight: .heavy)).foregroundStyle(color)
-            .frame(width: 26, height: 22)
-            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(color.opacity(0.5), lineWidth: 1))
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+        .background(LS.raised, in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: recap + next-shot card
@@ -341,7 +366,19 @@ struct SessionView: View {
             Button("End") { showFeedback = true }
                 .buttonStyle(SecondaryButtonStyle())
                 .frame(width: 92)
-                .disabled(model.activeSessionId == nil)
+                .disabled(model.activeSessionId == nil || ending)
+        }
+    }
+
+    private var endingOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView().tint(LS.action).scaleEffect(1.3)
+                Text("Ending session…").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+            }
+            .padding(24)
+            .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
@@ -354,6 +391,19 @@ struct SessionView: View {
             if let action { Text(action).font(.system(size: 11, weight: .medium)).foregroundStyle(LS.link) }
         }
         .padding(.top, 4)
+    }
+
+    private var emptyCard: some View {
+        VStack(spacing: 6) {
+            Text(rows.isEmpty ? "No shots yet" : "No analyzed shots yet")
+                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+            Text(rows.isEmpty ? "Tap Record shot to analyze your first throw."
+                              : "Open Shot history to see why, or record another shot.")
+                .font(.system(size: 13)).foregroundStyle(LS.textSecondary)
+        }
+        .frame(maxWidth: .infinity).frame(height: 110)
+        .background(LS.card, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(LS.cardStrokeBright, lineWidth: 1))
     }
 
     private var loadingCard: some View {
@@ -371,13 +421,6 @@ struct SessionView: View {
 
     // MARK: outcome / recap derivations
 
-    private func pinGlyph(_ s: LatestShot) -> (String, Color) {
-        switch s.state {
-        case "strike_repeat": return ("✓", LS.success)
-        case "pins_unknown", "no_reliable_data", .none, "": return ("?", LS.textSecondary)
-        default: return ("✕", LS.dataYellow)
-        }
-    }
     private func pinResult(_ s: LatestShot) -> (String, Color) {
         switch s.state {
         case "strike_repeat": return ("Strike", LS.success)
@@ -395,15 +438,12 @@ struct SessionView: View {
         if let ang = s.v("entry_angle") { return "Board \(Fmt.number(e)) at \(String(format: "%.1f", ang))°" }
         return "Board \(Fmt.number(e))"
     }
-    private func laneNote(_ s: LatestShot) -> String {
-        if let n = s.note, !n.isEmpty { return n }
-        if let r = s.rec?.reason, !r.isEmpty { return r }
-        return "—"
-    }
-
     private func recapPill(_ s: LatestShot) -> (String, Color) {
-        let cls = (s.classification ?? "").capitalized
-        let res = pinResult(s).0
+        // Classification is a raw server code (e.g. "no_intent"); only show it when it means something to a bowler.
+        let raw = (s.classification ?? "").lowercased()
+        let cls = ["", "no_intent", "unknown", "none"].contains(raw) ? ""
+            : raw.replacingOccurrences(of: "_", with: " ").capitalized
+        let res = pinResult(s).0 == "Not read" ? "Pins not read" : pinResult(s).0
         let txt = cls.isEmpty ? res : "\(cls) · \(res)"
         return (txt, s.state == "strike_repeat" ? LS.positive : LS.dataYellow)
     }
@@ -458,8 +498,19 @@ struct SessionView: View {
         }
     }
 
-    private func endAndSummarize() {
-        Task { try? await model.endCurrentSession(); showSummary = true }
+    /// Ends the session on the server (and closes any stale open ones), then shows the summary. Errors are
+    /// shown with a Try again — never swallowed — so End can't silently do nothing.
+    @MainActor
+    private func endSession() async {
+        guard !ending else { return }
+        ending = true
+        defer { ending = false }
+        do {
+            try await model.endCurrentSession()
+            showSummary = true
+        } catch {
+            endError = "\(error.localizedDescription)\nYour session is still open — check your connection and try again."
+        }
     }
 
     private func pollLoop() async {
@@ -475,7 +526,7 @@ struct SessionView: View {
     }
 
     private func load() async {
-        guard let sid = effectiveSessionId else { rows = []; return }
+        guard let sid = effectiveSessionId else { rows = []; loaded = true; return }
         let client: APIClient
         do { client = try model.makeClient() } catch { loadError = error.localizedDescription; return }
         do {
@@ -485,7 +536,8 @@ struct SessionView: View {
             summary = await sumReq
             await loadLatest(client)
             loadError = nil
-        } catch { loadError = error.localizedDescription }
+            loaded = true
+        } catch { loadError = error.localizedDescription; loaded = true }
     }
 
     private func loadLatest(_ client: APIClient) async {

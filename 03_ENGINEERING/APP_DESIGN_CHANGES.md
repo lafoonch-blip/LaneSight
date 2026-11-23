@@ -1,5 +1,5 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.6 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-23 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
@@ -235,3 +235,16 @@ confirm against a render):**
 **Blocked:** the side-by-side montage (the way the shot card was done) needs `FormCardView` rendered with a REAL
 form result — the key-position tiles are frames from the bowler's own clip, so a synthetic render is blank. Will
 capture + montage + apply verified fixes from Shayne's next on-device Form upload (ties into the 60 fps check).
+
+---
+
+## 2026-11-23-A · Active Session (Shot) usability fix — per Shayne's device test
+**Status:** BUILT (branch `fix/active-session-usability`, not yet compiled — Session 1 to build + install).
+**Why:** Shayne (2026-11-23): lane diagram too small to read, ball/oil rows looked like static text with no clear way to change them, Skip on the end-survey didn't end the session, and the session could never be ended.
+**What changed (`SessionView.swift`, new `QuickPickerSheets.swift`, `AppModel.swift`):**
+- Ball + Oil moved to the top as two big tappable tiles (icon, value, chevron). One tap opens a picker; tapping a ball/pattern applies it immediately and closes (no extra "Use this" step). Errors are shown, not swallowed; the pattern list loads on open with Try again.
+- Latest shot: lane recreation is now full card width (was squeezed to 150 pt), with Pins / Pocket / Target as three readable tiles below and a full-width "Full shot analysis" row. Removed the duplicate "LANE" text (it repeated the Next Shot text) and the unexplained "?" badge. Raw codes like "No_Intent" no longer appear in the recap pill.
+- Record / End pinned above the tab bar (always visible).
+- End flow: Submit or Skip on the feedback sheet now ends the session AFTER the sheet closes (presenting the summary mid-dismiss is what made Skip do nothing), shows "Ending session…", surfaces any error with Try again, and Summary "Done" returns to Home.
+- Stuck-forever root cause: the server had 62 never-closed sessions on Shayne's account; ending one made the app adopt the next. Ending now closes every other open session too, and resume adopts only the newest open session and closes older leftovers.
+**DIFFERS:** vs Figma 413:3804 — context chips row replaced by the Ball/Oil tiles at the top; latest-shot card is lane-on-top instead of lane-left/outcome-right. Figma should be updated to match.
