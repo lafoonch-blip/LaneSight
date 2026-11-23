@@ -18,7 +18,7 @@ Branch `context` holds only STATUS.md, INBOX.md and handoffs/ (full briefs), so 
 Last updated: 2026-11-23 (Capture/Form session — capture A+B+C-core done + pushed (aa63f3b); HDR device test deferred (iPhone busy))
 
 ## Live
-- 📱 **DEVICE IN USE: Session 1 — combined build (merge a9c2966) install + verify. Form/others hold.**
+- 📱 **DEVICE FREE. Combined build `a9c2966` (Session1 honesty fixes + Active Session + capture + form, MediaPipe) INSTALLED on phone; feat/ios-lane-parity pushed. Both sessions' fixes are in the binary.**
 - ✅ **Active Session usability fix SHIPPED (Session 1)**: merged `fix/active-session-usability` → `feat/ios-lane-parity` (`bcabde1`, pushed), xcodegen+build 0 errors, pytest 465 passed. Server **DEPLOYED `lanesight-api-bcabde1`** (regression PASS + smoke PASS): Home activity epoch-timestamp fix (verified live: `/me/activity` created_at is float ✓) + `coach.py` neutral `not_read` tip (no tripod/camera blame, DECISIONS #3). Release installed on phone. **UI tap-through (session→ball/oil→End→Skip→summary→Done→Home no-banner) = Shayne to confirm** (physical-device UI, can't automate). Follow-up (not blocking; data already fixed, app hides >12h): server-side close stale sessions at last-shot time.
   - **Form QUEUED NEXT** (combined capture+form Release built in `~/Developer/LaneSight-install`, `integration/capture-form` c5f5d17; ready to install): form-usability fix install + HDR check (IMG_8751/8754/8831) + recording-picker verify + stills-on-rear-clip + OnDeviceFormGateTests. Ping when the device is free.
 - Server: Cloud Run lanesight-api-bcabde1 (classical + form fixes + Home activity epoch fix + neutral coach not_read). Shadow/validation only.
