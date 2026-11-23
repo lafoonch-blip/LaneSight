@@ -872,6 +872,22 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var stageReportJSON: Data? = nil
         var reasonCode: String? = nil
         var failedStage: String? = nil
+        // DEC-133: the detected capture block (capture_quality.capture) for this clip, as JSON. Stored on the record.
+        var captureJSON: Data? = nil
+    }
+
+    /// DEC-133: below the capture floor, mark every measured metric in the detailed JSON `unavailable` with the
+    /// specific reason + reason_code — never estimate below the floor (DEC-026/027). No-op if no reasons.
+    nonisolated static func stampBelowFloor(_ detailed: Data?, reasons: [(code: String, reason: String)]) -> Data? {
+        guard !reasons.isEmpty, let detailed, let first = reasons.first,
+              var obj = (try? JSONSerialization.jsonObject(with: detailed)) as? [String: Any] else { return detailed }
+        let note = reasons.map { $0.reason }.joined(separator: "; ")
+        for (k, v) in obj {
+            guard var cell = v as? [String: Any] else { continue }
+            cell["value"] = NSNull(); cell["status"] = "unavailable"; cell["note"] = note; cell["reason_code"] = first.code
+            obj[k] = cell
+        }
+        return (try? JSONSerialization.data(withJSONObject: obj)) ?? detailed
     }
 
     /// DEC-126: run the on-device engine as the PRIMARY measurement for a live shot. Returns the measurement, or
@@ -907,8 +923,10 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                     ballSpeed: m["ball_speed"] as? Double, foulToPins: m["speed_avg_foul_to_pins"] as? Double,
                     revRate: m["rev_rate"] as? Double, basis: body["basis"] as? String ?? "unavailable",
                     note: body["note"] as? String ?? "", latencyS: perf["latency_s"] as? Double ?? .infinity,
-                    detailedJSON: dj, trajectoryJSON: tj, stageReportJSON: sj,
-                    reasonCode: body["reason_code"] as? String, failedStage: body["failed_stage"] as? String)
+                    detailedJSON: Self.stampBelowFloor(dj, reasons: gated.reasons), trajectoryJSON: tj, stageReportJSON: sj,
+                    reasonCode: gated.reasons.first?.code ?? (body["reason_code"] as? String),
+                    failedStage: body["failed_stage"] as? String,
+                    captureJSON: gated.capture.flatMap { try? JSONSerialization.data(withJSONObject: $0.dict) })
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -1029,6 +1047,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         var measuredPositionsJSON: Data? = nil // M1–M7
         var stageReportJSON: Data? = nil
         var reasonCode: String? = nil          // FORM_DELIVERY_NOT_ISOLATED when all swing events dropped
+        var captureJSON: Data? = nil           // DEC-133 capture_quality.capture
     }
 
     /// DEC-129: run the MediaPipe Form engine as the PRIMARY measurement. Same 30 s cap + fall-back-to-server rule
@@ -1050,14 +1069,16 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
                 let lat = Date().timeIntervalSince(t0)
                 let isoOk = ["E2", "E3", "E4", "E6", "E7"].contains { (a.events[$0] ?? nil) != nil }
                 let mpos = a.measuredPositions.mapValues { $0.dict }
+                let mj = try? JSONSerialization.data(withJSONObject: a.metricsJSONObject)
                 return OnDeviceFormMeasurement(
                     view: a.view, status: a.status, formVersion: a.formVersion,
                     basis: isoOk ? "best_effort" : "unavailable", latencyS: lat,
-                    metricsJSON: try? JSONSerialization.data(withJSONObject: a.metricsJSONObject),
+                    metricsJSON: Self.stampBelowFloor(mj, reasons: gated.reasons),
                     eventsJSON: try? JSONSerialization.data(withJSONObject: a.eventsJSONObject),
                     measuredPositionsJSON: try? JSONSerialization.data(withJSONObject: mpos),
                     stageReportJSON: try? JSONSerialization.data(withJSONObject: a.stageReportJSONObject),
-                    reasonCode: isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED")
+                    reasonCode: gated.reasons.first?.code ?? (isoOk ? nil : "FORM_DELIVERY_NOT_ISOLATED"),
+                    captureJSON: gated.capture.flatMap { try? JSONSerialization.data(withJSONObject: $0.dict) })
             }
             group.addTask {
                 try? await Task.sleep(nanoseconds: capS * 1_000_000_000)
@@ -1140,13 +1161,15 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             let events = od.eventsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let mpos = od.measuredPositionsJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let stage = od.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            let capQ = od.captureJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }.map { ["capture": $0] }
             do {
                 let resp = try await client.scoreFromMetrics(
                     metricsDetailed: detailed, trajectory: nil, keyPoints: nil,
                     sessionId: (source == "upload" ? nil : sid), metadata: metadata,
                     devicePerf: ["latency_s": od.latencyS], algorithmVersion: OnDeviceFormEngine.backendVersion,
                     appVersion: appVersion, stageReport: stage, reasonCode: od.reasonCode, failedStage: nil,
-                    events: events, view: od.view, measuredPositions: mpos, formVersion: od.formVersion, timeoutS: 10)
+                    events: events, view: od.view, measuredPositions: mpos, formVersion: od.formVersion,
+                    captureQuality: capQ, timeoutS: 10)
                 built = Self.buildFormResultFromCard(resp, isUpload: source != "live")   // Complete
                 onDeviceShadowTargets[recId] = resp.shot_id
                 track("ondevice_form_complete", props: ["ondevice_s": ct["ondevice_s"] ?? 0, "view": od.view])
@@ -1335,12 +1358,13 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             pipeline = .analyzing(state: "coaching", timings: [:])          // "Generating coaching"
             do {
                 let stageRep = m.stageReportJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                let capQ = m.captureJSON.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }.map { ["capture": $0] }
                 let resp = try await client.scoreFromMetrics(
                     metricsDetailed: detailed, trajectory: traj, keyPoints: nil,
                     sessionId: (source == "upload" ? nil : sid), metadata: metadata,
                     devicePerf: ["latency_s": m.latencyS], algorithmVersion: OnDeviceShadow.engineVersion,
                     appVersion: appVersion, stageReport: stageRep, reasonCode: m.reasonCode,
-                    failedStage: m.failedStage, timeoutS: 10)
+                    failedStage: m.failedStage, captureQuality: capQ, timeoutS: 10)
                 built = Self.buildResultFromCard(resp, isUpload: source != "live")   // Complete Analysis
                 onDeviceShadowTargets[recId] = resp.shot_id        // runAnalyze → shadowVideo against this shot
                 track("ondevice_metrics_complete",

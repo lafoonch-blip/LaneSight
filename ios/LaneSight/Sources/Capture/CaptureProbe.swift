@@ -12,7 +12,7 @@ enum CaptureProbe {
     /// The detected capture, matching the `capture_quality.capture` record block. `fpsNominal` is the track's
     /// declared rate; `fpsMeasured` is derived from real presentation timestamps (catches variable frame rate and
     /// iPhone slo-mo, whose true capture rate is NOT the Photos slowed-playback rate).
-    struct CaptureInfo {
+    struct CaptureInfo: Sendable {
         var width: Int
         var height: Int
         var fpsNominal: Double
@@ -22,11 +22,11 @@ enum CaptureProbe {
         var durationS: Double
         var source: String            // "live" | "upload"
 
-        var dict: [String: Any] {
+        nonisolated var dict: [String: Any] {
             ["width": width, "height": height, "fps_nominal": round2(fpsNominal), "fps_measured": round2(fpsMeasured),
              "dynamic_range": dynamicRange.rawValue, "codec": codec, "duration_s": round2(durationS), "source": source]
         }
-        private func round2(_ x: Double) -> Double { (x * 100).rounded() / 100 }
+        nonisolated private func round2(_ x: Double) -> Double { (x * 100).rounded() / 100 }
     }
 
     /// Capture-floor gate (DEC-133 / DEC-026): the reason codes for metrics this capture can't support. Empty = OK.
