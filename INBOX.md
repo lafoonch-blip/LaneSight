@@ -4,7 +4,8 @@ Claude Code sessions: at start, act on every OPEN item addressed to you (record 
 on your branch, do the work), then mark it DONE with your commit hash and update STATUS.md.
 claude.ai chats: append new items at the bottom (date, OPEN, who it's for, the decision/request).
 
-## 2026-11-23 — OPEN — Capture workstream (now owned by the FORM session; no separate capture session): on-device only, any video in, capture default + override
+## 2026-11-23 — IN PROGRESS (foundational pass `bcca484` on feat/capture-any-video) — Capture workstream (owned by the FORM session): on-device only, any video in, capture default + override
+**Progress:** A (foundational) done + pushed — DEC-133, SERVER_MEASUREMENT_RETIREMENT.md, `CaptureProbe`, capture-floor copy, CAPTURE_TEST_PLAN. Remaining A (doc sweep) → B (any video in: probe wired into record+upload, HDR→SDR, below-floor reasons) → D (engine 120/240/4K). C picker = Figma-gated; E retirement = gates+Shayne; F benchmark/clips = Shayne. Not fully DONE (epic) — leaving OPEN with this hash.
 Full handoff: `handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md` on this branch (`git show origin/context:handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md`).
 Amendments that override it:
 1. Use the next free DEC number in the repo (likely DEC-133), not DEC-126. Ignore the mirror's "v1.81 / DEC-125" notes.

@@ -15,7 +15,7 @@ Branch `context` holds only STATUS.md, INBOX.md and handoffs/ (full briefs), so 
   Project INBOX items onto this branch. Full briefs go in the Project under claude/ AND get copied to handoffs/.
 - Never put code on `context`. Never ask Shayne to paste context.
 
-Last updated: 2026-11-23 (Session 1 / shots — v17 on-device PinContactDetector shipped; updated Accuracy + Session 1 rows)
+Last updated: 2026-11-23 (Capture/Form session — DEC-133 recorded + pushed (bcca484); updated Capture row + decisions + rules)
 
 ## Live
 - Server: Cloud Run lanesight-api-47dfd3b (lanesight-cv-0.7.2 classical + form fixes). Shadow/validation only.
@@ -37,19 +37,21 @@ The server engine is OBSOLETE and is NOT a benchmark (no ground-truth guarantee)
 |---|---|---|
 | Session 1 (shots) | ~/Developer/LaneSight · feat/ios-lane-parity | DEC-132 DONE + pushed (`eaca061`): v15 ENGINE_DISAGREE wired + learned engine shipped; v17 ported server PinContactDetector on-device → 5/22, 0 wrong (recovered 8963); 8969 deck-changepoint done (withheld — weak/small deck signal, NOT camera motion); uncovered clips classified (DEC-118 capture limit). v17 Release installed on phone. NEXT (on-device accuracy vs ground truth; server is obsolete, not a benchmark): strengthen the deck-motion signal/ROI + far/small pins & ball detection so 8969/8976/8754 time accurately vs truth — else keep them withheld (zero plausible-but-wrong). NOT stabilization. Sole deployer. |
 | Form | ~/Developer/LaneSight-form · feat/form-ondevice | All assigned items DONE + pushed (558260d): form card vs design (grouping/labels/footer + on-device stills), E5 slide-plant (−13f early case fixed; late-error clips documented), on-device default verified ON. Release installed on Shayne's phone. IDLE — waiting on Shayne's 2 form re-uploads to validate the device fixes. |
-| Capture → owned by Form session | ~/Developer/LaneSight-capture · feat/capture-any-video | INBOX 2026-11-23: on-device only + any video in + capture picker (next free DEC, likely 133). |
+| Capture → owned by Form session | ~/Developer/LaneSight-capture · feat/capture-any-video | **DEC-133 recorded + pushed (`bcca484`)**: foundational pass = DEC-133 (one on-device engine; any video in; capture default 1080p120 SDR overridable) + SERVER_MEASUREMENT_RETIREMENT.md + `CaptureProbe` (real fps/res/HDR detection, builds) + capture-floor failure copy + CAPTURE_TEST_PLAN (S1–S5). **Doing A→B→D:** A doc sweep, B "any video in" (probe wired into record+upload, HDR→SDR, per-metric below-floor reasons), D engine at 120/240/4K (reuses Session 1's stabilization — amendment 7). C picker waits on Figma; E retirement waits on gates+Shayne; F benchmark/clips waits on Shayne. |
 
 ## Latest decisions (full text: 00_CONTEXT/DECISIONS.md on feat/ios-lane-parity)
 - DEC-126 usability first, iPhone primary · DEC-127 on-device metrics + metrics-only server call, one result screen
 - DEC-128 plausibility bounds / honest stage report · DEC-129 Form on-device (MediaPipe) · DEC-130 learned detection front-end
 - DEC-131 Form plausibility + swing-anchored delivery selector · DEC-132 pin contact measured visually, NO audio
-- Pending: on-device only / any video in / capture default (INBOX 2026-11-23)
+- DEC-133 one on-device measurement engine; any video in (detected capture drives availability); capture default 1080p120 SDR overridable; retire the server measurement path per metric as each passes its DEC-118 gate (on `feat/capture-any-video`)
 
 ## Standing rules
 - No fabricated or plausible-but-wrong numbers; unavailable + reason. No audio-based measurement. No AGPL models.
 - No user taps/labeling for calibration; Shayne doesn't label — sessions auto-label and self-audit.
 - Push own branches when gates pass (verify ls-remote). Never merge to main. Only Session 1 deploys.
 - Big artifacts under ~/LaneSightData, never /tmp. iPhone plugged in + unlocked for device runs.
+- **One product engine = on-device (DEC-133): no new server-only measurement work; server stays auth/data/Score/coaching + Python dev harness.** Session 1's DEC-132 on-device coverage is on-device work, NOT withdrawn (amendment 6).
+- **One iPhone — take turns (amendment 8):** note here when you start a device build/benchmark; don't run concurrent device work with Session 1 or Form.
 
 ## Infra notes
 - Vercel `lanesight-ops`: preview deployments DISABLED (`previewDeploymentsDisabled=true`, Shayne approved 2026-11-23) — every push to `context`/`main` (no `ops-dashboard/`) failed the preview build + emailed Shayne. Production still deploys from `dev-build-v0` (unchanged). Need a feature-branch dashboard preview? Deploy manually via Vercel CLI. No repo change.
