@@ -1,11 +1,12 @@
 # App design changes: build queue
-Status: ACTIVE · Version: 1.6 · Last Updated: 2026-11-03 · Owner: Shayne
+Status: ACTIVE · Version: 1.7 · Last Updated: 2026-11-23 · Owner: Shayne
 Decision: DEC-091 (Figma "Target state – v3.7" is the app's design source; every design change lands here as a build item).
 
 ## How this works
 - **Designs:** Figma "Lanesight - Product UX - Design" (`k6F8iHTtl2ZHvnXlHmYPnd`), page "01 — Home & Foundation", section **Target state – v3.7**. Guide: `02_DESIGN/target_state/README.md` (changelog at the bottom).
 - **Each design change = one entry below**: what changed, screens (Figma node + PNG in `02_DESIGN/target_state/screens/<date>/`), exact spec, data/API, done-when, and a **Status**.
 - **Claude Code:** build every entry whose status is **NOT BUILT**, in order, then set it to **BUILT (commit)**. If the build has to differ from the design, note it under the entry as **DIFFERS:** and say why. Never defer an entry to a "later version".
+- **Accuracy, honesty and privacy outrank design parity.** When a design would require showing a number the engine can't honestly stand behind, a metric that is `unavailable`/`disabled`/not coaching-eligible (see the metric contract `01_PRODUCT/METRIC_CAPABILITIES.md`), a lane-path segment the ball wasn't observed on, coaching off a non-coaching-eligible metric, or data a privacy rule forbids — **honesty wins and you deviate from the design.** Record the deviation as a **DIFFERS:** with the reason; such a deferral is explicitly allowed (it is not a failure to build the entry). The design catches up to the honest state, never the reverse.
 - **Claude (claude.ai):** whenever Figma changes, add an entry here and export the PNGs in the same session.
 - `02_DESIGN/dev_build_v0/` (Claude Design canvas) is **frozen** as of 2026-10-26 (v3.8) and is no longer updated. Where it disagrees with Figma, Figma wins.
 

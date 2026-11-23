@@ -1,10 +1,10 @@
 # Validation Plan: sensors + Specto
 Status: DRAFT  
-Version: 1.0  
-Last Updated: 2026-10-14  
+Version: 1.1  
+Last Updated: 2026-11-23  
 Owner: Shayne
 
-Goal: prove every LaneSight metric against an independent reference before it is labeled "Guaranteed" (`01_PRODUCT/METRIC_CAPABILITIES.md`). Each reference covers different metrics, so together they close the gaps.
+Goal: prove every LaneSight metric against an independent reference so the **Evidence** column of the metric contract (`01_PRODUCT/METRIC_CAPABILITIES.md`) can carry real validation (reference method · sample · error) — the bar for a metric becoming coaching-eligible. ("Guaranteed" is retired as a status; the vocabulary is measured / best_effort / unavailable / disabled.) Each reference covers different metrics, so together they close the gaps.
 
 ## 1. References and what each validates
 
@@ -52,7 +52,7 @@ Specto is the only reference for lateral metrics (boards, angles) that the Stage
 ## 4. Analysis (automated)
 - An evaluation harness (M1-14) ingests each reference's export (manual CSV until an API exists) and matches shots by order + timestamp.
 - Output per metric × capture tier: MAE, median, p90, bias, failure rate.
-- Results update `METRIC_CAPABILITIES.md` (Guaranteed / Best effort) and `VIDEO_VS_RUBY_VALIDATION.md`.
+- Results update the metric contract `METRIC_CAPABILITIES.md` (the **Evidence** column; status vocabulary **measured / best_effort / unavailable / disabled**, "Guaranteed" retired) and `VIDEO_VS_RUBY_VALIDATION.md`.
 - Cross-checks:
   - Sensor vs sensor (Ruby vs Witsee vs F5 on the same shots) shows how much the references disagree with each other.
   - LaneSight should be judged against that spread, not against one sensor as truth (the shot-4 speed gap, +3.3% vs Ruby, is exactly this question).

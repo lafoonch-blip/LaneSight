@@ -1,5 +1,5 @@
 # Target-state (MVP) designs — v3.7
-Status: APPROVED FOR HANDOFF · Version: 3.7.10 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: APPROVED FOR HANDOFF · Version: 3.7.11 · Last Updated: 2026-11-23 · Owner: Shayne
 
 ## Role (DEC-091)
 These Figma designs are **the app's design source**. Every change is queued for the build in `03_ENGINEERING/APP_DESIGN_CHANGES.md`, with PNGs in `screens/<date>/`.
@@ -13,8 +13,14 @@ These Figma designs are **the app's design source**. Every change is queued for 
 
 ## Prototype (Figma › Present)
 Flow starts: **Shot session (live)** · **Form session (live)** · **Onboarding → first use** · **Stats**. 245 links, none broken (audited 2026-10-27).
-- Shot loop (DEC-080): Setup → Record → Analyzing (blocking, screen stays on) → Shot card → **Record next shot**, or Close → Active Session → End → score popup → Session summary → feedback.
-- Form loop (DEC-081): Setup (no ball/oil; camera-view guidance) → Record delivery (side or behind, detected) → Analyzing → Form results (side or rear example) → Record next delivery, or Close → Form session → End → Form summary.
+
+> **Result flow is now on-device-first (DEC-126/127), not a blocking "Analyzing" screen.** The old blocking "Analyzing · about a minute" step is retired. Current flow: a **three-step progress screen** — "Analyzing your shot" → "Generating coaching" → "Your results" — advancing as each step actually completes (no artificial waits), then the result renders **once** in one of **two deliberate states, each rendered once and never filled in on screen**:
+> - **Complete Analysis** — on-device measurements + a lightweight metrics-only server call returned score + AI coaching + recommended adjustment.
+> - **Offline Analysis** — the server call didn't return within ~10 s: show the full on-device measurements with a clear offline status and one line that coaching needs connectivity; the coaching section is simply **absent** (no empty cards, loading placeholders, or half-populated sections). Queued coaching enriches the saved shot in history later — it never mutates a screen the user is viewing.
+> The same two states serve Shot and Form (Form rides the same path, DEC-129). No Figma frame yet for the Offline state / progress steps — built to "01 - Design Standards" tokens and logged in `03_ENGINEERING/APP_DESIGN_CHANGES.md` with **DIFFERS: no Figma yet** (DEC-127).
+
+- Shot loop (DEC-080/127): Setup → Record → progress steps → **Shot card (Complete or Offline)** → **Record next shot**, or Close → Active Session → End → score popup → Session summary → feedback.
+- Form loop (DEC-081/129): Setup (no ball/oil; camera-view guidance) → Record delivery (side or behind, detected) → progress steps → **Form results (Complete or Offline; side or rear example)** → Record next delivery, or Close → Form session → End → Form summary.
 - Uploads (DEC-069): Lab → Shot or Form → Live session / Upload video → result (not counted in Stats or Score).
 
 ## Screen inventory (69)
@@ -30,7 +36,10 @@ DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Met
 
 ## Build rules
 - **Sample numbers are illustrative.** `[Bracketed text]` is user data.
-- **Status chips:** MEASURED / BEST EFFORT / UNAVAILABLE (never a number without a status; UNAVAILABLE never shows a number).
+- **Status chips:** MEASURED / BEST EFFORT / UNAVAILABLE (never a number without a status; UNAVAILABLE never shows a number). This is the one status vocabulary — **"Guaranteed" is retired.** The metric contract (`01_PRODUCT/METRIC_CAPABILITIES.md`) uses four engine statuses — measured / best_effort / unavailable / **disabled** — where `disabled` (a metric gated off by policy, e.g. far-lane DEC-065) surfaces to the user as the **UNAVAILABLE** chip with a policy reason, so the UI still shows only three chips.
+- **Honesty outranks design parity.** A number the engine can't stand behind, a metric that is unavailable/disabled, or coaching off a non-coaching-eligible metric is **not shown as measured**, even if the design implies it; deviate and record it as a DIFFERS (see `03_ENGINEERING/APP_DESIGN_CHANGES.md`).
+- **Coaching acts only on coaching-eligible metrics.** Next-shot moves, insights, form cues and Score inputs never derive from an unavailable, disabled, low-confidence, or non-coaching-eligible metric (metric contract + DEC-094 #5). When the inputs aren't eligible, show the "no move / no move yet" state, not a fabricated move.
+- **The lane path is drawn only where the ball was observed.** Fitted / smoothed / extrapolated segments must never look measured; when the far lane isn't read the path stops at the last measured distance and the lane beyond is dimmed (DEC-065; lane card = the bundled `lane_render/` scene with a `cut`, APP_DESIGN_CHANGES 2026-11-02(b)).
 - **Text:** minimum 11 pt for anything a user reads (raised from 9–10 pt in the 2026-10-26 pass). Chart axis and lane-diagram labels may be smaller.
 - **Contrast:** text ≥ 4.5:1 on its background (≥ 3:1 at 18 pt+). Timing purple was lightened to pass.
 - **Tap targets:** every tappable element gets a **44 × 44 pt hit area**, even where the visible control is smaller (header icons 40 pt, Stats tabs 34 pt, text links).
@@ -42,6 +51,7 @@ DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Met
 Back, Edit, Form/Field, Control/Segment option, Row/List item, Tile/Stat were orphaned (main components lost). Rebuilt in Design Components › "LaneSight / Core controls (rebuilt 2026-10-26)" and all 94 instances relinked. Also new: `Sessions / Next-shot card` (6 states); Result badge gained Not a strike / Not read; Metric status row gained Best effort.
 
 ## Changelog
+- **3.7.11 (2026-11-23, doc-consolidation sync — no Figma change):** result flow documented as the DEC-126/127 on-device-first three-step progress + **Complete / Offline** states (the blocking "Analyzing" description retired); build rules gained the honesty-outranks-parity, coaching-eligible-only and lane-path-only-where-observed rules and the one status vocabulary (measured/best_effort/unavailable/disabled; "Guaranteed" retired), all pointing to the metric contract `01_PRODUCT/METRIC_CAPABILITIES.md`.
 - **3.7.10 (2026-10-27):** DEC-091: these designs are the app's design source; build queue `03_ENGINEERING/APP_DESIGN_CHANGES.md`; PNG exports in `screens/2026-10-27/`.
 - **3.7.9 (2026-10-27):** lane view camera pulled back so the **foul line, approach dots and pins** are all in frame; new **Laydown** label (board + distance past the foul line); target and ball lines thinned to ~1 board with minimal glow so they stay readable when they overlap.
 - **3.7.8 (2026-10-27):** DEC-090 — lane view gets Entry point, Breakpoint and Arrows data labels with dots on the path (markers drawn on top; pin glow reduced); "Target" ring → **Accuracy**; Lane & pins rings → **Entry point, Entry angle, Power** (Impact Energy, J). Breakpoint moves to the lane view and All metrics.

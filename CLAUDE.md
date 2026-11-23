@@ -1,5 +1,5 @@
 # Claude Code instructions (LaneSight)
-Read `AGENTS.md` first and follow its read order and rules. Short version: `DECISIONS.md` and `CURRENT_STATE.md` win; never use `99_ARCHIVE/` as a source; bump `Version` / `Last Updated` on any doc you change.
+Read `AGENTS.md` first and follow its read order and rules. Short version: **`STATUS.md` on the `context` branch is the live truth** (what every session is doing now — read it + `INBOX.md` first, every session); `DECISIONS.md` wins on decisions and `CURRENT_STATE.md` is the architecture/history record (not the live task board); never use `99_ARCHIVE/` as a source; bump `Version` / `Last Updated` on any doc you change.
 
 ## Local workflow (Shayne's Mac)
 - Code: `lanesight-core/` (pipeline `lanesight_core/`, at-lane runner `lanesight_runner/`). Setup and use: `lanesight-core/README.md`.
@@ -7,7 +7,7 @@ Read `AGENTS.md` first and follow its read order and rules. Short version: `DECI
 - Real clips and runner data live in `~/LaneSightData` (`sessions/<id>/shot_NNN.mov`, `lanesight_runner.db`). Training/validation clips: `~/LaneSightData/training_videos`. Never copy videos into the repo.
 - Validation reference: `lanesight-core/validation/` (pipeline outputs + Ruby values for IMG_8751–8754). Any change to `lanesight_core/cv/` must be re-run on real clips and compared against these before committing. Report the numbers.
 - Run `python3 -m pytest` before every commit; all tests must pass.
-- Commit locally. **Push to GitHub only when Shayne says so.**
+- **Push rule (matches `AGENTS.md`):** commit locally as you go; **push your own branch** once tests + the applicable gates pass, then verify with `git ls-remote origin <branch>`. **Never push or merge to `main`; only Session 1 deploys** (and never an unpushed commit). Branch exceptions that still wait on Shayne are noted in `STATUS.md` on `context`.
 
 ## Rules
 - **Work continuously.** Never pause between steps to ask whether to continue or to report progress. Run the whole task to the end, committing locally as you go, and give one report when finished. Stop only if a test fails and you can't fix it, you're truly blocked, or the next action is irreversible outside the repo (applying a migration to live Supabase, pushing to GitHub).

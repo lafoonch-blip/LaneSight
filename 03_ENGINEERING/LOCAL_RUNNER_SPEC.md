@@ -58,7 +58,7 @@ Use existing schema tables for session, shot, measurements (with source, confide
 
 ## 6. Page layout (single screen, laptop-sized)
 - **Header:** session type, ball (changeable; "Current Ball"), oil pattern, shot count, running game stats (strike %, spare %, pocket %).
-- **Shot card (latest shot):** replay image, metric cards with tier/confidence badges (Guaranteed / Best effort / Unavailable with reason), pin diagram with leave, Power, adjustment (primary + secondary) with reason and confidence.
+- **Shot card (latest shot):** replay image, metric cards with status chips (**Measured / Best effort / Unavailable** with reason — the metric contract vocabulary, `01_PRODUCT/METRIC_CAPABILITIES.md`; "Guaranteed" retired), pin diagram with leave, Power, adjustment (primary + secondary) with reason and confidence.
 - **Quick inputs:** intent, hit mark (Y/N/?), pin correction, Ruby fields, adjustment 👍/👎 + note. Keyboard shortcuts for Y/N/?.
 - **Shot list:** shot #, speed, rev, Power, arrows, breakpoint, entry, leave, ball. Click to reopen a shot.
 - **Variance panel:** LaneSight vs Ruby per shot and running mean/MAE (DEC-021).

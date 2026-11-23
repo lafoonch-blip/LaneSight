@@ -1,15 +1,16 @@
 # Engineering Handoff — LaneSight MVP (target-state v3.7 designs)
-Status: READY FOR PLANNING · Version: 1.7 · Last Updated: 2026-10-27 · Owner: Shayne
+Status: READY FOR PLANNING (superseded where noted in §0) · Version: 1.8 · Last Updated: 2026-11-23 · Owner: Shayne
 Designs: Figma "Lanesight - Product UX - Design" › section **Target state – v3.7** (guide: `02_DESIGN/target_state/README.md`, v3.7.2+)
 Decisions: DEC-061, DEC-066–077, DEC-079–085, DEC-088, DEC-090 (DEC-078 withdrawn). Metric placement: `01_PRODUCT/METRIC_TO_SCREEN_SPEC.md` v1.0 (approved).
 
 ## 0. Read this first
+- **Superseded where it describes server-side measurement + a blocking "Analyzing" screen (2026-11-23).** Measurement is now **on-device-first** (DEC-106/126/127): the phone measures, a lightweight metrics-only server call returns score + coaching, and the result renders once as **Complete** or **Offline** behind a three-step progress screen (not a blocking "Analyzing"). Read the metric contract `01_PRODUCT/METRIC_CAPABILITIES.md` for status/eligibility and `STATUS.md` on the `context` branch for live state. The flow descriptions below that say "Analyzing (blocking…)" and "all metric math on the server" are retained as the original handoff but no longer describe the live app.
 - **Build queue (DEC-091):** design changes after this doc are tracked as build items in `03_ENGINEERING/APP_DESIGN_CHANGES.md` (NOT BUILT → BUILT). Start there.
 - This builds on Dev Build v0 (`03_ENGINEERING/dev_build_v0/HANDOFF.md`, designs `02_DESIGN/dev_build_v0/` 3.8). Reuse its API, auth, upload queue and engines; this doc lists **what the MVP designs add or change**.
 - Backend is Cloud Run + Supabase (Storage for uploads); the Mac runner is no longer in the loop.
 - **Sample numbers in Figma are illustrative.** Never hardcode them. `[Bracketed]` = user data.
-- **Status chips everywhere** (DEC-061): MEASURED / BEST EFFORT / UNAVAILABLE. UNAVAILABLE never shows a number; it shows the reason or the view it needs.
-- Commit locally; push only when Shayne says. Ask Shayne about anything ambiguous; don't guess.
+- **Status chips everywhere** (DEC-061): MEASURED / BEST EFFORT / UNAVAILABLE ("Guaranteed" retired; a policy-`disabled` metric shows as UNAVAILABLE with a reason — metric contract `01_PRODUCT/METRIC_CAPABILITIES.md`). UNAVAILABLE never shows a number; it shows the reason or the view it needs.
+- **Push rule (matches `AGENTS.md`):** commit locally; push your own branch once tests + gates pass and verify `git ls-remote`; never push/merge to `main`; only Session 1 deploys. Ask Shayne about anything ambiguous; don't guess.
 
 ## 1. Flows (match the Figma prototype; 4 flow starts)
 1. **Shot session (DEC-080):** Lab › Shot Analysis › Live session → Setup (last-used ball, oil, target; "Ready to bowl") → Record (tap to start/stop) → **Analyzing (blocking, controls locked, screen kept awake)** → **Shot card opens automatically** → *Record next shot* or *Close* → Active Session → End → score popup → Session summary → feedback.

@@ -1,4 +1,6 @@
 # LaneSight measurement-engine architecture — decision brief
+> **Superseded as live guidance (2026-11-23) → see DEC-126/127 (on-device-first primary path, shipped) and DEC-133 (one on-device engine, any video in; `feat/capture-any-video`).** This brief is the **rationale of record for choosing Option B** (DEC-106); the "Today: server-side" framing in §1/§3 describes the state in October 2026 and no longer holds. For the current live engine/state read `STATUS.md` on the `context` branch and `00_CONTEXT/CURRENT_STATE.md`.
+
 Status: **DECIDED — Option B (native iOS), DEC-106 (2026-10-29).** Python stays the permanent non-production
 reference; port to Swift only after the engine stabilizes (phased, see DEC-106). Brief retained for the record
 and for external review of the reasoning.

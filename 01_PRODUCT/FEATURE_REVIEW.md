@@ -1,7 +1,9 @@
 # Feature Requirements Review: MVP vs MVP+
-Status: DRAFT (for Shayne's review)  
-Version: 1.0  
-Last Updated: 2026-10-14  
+> **Superseded (2026-11-23) — historical review.** Scope decisions here have been overtaken: the MVP is two on-device products (Shot + Form, DEC-118), measurement is on-device (DEC-106/126/127), and metric status/eligibility is governed by `01_PRODUCT/METRIC_CAPABILITIES.md` (the metric contract) — **"Guaranteed" is retired as a status** (see the status-label note inline below). Read `STATUS.md` on `context` for current scope. Kept as the record of the original MVP-vs-MVP+ triage.
+
+Status: SUPERSEDED — historical (was DRAFT for Shayne's review)  
+Version: 1.1  
+Last Updated: 2026-11-23  
 Owner: Shayne  
 Reviews: Google Doc "Feature Details" (2026-10-14) and the untitled "Phone Only / Sensor / Center" metric list  
 Against: DEC-017–023, BUILD_PLAN v2.1, METRIC_CAPABILITIES v1.0
@@ -88,7 +90,7 @@ Against: DEC-017–023, BUILD_PLAN v2.1, METRIC_CAPABILITIES v1.0
 | LaneSight Score + trend | MVP | Needs a defined composite (e.g. pocket %, strike %, spare conversion, consistency). Write it as a DEC, like Power |
 | World rank | MVP+ | Needs a large user base and anti-gaming rules; an early rank among 200 users looks empty |
 | Filters: all time / 90 / 60 / 30 days / week / ball / center | MVP | Aggregations exist (M3-05) |
-| Rev rate, speed | MVP | Speed Guaranteed; rev rate Best effort until blind-validated |
+| Rev rate, speed | MVP | Status per the metric contract (`METRIC_CAPABILITIES.md`): speed **best_effort**, rev rate **best_effort** until blind-validated |
 | Power | MVP (Best effort) | Defined from impact energy at pocket speed (proposed DEC-024). Tooltip shows energy plus pocket hit context, never "more power = more strikes" |
 | Approach timing (total, pushaway, backswing, downswing, release) | Sensor only | Ruby has it; F5 doesn't; Witsee partial. Video won't measure it under current scope |
 | Release: axis tilt, rotation, PAP | Sensor now; video MVP+ | Video axis needs ≥120 fps and is unbuilt (M1-10/11) |
@@ -142,9 +144,9 @@ Against: DEC-017–023, BUILD_PLAN v2.1, METRIC_CAPABILITIES v1.0
 ## 3. "Phone Only" metric list check
 | Metric | Status | Notes |
 |---|---|---|
-| Pocket hits | MVP, Guaranteed at 60 fps | Entry board + pins |
+| Pocket hits | MVP | Entry board + pins — far-lane, currently **disabled** by policy (DEC-065) in the metric contract |
 | Rev rate | MVP, Best effort | Blind validation pending |
-| Speed | MVP, Guaranteed | |
+| Speed | MVP | **best_effort** (metric contract) |
 | Energy at impact | Replaced by **Power** | |
 | Carry (strike chance %) | MVP: carry % (strikes on pocket hits). Predicted strike % is MVP+ | Prediction needs a large dataset |
 | Loft distance | MVP at ≥60 fps | Unavailable at 30 fps |

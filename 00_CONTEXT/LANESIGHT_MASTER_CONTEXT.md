@@ -1,9 +1,9 @@
 # LaneSight Master Context
 Status: CANONICAL  
-Version: 1.5  
-Last Updated: 2026-10-25  
+Version: 1.6  
+Last Updated: 2026-11-23  
 Owner: Shayne  
-Supersedes: v1.4; v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
+Supersedes: v1.5 (+ §4/§18 supersession notes: measurement is now on-device, DEC-106/126/127/130); v1.4; v1.2; v1.1; archived `LaneSight_Master_Product_Build_Context_v2.docx`
 
 ## 1. What LaneSight is
 LaneSight is the digital platform for bowlers: a hardware-agnostic bowling intelligence system that combines video, optional sensor telemetry, scoring/league records, equipment history and coaching into one persistent Bowler Profile.
@@ -36,6 +36,8 @@ Do not launch as an all-in-one league platform. Progressively earn the right to 
 Future branded areas: LaneSight Profile, Live, Coach, Arsenal, Team, Leagues and Centers.
 
 ## 4. Foundational technical sequence
+> **Partly superseded (2026-11-23).** This early ordering (manual calibration first; handheld/POV/glasses last) is superseded by the on-device, learned-front-end direction: measurement runs **on the iPhone** (DEC-106 engine decision; DEC-126/127 on-device-first), a learned detector makes shots work from **any normal camera position** rather than requiring a fixed tripod-only setup (DEC-130), and the capture-position support set is defined by the DEC-118 gates (see `02_RESEARCH/CAMERA_POSITION_SUPPORT_2026-11-02.md`). The "one on-device engine, any video in" capstone is DEC-133 (on the `feat/capture-any-video` branch). Retained below as the original strategic sequence of record.
+
 1. Stable tripod video + manual calibration.
 2. Automatic ball detection/tracking.
 3. Sensor integration + shot synchronization.
@@ -160,7 +162,8 @@ Current color direction:
 These are current concept colors; production accessibility and print values still need finalization.
 
 ## 18. Current stack direction
-- native SwiftUI iOS app (DEC-029); CV analysis server-side for MVP (DEC-033)
+> **Superseded on the measurement path (2026-11-23).** "CV analysis server-side for MVP (DEC-033)" is superseded: the production measurement engine is **native on-device iOS** (DEC-106), and the live path is **on-device-first** (DEC-126/127) — the server runs a shadow/reference and stays authoritative only for coaching, Score, tiers and achievements via a lightweight metrics-only call. One on-device engine / any video in = DEC-133 (`feat/capture-any-video`). The rest of this stack list stands.
+- native SwiftUI iOS app (DEC-029); CV analysis server-side for MVP (DEC-033) — **see the note above: measurement is now on-device (DEC-106/126/127)**
 - web/debug and later admin tooling
 - Python FastAPI / CV services
 - OpenCV + PyTorch

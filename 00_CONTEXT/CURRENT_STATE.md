@@ -1,9 +1,11 @@
 # LaneSight Current State
 Status: CANONICAL  
-Version: 1.74  
-Last Updated: 2026-11-03  
+Version: 1.75  
+Last Updated: 2026-11-23  
 Owner: Shayne  
-Supersedes: v1.73 (+ DEC-129 on-device Form device build + gate run result)
+Supersedes: v1.74 (+ live-truth pointer: this doc is the architecture/history record, not the task board)
+
+> **This is the architecture + history record, not the live status board.** For "what is each session doing right now, and what is blocked" read **`STATUS.md` on the `context` branch** (`git show origin/context:STATUS.md`) and `INBOX.md` — that is the single live source of truth (AGENTS.md). The dated entries below are a durable record of how the system got to its current shape; they are not kept in lockstep with the minute-to-minute task state.
 
 ## Where these docs live (DEC-025)
 - **Source of truth:** GitHub `lafoonch-blip/LaneSight` (`main`). Edit here; read `AGENTS.md` first.

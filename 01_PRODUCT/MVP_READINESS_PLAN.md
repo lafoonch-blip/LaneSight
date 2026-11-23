@@ -1,5 +1,7 @@
 # MVP Readiness Plan — Everything Needed Before (and During) the MVP App Build
-Status: DRAFT (for Shayne's review)
+> **Superseded (2026-11-23) — historical planning doc.** The live MVP scope is **two independent products, Shot Analysis + Form Analysis** (DEC-118), measured **on-device** (DEC-106/126/127), with per-product Friends-Beta gates; MVP stays Shayne-tested until he calls Beta (DEC-047). For current status read `STATUS.md` on the `context` branch; for metric eligibility read `01_PRODUCT/METRIC_CAPABILITIES.md` (the metric contract); for the engine read DEC-106/126/127. The capture-tier "Guaranteed/Base/Standard/HFR" framing and the "server-side analysis" assumptions below are retired — kept as a record of the pre-on-device plan.
+
+Status: SUPERSEDED — historical (was DRAFT for Shayne's review)
 Version: 0.2
 Last Updated: 2026-10-22
 Owner: Shayne
