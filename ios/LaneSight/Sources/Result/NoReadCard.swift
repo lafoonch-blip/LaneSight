@@ -49,9 +49,10 @@ struct NoReadCard: View {
             }
             Divider().overlay(LS.border)
             VStack(alignment: .leading, spacing: 4) {
-                Text("For the next one").font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
-                Text("Film from behind the bowler, phone steady, with the whole lane — foul line to the pins — in frame. "
-                     + "Good light on the pin deck helps.")
+                // Missed pins/ball are a detection limit of the app, not the bowler's camera position (2026-11-23).
+                Text("What this means").font(.system(size: 13, weight: .semibold)).foregroundStyle(LS.link)
+                Text("This is on our side — LaneSight couldn't follow the ball well enough in this video yet. "
+                     + "Clips like this one are being used to improve detection.")
                     .font(.system(size: 14)).foregroundStyle(LS.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
