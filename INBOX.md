@@ -35,3 +35,14 @@ needed, deploy it manually with the Vercel CLI. No repo change required. Record 
   (shared with capture D). Python reference first, then port; 22-clip gate after every CV change; zero plausible-but-wrong.
   Rev rate + early-lane speed stay best_effort until real truth exists. Sole deployer.
 - Device: one iPhone; sessions take turns (note in STATUS when using it).
+
+## 2026-11-23 — OPEN — Form session (capture workstream, item C unblocked): Figma designs for recording quality are ready
+Figma file k6F8iHTtl2ZHvnXlHmYPnd, page "01 — Home & Foundation", section "Target state – v3.7":
+- NEW `822:4216` Settings › Recording quality · v3.7 — Shot (1080p60 / 1080p120 Recommended ✓ / 1080p240 / 4K60) and Form
+  (1080p60 / 1080p120 Recommended ✓ / 1080p240) option lists with trade-off lines; HDR-off note; "Form never below 60"; Dark-lanes note.
+- NEW `822:4081` Sheet · Recording quality (from Setup) · v3.7 — same Shot options as a bottom sheet, "Use this format".
+- NEW `822:4354` Upload video · lower-quality clip (30 fps HDR) · v3.7 — amber capture badge + "Lower-quality clip" note with tip.
+- CHANGED `434:6174` Settings: Capture row value "1080p · 120 fps", footnote "Shots record at 1080p, 120 fps by default. Form never goes below 60 fps."
+- CHANGED `411:3491` Setup · Shot: pre-flight Camera row "1080p · 120 fps ›" (taps open the sheet).
+- CHANGED `422:5069` Upload video: "Results in about 15 seconds, analyzed on your iPhone."
+Add APP_DESIGN_CHANGES.md entries (NOT BUILT → build) with these node IDs; only list formats the device actually supports (hide 4K/240 rows when unavailable).
