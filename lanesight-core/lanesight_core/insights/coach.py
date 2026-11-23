@@ -161,8 +161,9 @@ def coach(throw: dict, lane: dict, recommendation: dict | None = None, arrows_ac
     wasn't measured), used to phrase the eyes move as an honest before→after; never fabricated."""
     t, l = throw.get('status'), lane.get('status')
     if l == 'not_read':
-        return {'action': 'no_move_yet', 'text': 'Keep the same line. Move the tripod so your next shot gets '
-                'a full read.'}
+        # DECISIONS #3 (2026-11-23): never blame camera position for a missed read (the pins/lane are in the clip),
+        # and no tripod advice on uploads (there is no tripod). Neutral, honest tip.
+        return {'action': 'no_move_yet', 'text': "Keep the same line — we couldn't fully read the lane on this one."}
     if t == 'building':
         if l == 'good':
             return {'action': 'keep', 'text': 'Good line — keep repeating it while we learn your normal throw.'}
