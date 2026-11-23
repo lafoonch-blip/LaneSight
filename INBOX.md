@@ -172,3 +172,12 @@ Tasks:
   (visible arrows/dots as the ruler; per DECISIONS #4 you may add a short board-check Labeler batch for Shayne instead), audit
   with contact sheets, grade laydown/arrows vs that truth, and report. If they pass a ±1 board gate, propose unlocking
   exact board moves.
+
+## 2026-11-23 — OPEN — SESSION 1: next shot-coverage work after the Active Session fix ships
+From Session 1's 8754/8969/8976 report (engine v17 unchanged, 5/22, 0 wrong). Per DECISIONS #3 these stay detection failures to fix, not accepted withholds.
+1. Port the reference's phase-correlation frame de-jitter (on-device stabilization, already Session 1's item) — likely cause of 8754's ~0.67 s late deck contact
+   on the untrimmed clip and of 8969's noisy pre-contact deck baseline. Then a safer shot-window isolation so 8754 isn't clipped. Python reference first,
+   port, 22-clip gate after each change, zero plausible-but-wrong.
+2. Prepare the shot Labeler batch (DECISIONS #4): foul-cross frame, first pin contact frame, a few ball centers, pin-deck box, on ALL shot clips incl. the 13,
+   hints pre-filled; hold out an unseen set. One line to Shayne when ready + how long it takes.
+3. Report detection quality per stage (DECISIONS #5) alongside the 22-clip table.
