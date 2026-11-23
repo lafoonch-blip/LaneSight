@@ -1804,6 +1804,23 @@ the pins are equally observable in the video, so a visual temporal model gets th
 **Amends/extends:** DEC-130 (replaces its audio `t_pins` exploration with the visual pin-contact classifier; the rest
 of DEC-130 stands); DEC-128 honesty/plausibility rules continue to bind.
 
+### DEC-134 — Speed is STRICT: reported only when timed foul→detected pin contact; no fallback estimate (2026-11-23)
+**Decision (Shayne, 2026-11-23, after upload 762be1be produced zero numbers):** Ball speed is reported ONLY when it can
+be timed from the foul-line crossing to a DETECTED pin contact. When pin contact isn't detected, speed is `unavailable`
++ reason — NEVER a fall-back early-lane / front-lane / release speed, and never derived from rev. Empty results are
+accepted until on-device coverage improves (the shot card's NoReadCard handles the zero-number case). Binds BOTH the
+on-device engine and the server.
+- The Active Session rings must not show a "best effort" session-mean speed/rev as a number under this rule — trace
+  where that value comes from (16.6 mph / 359 rpm seen 2026-11-23) and make it strict (unavailable, not an estimate).
+- Coverage work vs ground truth (pin contact / deck signal / far-small ball + pins) remains the priority to grow
+  strict-speed coverage honestly.
+**Why:** an early-lane/front-lane fallback is an unvalidated number shown as if measured — it violates the
+no-plausible-but-wrong honesty rule (DEC-026/027/094/128). "Unavailable + reason" beats a number we can't stand behind.
+**Date:** 2026-11-23 · **Status:** ACCEPTED — enforcement in the coaching/rec code (server + on-device) + the Active
+Session rings + shot-card headline is pending (Session 1, after the 8754/coverage pass).
+**Relates to:** the companion headline-speed decision (headline = 60 ft foul→pins average, labeled "Avg speed",
+resolving DEC-030 vs DEC-064 — recorded separately on the docs branch); DEC-064/112 (foul→pins average).
+
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.
 - DEC-092 — near-term optimize-server-first order and "metric math stays on the server" **stand**; only the **long-term scope** is amended by DEC-102 (on-device metric math becomes the target once the DEC-103 gates pass). DEC-092 P3's observation interface is realized as `MeasurementEvidence` (DEC-103).
