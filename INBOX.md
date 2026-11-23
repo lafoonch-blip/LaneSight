@@ -4,7 +4,7 @@ Claude Code sessions: at start, act on every OPEN item addressed to you (record 
 on your branch, do the work), then mark it DONE with your commit hash and update STATUS.md.
 claude.ai chats: append new items at the bottom (date, OPEN, who it's for, the decision/request).
 
-## 2026-11-23 — OPEN — Capture session: on-device only, any video in, capture default + override
+## 2026-11-23 — OPEN — Capture workstream (now owned by the FORM session; no separate capture session): on-device only, any video in, capture default + override
 Full handoff: `handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md` on this branch (`git show origin/context:handoffs/HANDOFF_2026-11-23_ON_DEVICE_ONLY_ANY_VIDEO.md`).
 Amendments that override it:
 1. Use the next free DEC number in the repo (likely DEC-133), not DEC-126. Ignore the mirror's "v1.81 / DEC-125" notes.
@@ -23,3 +23,14 @@ Shayne approved. The `lanesight-ops` Vercel project now has preview deployments 
 because every push to `context` (no `ops-dashboard/` folder) and `main` failed the preview build and emailed him.
 Production still deploys from `dev-build-v0` (unchanged). Feature-branch dashboard previews no longer build; if one is ever
 needed, deploy it manually with the Vercel CLI. No repo change required. Record in STATUS.md infra notes.
+
+## 2026-11-23 — OPEN — Consolidated plan (both sessions)
+- FORM session owns the capture workstream (it already drafted DEC-133, CaptureProbe, floor reasons, S1–S5 plan).
+  Order: A push the draft to feat/capture-any-video (branch from its current HEAD) + doc sweep → B "any video in"
+  (probe wired into record + upload, HDR→SDR on device, per-metric below-floor reasons) → D engine at 120/240/4K.
+  C (Recording picker) waits on Figma frames; E (server retirement) waits on gates + Shayne; F waits on Shayne's recordings.
+  Form branch work is done; only Shayne's 2 form re-uploads remain to validate it.
+- SESSION 1 (shots): 1) 8969 far deck signal; 2) 8754 / 8976 pin deck + lane at distance; owns on-device stabilization
+  (shared with capture D). Python reference first, then port; 22-clip gate after every CV change; zero plausible-but-wrong.
+  Rev rate + early-lane speed stay best_effort until real truth exists. Sole deployer.
+- Device: one iPhone; sessions take turns (note in STATUS when using it).

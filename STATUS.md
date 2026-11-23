@@ -37,7 +37,7 @@ The server engine is OBSOLETE and is NOT a benchmark (no ground-truth guarantee)
 |---|---|---|
 | Session 1 (shots) | ~/Developer/LaneSight · feat/ios-lane-parity | DEC-132 DONE + pushed (`eaca061`): v15 ENGINE_DISAGREE wired + learned engine shipped; v17 ported server PinContactDetector on-device → 5/22, 0 wrong (recovered 8963); 8969 deck-changepoint done (withheld — weak/small deck signal, NOT camera motion); uncovered clips classified (DEC-118 capture limit). v17 Release installed on phone. NEXT (on-device accuracy vs ground truth; server is obsolete, not a benchmark): strengthen the deck-motion signal/ROI + far/small pins & ball detection so 8969/8976/8754 time accurately vs truth — else keep them withheld (zero plausible-but-wrong). NOT stabilization. Sole deployer. |
 | Form | ~/Developer/LaneSight-form · feat/form-ondevice | All assigned items DONE + pushed (558260d): form card vs design (grouping/labels/footer + on-device stills), E5 slide-plant (−13f early case fixed; late-error clips documented), on-device default verified ON. Release installed on Shayne's phone. IDLE — waiting on Shayne's 2 form re-uploads to validate the device fixes. |
-| Capture (to start) | ~/Developer/LaneSight-capture · feat/capture-any-video | INBOX 2026-11-23: on-device only + any video in + capture picker (next free DEC, likely 133). |
+| Capture → owned by Form session | ~/Developer/LaneSight-capture · feat/capture-any-video | INBOX 2026-11-23: on-device only + any video in + capture picker (next free DEC, likely 133). |
 
 ## Latest decisions (full text: 00_CONTEXT/DECISIONS.md on feat/ios-lane-parity)
 - DEC-126 usability first, iPhone primary · DEC-127 on-device metrics + metrics-only server call, one result screen
