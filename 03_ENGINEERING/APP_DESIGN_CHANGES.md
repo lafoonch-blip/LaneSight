@@ -284,3 +284,25 @@ frames) and dropped into `02_DESIGN/target_state/compare/form/`.
 **Card (FormCardView.swift):** only measured / best-effort tiles + checkpoints shown; everything unmeasured is ONE "Not measured on this clip" card (names + tap "Why?" with short plain reasons — no engine notes, event codes or file names); "We couldn't time this delivery" lead card when no swing moment was found; Key positions hidden when no stills; swing-timing bar only with ≥2 measured phases; coaching cues collapsed as "Hand & wrist tips"; engine-version banner + footer versions removed.
 **DIFFERS:** vs Figma form result (design 3.3/3.4): no dashed unavailable tiles, no per-tile reason paragraphs, no version footer; added "Not measured" + "couldn't time" cards. Figma should be updated to match.
 **NOT fixed here (the real gap):** swing-moment detection itself — on these clips the engine finds the wrong window (rear) or nothing (side). Needs the two clips from the phone and engine work.
+
+---
+
+## 2026-11-23-A · Active Session (Shot) usability fix — per Shayne's device test
+**Status:** BUILT (branch `fix/active-session-usability`, not yet compiled — Session 1 to build + install).
+**Why:** Shayne (2026-11-23): lane diagram too small to read, ball/oil rows looked like static text with no clear way to change them, Skip on the end-survey didn't end the session, and the session could never be ended.
+**What changed (`SessionView.swift`, new `QuickPickerSheets.swift`, `AppModel.swift`):**
+- Ball + Oil moved to the top as two big tappable tiles (icon, value, chevron). One tap opens a picker; tapping a ball/pattern applies it immediately and closes (no extra "Use this" step). Errors are shown, not swallowed; the pattern list loads on open with Try again.
+- Latest shot: lane recreation is now full card width (was squeezed to 150 pt), with Pins / Pocket / Target as three readable tiles below and a full-width "Full shot analysis" row. Removed the duplicate "LANE" text (it repeated the Next Shot text) and the unexplained "?" badge. Raw codes like "No_Intent" no longer appear in the recap pill.
+- Record / End pinned above the tab bar (always visible).
+- End flow: Submit or Skip on the feedback sheet now ends the session AFTER the sheet closes (presenting the summary mid-dismiss is what made Skip do nothing), shows "Ending session…", surfaces any error with Try again, and Summary "Done" returns to Home.
+- Stuck-forever root cause: the server had 62 never-closed sessions on Shayne's account; ending one made the app adopt the next. Ending now closes every other open session too, and resume adopts only the newest open session and closes older leftovers.
+**DIFFERS:** vs Figma 413:3804 — context chips row replaced by the Ball/Oil tiles at the top; latest-shot card is lane-on-top instead of lane-left/outcome-right. Figma should be updated to match.
+
+---
+
+## 2026-11-23-C · Shot result when nothing was measured — per Shayne's upload 762be1be
+**Status:** BUILT (branch `fix/active-session-usability`; not compiled — Session 1 to build + install).
+**Found:** lane ok, ball track ok but sparse, metrics FAILED (`TRACK_TOO_SPARSE_FOR_SPEED`; speed: PIN_IMPACT_NOT_DETECTED; rev: spin period not clean). Zero numbers, yet the screen showed the 3D lane, six empty "—" gauges and the server coach line "Move the tripod…" on an upload; "What worked" hid the failed stage (on-device keys `track`/`metrics` weren't in its list).
+**Change:** new `NoReadCard` replaces lane view + gauges when every metric is unavailable — "We couldn't measure this shot", plain reasons mapped from the codes, one filming tip; "What worked" now lists on-device `track` + `metrics` stages.
+**DIFFERS:** no Figma frame for the zero-measurement state; needs one. Server coach text "Move the tripod…" (`insights/coach.py:164`) should also stop firing when nothing was measured / on uploads — Session 1 (sole deployer).
+**Underlying gap (not a UI fix):** speed now requires a detected pin contact (5/22 labeled clips); most real clips will hit this card until coverage improves.

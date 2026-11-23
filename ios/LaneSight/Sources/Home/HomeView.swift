@@ -301,7 +301,9 @@ struct SessionRowCard: View {
         if let lane = session.lane_pair?.value, !lane.isEmpty { parts.append("Lane \(lane)") }
         if let start = session.started_at, let end = session.ended_at {
             let mins = Int((end - start) / 60)
-            if mins > 0 { parts.append("\(mins) min") }
+            // A session left open and closed days later (stale-session cleanup) has no real duration — omit it
+            // rather than show "29823 min".
+            if mins > 0 && mins <= 12 * 60 { parts.append("\(mins) min") }
         }
         return parts.isEmpty ? "Session" : parts.joined(separator: " · ")
     }

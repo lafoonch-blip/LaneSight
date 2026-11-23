@@ -780,6 +780,32 @@ struct ActivityItem: Codable, Identifiable, Equatable {
     let ref_id: String?
     let created_at: Double?
     let payload: ActivityPayload?
+
+    enum CodingKeys: String, CodingKey { case id, kind, ref_id, created_at, payload }
+    // Lenient: created_at arrives as epoch seconds OR an ISO-8601 string (the live server sent the raw Postgres
+    // timestamp, which failed the whole list → Home "Couldn't load this"). A bad payload never drops the row.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        kind = try? c.decodeIfPresent(String.self, forKey: .kind)
+        ref_id = try? c.decodeIfPresent(String.self, forKey: .ref_id)
+        payload = try? c.decodeIfPresent(ActivityPayload.self, forKey: .payload)
+        if let d = try? c.decodeIfPresent(Double.self, forKey: .created_at) {
+            created_at = d
+        } else if let s = try? c.decodeIfPresent(String.self, forKey: .created_at) {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let alt = ISO8601DateFormatter()
+            // Postgres uses "2026-11-23 15:08:52.396684+00" (space, short offset) — normalise to ISO-8601 first.
+            var iso = s.replacingOccurrences(of: " ", with: "T")
+            if let r = iso.range(of: #"[+-]\d\d$"#, options: .regularExpression) { iso.replaceSubrange(r, with: iso[r] + ":00") }
+            // microseconds → milliseconds (the formatter only reliably parses 3 fractional digits)
+            iso = iso.replacingOccurrences(of: #"\.(\d{3})\d+"#, with: ".$1", options: .regularExpression)
+            created_at = (f.date(from: iso) ?? alt.date(from: iso))?.timeIntervalSince1970
+        } else {
+            created_at = nil
+        }
+    }
 }
 
 struct ActivityPayload: Codable, Equatable {

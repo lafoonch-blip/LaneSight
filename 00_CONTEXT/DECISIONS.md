@@ -1821,6 +1821,22 @@ of DEC-130 stands); DEC-128 honesty/plausibility rules continue to bind.
 
 **Date:** 2026-11-23 · **Status:** ACCEPTED (in progress; the shipped default stays 1080p120 SDR until the benchmark + DEC-118 gates pass at a higher format).
 **Amends/extends:** DEC-102 (removes the server-as-fallback measurement role), DEC-104 (fallback upload → opt-in consented upload of failed/flagged clips), DEC-117 (freeze extended from speed/rev to all server-only metrics), DEC-028 / DEC-121 (capture default: max fps at ≥1080p SDR, Form floor 60, user-overridable), DEC-100 (retention → opt-in). DEC-106 (Python harness) and the DEC-118 gates continue to bind.
+### DEC-134 — Speed is STRICT: reported only when timed foul→detected pin contact; no fallback estimate (2026-11-23)
+**Decision (Shayne, 2026-11-23, after upload 762be1be produced zero numbers):** Ball speed is reported ONLY when it can
+be timed from the foul-line crossing to a DETECTED pin contact. When pin contact isn't detected, speed is `unavailable`
++ reason — NEVER a fall-back early-lane / front-lane / release speed, and never derived from rev. Empty results are
+accepted until on-device coverage improves (the shot card's NoReadCard handles the zero-number case). Binds BOTH the
+on-device engine and the server.
+- The Active Session rings must not show a "best effort" session-mean speed/rev as a number under this rule — trace
+  where that value comes from (16.6 mph / 359 rpm seen 2026-11-23) and make it strict (unavailable, not an estimate).
+- Coverage work vs ground truth (pin contact / deck signal / far-small ball + pins) remains the priority to grow
+  strict-speed coverage honestly.
+**Why:** an early-lane/front-lane fallback is an unvalidated number shown as if measured — it violates the
+no-plausible-but-wrong honesty rule (DEC-026/027/094/128). "Unavailable + reason" beats a number we can't stand behind.
+**Date:** 2026-11-23 · **Status:** ACCEPTED — enforcement in the coaching/rec code (server + on-device) + the Active
+Session rings + shot-card headline is pending (Session 1, after the 8754/coverage pass).
+**Relates to:** the companion headline-speed decision (headline = 60 ft foul→pins average, labeled "Avg speed",
+resolving DEC-030 vs DEC-064 — recorded separately on the docs branch); DEC-064/112 (foul→pins average).
 
 ## Superseded decisions
 - DEC-102 — the **server-as-fallback measurement** role **amended by DEC-133** (one product engine: on-device; the server keeps auth/data/sync + authoritative Score/tiers/achievements/coaching, but is no longer a measurement fallback).

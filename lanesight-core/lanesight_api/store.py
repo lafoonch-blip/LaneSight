@@ -1899,8 +1899,13 @@ class PgStore(MemoryStore):
         # Scope to the Home Recent activity kinds (DEC-055) — practice sessions, achievement unlocks,
         # tier changes only; drop personal-best and any other kinds, and never uploads.
         kinds = ','.join(_ACTIVITY_KINDS)
-        return self._get('activity_item',
+        rows = self._get('activity_item',
                          f'user_id=eq.{user_id}&kind=in.({kinds})&select=*&order=created_at.desc')
+        # created_at is timestamptz (ISO string) in Postgres; the API contract (iOS ActivityItem) is epoch seconds.
+        # Returning the raw string made the iPhone fail to decode the whole list → Home "Couldn't load this".
+        for r in rows:
+            r['created_at'] = _ts_epoch(r.get('created_at'))
+        return rows
 
     def list_uploads(self, user_id):
         rows = self._get('shots', f'user_id=eq.{user_id}&source=eq.upload'
