@@ -559,10 +559,14 @@ struct ShotCardView: View {
 
     private func metric(_ name: String) -> Metric? { result.metrics.first { $0.0 == name }?.1 }
 
-    // 3 headline rings (Figma 413:4147): Speed · Rev rate · Accuracy.
+    // 3 headline rings (Figma 413:4147): Avg Speed · Rev rate · Accuracy.
+    // DEC-134/135: the HEADLINE speed is the strict foul→pins average ("Avg Speed"), NOT release speed — release
+    // moves to the detail list. Key is speed_avg_foul_to_pins (on-device) or speed_avg_60ft (server). Rev rate stays
+    // display-eligible (best_effort sub via ring()); it is never a coaching signal (DEC-135, enforced in coach.py).
     private var ringRow: some View {
-        HStack(alignment: .top, spacing: 8) {
-            ring("Speed", "ball_speed", unit: "mph", lo: 8, hi: 24, color: LS.action)
+        let avgSpeedKey = metric("speed_avg_foul_to_pins") != nil ? "speed_avg_foul_to_pins" : "speed_avg_60ft"
+        return HStack(alignment: .top, spacing: 8) {
+            ring("Avg Speed", avgSpeedKey, unit: "mph", lo: 8, hi: 24, color: LS.action)
             ring("Rev Rate", "rev_rate", unit: "rpm", lo: 100, hi: 600, color: LS.action)
             ring("Accuracy", "accuracy", unit: "", lo: 0, hi: 100, color: LS.success)
         }

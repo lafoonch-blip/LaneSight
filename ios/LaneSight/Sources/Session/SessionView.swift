@@ -306,8 +306,13 @@ struct SessionView: View {
 
     private var ringRow: some View {
         HStack(alignment: .top, spacing: 7) {
-            ring("Rev Rate", summary?.mean("rev_rate"), unit: "rpm", lo: 100, hi: 600, color: LS.dataPurple, sub: "best effort")
-            ring("Speed", summary?.mean("ball_speed"), unit: "mph", lo: 8, hi: 24, color: LS.action)
+            // DEC-134/135: the rings show STRICT metrics only — no best-effort session numbers.
+            // Speed = the foul→pins average ("Avg Speed"), populated only when pin contact was timed; "—" otherwise.
+            // Rev rate has no ground truth yet (DEC-027/028 validation pending) → not shown as a session stat here
+            // (it's display-eligible per-shot on the card, DEC-135); shows "—" until validated.
+            ring("Rev Rate", nil, unit: "rpm", lo: 100, hi: 600, color: LS.dataPurple)
+            ring("Avg Speed", summary?.mean("speed_avg_foul_to_pins") ?? summary?.mean("speed_avg_60ft"),
+                 unit: "mph", lo: 8, hi: 24, color: LS.action)
             ring("Accuracy", nil, unit: "%", lo: 0, hi: 100, color: LS.success)   // needs per-shot targets → "—"
             ring("Consistency", summary?.consistency?.repeatability_score, unit: "%", lo: 0, hi: 100,
                  color: LS.dataYellow, sub: "provisional")

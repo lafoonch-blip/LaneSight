@@ -31,6 +31,10 @@ ARROWS_BAND = 1.0            # boards at the arrows vs the target line
 ANGLE_TARGET_LO, ANGLE_TARGET_HI = 4.0, 6.0   # entry-angle window that carries (DEC-064)
 ARROW_SCALE = 5.0            # DEC-031: a full arrow miss (score 0) at >= this many boards off intent
 BP_SCALE = 8.0               # DEC-031: a full breakpoint miss (score 0) at >= this many boards off intent
+# DEC-135: near-lane boards (laydown/arrows/7ft) are coaching-eligible for DIRECTION ONLY (missing left/right of the
+# target) until they pass board-accuracy validation (DEC-034 Specto gate). While False, the coach never prescribes an
+# exact board move — it gives the direction toward the pocket. Flip to True only once boards are validated.
+BOARDS_VALIDATED = False
 
 
 def _component_score(err: float, scale: float) -> float:
@@ -198,6 +202,9 @@ def _move(rec: dict | None) -> dict | None:
     feet = rec.get('move_feet')
     if feet is None and rec.get('direction') is None:
         return None
+    # DEC-135: direction only (no exact board counts) until near-lane boards are validated (DEC-034).
+    if not BOARDS_VALIDATED:
+        return {'feet': None, 'eyes': None, 'direction': rec.get('direction')} if rec.get('direction') else None
     return {'feet': feet, 'eyes': _eyes_boards(rec), 'direction': rec.get('direction')}
 
 
@@ -209,6 +216,12 @@ def _lane_move_text(lane: dict, rec: dict | None, arrows_act=None) -> str:
     escalate = " Ball change only if it keeps missing after a move or two."
     d = (rec or {}).get('direction')
     feet = (rec or {}).get('move_feet')
+    # DEC-135: until near-lane boards are validated (DEC-034), coaching gives DIRECTION only — never an exact board
+    # move. The direction (toward the pocket) comes from the entry side, which is robust; the board COUNT is not.
+    if not BOARDS_VALIDATED:
+        if d in ('left', 'right'):
+            return f"{base} You're missing to the {'right' if d == 'left' else 'left'} of the pocket — move your feet and eyes {d} toward it.{escalate}"
+        return f"{base} Adjust your feet and eyes toward the pocket.{escalate}"
     if not (rec and d in ('left', 'right') and feet is not None):
         return f"{base} Adjust your feet and eyes toward the pocket (2-and-1).{escalate}"
     eyes = _eyes_boards(rec)

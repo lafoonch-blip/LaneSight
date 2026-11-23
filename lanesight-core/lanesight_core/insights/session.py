@@ -11,7 +11,10 @@ def _vals(shots, metric):
 def summary(shots: list[dict]) -> dict:
     """shots: ShotRecord dicts. Averages + spread for every metric with enough valid values."""
     out = {}
-    for metric in ('ball_speed', 'rev_rate', 'loft', 'laydown_board', 'arrows_board', 'breakpoint_board',
+    # DEC-134/135: the foul→pins average ("Avg speed") is the strict, truth-comparable speed the Active Session ring
+    # shows (on-device key speed_avg_foul_to_pins; server key speed_avg_60ft). ball_speed (release) stays for detail.
+    for metric in ('ball_speed', 'speed_avg_foul_to_pins', 'speed_avg_60ft', 'rev_rate', 'loft', 'laydown_board',
+                   'arrows_board', 'breakpoint_board',
                    'breakpoint_distance', 'entry_board', 'entry_angle', 'launch_angle'):
         v = _vals(shots, metric)
         if v: out[metric] = dict(n=len(v), mean=round(float(np.mean(v)), 2), sd=round(float(np.std(v)), 2),

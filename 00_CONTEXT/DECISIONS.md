@@ -1818,8 +1818,25 @@ on-device engine and the server.
 no-plausible-but-wrong honesty rule (DEC-026/027/094/128). "Unavailable + reason" beats a number we can't stand behind.
 **Date:** 2026-11-23 · **Status:** ACCEPTED — enforcement in the coaching/rec code (server + on-device) + the Active
 Session rings + shot-card headline is pending (Session 1, after the 8754/coverage pass).
-**Relates to:** the companion headline-speed decision (headline = 60 ft foul→pins average, labeled "Avg speed",
-resolving DEC-030 vs DEC-064 — recorded separately on the docs branch); DEC-064/112 (foul→pins average).
+**Relates to:** DEC-135 (headline "Avg speed" + coaching eligibility); DEC-064/112 (foul→pins average).
+
+### DEC-135 — Coaching eligibility + headline is "Avg speed" (foul→pins) (2026-11-23)
+**Decision (Shayne, 2026-11-23, resolving the metric-contract coaching-eligibility conflicts):**
+1. **Rev rate** — display-eligible (best_effort) but **NOT coaching-eligible** until validated against independent truth
+   (240 fps marked-ball clips or Specto). The coach/throw matrix must not use revs as a classification signal until then.
+2. **Near-lane boards** (laydown, arrows, 7 ft) — coaching may use them for **DIRECTION only** ("you're missing left/right
+   of your target"), **never exact board-move prescriptions**, until they pass board-accuracy validation (DEC-034). Exact
+   feet/eyes moves unlock only once boards are validated.
+3. **Headline speed = the 60 ft average** (foul line → first pin contact), labeled **"Avg speed"** — the ground-truth-
+   validated metric, and what the shot card + center displays show. Release speed is secondary detail. **Resolves
+   DEC-030 (release) vs DEC-064 (60 ft average)** in favor of the average for the headline.
+**Why:** fail-closed honesty (the metric contract) — coaching acts only on validated metrics; an unvalidated metric may
+be shown with a best_effort marker but must never drive a prescription. The foul→pins average is the metric that has
+ground-truth labels, so it is the honest headline.
+**Date:** 2026-11-23 · **Status:** ACCEPTED — enforcement pending (Session 1: coaching/rec code server + on-device, the
+Active Session rings, and the shot-card "Avg speed" headline).
+**Relates to:** DEC-134 (strict speed), DEC-031 (Accuracy), DEC-027/028 (rev factor validation), DEC-034 (Specto board
+gate), DEC-064/112 (foul→pins average), DEC-030 (release = secondary), DEC-127 (on-device measured metrics).
 
 ## Superseded decisions
 - DEC-029 / DEC-033 — server-side-only analysis **amended by DEC-102** (offline-first, hybrid: on-device measurement where validated, server stays fallback + reference). Server-authoritative coaching/score/tiers unchanged.

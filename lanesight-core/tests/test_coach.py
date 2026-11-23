@@ -22,7 +22,8 @@ def test_good_throw_miss_lane_move():
                       recommendation={'direction': 'left', 'move_feet': 2})
     assert out['throw']['status'] == 'good' and out['lane']['status'] == 'miss'
     assert out['coach']['action'] == 'lane_move'
-    assert out['coach']['move'] == {'feet': 2, 'eyes': 1, 'direction': 'left'}
+    # DEC-135: near-lane boards are direction-only until validated — no exact feet/eyes board counts.
+    assert out['coach']['move'] == {'feet': None, 'eyes': None, 'direction': 'left'}
 
 
 def test_off_throw_miss_lane_no_move():
@@ -102,21 +103,20 @@ def test_accuracy_ring_drops_low_confidence_breakpoint_via_quality():
     assert ring2['status'] == 'ok' and ring2['value'] == round(0.6*100 + 0.4*coach._component_score(4.0, 8.0))
 
 
-def test_lane_move_text_before_after_and_escalation():
+def test_lane_move_text_direction_only_until_boards_validated():
+    # DEC-135: near-lane boards are coaching-eligible for DIRECTION only (no exact board move) until validated.
     base = _base()
     m = {'ball_speed': 12.1, 'rev_rate': 405, 'arrows_board': 10.0}
-    # measured arrows (10) + a 2-and-1 move left -> eyes to the 11 board, from 10; plus the escalation line.
     out = coach.build(m, MISS, base, recommendation={'direction': 'left', 'move_feet': 2, 'move_target': 1},
                       quality={'arrows_board': {'status': 'ok'}})
     txt = out['coach']['text']
-    assert 'feet 2 boards left' in txt and 'eyes to the 11 board (from 10)' in txt
+    # no exact board counts; direction toward the pocket + the escalation line
+    assert 'boards left' not in txt and 'eyes to the' not in txt and 'from 10' not in txt
+    assert 'move your feet and eyes left' in txt
     assert 'Ball change only if it keeps missing' in txt
-    # right subtracts boards: 10 -> 9
     outr = coach.build(m, MISS, base, recommendation={'direction': 'right', 'move_feet': 2, 'move_target': 1},
                        quality={'arrows_board': {'status': 'ok'}})
-    assert 'eyes to the 9 board (from 10)' in outr['coach']['text']
-    # arrows WITHHELD (bad geometry) -> no fabricated board, falls back to the delta phrasing + escalation
-    outw = coach.build(m, MISS, base, recommendation={'direction': 'left', 'move_feet': 2, 'move_target': 1},
-                       quality={'arrows_board': {'status': 'unavailable'}})
-    assert 'from' not in outw['coach']['text'] and 'eyes 1 board the same way' in outw['coach']['text']
-    assert 'Ball change only' in outw['coach']['text']
+    assert 'move your feet and eyes right' in outr['coach']['text']
+    assert 'board' not in outr['coach']['text']   # no exact board prescription
+    # the structured move carries direction only (no exact feet/eyes) until boards are validated
+    assert out['coach']['move'] == {'feet': None, 'eyes': None, 'direction': 'left'}
