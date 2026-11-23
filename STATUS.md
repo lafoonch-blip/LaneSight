@@ -31,7 +31,7 @@ Last updated: 2026-11-23 (Capture/Form session — capture A+B+C-core done + pus
 The server engine is OBSOLETE and is NOT a benchmark (no ground-truth guarantee); do not compare on-device to server/Ruby. Grade on-device against Shayne's labels, zero plausible-but-wrong.
 - iPhone (v17 `7f07302`): **5/22 within ±0.5 of truth, 0 plausible-but-wrong, MAE 0.166** (on-device engine: foul-anchored deck-motion pin-contact changepoint + VP guard + WEAK spanMin 0.45; measures 8963 correctly at +0.03).
 - Withheld, root-caused on the Python dev harness (vs ground truth; NOT vs server): **8969** = deck pre-contact baseline NOISY (0.153 > 0.08 honesty gate) from the camera position — the reference ALSO withholds it; forcing it would risk a wrong number → stays withheld (correct). **8976** = ball untrackable (reference: 13 track pts, no pins, no foul-cross) → genuinely unmeasurable, withheld. **8754** (TRIPOD) = CLOSED, stays withheld: the trim clips the shot (NOTRIM recovers a 102-pt track) but the deck contact then fires ~0.67 s late → wrong 13.6 — so the trim's withholding is load-bearing for zero-wrong (widening it ships a wrong number). Box-ROI fix tried → didn't fix the timing + regressed the gate (8968 wrong, MAE→1.13) → reverted. Real coverage needs shot-isolation + a faithful deck-timing (phase-correlation) port. NOT camera motion.
-- ~13 clips (behind-ball-return / off-axis) are the DEC-118 unsupported framing (classified `02_RESEARCH/UNCOVERED_CLIPS_CLASSIFICATION_2026-11-18.md`): pins/contact 7, track 5, foul 1 — a capture-position limit.
+- ~13 clips (behind-ball-return / off-axis; `02_RESEARCH/UNCOVERED_CLIPS_CLASSIFICATION_2026-11-18.md`: pins/contact 7, track 5, foul 1) are DETECTION failures to fix and count against coverage (DECISIONS #3, 2026-11-23 — reverses the earlier "unsupported framing" call). Pins are visible in every clip.
 - Rev rate + early-lane speed: no ground truth (best_effort). Far-lane metrics (entry, breakpoint) off.
 - Form: on-device, plausibility-bounded; step count best_effort; blind test set = next 60 fps clips (not recorded yet).
 
@@ -52,7 +52,7 @@ The server engine is OBSOLETE and is NOT a benchmark (no ground-truth guarantee)
 ## Standing rules
 - ONE APP ON THE PHONE: before any Release install, merge the other sessions' latest pushed work (feat/ios-lane-parity + integration/capture-form) so an install never removes another session's fixes. Verify key symbols from both are in the binary.
 - No fabricated or plausible-but-wrong numbers; unavailable + reason. No audio-based measurement. No AGPL models.
-- No user taps/labeling for calibration; Shayne doesn't label — sessions auto-label and self-audit.
+- No user taps/calibration in the app. Shayne DOES label clips in the Labeler when it measurably helps (DECISIONS #4, 2026-11-23); sessions pre-fill hints and keep an unseen held-out set.
 - Push own branches when gates pass (verify ls-remote). Never merge to main. Only Session 1 deploys.
 - Big artifacts under ~/LaneSightData, never /tmp. iPhone plugged in + unlocked for device runs.
 - **One product engine = on-device (DEC-133): no new server-only measurement work; server stays auth/data/Score/coaching + Python dev harness.** Session 1's DEC-132 on-device coverage is on-device work, NOT withdrawn (amendment 6).
