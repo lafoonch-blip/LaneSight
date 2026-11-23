@@ -49,6 +49,9 @@ Last updated: 2026-11-23 (Session 1 / shots — v17 on-device PinContactDetector
 - Push own branches when gates pass (verify ls-remote). Never merge to main. Only Session 1 deploys.
 - Big artifacts under ~/LaneSightData, never /tmp. iPhone plugged in + unlocked for device runs.
 
+## Infra notes
+- Vercel `lanesight-ops`: preview deployments DISABLED (`previewDeploymentsDisabled=true`, Shayne approved 2026-11-23) — every push to `context`/`main` (no `ops-dashboard/`) failed the preview build + emailed Shayne. Production still deploys from `dev-build-v0` (unchanged). Need a feature-branch dashboard preview? Deploy manually via Vercel CLI. No repo change.
+
 ## Shayne to-do
 - Re-upload the 2 form clips (b6cfd17c rear, ee17c156 side) on the installed build.
 - Next bowling session: 10–15 Form deliveries at 60 fps (mostly side view, feet visible).
