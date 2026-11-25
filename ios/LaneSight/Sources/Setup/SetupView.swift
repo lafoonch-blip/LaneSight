@@ -17,6 +17,7 @@ struct SetupView: View {
     @State private var goCapture = false
     @State private var showBallSheet = false
     @State private var showOilSheet = false
+    @State private var showRecordingSheet = false   // DEC-133 recording-quality quick sheet
 
     private var isShot: Bool { model.captureMode == "shot" }
 
@@ -119,6 +120,9 @@ struct SetupView: View {
         .sheet(isPresented: $showBallSheet) {
             NavigationStack { BallPickerSheet() }.environmentObject(model).presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $showRecordingSheet) {
+            RecordingQualitySheet(mode: model.captureMode).presentationDetents([.medium, .large])
+        }
         .sheet(isPresented: $showOilSheet) {
             OilPatternSheet(patterns: oilPatterns,
                             selectedName: $model.selectedOilPatternName, selectedId: $model.selectedOilPatternId)
@@ -202,7 +206,7 @@ struct SetupView: View {
             VStack(alignment: .leading, spacing: 10) {
                 checkRow(ok: healthOK, title: "Analysis service reachable",
                          detail: healthMs.map { "\($0) ms · first result ~1 min" } ?? "Checking…")
-                checkRow(ok: true, title: "Camera", detail: "\(model.preferredFPS) fps · SDR")
+                cameraRow
                 checkRow(ok: healthOK, title: healthOK ? "Connected" : "Cellular only",
                          detail: healthOK ? "Uploads send now" : "Uploads may queue")
             }
@@ -211,6 +215,26 @@ struct SetupView: View {
             .background(LS.card, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(LS.border, lineWidth: 1))
         }
+    }
+
+    /// DEC-133 (Figma 411:3491): the pre-flight Camera row shows the chosen recording format and taps to open the
+    /// quick recording-quality sheet (822:4081). SDR always (HDR is converted on import, not recorded).
+    private var cameraRow: some View {
+        Button { showRecordingSheet = true } label: {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(LS.positive.opacity(0.18)).frame(width: 16, height: 16)
+                    Text("✓").font(.system(size: 11, weight: .bold)).foregroundStyle(LS.positive)
+                }
+                Text("Camera").font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
+                Spacer(minLength: 8)
+                Text("\(CaptureFormats.effective(mode: model.captureMode).label) · SDR")
+                    .font(.system(size: 11)).foregroundStyle(Color(hex: 0xB9C6D9))
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color(hex: 0xB9C6D9))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func checkRow(ok: Bool, title: String, detail: String) -> some View {
