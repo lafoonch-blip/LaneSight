@@ -1,6 +1,23 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import CoreTransferable
+
+/// A picked video, imported as a FILE (not Data). Photos vends videos as files — `loadTransferable(type: Data.self)`
+/// returns nil for many video assets (the clip then silently never loaded), so import via a file representation and
+/// copy it to our temp dir. This is the reliable way to bring a Photos video on-device.
+struct ImportedMovie: Transferable {
+    let url: URL
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            let ext = received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension
+            let dst = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID().uuidString).\(ext)")
+            try? FileManager.default.removeItem(at: dst)
+            try FileManager.default.copyItem(at: received.file, to: dst)
+            return ImportedMovie(url: dst)
+        }
+    }
+}
 
 /// Upload a clip (Upload.dc.html). Pick a video from Photos → POST /uploads → same analyze job →
 /// Shot card. One shot per clip. All results are live from the pipeline; nothing is simulated.
@@ -150,17 +167,16 @@ struct UploadView: View {
         loadingClip = true
         errorText = nil
         do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
+            // Import the video as a FILE (reliable for Photos videos; Data transfer returns nil for many of them).
+            guard let movie = try await item.loadTransferable(type: ImportedMovie.self) else {
                 errorText = "Couldn't read that clip."; loadingClip = false; return
             }
-            let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "mov"
-            let url = FileManager.default.temporaryDirectory
-                .appendingPathComponent("upload-\(UUID().uuidString).\(ext)")
-            try data.write(to: url)
+            let url = movie.url
             pickedURL = url
             pickedName = url.lastPathComponent
             // DEC-133: detect the imported clip's real capture + whether it's below the floor for this mode.
-            let info = CaptureProbe.probe(url: url, source: "upload")
+            // Off the main actor — probe reads the asset synchronously and must not freeze the import UI.
+            let info = await Task.detached { CaptureProbe.probe(url: url, source: "upload") }.value
             capture = info
             captureWarn = info.flatMap { CaptureProbe.floorReasons($0, formMode: mode == "form").first?.reason }
         } catch {

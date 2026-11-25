@@ -912,13 +912,16 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odp-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
-        // DEC-133 any-video-in: probe the real capture + tone-map HDR→SDR before analysis (a bad HDR tone-map
-        // breaks ball tracking — DEC-113), so the engine only ever sees SDR frames. `analysisInput` is the SDR clip.
-        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: mode == "form")
-        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceMeasurement? = await withTaskGroup(of: OnDeviceMeasurement?.self) { group in
             group.addTask {
+                // DEC-133 any-video-in: probe the real capture + tone-map HDR→SDR before analysis (a bad HDR tone-map
+                // breaks ball tracking — DEC-113), so the engine only ever sees SDR frames. `analysisInput` is the SDR
+                // clip. Inside the task group so the 30 s cap below ALSO bounds a stuck HDR conversion — otherwise a
+                // hung export (no timeout of its own) would stall the whole analysis before the cap could fire.
+                let gated = await CaptureProbe.gate(url: copy, source: source, formMode: mode == "form")
+                let analysisInput = gated.analysisURL ?? copy
+                defer { if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) } }  // HDR→SDR temp
                 let clip = (mode == "form") ? analysisInput : await VideoTrimmer.trimToShotWindow(analysisInput, tail: 5.0)
                 defer { if clip != analysisInput { try? FileManager.default.removeItem(at: clip) } }
                 let body = await OnDeviceShadow.run(clipURL: clip, shotId: shotId, source: source,
@@ -948,8 +951,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             group.cancelAll()
             return first
         }
-        try? FileManager.default.removeItem(at: copy)
-        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
+        try? FileManager.default.removeItem(at: copy)   // the HDR→SDR temp is cleaned up inside the worker task (defer)
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }
@@ -1070,12 +1072,14 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("odf-\(shotId).mov")
         try? FileManager.default.removeItem(at: copy)
         guard (try? FileManager.default.copyItem(at: clipURL, to: copy)) != nil else { return nil }
-        // DEC-133 any-video-in: probe + tone-map HDR→SDR before the Form engine (DEC-113). Form floor is 60 fps.
-        let gated = await CaptureProbe.gate(url: copy, source: source, formMode: true)
-        let analysisInput = gated.analysisURL ?? copy
         let capS = UInt64(Self.ondevicePrimaryMaxLatencyS)
         let result: OnDeviceFormMeasurement? = await withTaskGroup(of: OnDeviceFormMeasurement?.self) { group in
             group.addTask {
+                // DEC-133 any-video-in: probe + tone-map HDR→SDR before the Form engine (DEC-113). Form floor is 60 fps.
+                // Inside the task group so the 30 s cap below ALSO bounds a stuck HDR conversion (no timeout of its own).
+                let gated = await CaptureProbe.gate(url: copy, source: source, formMode: true)
+                let analysisInput = gated.analysisURL ?? copy
+                defer { if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) } }  // HDR→SDR temp
                 let t0 = Date()
                 guard let a = try? OnDeviceFormEngine.analyze(clipURL: analysisInput, handed: handed) else { return nil }
                 let lat = Date().timeIntervalSince(t0)
@@ -1100,8 +1104,7 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
             group.cancelAll()
             return first
         }
-        try? FileManager.default.removeItem(at: copy)
-        if analysisInput != copy { try? FileManager.default.removeItem(at: analysisInput) }   // the HDR→SDR temp
+        try? FileManager.default.removeItem(at: copy)   // the HDR→SDR temp is cleaned up inside the worker task (defer)
         guard let result, result.latencyS <= Self.ondevicePrimaryMaxLatencyS else { return nil }
         return result
     }

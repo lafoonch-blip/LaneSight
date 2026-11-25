@@ -89,7 +89,9 @@ enum CaptureProbe {
     }
 
     /// Probe a clip. `source` is "live" (just recorded) or "upload" (imported).
-    static func probe(url: URL, source: String) -> CaptureInfo? {
+    /// `nonisolated`: pure AVFoundation reads, no actor state — safe to run off the main actor so a multi-second
+    /// probe (AVAssetReader window) never freezes the import UI.
+    nonisolated static func probe(url: URL, source: String) -> CaptureInfo? {
         let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         guard let track = asset.tracks(withMediaType: .video).first else { return nil }
 
@@ -112,7 +114,7 @@ enum CaptureProbe {
 
     // MARK: PTS-measured fps (real capture rate, incl. variable frame rate / slo-mo)
 
-    private static func measureFPS(asset: AVAsset, track: AVAssetTrack, windowS: Double = 3.0) -> Double? {
+    nonisolated private static func measureFPS(asset: AVAsset, track: AVAssetTrack, windowS: Double = 3.0) -> Double? {
         guard let reader = try? AVAssetReader(asset: asset) else { return nil }
         let out = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
         out.alwaysCopiesSampleData = false
@@ -134,14 +136,14 @@ enum CaptureProbe {
 
     // MARK: format description helpers
 
-    private static func fourCC(_ code: FourCharCode) -> String {
+    nonisolated private static func fourCC(_ code: FourCharCode) -> String {
         let bytes = [UInt8((code >> 24) & 0xFF), UInt8((code >> 16) & 0xFF),
                      UInt8((code >> 8) & 0xFF), UInt8(code & 0xFF)]
         let s = String(bytes: bytes, encoding: .ascii)?.trimmingCharacters(in: .whitespaces) ?? ""
         return s.isEmpty ? String(format: "0x%08x", code) : s
     }
 
-    private static func dynamicRange(_ fd: CMFormatDescription) -> DynamicRange {
+    nonisolated private static func dynamicRange(_ fd: CMFormatDescription) -> DynamicRange {
         guard let tf = CMFormatDescriptionGetExtension(fd, extensionKey: kCMFormatDescriptionExtension_TransferFunction) else {
             return .sdr
         }
