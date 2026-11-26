@@ -1739,6 +1739,9 @@ final class AppModel: ObservableObject, BackgroundUploadObserver {
     /// DEC-119 item 3/4: resume durable uploads/analyses on relaunch or foreground. Reconnects the background
     /// URLSession, (re)starts stalled uploads, and runs analyze for clips that finished uploading while away.
     func resumePendingUploads() async {
+        // Don't kick background uploads during an XCTest run — the test host app would spin up upload/analyze tasks
+        // that destabilize the long on-device engine/HDR tests (observed: crashes + restarts on the device gate).
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return }
         BackgroundUploadManager.shared.observer = self
         let live = await BackgroundUploadManager.shared.liveTaskIDs()
         let pending = ShotUploadStore.shared.active()
