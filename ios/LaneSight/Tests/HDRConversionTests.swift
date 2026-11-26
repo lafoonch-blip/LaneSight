@@ -9,14 +9,15 @@ import AVFoundation
 /// DRASTICALLY worse track (so a broken tone-map is caught).
 @MainActor
 final class HDRConversionTests: XCTestCase {
-    // Absolute HOST path (the simulator process can read host paths; `~` would resolve to the sim sandbox).
-    private let hdr = URL(fileURLWithPath: "/Users/shaynel/LaneSightData/training_videos/IMG_8751.mov")
-    private let sdr = URL(fileURLWithPath: "/Users/shaynel/LaneSightData/training_videos/IMG_8751_sdr.mov")
+    // Bundled test resources (device-safe; the device can't read host paths). Copied into Tests/FormGateClips/.
+    private func clip(_ name: String) -> URL? {
+        Bundle(for: type(of: self)).url(forResource: name, withExtension: "mov")
+            ?? Bundle(for: type(of: self)).url(forResource: name, withExtension: "MOV")
+    }
 
     func testHDRtoSDRtrackingMatchesBaseline() async throws {
-        guard FileManager.default.fileExists(atPath: hdr.path),
-              FileManager.default.fileExists(atPath: sdr.path) else {
-            throw XCTSkip("IMG_8751.mov (HDR) + IMG_8751_sdr.mov not in ~/LaneSightData/training_videos")
+        guard let hdr = clip("IMG_8751_hdr"), let sdr = clip("IMG_8751_sdr") else {
+            throw XCTSkip("IMG_8751_hdr.mov / IMG_8751_sdr.mov not bundled in the test target")
         }
         // 1) probe the HDR clip — it must be detected as HDR and convert to a valid SDR file.
         let info = CaptureProbe.probe(url: hdr, source: "upload")
